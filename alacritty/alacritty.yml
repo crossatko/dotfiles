@@ -1,0 +1,27 @@
+import:
+  - ~/.config/alacritty/rose-pine.yml
+
+window:
+  opacity: 0.97
+
+font:
+  normal:
+    family: DankMono Nerd Font Mono
+    style: Regular
+
+  bold:
+    family: DankMono Nerd Font Mono
+    style: Bold
+
+  italic:
+    family: DankMono Nerd Font Mono
+    style: Italic
+
+  bold_italic:
+    family: DankMono Nerd Font Mono
+    style: Bold Italic
+
+  size: 20
+  offset:
+    x: 0
+    y: 6
