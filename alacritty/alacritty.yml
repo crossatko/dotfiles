@@ -1,6 +1,9 @@
 import:
   - ~/.config/alacritty/rose-pine.yml
 
+shell:
+  program: /bin/zsh
+
 window:
   opacity: 0.97
 
