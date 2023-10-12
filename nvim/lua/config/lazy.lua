@@ -47,3 +47,5 @@ require("lazy").setup({
     },
   },
 })
+
+vim.cmd("hi Normal ctermbg=NONE guibg=NONE")
