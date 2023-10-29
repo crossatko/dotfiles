@@ -24,6 +24,11 @@ set $up k
 set $right l
 # Your preferred terminal emulator
 set $term alacritty
+
+# Preferred browser
+set $browser firefox
+
+
 # Your preferred application launcher
 # Note: pass the final command to swaymsg so that the resulting window can be opened
 # on the original workspace that the command was run on.
@@ -105,6 +110,12 @@ bindsym XF86AudioMute exec amixer set Master toggle
 
     # Start your launcher
     bindsym $mod+d exec $menu
+
+    # Open ranger in alacritty
+    bindsym $mod+Shift+f exec $term -e ranger
+
+    # Open a browser
+    bindsym $mod+b exec $browser
 
     # Drag floating windows by holding down $mod and left mouse button.
     # Resize them with right mouse button + $mod.
