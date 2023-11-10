@@ -26,6 +26,7 @@ source $ZSH/oh-my-zsh.sh
 # system
 alias sleep="systemctl suspend"
 alias :q="exit"
+alias dnf="dnf5"
 
 # dev
 unset rc
