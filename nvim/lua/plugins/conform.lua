@@ -14,6 +14,7 @@ return {
       ["less"] = { { "prettierd", "prettier" } },
       ["html"] = { { "prettierd", "prettier" } },
       ["json"] = { { "prettierd", "prettier" } },
+      ["json5"] = { { "prettierd", "prettier" } },
       ["jsonc"] = { { "prettierd", "prettier" } },
       ["yaml"] = { { "prettierd", "prettier" } },
       ["markdown"] = { { "prettierd", "prettier" } },
