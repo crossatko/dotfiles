@@ -231,7 +231,7 @@ mode "resize" {
 }
 bindsym $mod+r mode "resize"
 
-gaps inner 5
+gaps inner 0
 
 # for_window [class="^.*"] border pixel 0
 # for_window [title="^.*"] title_format ""
@@ -240,7 +240,7 @@ gaps inner 5
 # font pango:monospace 10
 # titlebar_border_thicXkness 0                                                     
 # titlebar_padding 0
-default_border pixel
+default_border pixel 
 
 # Set colors
 set $bg #191724

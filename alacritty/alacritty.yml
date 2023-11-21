@@ -24,7 +24,7 @@ font:
     family: DankMono Nerd Font Mono
     style: Bold Italic
 
-  size: 18
+  size: 17
   offset:
     x: 0
-    y: 8
+    y: 4
