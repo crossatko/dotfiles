@@ -194,6 +194,7 @@ bindsym XF86AudioMute exec amixer set Master toggle
 
     # Make the current focus fullscreen
     bindsym $mod+f fullscreen
+    
 
     # Toggle the current focus between tiling and floating mode
     bindsym $mod+Shift+space floating toggle
@@ -274,7 +275,7 @@ exec dunst
 
 exec_always killall swayidle
 exec_always swayidle -w \
-	timeout 300 'swaylock -f -c 191724' \
-	timeout 600 'swaymsg "output * dpms off"' \
+	timeout 600 'swaylock -f -c 000000' \
+	timeout 610 'swaymsg "output * dpms off"' \
 		resume 'swaymsg "output * dpms on"' \
-	before-sleep 'swaylock -f -c 191724'
+	before-sleep 'swaylock -f -c 000000'
