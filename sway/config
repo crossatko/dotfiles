@@ -5,6 +5,7 @@
 # Read `man 5 sway` for a complete reference.
 
 
+
 # init keyring
 exec eval $(/usr/bin/gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh)
 # export keyring
@@ -101,6 +102,8 @@ bindsym XF86AudioMute exec amixer set Master toggle
 #
 
     bindsym Print exec grim -g "$(slurp)" - | wl-copy
+    # bindsym $mod+$alt+Shift+z output * dpms off
+    # bindsym $mod+$alt+Shift+x output * dpms on
 
     # Start a terminal
     bindsym $mod+Return exec $term
@@ -266,3 +269,12 @@ default_floating_border none
 exec "dbus-update-activation-environment --systemd DISPLAY MOZ_DBUS_REMOTE"
 
 exec nm-applet
+exec paystray
+exec dunst
+
+exec_always killall swayidle
+exec_always swayidle -w \
+	timeout 300 'swaylock -f -c 191724' \
+	timeout 600 'swaymsg "output * dpms off"' \
+		resume 'swaymsg "output * dpms on"' \
+	before-sleep 'swaylock -f -c 191724'
