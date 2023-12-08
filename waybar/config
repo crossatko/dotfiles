@@ -16,7 +16,7 @@
     "mpd",
     "idle_inhibitor",
     "pulseaudio",
-//  "network",
+    "network",
     "cpu",
     "memory",
 //  "temperature",
