@@ -194,7 +194,6 @@ bindsym XF86AudioMute exec amixer set Master toggle
 
     # Make the current focus fullscreen
     bindsym $mod+f fullscreen
-    
 
     # Toggle the current focus between tiling and floating mode
     bindsym $mod+Shift+space floating toggle
