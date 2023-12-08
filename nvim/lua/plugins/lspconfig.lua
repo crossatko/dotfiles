@@ -35,6 +35,21 @@ return {
             client.resolved_capabilities.document_formatting = false
           end,
         },
+        emmet_ls = {
+          filetypes = {
+            "html",
+            "css",
+            "blade",
+            "vue",
+            "svelte",
+            "php",
+            "scss",
+            "javascript",
+            "javascriptreact",
+            "typescript",
+            "typescriptreact",
+          },
+        },
       },
     },
   },
