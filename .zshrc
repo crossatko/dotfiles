@@ -46,6 +46,10 @@ alias on="up"
 alias off="down"
 alias startdocker="systemctl --user start docker-desktop"
 
+#other
+alias cc="clear"
+alias ai="PYTORCH_HIP_ALLOC_CONF=garbage_collection_threshold:0.6,max_split_size_mb:128 HSA_OVERRIDE_GFX_VERSION=10.3.0 python3 ~/ai/Fooocus/entry_with_update.py"
+
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"                   # This loads nvm
 
