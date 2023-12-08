@@ -2,8 +2,10 @@ return {
   "nvim-treesitter/nvim-treesitter",
   dependencies = {
     "nvim-treesitter/nvim-treesitter-context",
-    "windwp/nvim-ts-autotag",
+    -- "windwp/nvim-ts-autotag",
+    "EmranMR/tree-sitter-blade",
   },
+
   opts = {
     ensure_installed = {
       "php",
@@ -34,12 +36,12 @@ return {
         script_element = "// %s",
       },
     },
-    autotag = {
-      enable = true,
-      enable_rename = true,
-      enable_close = true,
-      enable_close_on_slash = true,
-    },
+    -- autotag = {
+    --   enable = true,
+    --   enable_rename = true,
+    --   enable_close = true,
+    --   enable_close_on_slash = true,
+    -- },
     highlight = {
       enable = true,
       additional_vim_regex_highlighting = { "markdown" },
