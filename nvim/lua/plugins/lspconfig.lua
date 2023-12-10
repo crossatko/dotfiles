@@ -8,6 +8,9 @@ return {
     opts = {
       -- make sure mason installs the server
       servers = {
+        htmx = {
+          filetypes = { "html", "htm", "php", "vue", "blade", "twig" },
+        },
         jsonls = {
           -- lazy-load schemastore when needed
           on_new_config = function(new_config)
