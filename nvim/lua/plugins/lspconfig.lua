@@ -3,6 +3,7 @@ return {
     "neovim/nvim-lspconfig",
     dependencies = {
       "b0o/SchemaStore.nvim",
+      "vrischmann/tree-sitter-templ",
       version = false, -- last release is way too old
     },
     opts = {
@@ -10,6 +11,15 @@ return {
       servers = {
         htmx = {
           filetypes = { "html", "htm", "php", "vue", "blade", "twig", "templ" },
+        },
+        tailwindcss = {
+          filetypes = { "html", "htm", "php", "vue", "blade", "twig", "templ" },
+          init_options = {
+            userLanguages = {
+              templ = "html",
+              blade = "html",
+            },
+          },
         },
         jsonls = {
           -- lazy-load schemastore when needed
@@ -51,6 +61,7 @@ return {
             "javascriptreact",
             "typescript",
             "typescriptreact",
+            "templ",
           },
         },
       },

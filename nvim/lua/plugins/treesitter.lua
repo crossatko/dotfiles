@@ -22,6 +22,7 @@ return {
   "nvim-treesitter/nvim-treesitter",
   dependencies = {
     "nvim-treesitter/nvim-treesitter-context",
+    "vrischmann/tree-sitter-templ",
     -- "windwp/nvim-ts-autotag",
     "EmranMR/tree-sitter-blade",
   },
@@ -46,6 +47,7 @@ return {
       "html",
       "css",
       "scss",
+      "templ",
     },
     context_commentstring = {
       enable = true,
