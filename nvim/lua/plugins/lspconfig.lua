@@ -9,7 +9,7 @@ return {
       -- make sure mason installs the server
       servers = {
         htmx = {
-          filetypes = { "html", "htm", "php", "vue", "blade", "twig" },
+          filetypes = { "html", "htm", "php", "vue", "blade", "twig", "templ" },
         },
         jsonls = {
           -- lazy-load schemastore when needed
