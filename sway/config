@@ -10,7 +10,8 @@
 exec eval $(/usr/bin/gnome-keyring-daemon --start --components=gpg,pkcs11,secrets,ssh)
 # export keyring
 exec export GNOME_KEYRING_CONTROL GNOME_KEYRING_PID GPG_AGENT_INFO SSH_AUTH_SOCK
-exec export XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=sway
+exec export XDG_SESSION_TYPE= #wayland 
+exec export XDG_CURRENT_DESKTOP=sway
 # mn-applet
 
 ### Variables
@@ -271,6 +272,10 @@ exec "dbus-update-activation-environment --systemd DISPLAY MOZ_DBUS_REMOTE"
 exec nm-applet
 exec paystray
 exec dunst
+
+exec_always killall mullvad-gui
+# exec_always mullvad connect
+exec_always /opt/Mullvad\ VPN/mullvad-gui
 
 exec_always killall swayidle
 exec_always swayidle -w \
