@@ -6,7 +6,8 @@ return {
     formatters_by_ft = {
       css = { "prettier" },
       html = { "prettier" },
-      go = { "gopls" },
+      -- go = { "gopls" },
+      template = { "templ" },
       javascript = { "prettier" },
       javascriptreact = { "prettier" },
       json = { "prettier" },
