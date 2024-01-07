@@ -273,9 +273,9 @@ exec nm-applet
 exec paystray
 exec dunst
 
-exec_always killall mullvad-gui
+# exec_always killall mullvad-gui
 # exec_always mullvad connect
-exec_always /opt/Mullvad\ VPN/mullvad-gui
+# exec_always /opt/Mullvad\ VPN/mullvad-gui
 
 exec_always killall swayidle
 exec_always swayidle -w \
