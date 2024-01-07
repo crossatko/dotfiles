@@ -28,7 +28,7 @@ set $right l
 set $term alacritty
 
 # Preferred browser
-set $browser firefox
+set $browser chromium-browser
 
 
 # Your preferred application launcher

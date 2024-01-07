@@ -33,8 +33,8 @@ source $ZSH/oh-my-zsh.sh
 # system
 alias sleep="systemctl suspend"
 alias :q="exit"
-alias sudo="sudo "
-alias dnf="dnf5"
+# alias sudo="sudo "
+# alias dnf="dnf5"
 
 # dev
 unset rc
@@ -55,7 +55,7 @@ alias startdocker="systemctl --user start docker-desktop"
 
 #other
 alias cc="clear"
-alias ai="PYTORCH_HIP_ALLOC_CONF=garbage_collection_threshold:0.6,max_split_size_mb:128 HSA_OVERRIDE_GFX_VERSION=10.3.0 python3 ~/ai/Fooocus/entry_with_update.py"
+alias ai="PYTORCH_HIP_ALLOC_CONF=garbage_collection_threshold:0.6,max_split_size_mb:128 HSA_OVERRIDE_GFX_VERSION=10.3.0 python3 ~/code/ai/Fooocus/entry_with_update.py"
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"                   # This loads nvm

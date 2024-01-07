@@ -9,9 +9,9 @@ return {
     opts = {
       -- make sure mason installs the server
       servers = {
-        htmx = {
-          filetypes = { "html", "htm", "php", "vue", "blade", "twig", "templ" },
-        },
+        -- htmx = {
+        --   filetypes = { "html", "htm", "php", "vue", "blade", "twig", "templ" },
+        -- },
         tailwindcss = {
           filetypes = { "html", "htm", "php", "vue", "blade", "twig", "templ" },
           init_options = {
