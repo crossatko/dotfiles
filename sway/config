@@ -40,7 +40,7 @@ set $menu tofi-run | xargs swaymsg exec --;
 ### Output configuration
 #
 # Default wallpaper (more resolutions are available in @datadir@/backgrounds/sway/)
-output * bg ~/Pictures/Wallpapers/1.jpg fill
+output * bg ~/Pictures/Wallpapers/2.jpg fill
 #
 # Example configuration:
 #
