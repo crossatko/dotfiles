@@ -5,8 +5,8 @@
 }
 
 window#waybar {
-  background-color: #191724;
-  /* background-color: transparent; */
+  /* background-color: #191724; */
+  background-color: transparent;
   color: #e0def4;
   transition-property: background-color;
   transition-duration: 0.2s;
@@ -29,11 +29,12 @@ window#waybar.solo {
 button {
   /* Avoid rounded borders under each button name */
   border: none;
-  border-radius: 0;
+  border-radius: 4px;
 }
 
 /* https://github.com/Alexays/Waybar/wiki/FAQ#the-workspace-buttons-have-a-strange-hover-effect */
 button:hover {
+  border: none;
   background: inherit;
 }
 
@@ -47,7 +48,8 @@ button:hover {
   background: rgba(0, 0, 0, 0.2);
 }
 
-#workspaces button.focused {
+#workspaces button.focused,
+#workspaces button.active {
   background-color: #d7827e;
   color: #191724;
   font-weight: bold;
@@ -80,6 +82,7 @@ button:hover {
   padding: 0 10px;
   color: #e0def4;
   background-color: #191724;
+  border-radius: 4px;
 }
 
 #window,
