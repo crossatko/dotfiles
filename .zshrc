@@ -45,6 +45,8 @@ alias ci="composer install"
 alias sa="cd ../api && a serve"
 alias sail="./vendor/bin/sail"
 alias vim="nvim"
+alias v="nvim"
+alias z="zellij"
 
 # docker
 alias up="make build.all && make up.d"
