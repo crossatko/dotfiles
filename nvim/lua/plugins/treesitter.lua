@@ -1,7 +1,6 @@
 return {
   "nvim-treesitter/nvim-treesitter",
   dependencies = {
-    -- "nvim-treesitter/nvim-treesitter-context",
     "vrischmann/tree-sitter-templ",
     "windwp/nvim-ts-autotag",
     "EmranMR/tree-sitter-blade",
