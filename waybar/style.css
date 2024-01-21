@@ -79,7 +79,8 @@ button:hover {
 #mode,
 #idle_inhibitor,
 #scratchpad,
-#mpd {
+#mpd,
+#custom-easyeffects {
   padding: 0 10px;
   color: #e0def4;
   background-color: #191724;
@@ -127,6 +128,10 @@ label:focus {
 
 #network.disconnected {
   background-color: #eb6f92;
+}
+
+#custom-easyeffects.mute {
+  color: #eb6f92;
 }
 
 #temperature {
