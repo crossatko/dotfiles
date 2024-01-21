@@ -17,7 +17,7 @@ else
 fi
 
 echo '{
-    "text": "'"$PERCENT%"'", 
+    "text": "'"$([ "$CURRENT_PRESET" == "mic" ] && echo " ON AIR" || echo " MUTED")"'", 
     "alt": "'"$CURRENT_PRESET"'", 
     "percentage": "'"$PERCENT"'", 
     "tooltip": "Click to '"$([ "$CURRENT_PRESET" == "mic" ] && echo "mute" || echo "unmute")"'", 

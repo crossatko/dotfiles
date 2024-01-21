@@ -1,7 +1,9 @@
 * {
   /* `otf-font-awesome` is required to be installed for icons */
-  font-family: FontAwesome, Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Font Awesome 6 Pro Regular", "DankMono Nerd Font Mono", Roboto,
+    Helvetica, Arial, sans-serif;
   font-size: 13px;
+  /* font-weight: 700; */
 }
 
 window#waybar {
@@ -39,7 +41,7 @@ button:hover {
 }
 
 #workspaces button {
-  padding: 5px 8px 0px 8px;
+  padding: 0px 8px 0px 8px;
   background-color: #191724;
   color: #e0def4;
   margin: 0 2px;
@@ -130,8 +132,9 @@ label:focus {
   background-color: #eb6f92;
 }
 
-#custom-easyeffects.mute {
-  color: #eb6f92;
+#custom-easyeffects.mic {
+  background-color: #eb6f92;
+  color: #191724;
 }
 
 #temperature {

@@ -62,7 +62,7 @@
     "tooltip": false
   },
   "memory": {
-    "format": "{}% "
+    "format": "{}% "
   },
   "network": {
     // "interface": "wlp2*", // (Optional) To force the use of this interface
