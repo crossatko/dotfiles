@@ -20,13 +20,11 @@ fi
 
 # Toggle between 'mic' and 'mute'
 if [ "$CURRENT_PRESET" == "$MIC_PRESET" ]; then
-	amixer set Capture mute
+	amixer set 'Capture' 0
 	$EASY_EFFECTS_PATH -l $MUTE_PRESET
 	echo "$MUTE_PRESET" >"$PRESET_FILE"
-	echo "Switched to Mute preset"
 else
-	amixer set Capture unmute
+	amixer set 'Capture' 100
 	$EASY_EFFECTS_PATH -l $MIC_PRESET
 	echo "$MIC_PRESET" >"$PRESET_FILE"
-	echo "Switched to Mic preset"
 fi
