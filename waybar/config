@@ -11,6 +11,7 @@
   "modules-left": [
     "network",
     "cpu",
+    "custom/cputemp",
     "memory",
   ],
   "modules-center": ["hyprland/workspaces" ],
@@ -60,6 +61,15 @@
   "cpu": {
     "format": "{usage}% ",
     "tooltip": false
+  },
+
+  "custom/cputemp": {
+    "exec": "$HOME/.config/waybar/scripts/cputemp.sh",
+    "interval": 3,
+    "return-type": "json",
+    "format": "<span>{icon} {}</span>",
+    "format-icons": {"cool": "", "warm": "", "hot": ""},
+    "class": "button",
   },
   "memory": {
     "format": "{}% "

@@ -82,7 +82,8 @@ button:hover {
 #idle_inhibitor,
 #scratchpad,
 #mpd,
-#custom-easyeffects {
+#custom-easyeffects,
+#custom-cputemp {
   padding: 0 10px;
   color: #e0def4;
   background-color: #191724;
@@ -137,13 +138,29 @@ label:focus {
   color: #191724;
 }
 
-#temperature {
-  background-color: #ea9d34;
+#custom-cputemp.hot {
+  background-color: #eb6f92;
   color: #191724;
 }
 
-#temperature.critical {
+#custom-cputemp.hot {
   background-color: #eb6f92;
+  color: #191724;
+}
+
+#custom-cputemp.warm {
+  background-color: #f6c177;
+  color: #191724;
+}
+
+#custom-cputemp.cool {
+  background-color: #9ccfd8;
+  color: #191724;
+}
+
+#temperature {
+  background-color: #ea9d34;
+  color: #191724;
 }
 
 #tray {
