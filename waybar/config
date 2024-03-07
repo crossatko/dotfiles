@@ -13,6 +13,7 @@
     "cpu",
     "custom/cputemp",
     "memory",
+    "custom/prices"
   ],
   "modules-center": ["hyprland/workspaces" ],
   "modules-right": [
@@ -69,6 +70,14 @@
     "return-type": "json",
     "format": "<span>{icon} {}</span>",
     "format-icons": {"cool": "", "warm": "", "hot": ""},
+    "class": "button",
+  },
+
+  "custom/prices": {
+    "exec": "$HOME/.config/waybar/scripts/prices.sh",
+    "interval": 30,
+    "return-type": "json",
+    "format": "<span>{}</span>",
     "class": "button",
   },
   "memory": {

@@ -4,6 +4,8 @@
     Helvetica, Arial, sans-serif;
   font-size: 13px;
   /* font-weight: 700; */
+  /* font-feature-settings: "tnum"; */
+  /* font-variant-numeric: tabular-nums; */
 }
 
 window#waybar {
@@ -83,7 +85,8 @@ button:hover {
 #scratchpad,
 #mpd,
 #custom-easyeffects,
-#custom-cputemp {
+#custom-cputemp,
+#custom-prices {
   padding: 0 10px;
   color: #e0def4;
   background-color: #191724;

@@ -33,6 +33,8 @@ source $ZSH/oh-my-zsh.sh
 # system
 alias sleep="systemctl suspend"
 alias :q="exit"
+alias dnfu="sudo dnf update"
+alias dnfi="sudo dnf install"
 # alias sudo="sudo "
 # alias dnf="dnf5"
 
