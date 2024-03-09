@@ -16,4 +16,4 @@ sol_usd_rate=$(echo "scale=2; 1 / $sol_rate" | bc)
 shib_usd_rate=$(echo "scale=8; 1 / $shib_rate" | bc)
 
 # Echo the BTC and SOL prices in Waybar style JSON format
-echo '{"text": "BTC: '$btc_usd_rate' USD   |   SOL: '$sol_usd_rate' USD   |   LTC: '$ltc_usd_rate' USD   |   SHIB: '$shib_usd_rate' USD"}'
+echo '{"text": "BTC: USD'$btc_usd_rate'   |   SOL: USD'$sol_usd_rate'   |   LTC: USD'$ltc_usd_rate'   |   SHIB: USD'$shib_usd_rate'"}'
