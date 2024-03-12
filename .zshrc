@@ -50,6 +50,25 @@ alias vim="nvim"
 alias v="nvim"
 alias z="zellij"
 
+_code_completion() {
+    local cur=${COMP_WORDS[COMP_CWORD]}
+    local projects=$(ls "$HOME/code")
+
+    COMPREPLY=($(compgen -W "$projects" -- "$cur"))
+}
+
+complete -F _code_completion code
+
+code() {
+    local project_path="$HOME/code/$1"
+    if [ -d "$project_path" ]; then
+        cd "$project_path" || return
+        nvim
+    else
+        echo "Project not found in code folder."
+    fi
+}
+
 # docker
 alias up="make build.all && make up.d"
 alias down="make down"
@@ -73,3 +92,4 @@ function calc() {
 eval "$(starship init zsh)"
 
 eval "$(atuin init zsh)"
+eval "$(zellij setup --generate-auto-start zsh)"
