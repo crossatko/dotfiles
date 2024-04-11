@@ -49,6 +49,8 @@ alias sail="./vendor/bin/sail"
 alias vim="nvim"
 alias v="nvim"
 alias z="zellij"
+alias "??"="gh copilot suggest"
+alias "???"="gh copilot explain"
 
 _code_completion() {
     local cur=${COMP_WORDS[COMP_CWORD]}
@@ -91,5 +93,7 @@ function calc() {
 
 eval "$(starship init zsh)"
 
-eval "$(atuin init zsh)"
-eval "$(zellij setup --generate-auto-start zsh)"
+# eval "$(atuin init zsh)"
+# eval "$(zellij setup --generate-auto-start zsh)"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+# eval "$(gh copilot alias -- zsh)"
