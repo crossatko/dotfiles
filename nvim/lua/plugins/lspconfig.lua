@@ -41,6 +41,22 @@ return {
             -- disable formatting, since we use prettier
             client.resolved_capabilities.document_formatting = false
           end,
+          init_options = {
+            plugins = {
+              {
+                name = "@vue/typescript-plugin",
+                location = "/usr/local/lib/node_modules/@vue/typescript-plugin",
+                languages = { "javascript", "typescript", "vue" },
+              },
+            },
+          },
+          filetypes = {
+            "javascript",
+            "typescript",
+            "vue",
+          },
+          ---@diagnostic disable-next-line: missing-fields
+          settings = {},
         },
         volar = {
           on_attach = function(client)

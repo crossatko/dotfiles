@@ -27,6 +27,7 @@ return {
       "vimdoc",
       "vue",
       "yaml",
+      "css",
     },
     autotag = {
       enable = true,
