@@ -36,10 +36,14 @@ return {
             },
           },
         },
+        bashls = {
+          cmd = { "bash-language-server", "start" },
+          filetypes = { "sh", "bash" },
+        },
         tsserver = {
           on_attach = function(client)
             -- disable formatting, since we use prettier
-            client.resolved_capabilities.document_formatting = false
+            client.server_capabilities.documentFormattingProvider = false
           end,
           init_options = {
             plugins = {
@@ -61,7 +65,7 @@ return {
         volar = {
           on_attach = function(client)
             -- disable formatting, since we use prettier
-            client.resolved_capabilities.document_formatting = false
+            client.server_capabilities.documentFormattingProvider = false
           end,
         },
         emmet_ls = {
