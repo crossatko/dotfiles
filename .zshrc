@@ -97,3 +97,10 @@ eval "$(starship init zsh)"
 # eval "$(zellij setup --generate-auto-start zsh)"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 # eval "$(gh copilot alias -- zsh)"
+
+# bun completions
+[ -s "/home/crossatko/.bun/_bun" ] && source "/home/crossatko/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
