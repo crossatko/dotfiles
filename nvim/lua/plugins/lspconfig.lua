@@ -40,33 +40,16 @@ return {
           cmd = { "bash-language-server", "start" },
           filetypes = { "sh", "bash" },
         },
-        tsserver = {
+        volar = {},
+        -- Volar 2.0 has discontinued their "take over mode" which in previous version provided support for typescript in vue files.
+        -- The new approach to get typescript support involves using the typescript language server along side volar.
+        vtsls = {
           on_attach = function(client)
             -- disable formatting, since we use prettier
             client.server_capabilities.documentFormattingProvider = false
           end,
-          init_options = {
-            plugins = {
-              {
-                name = "@vue/typescript-plugin",
-                location = "/usr/local/lib/node_modules/@vue/typescript-plugin",
-                languages = { "javascript", "typescript", "vue" },
-              },
-            },
-          },
-          filetypes = {
-            "javascript",
-            "typescript",
-            "vue",
-          },
           ---@diagnostic disable-next-line: missing-fields
           settings = {},
-        },
-        volar = {
-          on_attach = function(client)
-            -- disable formatting, since we use prettier
-            client.server_capabilities.documentFormattingProvider = false
-          end,
         },
         emmet_ls = {
           filetypes = {
