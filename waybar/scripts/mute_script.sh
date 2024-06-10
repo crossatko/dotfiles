@@ -24,13 +24,13 @@ fi
 
 # Toggle between 'mic' and 'mute'
 if [ "$CURRENT_PRESET" == "$MIC_PRESET" ]; then
-	amixer set 'Capture' 0
+	amixer set 'Capture' 0%
 	# amixer -c "$CARD_INDEX" cset numid=22 off
 	$EASY_EFFECTS_PATH -l $MUTE_PRESET
 	echo "$MUTE_PRESET" >"$PRESET_FILE"
 
 else
-	amixer set 'Capture' 100
+	amixer set 'Capture' 100%
 	# amixer -c "$CARD_INDEX" cset numid=22 on
 	$EASY_EFFECTS_PATH -l $MIC_PRESET
 	echo "$MIC_PRESET" >"$PRESET_FILE"
