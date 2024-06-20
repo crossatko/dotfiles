@@ -1,0 +1,237 @@
+* {
+  /* `otf-font-awesome` is required to be installed for icons */
+  font-family: "ComicCodeLigatures Nerd Font Mono", "Font Awesome 6 Pro Regular", "DankMono Nerd Font Mono", Roboto,
+    Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  /* font-weight: 700; */
+  /* font-feature-settings: "tnum"; */
+  /* font-variant-numeric: tabular-nums; */
+}
+
+window#waybar {
+  /* background-color: #191724; */
+  background-color: transparent;
+  color: #e0def4;
+  transition-property: background-color;
+  transition-duration: 0.2s;
+  /* opacity: 0.95; */
+}
+
+window#waybar.hidden {
+  opacity: 0.2;
+}
+
+/*
+window#waybar.empty {
+    background-color: transparent;
+}
+window#waybar.solo {
+    background-color: #FFFFFF;
+}
+*/
+
+button {
+  /* Avoid rounded borders under each button name */
+  border: none;
+  border-radius: 4px;
+}
+
+/* https://github.com/Alexays/Waybar/wiki/FAQ#the-workspace-buttons-have-a-strange-hover-effect */
+button:hover {
+  border: none;
+  background: inherit;
+}
+
+#workspaces button {
+  padding: 0px 8px 0px 8px;
+  background-color: #191724;
+  color: #e0def4;
+  margin: 0 2px;
+}
+
+#workspaces button:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+#workspaces button.focused,
+#workspaces button.active {
+  background-color: #d7827e;
+  color: #191724;
+  font-weight: bold;
+}
+
+#workspaces button.urgent {
+  background-color: #eb6f92;
+}
+
+#mode {
+  background-color: #64727d;
+}
+
+#clock,
+#battery,
+#cpu,
+#memory,
+#disk,
+#temperature,
+#backlight,
+#network,
+#pulseaudio,
+#wireplumber,
+#custom-media,
+#tray,
+#mode,
+#idle_inhibitor,
+#scratchpad,
+#mpd,
+#custom-easyeffects,
+#custom-cputemp,
+#custom-prices {
+  padding: 0 10px;
+  color: #e0def4;
+  background-color: #191724;
+  border-radius: 4px;
+}
+
+#window,
+#workspaces {
+  margin: 0 4px;
+}
+
+#window {
+  padding: 5px 8px 0px 8px;
+  color: #e0def4;
+  background: #191724;
+}
+window#waybar.empty #window {
+  background: none;
+}
+
+/* If workspaces is the leftmost module, omit left margin */
+.modules-left > widget:first-child > #workspaces {
+  margin-left: 0;
+}
+
+/* If workspaces is the rightmost module, omit right margin */
+.modules-right > widget:last-child > #workspaces {
+  margin-right: 0;
+}
+
+#clock {
+  background-color: #191724;
+}
+
+@keyframes blink {
+  to {
+    background-color: #ffffff;
+    color: #000000;
+  }
+}
+
+label:focus {
+  background-color: #191724;
+}
+
+#network.disconnected {
+  background-color: #eb6f92;
+}
+
+#custom-easyeffects.mic {
+  background-color: #eb6f92;
+  color: #191724;
+}
+
+#custom-cputemp.hot {
+  background-color: #eb6f92;
+  color: #191724;
+}
+
+#custom-cputemp.hot {
+  background-color: #eb6f92;
+  color: #191724;
+}
+
+#custom-cputemp.warm {
+  background-color: #f6c177;
+  color: #191724;
+}
+
+#custom-cputemp.cool {
+  background-color: #9ccfd8;
+  color: #191724;
+}
+
+#temperature {
+  background-color: #ea9d34;
+  color: #191724;
+}
+
+#tray {
+  background-color: #191724;
+}
+
+#tray > .passive {
+  -gtk-icon-effect: dim;
+}
+
+#tray > .needs-attention {
+  -gtk-icon-effect: highlight;
+  background-color: #eb4d4b;
+}
+
+#idle_inhibitor {
+  background-color: #191724;
+}
+
+#idle_inhibitor.activated {
+  background-color: #f2e9e1;
+  color: #191724;
+}
+
+#mpd {
+  background-color: #66cc99;
+  color: #2a5c45;
+}
+
+#mpd.disconnected {
+  background-color: #f53c3c;
+}
+
+#mpd.stopped {
+  background-color: #90b1b1;
+}
+
+#mpd.paused {
+  background-color: #51a37a;
+}
+
+#language {
+  background: #191724;
+  color: #faf4ed;
+  padding: 0 10px;
+  min-width: 16px;
+}
+
+#keyboard-state {
+  background: #97e1ad;
+  color: #000000;
+  padding: 0 0px;
+  margin: 0 5px;
+  min-width: 16px;
+}
+
+#keyboard-state > label {
+  padding: 0 5px;
+}
+
+#keyboard-state > label.locked {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+#scratchpad {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+#scratchpad.empty {
+  background-color: transparent;
+}
