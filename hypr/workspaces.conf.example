@@ -1,9 +1,0 @@
-workspace = name:Q, monitor:$monitor2
-workspace = name:W, monitor:$monitor2
-workspace = name:E, monitor:$monitor2, on-created-empty:$discord && $terminal, default:true
-workspace = name:R, monitor:$monitor2, on-created-empty:$mail
-
-workspace = name:A, monitor:$monitor1
-workspace = name:S, monitor:$monitor1
-workspace = name:D, monitor:$monitor1, on-created-empty:$browser, default:true
-workspace = name:F, monitor:$monitor1, on-created-empty:$terminal

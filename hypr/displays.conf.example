@@ -1,5 +1,0 @@
-$monitor1 = DP-3
-$monitor2 = DP-2
-
-monitor=$monitor1,3440x1440@100,0x0,1
-# monitor=$monitor2,1920x1200@60,0x0,1,transform,1
