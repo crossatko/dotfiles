@@ -1,4 +1,3 @@
-
 workspace = name:Q, monitor:$monitor2
 workspace = name:W, monitor:$monitor2
 workspace = name:E, monitor:$monitor2, on-created-empty:$discord && $terminal, default:true
