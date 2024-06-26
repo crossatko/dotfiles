@@ -20,6 +20,9 @@ return {
               blade = "html",
             },
           },
+          on_attach = function(client)
+            client.server_capabilities.inlayHintProvider = false
+          end,
         },
         jsonls = {
           -- lazy-load schemastore when needed
@@ -46,6 +49,7 @@ return {
         vtsls = {
           on_attach = function(client)
             -- disable formatting, since we use prettier
+            client.server_capabilities.inlayHintProvider = false
             client.server_capabilities.documentFormattingProvider = false
           end,
           ---@diagnostic disable-next-line: missing-fields
@@ -66,6 +70,9 @@ return {
             "typescriptreact",
             "templ",
           },
+          on_attach = function(client)
+            client.server_capabilities.inlayHintProvider = false
+          end,
         },
       },
     },
