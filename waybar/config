@@ -17,11 +17,11 @@
   ],
   "modules-center": ["hyprland/workspaces" ],
   "modules-right": [
-    "idle_inhibitor",
+//     "idle_inhibitor",
+    "tray",
     "pulseaudio",
     "custom/easyeffects",
-    "clock",
-    "tray"
+    "clock"
   ],
 
   "keyboard-state": {
