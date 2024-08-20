@@ -19,7 +19,7 @@ if [ "$WINDOW_COUNT" -eq 1 ]; then
   hyprctl dispatch setfloating active
   hyprctl dispatch resizeactive exact 2200 1392
   hyprctl dispatch centerwindow
-  hyprctl dispatch moveactive 0 -17
+  hyprctl dispatch moveactive 0 17
 else
   echo "$OPEN_CLIENTS" | jq -r '.address' | while read -r client_address; do
     hyprctl dispatch settiled address:"$client_address"
