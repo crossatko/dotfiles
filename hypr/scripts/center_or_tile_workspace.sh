@@ -1,5 +1,7 @@
 #!/bin/bash
 
+sleep 0.2
+
 # Get the current workspace information
 CURRENT_WORKSPACE=$(hyprctl activeworkspace -j)
 

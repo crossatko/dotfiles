@@ -9,18 +9,16 @@
   "margin-left": 4,
   "margin-right": 4,
   "modules-left": [
-//"network",
-    "cpu",
-//    "custom/cputemp",
-    "memory",
-    "custom/prices"
+    "hyprland/workspaces" 
   ],
-  "modules-center": ["hyprland/workspaces" ],
+  "modules-center": [],
   "modules-right": [
-//     "idle_inhibitor",
-    "tray",
+    "custom/prices",
+    "cpu",
+    "memory",
     "pulseaudio",
-//    "custom/easyeffects",
+    "custom/easyeffects",
+    "tray",
     "clock"
   ],
 
