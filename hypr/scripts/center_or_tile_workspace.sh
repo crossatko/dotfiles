@@ -19,7 +19,7 @@ echo "Open Clients: $OPEN_CLIENTS"
 
 if [ "$WINDOW_COUNT" -eq 1 ]; then
   hyprctl dispatch setfloating active
-  hyprctl dispatch resizeactive exact 2200 1392
+  hyprctl dispatch resizeactive exact 2400 1392
   hyprctl dispatch centerwindow
   hyprctl dispatch moveactive 0 17
 else
