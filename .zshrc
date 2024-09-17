@@ -30,6 +30,10 @@ plugins=(git)
 
 source $ZSH/oh-my-zsh.sh
 
+pokemon-colorscripts -r --no-title
+
+alias brave="brave-browser"
+
 # system
 alias sleep="systemctl suspend"
 alias :q="exit"
@@ -91,6 +95,36 @@ export NVM_DIR="$HOME/.nvm"
 
 function calc() {
   echo "$*" | bc -l
+}
+
+# Function alias for yay
+yay() {
+  case "$1" in
+    -S)
+      shift
+      sudo dnf install "$@"
+      ;;
+    -R)
+      shift
+      sudo dnf remove "$@"
+      ;;
+    -Sy)
+      sudo dnf check-update
+      ;;
+    -Syu)
+      sudo dnf update
+      ;;
+    -Ss)
+      shift
+      dnf search "$@"
+      ;;
+    -Su)
+      sudo dnf upgrade "$@"
+      ;;
+    *)
+      echo "Command not recognized: yay $@"
+      ;;
+  esac
 }
 
 eval "$(starship init zsh)"

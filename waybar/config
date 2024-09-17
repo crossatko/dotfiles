@@ -8,9 +8,7 @@
   "margin-top": 4,
   "margin-left": 4,
   "margin-right": 4,
-  "modules-left": [
-    "hyprland/workspaces" 
-  ],
+  "modules-left": ["hyprland/workspaces"],
   "modules-center": [],
   "modules-right": [
     "custom/prices",
@@ -31,16 +29,16 @@
       "unlocked": ""
     }
   },
-//  "sway/mode": {
-//    "format": "<span style=\"italic\">{}</span>"
-//  },
-//  "sway/scratchpad": {
-//    "format": "{icon} {count}",
-//    "show-empty": false,
-//    "format-icons": ["", ""],
-//    "tooltip": true,
-//    "tooltip-format": "{app}: {title}"
-//  },
+  //  "sway/mode": {
+  //    "format": "<span style=\"italic\">{}</span>"
+  //  },
+  //  "sway/scratchpad": {
+  //    "format": "{icon} {count}",
+  //    "show-empty": false,
+  //    "format-icons": ["", ""],
+  //    "tooltip": true,
+  //    "tooltip-format": "{app}: {title}"
+  //  },
   "idle_inhibitor": {
     "format": "{icon}",
     "format-icons": {
@@ -67,8 +65,8 @@
     "interval": 3,
     "return-type": "json",
     "format": "<span>{icon} {}</span>",
-    "format-icons": {"cool": "", "warm": "", "hot": ""},
-    "class": "button",
+    "format-icons": { "cool": "", "warm": "", "hot": "" },
+    "class": "button"
   },
 
   "custom/prices": {
@@ -76,7 +74,7 @@
     "interval": 30,
     "return-type": "json",
     "format": "<span>{}</span>",
-    "class": "button",
+    "class": "button"
   },
   "memory": {
     "format": "{}% "
@@ -112,10 +110,10 @@
   "custom/easyeffects": {
     "exec": "$HOME/.config/waybar/scripts/easyeffects.sh",
     "format": "<span>{icon} {}</span>",
-    "format-icons": {"mic": "", "mute": ""},
+    "format-icons": { "mic": "", "mute": "" },
     "return-type": "json",
     "class": "button",
     "interval": 1,
-    "on-click": "$HOME/.config/waybar/scripts/easyeffects.sh toggle",
-  },
+    "on-click": "$HOME/.config/waybar/scripts/easyeffects.sh toggle"
+  }
 }
