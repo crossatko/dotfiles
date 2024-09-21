@@ -15,7 +15,7 @@
     "cpu",
     "memory",
     "pulseaudio",
-    "custom/easyeffects",
+    "custom/mic",
     "tray",
     "clock"
   ],
@@ -107,13 +107,13 @@
     },
     "on-click": "pavucontrol"
   },
-  "custom/easyeffects": {
-    "exec": "$HOME/.config/waybar/scripts/easyeffects.sh",
-    "format": "<span>{icon} {}</span>",
+  "custom/mic": {
+    "exec": "$HOME/.config/waybar/scripts/mic.sh",
+    "format": "<span>{icon}</span>",
     "format-icons": { "mic": "", "mute": "" },
     "return-type": "json",
     "class": "button",
     "interval": 1,
-    "on-click": "$HOME/.config/waybar/scripts/easyeffects.sh toggle"
+    "on-click": "$HOME/.config/waybar/scripts/mic.sh toggle"
   }
 }

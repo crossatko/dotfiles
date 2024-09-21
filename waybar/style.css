@@ -86,7 +86,7 @@ button:hover {
 #idle_inhibitor,
 #scratchpad,
 #mpd,
-#custom-easyeffects,
+#custom-mic,
 #custom-cputemp,
 #custom-prices {
   padding: 0 10px;
@@ -138,7 +138,7 @@ label:focus {
   background-color: #eb6f92;
 }
 
-#custom-easyeffects.mic {
+#custom-mic.mic {
   background-color: #eb6f92;
   color: #191724;
 }
