@@ -1,4 +1,4 @@
-import = ["/home/kreejzak/.config/alacritty/rose-pine.toml"]
+import = ["/home/crossatko/.config/alacritty/rose-pine.toml"]
 
 [font]
 size = 15
