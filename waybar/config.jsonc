@@ -17,7 +17,7 @@
     "pulseaudio",
     "custom/mic",
     "tray",
-    "clock"
+    "clock",
   ],
 
   "keyboard-state": {
@@ -26,8 +26,8 @@
     "format": "{name} {icon}",
     "format-icons": {
       "locked": "",
-      "unlocked": ""
-    }
+      "unlocked": "",
+    },
   },
   //  "sway/mode": {
   //    "format": "<span style=\"italic\">{}</span>"
@@ -43,21 +43,21 @@
     "format": "{icon}",
     "format-icons": {
       "activated": "",
-      "deactivated": ""
-    }
+      "deactivated": "",
+    },
   },
   "tray": {
-    "spacing": 10
+    "spacing": 10,
   },
   "clock": {
     "timezone": "Europe/Prague",
     "format": "{:%Y-%m-%d %H:%M}",
     "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
-    "format-alt": "{:%Y-%m-%d}"
+    "format-alt": "{:%Y-%m-%d}",
   },
   "cpu": {
     "format": "{usage}% ",
-    "tooltip": false
+    "tooltip": false,
   },
 
   "custom/cputemp": {
@@ -66,7 +66,7 @@
     "return-type": "json",
     "format": "<span>{icon} {}</span>",
     "format-icons": { "cool": "", "warm": "", "hot": "" },
-    "class": "button"
+    "class": "button",
   },
 
   "custom/prices": {
@@ -74,10 +74,10 @@
     "interval": 30,
     "return-type": "json",
     "format": "<span>{}</span>",
-    "class": "button"
+    "class": "button",
   },
   "memory": {
-    "format": "{}% "
+    "format": "{}% ",
   },
   "network": {
     // "interface": "wlp2*", // (Optional) To force the use of this interface
@@ -86,7 +86,7 @@
     "tooltip-format": "{ifname} via {gwaddr} ",
     "format-linked": "{ifname} (No IP) ",
     "format-disconnected": "Disconnected ⚠",
-    "format-alt": "{ifname}: {ipaddr}/{cidr}"
+    "format-alt": "{ifname}: {ipaddr}/{cidr}",
   },
   "pulseaudio": {
     // "scroll-step": 1, // %, can be a float
@@ -103,9 +103,9 @@
       "phone": "",
       "portable": "",
       "car": "",
-      "default": ["", "", ""]
+      "default": ["", "", ""],
     },
-    "on-click": "pavucontrol"
+    "on-click": "pavucontrol",
   },
   "custom/mic": {
     "exec": "$HOME/.config/waybar/scripts/mic.sh",
@@ -114,6 +114,6 @@
     "return-type": "json",
     "class": "button",
     "interval": 1,
-    "on-click": "$HOME/.config/waybar/scripts/mic.sh toggle"
-  }
+    "on-click": "$HOME/.config/waybar/scripts/mic.sh toggle",
+  },
 }
