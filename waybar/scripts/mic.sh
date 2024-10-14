@@ -6,7 +6,7 @@ if [ "$1" == "toggle" ]; then
 fi
 
 # Set the preset file
-PRESET_FILE="$HOME/.easyeffects_preset"
+PRESET_FILE="$HOME/.mic_preset"
 
 CURRENT_PRESET=$([ -e "$PRESET_FILE" ] && cat "$PRESET_FILE" || echo "mic")
 
