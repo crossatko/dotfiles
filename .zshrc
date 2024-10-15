@@ -127,6 +127,45 @@ yay() {
   esac
 }
 
+
+imgs() {
+    local width=${1:-}         # Optional width (first argument)
+    local height               # To be set based on input
+    local output_format         # To be set based on input (either third or second argument)
+
+    # If the second argument is a number, it's height, otherwise it's the output format
+    if [[ "$2" =~ ^[0-9]+$ ]]; then
+        height=$2
+        output_format=$3
+    elif [[ -n "$1" && -n "$2" ]]; then
+        height=$width  # If second argument is not a number, assume it's the format, so height defaults to width
+        output_format=$2
+    else
+        height=$width  # If only one size is provided, assume square dimensions
+    fi
+
+    # If only output format is provided as first argument
+    if [[ -z "$width" && -n "$1" ]]; then
+        output_format=$1
+    fi
+
+
+    mkdir -p new
+
+    for img in *.*(jpg|jpeg|png|gif|bmp|tiff|webp); do
+        ext="${img##*.}"               # Get the original file extension
+        filename="${img%.*}"           # Get the filename without extension
+        output_ext=${output_format:-$ext}  # Use specified output format or original if not specified
+
+        # Apply resizing if width (and height, automatically) are provided, otherwise just convert
+        if [[ -n "$width" && -n "$height" ]]; then
+            magick "$img" -resize "${width}x${height}>" "./new/${filename}.${output_ext}"
+        else
+            magick "$img" "./new/${filename}.${output_ext}"
+        fi
+    done
+}
+
 eval "$(starship init zsh)"
 
 # eval "$(atuin init zsh)"
