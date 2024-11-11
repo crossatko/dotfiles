@@ -16,6 +16,7 @@
     "memory",
     "pulseaudio",
     "custom/mic",
+    "custom/airpods",
     "tray",
     "clock",
   ],
@@ -115,5 +116,14 @@
     "class": "button",
     "interval": 1,
     "on-click": "$HOME/.config/waybar/scripts/mic.sh toggle",
+  },
+  "custom/airpods": {
+    "exec": "$HOME/.config/waybar/scripts/airpods.sh",
+    "format": "<span>{icon}</span>",
+    "format-icons": { "connected": "", "disconnected": "" },
+    "return-type": "json",
+    "class": "button",
+    "interval": 1,
+    "on-click": "$HOME/.config/waybar/scripts/airpods.sh toggle",
   },
 }
