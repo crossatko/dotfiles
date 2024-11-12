@@ -179,3 +179,5 @@ eval "$(starship init zsh)"
 # bun
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
+export PATH="/home/crossatko/.config/herd-lite/bin:$PATH"
+export PHP_INI_SCAN_DIR="/home/crossatko/.config/herd-lite/bin:$PHP_INI_SCAN_DIR"
