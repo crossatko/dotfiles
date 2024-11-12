@@ -29,7 +29,9 @@ program = "/bin/zsh"
 x = 0
 y = 0
 
+[general]
 import = ["~/.config/alacritty/rose-pine.toml"]
+# import = ["/home/kreejzak/.config/alacritty/rose-pine.toml"]
 
 [terminal]
 
