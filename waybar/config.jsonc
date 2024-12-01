@@ -11,6 +11,7 @@
   "modules-left": ["hyprland/workspaces"],
   "modules-center": [],
   "modules-right": [
+    "idle_inhibitor",
     "custom/prices",
     "cpu",
     "memory",
