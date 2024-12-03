@@ -82,6 +82,7 @@ button:hover {
 #wireplumber,
 #custom-media,
 #custom-airpods,
+#custom-hyprsunset,
 #tray,
 #mode,
 #idle_inhibitor,
@@ -144,6 +145,14 @@ label:focus {
   color: #191724;
 }
 
+#custom-hyprsunset {
+  min-width: 16px;
+}
+#custom-hyprsunset.on {
+  background-color: #ea9d34;
+  color: #191724;
+}
+
 #custom-cputemp.hot {
   background-color: #eb6f92;
   color: #191724;
@@ -187,7 +196,7 @@ label:focus {
 }
 
 #idle_inhibitor.activated {
-  background-color: #f2e9e1;
+  background-color: #66cc99;
   color: #191724;
 }
 

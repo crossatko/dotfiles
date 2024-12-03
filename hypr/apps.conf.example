@@ -1,0 +1,6 @@
+$menu = tofi-drun --drun-launch=true
+$terminal =  alacritty 
+$browser = brave
+$discord = flatpak run com.discordapp.DiscordCanary
+$mail = thunderbird
+$filemanager = nautilus

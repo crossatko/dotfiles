@@ -12,6 +12,7 @@
   "modules-center": [],
   "modules-right": [
     "idle_inhibitor",
+    "custom/hyprsunset",
     "custom/prices",
     "cpu",
     "memory",
@@ -126,5 +127,13 @@
     "class": "button",
     "interval": 1,
     "on-click": "$HOME/.config/waybar/scripts/airpods.sh toggle",
+  },
+  "custom/hyprsunset": {
+    "exec": "$HOME/.config/waybar/scripts/hyprsunset.sh 1000 status",
+    "format": "<span>{icon}</span>",
+    "interval": 1,
+    "format-icons": { "on": "", "off": "" },
+    "return-type": "json",
+    "on-click": "$HOME/.config/waybar/scripts/hyprsunset.sh 4000 toggle",
   },
 }
