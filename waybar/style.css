@@ -97,6 +97,11 @@ button:hover {
 .modules-right > widget {
 }
 
+.modules-center > widget > * {
+  font-weight: 500;
+  font-size: 14px;
+}
+
 .modules-right > widget > * {
   padding: 0px 6px;
   border-radius: 6px;

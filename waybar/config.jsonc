@@ -9,7 +9,7 @@
   "margin-left": 4,
   "margin-right": 4,
   "modules-left": ["hyprland/workspaces", "hyprland/window"],
-  "modules-center": [],
+  "modules-center": ["clock"],
   "modules-right": [
     // "idle_inhibitor",
     "custom/weather",
@@ -21,7 +21,6 @@
     "custom/airpods",
     "pulseaudio",
     "tray",
-    "clock",
   ],
 
   "keyboard-state": {
@@ -47,7 +46,7 @@
     "timezone": "Europe/Prague",
     "format": "{:%Y-%m-%d %H:%M}",
     "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
-    "format-alt": "{:%Y-%m-%d}",
+    "on-click": "thunderbird --calendar",
   },
   "cpu": {
     "format": "{usage}% ",
