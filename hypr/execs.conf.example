@@ -1,0 +1,22 @@
+# Startup
+exec = gsettings set org.gnome.desktop.interface gtk-theme "Adwaita-dark"
+exec = gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"   # for GTK4 apps
+exec = ddcutil setvcp 10 100
+
+exec-once = dunst
+# exec = killall dunst && dunst
+exec-once = 1password --silent
+exec-once = localsend --hidden
+exec-once = steam -silent
+exec-once = flatpak run org.signal.Signal
+exec-once = ln -s $XDG_RUNTIME_DIR/hypr /tmp/hypr
+exec-once = systemctl --user start hyprpolkitagent
+exec-once = hypridle
+# exec = killall hypridle && hypridle
+
+# exec-once = hyprpm reload -n
+
+# exec = killall waybar && waybar
+exec-once = waybar
+exec-once = hyprpaper
+# exec = killall hyprpaper && hyprpaper
