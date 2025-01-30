@@ -18,5 +18,11 @@ exec-once = hypridle
 
 # exec = killall waybar && waybar
 exec-once = waybar
+# exec = waybar
 exec-once = hyprpaper
 # exec = killall hyprpaper && hyprpaper
+
+exec-once = [workspace name:D silent] $browser
+exec-once = [workspace name:E silent] $discord
+exec-once = [workspace name:F silent] $terminal
+exec-once = [workspace name:R silent] $mail
