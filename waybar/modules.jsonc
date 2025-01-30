@@ -1,0 +1,118 @@
+{
+  "hyprland/window": {
+    "separate-outputs": true,
+  },
+  "keyboard-state": {
+    "numlock": true,
+    "capslock": true,
+    "format": "{name} {icon}",
+    "format-icons": {
+      "locked": "",
+      "unlocked": "",
+    },
+  },
+  "idle_inhibitor": {
+    "format": "{icon}",
+    "format-icons": {
+      "activated": "",
+      "deactivated": "",
+    },
+  },
+  "tray": {
+    "spacing": 10,
+  },
+  "clock": {
+    "timezone": "Europe/Prague",
+    "format": "{:%Y-%m-%d %H:%M}",
+    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
+    "on-click": "thunderbird --calendar",
+  },
+  "cpu": {
+    "format": "{usage}% ",
+    "tooltip": false,
+  },
+
+  "custom/cputemp": {
+    "exec": "$HOME/.config/waybar/scripts/cputemp.sh",
+    "interval": 3,
+    "return-type": "json",
+    "format": "<span>{icon} {}</span>",
+    "format-icons": { "cool": "", "warm": "", "hot": "" },
+    "class": "button",
+  },
+
+  "custom/weather": {
+    "exec": "$HOME/.config/waybar/scripts/weather.sh",
+    "interval": 600,
+    "return-type": "json",
+    "format": "<span>{}</span>",
+    "class": "button",
+  },
+
+  "custom/prices": {
+    "exec": "$HOME/.config/waybar/scripts/prices.sh",
+    "interval": 10,
+    "return-type": "json",
+    "format": "<span>{}</span>",
+    "class": "button",
+  },
+  "memory": {
+    "format": "{}% ",
+  },
+  "network": {
+    // "interface": "wlp2*", // (Optional) To force the use of this interface
+    "format-wifi": "{essid} ({signalStrength}%) ",
+    "format-ethernet": "{ipaddr}/{cidr} ",
+    "tooltip-format": "{ifname} via {gwaddr} ",
+    "format-linked": "{ifname} (No IP) ",
+    "format-disconnected": "Disconnected ⚠",
+    "format-alt": "{ifname}: {ipaddr}/{cidr}",
+  },
+  "pulseaudio": {
+    // "scroll-step": 1, // %, can be a float
+    "format": "{volume}% <span>{icon}</span>",
+    // "format-bluetooth": "{volume}% <span>{icon}</span> {format_source}",
+    // "format-bluetooth-muted": " {icon} {format_source}",
+    "format-muted": " {format_source}",
+    // "format-source": "{volume}% ",
+    // "format-source-muted": "",
+    "format-source": "",
+    "format-source-muted": "",
+    "format-icons": {
+      // "headphone": "",
+      // "hands-free": "",
+      // "headset": "",
+      // "phone": "",
+      // "portable": "",
+      // "car": "",
+      "default": ["", "", ""],
+    },
+    "on-click": "pavucontrol",
+  },
+  "custom/mic": {
+    "exec": "$HOME/.config/waybar/scripts/mic.sh",
+    "format": "<span>{icon}</span>",
+    "format-icons": { "mic": "", "mute": "" },
+    "return-type": "json",
+    "class": "button",
+    "interval": 1,
+    "on-click": "$HOME/.config/waybar/scripts/mic.sh toggle",
+  },
+  "custom/airpods": {
+    "exec": "$HOME/.config/waybar/scripts/airpods.sh",
+    "format": "<span>{icon}</span>",
+    "format-icons": { "connected": "", "disconnected": "" },
+    "return-type": "json",
+    "class": "button",
+    "interval": 1,
+    "on-click": "$HOME/.config/waybar/scripts/airpods.sh toggle",
+  },
+  "custom/hyprsunset": {
+    "exec": "$HOME/.config/waybar/scripts/hyprsunset.sh 1000 status",
+    "format": "<span>{icon}</span>",
+    "interval": 1,
+    "format-icons": { "on": "", "off": "" },
+    "return-type": "json",
+    "on-click": "$HOME/.config/waybar/scripts/hyprsunset.sh 4000 toggle",
+  },
+}
