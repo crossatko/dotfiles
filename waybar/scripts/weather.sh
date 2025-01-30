@@ -1,6 +1,10 @@
 #!/bin/bash
 
 response=$(curl -s https://wttr.in/Olomouc?format=1)
-remove_spaces=${response// /}
 
-echo "{\"text\": \"$remove_spaces\"}"
+if [[ "$response" == *"Unknown location"* ]]; then
+  echo "{\"text\": \"🌩️❓\"}" # Weather-related error emoji
+else
+  remove_spaces=${response// /}
+  echo "{\"text\": \"$remove_spaces\"}"
+fi

@@ -98,6 +98,7 @@ button:hover {
 }
 
 .modules-center > widget > * {
+  padding: 0px 12px;
   font-weight: 500;
   font-size: 14px;
 }
