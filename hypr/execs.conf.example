@@ -3,25 +3,20 @@ exec = gsettings set org.gnome.desktop.interface gtk-theme "Adwaita-dark"
 exec = gsettings set org.gnome.desktop.interface color-scheme "prefer-dark"   # for GTK4 apps
 exec = ddcutil setvcp 10 100
 
+# System stuff
+exec-once = ln -s $XDG_RUNTIME_DIR/hypr /tmp/hypr
+exec-once = systemctl --user start hyprpolkitagent
+exec-once = flatpak run org.signal.Signal
+exec-once = hypridle
 exec-once = dunst
-# exec = killall dunst && dunst
+
+exec-once = waybar
+exec-once = hyprpaper
+
+# Apps
 exec-once = 1password --silent
 exec-once = localsend --hidden
 exec-once = steam -silent
-exec-once = flatpak run org.signal.Signal
-exec-once = ln -s $XDG_RUNTIME_DIR/hypr /tmp/hypr
-exec-once = systemctl --user start hyprpolkitagent
-exec-once = hypridle
-# exec = killall hypridle && hypridle
-
-# exec-once = hyprpm reload -n
-
-# exec = killall waybar && waybar
-exec-once = waybar
-# exec = waybar
-exec-once = hyprpaper
-# exec = killall hyprpaper && hyprpaper
-
 exec-once = [workspace name:D silent] $browser
 exec-once = [workspace name:E silent] $discord
 exec-once = [workspace name:F silent] $terminal
