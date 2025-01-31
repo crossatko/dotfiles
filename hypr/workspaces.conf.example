@@ -7,3 +7,6 @@ workspace = name:A, monitor:$monitor1
 workspace = name:S, monitor:$monitor1
 workspace = name:D, monitor:$monitor1, on-created-empty:$browser, default:true
 workspace = name:F, monitor:$monitor1, on-created-empty:$terminal
+
+# Ultrawide center single window
+workspace = w[tv1], gapsout:4 444 4 444, gapsin:4
