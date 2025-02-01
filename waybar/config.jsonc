@@ -1,6 +1,6 @@
 [
   {
-    "output": "!DP-2",
+    "output": "DP-3", // ["!DP-2", "!HEADLESS-2"],
     "layer": "top", // Waybar at top layer
     "position": "top", // Waybar position (top|bottom|left|right)
     "height": 32, // Waybar height (to be removed for auto height)
@@ -22,9 +22,28 @@
       "custom/hyprsunset",
       "custom/mic",
       "custom/airpods",
+      "custom/headphones",
+      "custom/gamepad",
       "pulseaudio",
       "tray",
     ],
+  },
+
+  {
+    "output": "HEADLESS-2",
+    "layer": "top", // Waybar at top layer
+    "position": "top", // Waybar position (top|bottom|left|right)
+    "height": 32, // Waybar height (to be removed for auto height)
+    "width": 1172, // Waybar width
+    "spacing": 4, // Gaps between modules (4px)
+    "margin-bottom": 0,
+    "margin-top": 4,
+    "margin-left": 4,
+    "margin-right": 4,
+    "include": ["$HOME/.config/waybar/modules.jsonc"],
+    "modules-left": ["hyprland/workspaces", "hyprland/window"],
+    "modules-center": ["clock"],
+    "modules-right": ["custom/weather", "custom/prices"],
   },
   {
     "output": "DP-2",

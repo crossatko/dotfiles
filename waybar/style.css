@@ -22,7 +22,7 @@ window#waybar > box {
   padding-bottom: 0;
   padding: 4px 4px 4px 2px;
   background: rgba(25, 23, 36, 0.75);
-  border-radius: 8px;
+  border-radius: 16px;
 }
 
 window#waybar.hidden {
@@ -53,7 +53,7 @@ button:hover {
   color: rgb(224, 222, 244);
   margin: 0 2px;
   min-width: 24px;
-  border-radius: 6px;
+  border-radius: 12px;
   font-weight: bold;
 }
 
@@ -105,7 +105,7 @@ button:hover {
 
 .modules-right > widget > * {
   padding: 0px 6px;
-  border-radius: 6px;
+  border-radius: 12px;
   min-width: 24px;
   background-color: rgba(25, 23, 36, 0.75);
   color: rgb(224, 222, 244);
@@ -115,8 +115,16 @@ button:hover {
 #network.disconnected {
   background-color: #eb6f92;
 }
+
+#pulseaudio {
+  padding: 0 12px;
+}
 #pulseaudio:hover {
   background-color: rgba(224, 222, 244, 0.2);
+}
+
+#custom-prices {
+  padding: 0 12px;
 }
 
 #custom-mic {
@@ -132,13 +140,35 @@ button:hover {
 }
 
 #custom-airpods {
-  font-size: 12px;
+  font-size: 13px;
   padding: 0;
 }
 #custom-airpods:hover {
   background-color: rgba(224, 222, 244, 0.2);
 }
 #custom-airpods.connected {
+  background-color: rgb(49, 116, 143);
+}
+
+#custom-headphones {
+  font-size: 13px;
+  padding: 0;
+}
+#custom-headphones:hover {
+  background-color: rgba(224, 222, 244, 0.2);
+}
+#custom-headphones.connected {
+  background-color: rgb(49, 116, 143);
+}
+
+#custom-gamepad {
+  font-size: 13px;
+  padding: 0;
+}
+#custom-gamepad:hover {
+  background-color: rgba(224, 222, 244, 0.2);
+}
+#custom-gamepad.connected {
   background-color: rgb(49, 116, 143);
 }
 

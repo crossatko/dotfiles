@@ -19,7 +19,7 @@
     },
   },
   "tray": {
-    "spacing": 10,
+    "spacing": 8,
   },
   "clock": {
     "timezone": "Europe/Prague",
@@ -99,13 +99,31 @@
     "on-click": "$HOME/.config/waybar/scripts/mic.sh toggle",
   },
   "custom/airpods": {
-    "exec": "$HOME/.config/waybar/scripts/airpods.sh",
+    "exec": "$HOME/.config/waybar/scripts/device.sh 70:8C:F2:72:B1:A0",
     "format": "<span>{icon}</span>",
-    "format-icons": { "connected": "", "disconnected": "" },
+    "format-icons": { "connected": "", "disconnected": "" },
     "return-type": "json",
     "class": "button",
     "interval": 1,
-    "on-click": "$HOME/.config/waybar/scripts/airpods.sh toggle",
+    "on-click": "$HOME/.config/waybar/scripts/device.sh 70:8C:F2:72:B1:A0 toggle",
+  },
+  "custom/headphones": {
+    "exec": "$HOME/.config/waybar/scripts/device.sh 1C:6E:4C:83:9A:B9",
+    "format": "<span>{icon}</span>",
+    "format-icons": { "connected": "", "disconnected": "" },
+    "return-type": "json",
+    "class": "button",
+    "interval": 1,
+    "on-click": "$HOME/.config/waybar/scripts/device.sh 1C:6E:4C:83:9A:B9 toggle",
+  },
+  "custom/gamepad": {
+    "exec": "$HOME/.config/waybar/scripts/device.sh 4C:B9:9B:6A:16:00",
+    "format": "<span>{icon}</span>",
+    "format-icons": { "connected": "", "disconnected": "" },
+    "return-type": "json",
+    "class": "button",
+    "interval": 1,
+    "on-click": "$HOME/.config/waybar/scripts/device.sh 4C:B9:9B:6A:16:00 toggle",
   },
   "custom/hyprsunset": {
     "exec": "$HOME/.config/waybar/scripts/hyprsunset.sh 1000 status",
