@@ -3,8 +3,14 @@ height = 100%
 border-width = 0
 outline-width = 0
 padding-left = 35%
-padding-top = 35%
-result-spacing = 25
-num-results = 5
-font = monospace
-background-color = #000A
+padding-top = 30%
+result-spacing = 10
+num-results = 8
+font = "ComicCodeLigatures Nerd Font Mono"
+font-size = 24
+background-color = #191724bb
+text-color = #e0def4
+selection-color = #eb6f92
+
+
+
