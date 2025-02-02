@@ -1,0 +1,50 @@
+# PiP
+windowrulev2 = float, title:^(Picture in picture)$
+windowrulev2 = pin, title:^(Picture in picture)$
+windowrulev2 = movewindow 100%-604 100%-500, title:^(Picture in picture)$ 
+windowrulev2 = size 600 338, title:^(Picture in picture)$
+windowrulev2 = bordersize 0, title:^(Picture in picture)$
+windowrulev2 = rounding 8, title:^(Picture in picture)$
+windowrulev2 = opacity 0.95, title:^(Picture in picture)$
+windowrulev2 = noinitialfocus, title:^(Picture in picture)$
+
+# Target Brave's initial empty window state
+windowrulev2 = float, forcenonzero, class^(brave-browser)$, initialTitle:^Untitled - Brave$
+windowrulev2 = pin, class^(brave-browser)$, initialTitle:^Untitled - Brave$
+windowrulev2 = movewindow 100%-440 43, class^(brave-browser)$, initialTitle:^Untitled - Brave$
+windowrulev2 = size 436 893, class^(brave-browser)$, initialTitle:^Untitled - Brave$
+
+# Update rules once title changes to Twitch chat
+windowrulev2 = bordersize 0, class^(brave-browser)$, title:.*Chat - Twitch.*
+windowrulev2 = rounding 8, class^(brave-browser)$, title:.*Chat - Twitch.*
+windowrulev2 = opacity 0.95, class^(brave-browser)$, title:.*Chat - Twitch.*
+windowrulev2 = noinitialfocus, class^(brave-browser)$, title:.*Chat - Twitch.*
+
+# Steam game
+windowrulev2 = workspace name:Q,class:^steam_app_\d+$
+
+# Pavucontrol
+windowrulev2 = float, class:^(org.pulseaudio.pavucontrol)$
+windowrulev2 = size 1000 1200, class:^(org.pulseaudio.pavucontrol)$
+windowrulev2 = center, class:^(org.pulseaudio.pavucontrol)$
+
+# Open/Save file dialogs
+
+windowrulev2 = float, class:xdg-desktop-portal-gtk
+windowrulev2 = size 1000 900, class:xdg-desktop-portal-gtk
+
+windowrulev2 = float, title:^(Save File)$
+windowrulev2 = size 1000 900, title:^(Save File)$
+
+windowrulev2 = float, title:^(Open File)$
+windowrulev2 = size 1000 900, title:^(Open File)$
+
+# blueman-manager
+windowrulev2 = float, class:^(blueman-manager)$
+windowrulev2 = size 600 1000, class:^(blueman-manager)$
+
+# disable idle inhibition for fullscreen windows
+windowrulev2 = idleinhibit fullscreen, class:^(*)$
+windowrulev2 = idleinhibit fullscreen, title:^(*)$
+windowrulev2 = idleinhibit fullscreen, fullscreen:1
+

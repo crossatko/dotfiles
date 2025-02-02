@@ -1,0 +1,9 @@
+displays.conf
+workspaces.conf
+input.conf
+apps.conf
+execs.conf
+env.conf
+binds.conf
+windowrules.conf
+general.conf
