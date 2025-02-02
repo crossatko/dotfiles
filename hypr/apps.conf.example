@@ -1,5 +1,5 @@
 $menu = tofi-drun --drun-launch=true
-$terminal =  alacritty 
+$terminal = kitty
 $browser = brave
 $discord = flatpak run com.discordapp.Discord
 $mail = thunderbird
