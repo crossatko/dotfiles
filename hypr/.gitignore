@@ -5,3 +5,4 @@ input.conf
 apps.conf
 execs.conf
 env.conf
+binds.conf
