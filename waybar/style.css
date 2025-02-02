@@ -110,12 +110,52 @@ button:hover {
   background-color: @error;
 }
 
-#pulseaudio {
-  padding: 0 12px;
+#audio {
+  padding: 0px;
 }
-
+#audio > widget > * {
+  min-width: 28px;
+  transition: 0.2s all;
+}
+#audio > widget > #custom-airpods {
+  border-radius: 12px 0px 0px 12px;
+  padding: 0px 0px 0px 2px;
+}
+#audio > widget > #pulseaudio {
+  padding: 0 8px 0 4px;
+  min-width: 32px;
+  border-radius: 0 12px 12px 0;
+}
 #pulseaudio:hover {
   background-color: @button-hover;
+}
+
+#pulseaudio-slider {
+  padding: 0px;
+}
+#pulseaudio-slider slider {
+  min-height: 0px;
+  min-width: 0px;
+  opacity: 0;
+  background-image: none;
+  border: none;
+  box-shadow: none;
+}
+#pulseaudio-slider trough {
+  min-height: 22px;
+  min-width: 40px;
+  border-radius: 0px;
+  background-color: @text-inverse;
+  box-shadow: none;
+  border: 1px solid @text-inverse;
+}
+#pulseaudio-slider highlight {
+  min-width: 1px;
+  min-height: 16px;
+  background-color: @info;
+  box-shadow: none;
+  border: 0px;
+  border-radius: 0px;
 }
 
 #custom-prices,

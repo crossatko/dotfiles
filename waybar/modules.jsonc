@@ -31,6 +31,19 @@
     "format": "{usage}% ",
     "tooltip": false,
   },
+  "mpris": {
+    "format": "{player_icon} {dynamic}",
+    "format-paused": "{status_icon} <i>{dynamic}</i>",
+    "interval": 1,
+    "player-icons": {
+      "default": "▶",
+      "spotify": "",
+      "mpv": "🎵",
+    },
+    "status-icons": {
+      "paused": "⏸",
+    },
+  },
 
   "custom/cputemp": {
     "exec": "$HOME/.config/waybar/scripts/cputemp.sh",
@@ -68,29 +81,28 @@
     "format-disconnected": "Disconnected ⚠",
     "format-alt": "{ifname}: {ipaddr}/{cidr}",
   },
+
+  "group/audio": {
+    "orientation": "horizontal",
+    "modules": [
+      "custom/airpods",
+      "custom/headphones",
+      "custom/mic",
+      "pulseaudio/slider",
+      "pulseaudio",
+    ],
+  },
   "pulseaudio": {
-    // "scroll-step": 1, // %, can be a float
-    "format": "{icon} {volume}%",
-    // "format-bluetooth": "{volume}% <span>{icon}</span> {format_source}",
-    // "format-bluetooth-muted": " {icon} {format_source}",
-    "format-muted": "  {format_source}",
-    // "format-source": "{volume}% ",
-    // "format-source-muted": "",
+    "format": "{volume}%",
+    "format-muted": " {format_source}",
     "format-source": "",
     "format-source-muted": "",
-    "format-icons": {
-      "alsa_output.pci-0000_00_1f.3.analog-stereo": "",
-      "alsa_output.pci-0000_00_1f.3.analog-stereo-muted": "",
-      "headphone": "",
-      "hands-free": "",
-      "headset": "",
-      "phone": "",
-      "phone-muted": "",
-      "portable": "",
-      "car": "",
-      "default": ["", "", ""],
-    },
     "on-click": "pavucontrol",
+  },
+  "pulseaudio/slider": {
+    "min": 0,
+    "max": 100,
+    "orientation": "horizontal",
   },
   "custom/mic": {
     "exec": "$HOME/.config/waybar/scripts/mic.sh",
