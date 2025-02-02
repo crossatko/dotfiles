@@ -1,27 +1,29 @@
+@define-color background rgba(25, 23, 36, 0.75);
+@define-color text rgb(224, 222, 244);
+@define-color text-inverse rgba(25, 23, 36, 1);
+@define-color button rgba(25, 23, 36, 0.75);
+@define-color button-hover rgba(224, 222, 244, 0.2);
+@define-color button-active rgb(235, 188, 186);
+@define-color button-active-hover rgb(246, 193, 119);
+@define-color info rgb(49, 116, 143);
+@define-color warning #ea9d34;
+@define-color error #eb6f92;
+
 * {
-  /* `otf-font-awesome` is required to be installed for icons */
   font-family: "ComicCodeLigatures Nerd Font Mono", "Font Awesome 6 Pro Regular",
     "DankMono Nerd Font Mono", Roboto, Helvetica, Arial, sans-serif;
-  font-size: 13px;
-  /* font-weight: 700; */
-  /* font-feature-settings: "tnum"; */
-  /* font-variant-numeric: tabular-nums; */
+  font-size: 12px;
 }
 
 window#waybar {
-  /* background-color: #191724; */
   background-color: transparent;
-  color: #e0def4;
-  transition-property: background-color;
-  transition-duration: 0.2s;
-  /* border-radius: 8px; */
-  /* opacity: 0.95; */
+  color: @text;
 }
 
 window#waybar > box {
   padding-bottom: 0;
   padding: 4px 4px 4px 2px;
-  background: rgba(25, 23, 36, 0.75);
+  background: @background;
   border-radius: 16px;
 }
 
@@ -41,41 +43,43 @@ button:hover {
 }
 
 #workspaces {
-  /* background-color: rgba(25, 23, 36, 0.8); */
-  /* padding: 4px 2px; */
   padding: 0;
-  /* border-radius: 8px; */
 }
 
 #workspaces button {
   padding: 0px 0px;
-  background-color: rgba(25, 23, 36, 0.75);
-  color: rgb(224, 222, 244);
+  background-color: @button;
+  color: @text;
   margin: 0 2px;
   min-width: 24px;
   border-radius: 12px;
   font-weight: bold;
 }
 
+#workspaces button label {
+  font-size: 12px;
+}
+
 #workspaces button:hover {
   box-shadow: inherit;
   text-shadow: inherit;
-  background-color: rgba(224, 222, 244, 0.2);
+  background-color: @button-hover;
 }
 
 #workspaces button.focused,
 #workspaces button.active {
-  background-color: rgb(235, 188, 186);
+  background-color: @button-active;
+  min-width: 40px;
   color: #191724;
 }
 
 #workspaces button.focused:hover,
 #workspaces button.active:hover {
-  background-color: rgb(246, 193, 119);
+  background-color: @button-active-hover;
 }
 
 #workspaces button.urgent {
-  background-color: #eb6f92;
+  background-color: @error;
 }
 
 #window {
@@ -83,18 +87,8 @@ button:hover {
   padding-left: 8px;
 }
 
-#mode {
-  background-color: #64727d;
-}
-
 .modules-right {
-  /* background-color: rgba(25, 23, 36, 0.9); */
-  /* padding: 4px; */
   padding: 0px;
-  /* border-radius: 8px; */
-}
-
-.modules-right > widget {
 }
 
 .modules-center > widget > * {
@@ -107,23 +101,25 @@ button:hover {
   padding: 0px 6px;
   border-radius: 12px;
   min-width: 24px;
-  background-color: rgba(25, 23, 36, 0.75);
+  background-color: @button;
   color: rgb(224, 222, 244);
-  transition: 0.3s all;
+  transition: 0.2s all;
 }
 
 #network.disconnected {
-  background-color: #eb6f92;
+  background-color: @error;
 }
 
 #pulseaudio {
   padding: 0 12px;
 }
+
 #pulseaudio:hover {
-  background-color: rgba(224, 222, 244, 0.2);
+  background-color: @button-hover;
 }
 
-#custom-prices {
+#custom-prices,
+#custom-weather {
   padding: 0 12px;
 }
 
@@ -131,45 +127,34 @@ button:hover {
   font-size: 14px;
   padding: 0;
 }
+
+#custom-mic {
+  font-size: 14px;
+  padding: 0;
+}
 #custom-mic:hover {
-  background-color: rgba(224, 222, 244, 0.2);
+  background-color: @button-hover;
 }
 #custom-mic.mic {
-  background-color: #eb6f92;
-  color: #191724;
+  background-color: @error;
+  color: @text-inverse;
 }
 
-#custom-airpods {
-  font-size: 13px;
-  padding: 0;
-}
-#custom-airpods:hover {
-  background-color: rgba(224, 222, 244, 0.2);
-}
-#custom-airpods.connected {
-  background-color: rgb(49, 116, 143);
-}
-
-#custom-headphones {
-  font-size: 13px;
-  padding: 0;
-}
-#custom-headphones:hover {
-  background-color: rgba(224, 222, 244, 0.2);
-}
-#custom-headphones.connected {
-  background-color: rgb(49, 116, 143);
-}
-
+#custom-airpods,
+#custom-headphones,
 #custom-gamepad {
   font-size: 13px;
   padding: 0;
 }
+#custom-airpods:hover,
+#custom-headphones:hover,
 #custom-gamepad:hover {
-  background-color: rgba(224, 222, 244, 0.2);
+  background-color: @button-hover;
 }
+#custom-airpods.connected,
+#custom-headphones.connected,
 #custom-gamepad.connected {
-  background-color: rgb(49, 116, 143);
+  background-color: @info;
 }
 
 #custom-hyprsunset {
@@ -177,42 +162,33 @@ button:hover {
   padding: 0;
 }
 #custom-hyprsunset:hover {
-  background-color: rgba(224, 222, 244, 0.2);
+  background-color: @button-hover;
 }
 #custom-hyprsunset.on {
-  background-color: #ea9d34;
-  color: #191724;
+  background-color: @warning;
+  color: @text-inverse;
   font-size: 10px;
 }
 
 #custom-cputemp.hot {
-  background-color: #eb6f92;
-  color: #191724;
-}
-
-#custom-cputemp.hot {
-  background-color: #eb6f92;
-  color: #191724;
+  background-color: @error;
+  color: @text;
 }
 
 #custom-cputemp.warm {
-  background-color: #f6c177;
-  color: #191724;
+  background-color: @warning;
+  color: @button;
 }
 
 #custom-cputemp.cool {
-  background-color: #9ccfd8;
-  color: #191724;
+  background-color: @info;
+  color: @text;
 }
 
 #temperature {
-  background-color: #ea9d34;
-  color: #191724;
+  background-color: @warning;
+  color: @text;
 }
-
-/* #tray { */
-/*   background-color: #191724; */
-/* } */
 
 #tray > .passive {
   -gtk-icon-effect: dim;
@@ -220,5 +196,5 @@ button:hover {
 
 #tray > .needs-attention {
   -gtk-icon-effect: highlight;
-  background-color: rgb(235, 111, 146);
+  background-color: @button;
 }
