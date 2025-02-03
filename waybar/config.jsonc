@@ -28,7 +28,6 @@
       "tray",
     ],
   },
-
   {
     "output": "HEADLESS-2",
     "layer": "top", // Waybar at top layer
@@ -59,6 +58,6 @@
     "include": ["$HOME/.config/waybar/modules.jsonc"],
     "modules-left": ["hyprland/workspaces", "hyprland/window"],
     "modules-center": ["clock"],
-    "modules-right": ["custom/weather", "custom/prices"],
+    "modules-right": ["custom/weather", "custom/prices", "tray"],
   },
 ]

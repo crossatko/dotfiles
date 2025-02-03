@@ -1,5 +1,6 @@
 @define-color background rgba(25, 23, 36, 0.75);
 @define-color text rgb(224, 222, 244);
+@define-color text-transparent rgba(224, 222, 244, 0.2);
 @define-color text-inverse rgba(25, 23, 36, 1);
 @define-color button rgba(25, 23, 36, 0.75);
 @define-color button-hover rgba(224, 222, 244, 0.2);
@@ -117,19 +118,18 @@ button:hover {
   min-width: 28px;
   transition: 0.2s all;
 }
-#audio > widget > #custom-airpods {
-  border-radius: 12px 0px 0px 12px;
-  padding: 0px 0px 0px 2px;
+#audio > widget > #custom-headphones {
+  border-radius: 0px 12px 12px 0px;
+  padding: 0px 2px 0px 0px;
 }
 #audio > widget > #pulseaudio {
-  padding: 0 8px 0 4px;
+  padding: 0 4px 0 6px;
   min-width: 32px;
-  border-radius: 0 12px 12px 0;
+  border-radius: 12px 0 0 12px;
 }
 #pulseaudio:hover {
   background-color: @button-hover;
 }
-
 #pulseaudio-slider {
   padding: 0px 4px;
 }
@@ -145,11 +145,11 @@ button:hover {
 #pulseaudio-slider trough {
   min-height: 2px;
   min-width: 40px;
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 0;
-  background-color: @text-inverse;
-  box-shadow: none;
-  border: 1px solid @text-inverse;
+  background-color: @text-transparent;
+  box-shadow: 0px 0px 0px 1px @text-transparent;
+  border: 0px solid @text;
 }
 #pulseaudio-slider highlight {
   min-width: 4px;
@@ -157,7 +157,7 @@ button:hover {
   background-color: @info;
   box-shadow: none;
   border: 0px;
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 #custom-prices,

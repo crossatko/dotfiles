@@ -85,11 +85,11 @@
   "group/audio": {
     "orientation": "horizontal",
     "modules": [
+      "pulseaudio",
+      "pulseaudio/slider",
+      "custom/mic",
       "custom/airpods",
       "custom/headphones",
-      "custom/mic",
-      "pulseaudio/slider",
-      "pulseaudio",
     ],
   },
   "pulseaudio": {
