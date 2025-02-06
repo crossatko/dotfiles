@@ -148,4 +148,13 @@
     "return-type": "json",
     "on-click": "$HOME/.config/waybar/scripts/hyprsunset.sh 4000 toggle",
   },
+  "custom/keyboard": {
+    "exec": "$HOME/.config/waybar/scripts/keyboard_layout.sh get",
+    "return-type": "json",
+    "format": "{}",
+    "class": "button",
+    "exec-on-event": true,
+    "on-click": "$HOME/.config/waybar/scripts/keyboard_layout.sh switch",
+    "interval": 1,
+  },
 }

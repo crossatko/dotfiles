@@ -19,15 +19,20 @@ get_status() {
   fi
 }
 
-# Function to toggle device connection
+# Function to set audio codec
+
+# Modify toggle_connection function
 toggle_connection() {
-  # Check current connection status
   if bluetoothctl info "$DEVICE_MAC" | grep -q "Connected: yes"; then
-    # If connected, disconnect
-    bluetoothctl disconnect "$DEVICE_MAC"
+    notify-send -t 3000 "Bluetooth" "Disconnecting from device..."
+    if ! bluetoothctl disconnect "$DEVICE_MAC"; then
+      notify-send -t 3000 -u critical "Bluetooth Error" "Failed to disconnect from device!"
+    fi
   else
-    # If disconnected, connect
-    bluetoothctl connect "$DEVICE_MAC"
+    notify-send -t 3000 "Bluetooth" "Connecting to device..."
+    if ! bluetoothctl connect "$DEVICE_MAC"; then
+      notify-send -t 3000 -u critical "Bluetooth Error" "Failed to connect to device!"
+    fi
   fi
 }
 
