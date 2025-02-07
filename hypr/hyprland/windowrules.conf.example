@@ -1,24 +1,19 @@
 # PiP
 windowrulev2 = float, title:^(Picture in picture)$
 windowrulev2 = pin, title:^(Picture in picture)$
-windowrulev2 = movewindow 100%-604 100%-500, title:^(Picture in picture)$ 
-windowrulev2 = size 600 338, title:^(Picture in picture)$
-windowrulev2 = bordersize 0, title:^(Picture in picture)$
-windowrulev2 = rounding 8, title:^(Picture in picture)$
-windowrulev2 = opacity 0.95, title:^(Picture in picture)$
-windowrulev2 = noinitialfocus, title:^(Picture in picture)$
+windowrulev2 = movewindow 100%-1100 100%-700, title:^(Picture in picture)$ 
+windowrulev2 = size 1096 619, title:^(Picture in picture)$
 
 # Target Brave's initial empty window state
 windowrulev2 = float, forcenonzero, class^(brave-browser)$, initialTitle:^Untitled - Brave$
 windowrulev2 = pin, class^(brave-browser)$, initialTitle:^Untitled - Brave$
-windowrulev2 = movewindow 100%-440 43, class^(brave-browser)$, initialTitle:^Untitled - Brave$
-windowrulev2 = size 436 893, class^(brave-browser)$, initialTitle:^Untitled - Brave$
+windowrulev2 = movewindow 100%-1100 43, class^(brave-browser)$, initialTitle:^Untitled - Brave$
+windowrulev2 = size 436 693, class^(brave-browser)$, initialTitle:^Untitled - Brave$
 
-# Update rules once title changes to Twitch chat
-windowrulev2 = bordersize 0, class^(brave-browser)$, title:.*Chat - Twitch.*
-windowrulev2 = rounding 8, class^(brave-browser)$, title:.*Chat - Twitch.*
-windowrulev2 = opacity 0.95, class^(brave-browser)$, title:.*Chat - Twitch.*
-windowrulev2 = noinitialfocus, class^(brave-browser)$, title:.*Chat - Twitch.*
+# Rules for pinned windows
+windowrulev2 = bordersize 0, pinned:1
+windowrulev2 = opacity 0.95, pinned:1
+windowrulev2 = noinitialfocus, pinned:1
 
 # Steam game
 windowrulev2 = workspace name:Q,class:^steam_app_\d+$

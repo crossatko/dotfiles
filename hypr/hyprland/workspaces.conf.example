@@ -9,4 +9,7 @@ workspace = name:D, monitor:$monitor1, on-created-empty:$browser, default:true
 workspace = name:F, monitor:$monitor1, on-created-empty:$terminal
 
 # Ultrawide center single window
-workspace = w[tv1], gapsout:4 444 4 444, gapsin:4
+workspace = w[tv1]w[fv0]m[$monitor1], gapsout:4 550 4 550, gapsin:2
+
+# Ultrawide move make space for PiP - will be changed when pinned workspace rules are merged
+workspace = w[fv1-3]w[tv1-3]m[$monitor1], gapsout:4 1104 4 4, gapsin:2
