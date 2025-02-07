@@ -27,6 +27,7 @@
       // "custom/headphones",
       "group/audio",
       "tray",
+      "custom/notification",
     ],
   },
   {
