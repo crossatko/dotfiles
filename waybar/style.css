@@ -239,6 +239,10 @@ button:hover {
   background-color: @info;
   color: @text;
 }
+#custom-notification {
+  font-size: 15px;
+  padding: 0;
+}
 
 #temperature {
   background-color: @warning;
