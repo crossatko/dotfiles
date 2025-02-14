@@ -135,7 +135,7 @@ button:hover {
   background-color: @button-hover;
 }
 #pulseaudio-slider {
-  padding: 0px 4px;
+  padding: 0px 10px 0px 4px;
 }
 #pulseaudio-slider slider {
   min-height: 0px;

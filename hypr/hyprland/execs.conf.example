@@ -7,11 +7,13 @@ exec = ddcutil setvcp 10 100
 exec-once = ln -s $XDG_RUNTIME_DIR/hypr /tmp/hypr
 exec-once = systemctl --user start hyprpolkitagent
 exec-once = flatpak run org.signal.Signal
-exec-once = hypridle
-exec-once = dunst
+exec-once = swaync # dunst
+exec-once = wl-paste --watch cliphist store
+exec = ~/.config/hypr/hypridle.sh
 
-exec-once = waybar
-exec-once = hyprpaper
+exec = ~/.config/waybar/waybar.sh
+exec = ~/.config/hypr/hyprpaper.sh
+# exec-once = mpvpaper -o "--no-audio --loop --panscan=1.0 --video-align-y=-1"  DP-3 ~/Videos/wallpapers/2b-blade-of-automata.3840x2160.mp4
 
 # Apps
 exec-once = 1password --silent

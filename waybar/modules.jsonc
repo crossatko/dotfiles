@@ -67,7 +67,7 @@
 
   "custom/prices": {
     "exec": "$HOME/.config/waybar/scripts/prices.sh",
-    "interval": 10,
+    "interval": 60,
     "return-type": "json",
     "format": "<span>{}</span>",
     "class": "button",
