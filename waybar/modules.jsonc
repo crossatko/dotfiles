@@ -1,6 +1,23 @@
 {
   "hyprland/workspaces": {
-    // "sort-by": "id",
+    "disable-scroll": true,
+    "all-outputs": true,
+    "on-click": "activate",
+    "format": "{icon}",
+    "format-icons": {
+      "01": "A",
+      "02": "S",
+      "03": "D",
+      "04": "F",
+      "05": "Q",
+      "06": "W",
+      "07": "E",
+      "08": "R",
+      "09": "Z",
+      "10": "X",
+      "11": "C",
+      "12": "V",
+    },
   },
   "hyprland/window": {
     "separate-outputs": true,

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-response=$(curl -s https://wttr.in/Olomouc?format=1)
+response=$(curl -s https://wttr.in?format=1)
 
 if [[ "$response" == *"Unknown location"* ]]; then
   echo "{\"text\": \"🌩️❓\"}" # Weather-related error emoji

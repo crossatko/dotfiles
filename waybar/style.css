@@ -11,8 +11,8 @@
 @define-color error #eb6f92;
 
 * {
-  font-family: "ComicCodeLigatures Nerd Font Mono", "Font Awesome 6 Pro Regular",
-    "DankMono Nerd Font Mono", Roboto, Helvetica, Arial, sans-serif;
+  font-family: "ComicCodeLigatures Nerd Font Mono", "DankMono Nerd Font Mono",
+    Roboto, Helvetica, Arial, sans-serif;
   font-size: 12px;
 }
 
