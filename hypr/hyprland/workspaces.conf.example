@@ -1,12 +1,17 @@
-workspace = name:Q, monitor:$monitor2
-workspace = name:W, monitor:$monitor2
-workspace = name:E, monitor:$monitor2, on-created-empty:$discord && $terminal, default:true
-workspace = name:R, monitor:$monitor2, on-created-empty:$mail
+workspace = name:A, defaultName:01, monitor:$monitor1
+workspace = name:S, defaultName:02, monitor:$monitor1
+workspace = name:D, defaultName:03, monitor:$monitor1, on-created-empty:$browser
+workspace = name:F, defaultName:04, monitor:$monitor1, on-created-empty:$terminal
 
-workspace = name:A, monitor:$monitor1
-workspace = name:S, monitor:$monitor1
-workspace = name:D, monitor:$monitor1, on-created-empty:$browser, default:true
-workspace = name:F, monitor:$monitor1, on-created-empty:$terminal
+workspace = name:Q, defaultName:05, monitor:$monitor1, on-created-empty:$figma
+workspace = name:W, defaultName:06, monitor:$monitor1, on-created-empty:$music
+workspace = name:E, defaultName:07, monitor:$monitor1, on-created-empty:$discord, default:true
+workspace = name:R, defaultName:08, monitor:$monitor1, on-created-empty:$mail
+
+workspace = name:Z, defaultName:09, monitor:$monitor1
+workspace = name:X, defaultName:10, monitor:$monitor1
+workspace = name:C, defaultName:11, monitor:$monitor1
+workspace = name:V, defaultName:12, monitor:$monitor1
 
 # Ultrawide center single window
 workspace = w[tv1]w[fv0]m[$monitor1], gapsout:4 550 4 550, gapsin:2

@@ -5,29 +5,22 @@ bind = $mainMod, D, exec, $menu
 bind = $mainMod SHIFT, V, exec, cliphist list | tofi | cliphist decode | wl-copy 
 
 bind = $mainMod, RETURN, exec, $terminal
-# bindr = $mainMod, RETURN, exec, ~/.config/hypr/scripts/center_or_tile_workspace.sh
-
 bind = $mainMod, b, exec, $browser
-# bindr = $mainMod, b, exec, ~/.config/hypr/scripts/center_or_tile_workspace.sh
-
 bind = $mainMod, E, exec, $filemanager
 bind = $mainMod, M, exec, ~/.config/waybar/scripts/mute_script.sh
 
 bind = $mainMod SHIFT, Q, killactive,
-# bindr = $mainMod SHIFT, Q, exec, ~/.config/hypr/scripts/center_or_tile_workspace.sh
-
 bind = $mainMod SHIFT, E, exit,
-
-bind = $mainMod, c, togglefloating,
+bind = $mainMod SHIFT, L, exec, loginctl lock-session
 
 bind = $mainMod, v, togglefloating,
 bind = $mainMod, v, centerwindow,
+bind = $mainMod SHIFT, p, pin,
 
 bind = $mainMod, F, fullscreen, 0
 bind = $mainMod SHIFT, F, fullscreen, 1
 
 bind = $mainMod, P, pseudo, # dwindle
-bind = $mainMod, O, exec, ~/dotfiles/hypr/scripts/center_or_tile_workspace.sh
 bind = $mainMod, X, togglesplit, # dwindle
 
 # Window groups
@@ -47,24 +40,32 @@ bind = $mainMod $altMod, k, movewindoworgroup, u
 bind = $mainMod $altMod, j, movewindoworgroup, d
 
 # Switch workspaces with altMod + [QWERASDF]
-bind = $altMod, Q, workspace, name:Q
-bind = $altMod, W, workspace, name:W
-bind = $altMod, E, workspace, name:E
-bind = $altMod, R, workspace, name:R
-bind = $altMod, A, workspace, name:A
-bind = $altMod, S, workspace, name:S
-bind = $altMod, D, workspace, name:D
-bind = $altMod, F, workspace, name:F
+bind = $altMod, Q, workspace, name:05 
+bind = $altMod, W, workspace, name:06 
+bind = $altMod, E, workspace, name:07 
+bind = $altMod, R, workspace, name:08 
+bind = $altMod, A, workspace, name:01 
+bind = $altMod, S, workspace, name:02 
+bind = $altMod, D, workspace, name:03 
+bind = $altMod, F, workspace, name:04 
+bind = $altMod, Z, workspace, name:09 
+bind = $altMod, X, workspace, name:10
+bind = $altMod, C, workspace, name:11
+bind = $altMod, V, workspace, name:12
 
 # Move active window to a workspace with mainMod + SHIFT + [QWERASDF]
-bind = $mainMod $altMod, Q, movetoworkspace, name:Q
-bind = $mainMod $altMod, W, movetoworkspace, name:W
-bind = $mainMod $altMod, E, movetoworkspace, name:E
-bind = $mainMod $altMod, R, movetoworkspace, name:R
-bind = $mainMod $altMod, A, movetoworkspace, name:A
-bind = $mainMod $altMod, S, movetoworkspace, name:S
-bind = $mainMod $altMod, D, movetoworkspace, name:D
-bind = $mainMod $altMod, F, movetoworkspace, name:F
+bind = $mainMod $altMod, Q, movetoworkspace, name:05
+bind = $mainMod $altMod, W, movetoworkspace, name:06
+bind = $mainMod $altMod, E, movetoworkspace, name:07
+bind = $mainMod $altMod, R, movetoworkspace, name:08
+bind = $mainMod $altMod, A, movetoworkspace, name:01
+bind = $mainMod $altMod, S, movetoworkspace, name:02
+bind = $mainMod $altMod, D, movetoworkspace, name:03
+bind = $mainMod $altMod, F, movetoworkspace, name:04
+bind = $mainMod $altMod, Z, movetoworkspace, name:09
+bind = $mainMod $altMod, X, movetoworkspace, name:10
+bind = $mainMod $altMod, C, movetoworkspace, name:11
+bind = $mainMod $altMod, V, movetoworkspace, name:12
 
 # Scroll through existing workspaces with mainMod + scroll
 bind = $mainMod, mouse_down, workspace, e+1
