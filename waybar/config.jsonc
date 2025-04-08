@@ -11,7 +11,11 @@
     "margin-left": 4,
     "margin-right": 4,
     "include": ["$HOME/.config/waybar/modules.jsonc"],
-    "modules-left": ["hyprland/workspaces", "hyprland/window"],
+    "modules-left": [
+      "hyprland/workspaces",
+      // "wlr/taskbar",
+      "hyprland/window",
+    ],
     "modules-center": ["clock"],
     "modules-right": [
       // "idle_inhibitor",
