@@ -74,6 +74,11 @@ return {
             client.server_capabilities.inlayHintProvider = false
           end,
         },
+        -- Lua = {
+        --   diagnostics = {
+        --     globals = { "love" }, -- Recognize 'love' as a global
+        --   },
+        -- },
       },
     },
   },
