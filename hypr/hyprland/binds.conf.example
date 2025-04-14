@@ -39,6 +39,12 @@ bind = $mainMod $altMod, l, movewindoworgroup, r
 bind = $mainMod $altMod, k, movewindoworgroup, u
 bind = $mainMod $altMod, j, movewindoworgroup, d
 
+# Resize windows with mainMod + altMod + Shift hjkl
+bind = $mainMod $altMod SHIFT, h, resizeactive, -10% 0
+bind = $mainMod $altMod SHIFT, l, resizeactive, 10% 0
+bind = $mainMod $altMod SHIFT, k, resizeactive, 0 -10%
+bind = $mainMod $altMod SHIFT, j, resizeactive, 0 10%
+
 # Switch workspaces with altMod + [QWERASDF]
 bind = $altMod, Q, workspace, name:05 
 bind = $altMod, W, workspace, name:06 
