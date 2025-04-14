@@ -10,7 +10,7 @@ return {
     },
     window = {
       position = "left",
-      width = 50,
+      width = 40,
       mappings = {
         ["<space>"] = "none",
       },

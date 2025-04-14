@@ -7,6 +7,8 @@ vim.filetype.add({
     [".env"] = "dotenv",
     [".env.example"] = "dotenv",
     [".yamlfmt"] = "yaml",
+    [".*/hypr/.*%.conf"] = "hyprlang",
+    [".*/hypr/.*%.conf.example"] = "hyprlang",
   },
   pattern = {
     ["%.env%.[%w_.-]+"] = "dotenv",

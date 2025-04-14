@@ -22,6 +22,13 @@
   "hyprland/window": {
     "separate-outputs": true,
   },
+  "wlr/taskbar": {
+    "format": "{icon}",
+    "icon-size": 16,
+    "tooltip-format": "{title}",
+    "on-click": "activate",
+    "on-click-middle": "close",
+  },
   "keyboard-state": {
     "numlock": true,
     "capslock": true,

@@ -179,13 +179,9 @@ button:hover {
 }
 
 #custom-mic {
-  font-size: 14px;
+  font-size: 12px;
   padding: 0;
-}
-
-#custom-mic {
-  font-size: 14px;
-  padding: 0;
+  font-family: "Font Awesome 6 Pro Regular";
 }
 #custom-mic:hover {
   background-color: @button-hover;
@@ -198,7 +194,8 @@ button:hover {
 #custom-airpods,
 #custom-headphones,
 #custom-gamepad {
-  font-size: 13px;
+  font-family: "Font Awesome 6 Pro Regular";
+  font-size: 12px;
   padding: 0;
 }
 #custom-airpods:hover,
@@ -213,7 +210,8 @@ button:hover {
 }
 
 #custom-hyprsunset {
-  font-size: 11px;
+  font-family: "Font Awesome 6 Pro Regular";
+  font-size: 12px;
   padding: 0;
 }
 #custom-hyprsunset:hover {
@@ -222,7 +220,6 @@ button:hover {
 #custom-hyprsunset.on {
   background-color: @warning;
   color: @text-inverse;
-  font-size: 10px;
 }
 
 #custom-cputemp.hot {
