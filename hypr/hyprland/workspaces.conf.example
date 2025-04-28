@@ -1,12 +1,12 @@
 workspace = name:A, defaultName:01, monitor:$monitor1
 workspace = name:S, defaultName:02, monitor:$monitor1
-workspace = name:D, defaultName:03, monitor:$monitor1, on-created-empty:$browser
+workspace = name:D, defaultName:03, monitor:$monitor1, on-created-empty:$browser, default:true
 workspace = name:F, defaultName:04, monitor:$monitor1, on-created-empty:$terminal
 
-workspace = name:Q, defaultName:05, monitor:$monitor1, on-created-empty:$figma
-workspace = name:W, defaultName:06, monitor:$monitor1, on-created-empty:$music
-workspace = name:E, defaultName:07, monitor:$monitor1, on-created-empty:$discord, default:true
-workspace = name:R, defaultName:08, monitor:$monitor1, on-created-empty:$mail
+workspace = name:Q, defaultName:05, monitor:$monitor2, on-created-empty:$figma
+workspace = name:W, defaultName:06, monitor:$monitor2, on-created-empty:$music
+workspace = name:E, defaultName:07, monitor:$monitor2, on-created-empty:$discord, default:true
+workspace = name:R, defaultName:08, monitor:$monitor2, on-created-empty:$mail
 
 workspace = name:Z, defaultName:09, monitor:$monitor1
 workspace = name:X, defaultName:10, monitor:$monitor1

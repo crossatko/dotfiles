@@ -1,9 +1,9 @@
 general {
-    gaps_in = 2
-    gaps_out = 4
-    border_size = 3
-    col.active_border = $rose $rose $rose 45deg
-    col.inactive_border = $muted
+    gaps_in = 0 # 2
+    gaps_out = 0 # 4
+    border_size = 0
+    col.active_border = $muted
+    col.inactive_border = $surface
     layout = dwindle
 }
 
@@ -24,18 +24,21 @@ group {
 
 
 decoration {
-  rounding = 12
-  rounding_power = 3.0
+  rounding = 0
+  rounding_power = 2.0
   active_opacity = 1.0
-  inactive_opacity = 0.975
+  inactive_opacity = 0.95
+  dim_inactive = 1
+  dim_strength = 0.5
   blur {
     enabled = true
-    size = 5
-    passes = 2
+    size = 3
+    passes = 3
     popups = false
+    noise = 0.1
   }
   shadow {
-    enabled = true
+    enabled = false
     range = 64
     render_power = 4
     color = 0x33000000
@@ -53,10 +56,10 @@ layerrule = blur, launcher
 animations {
     enabled = true
     bezier = myBezier, 0,.8,.2,1
-    animation = windows, 1, 2, myBezier, slide
-    animation = windowsOut, 1, 2, default, popin 80%
+    animation = windows, 1, 2, myBezier
+    animation = windowsOut, 1, 2, myBezier
     animation = border, 1, 2, default
-    animation = borderangle, 1, 2, default
+    animation = borderangle, 1, 2, default, once
     animation = fade, 1, 2, default
     animation = workspaces, 1, 2, default, slidefade 5%
 }
@@ -73,4 +76,25 @@ misc {
   disable_hyprland_logo = true
   focus_on_activate = true
   key_press_enables_dpms = true
+}
+
+render {
+  cm_fs_passthrough = 2
+}
+
+plugin {
+    hyprbars {
+        bar_height = 24
+        bar_color = $base
+        bar_blur = false
+        col.text = $iris
+        bar_title_enabled = true
+        bar_text_size = 10
+        bar_text_font = $fontFamily
+        bar_text_align = center
+        bar_part_of_window = true
+        bar_precedence_over_border = true
+        bar_padding = 12
+
+    }
 }
