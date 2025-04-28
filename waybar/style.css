@@ -1,18 +1,19 @@
 @define-color background rgba(25, 23, 36, 0.75);
-@define-color text rgb(224, 222, 244);
+@define-color text rgba(224, 222, 244, 0.75);
 @define-color text-transparent rgba(224, 222, 244, 0.2);
 @define-color text-inverse rgba(25, 23, 36, 1);
 @define-color button rgba(25, 23, 36, 0.75);
 @define-color button-hover rgba(224, 222, 244, 0.2);
-@define-color button-active rgb(235, 188, 186);
+@define-color button-active rgba(235, 188, 186, 0.75);
 @define-color button-active-hover rgb(246, 193, 119);
 @define-color info rgb(49, 116, 143);
 @define-color warning #ea9d34;
 @define-color error #eb6f92;
 
 * {
-  font-family: "ComicCodeLigatures Nerd Font Mono", "DankMono Nerd Font Mono",
-    Roboto, Helvetica, Arial, sans-serif;
+  font-family:
+    "ComicCodeLigatures Nerd Font Mono", "DankMono Nerd Font Mono", Roboto,
+    Helvetica, Arial, sans-serif;
   font-size: 12px;
 }
 
@@ -24,8 +25,8 @@ window#waybar {
 window#waybar > box {
   padding-bottom: 0;
   padding: 4px 4px 4px 2px;
-  background: @background;
-  border-radius: 16px;
+  background: #000; /* @background; */
+  border-radius: 0px;
 }
 
 window#waybar.hidden {
@@ -84,7 +85,7 @@ button:hover {
 }
 
 #window {
-  color: rgb(224, 222, 244);
+  color: @text;
   padding-left: 8px;
 }
 
@@ -103,7 +104,7 @@ button:hover {
   border-radius: 12px;
   min-width: 24px;
   background-color: @button;
-  color: rgb(224, 222, 244);
+  color: @text;
   transition: 0.2s all;
 }
 #clock {
@@ -245,9 +246,13 @@ button:hover {
   background-color: @warning;
   color: @text;
 }
+#tray {
+  opacity: 0.75;
+}
 
 #tray > .passive {
   -gtk-icon-effect: dim;
+  opacity: 0.5;
 }
 
 #tray > .needs-attention {
