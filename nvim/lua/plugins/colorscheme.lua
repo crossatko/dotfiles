@@ -2,26 +2,39 @@ return {
   {
     "rose-pine/neovim",
     name = "rose-pine",
-    -- lazy = false,
-    -- priority = 1000,
-    -- opts = {
-    --   --- @usage 'auto'|'main'|'moon'|'dawn'
-    --   variant = "main",
-    --   --- @usage 'main'|'moon'|'dawn'
-    --   dark_variant = "main",
-    --   groups = {
-    --     disable_float_background = true,
-    --     didsble_background = true,
-    --   },
-    --   highlight_groups = {
-    --     TabLineFill = { bg = "none" },
-    --     MiniIndentscopeSymbol = { fg = "iris" },
-    --     MiniIndentscopeSymbolOff = { fg = "iris" },
-    --     IndentBlanklineChar = { fg = "overlay" },
-    --     IndentBlanklineSpaceChar = { fg = "overlay" },
-    --     IndentBlanklineSpaceCharBlankline = { fg = "overlay" },
-    --   },
-    -- },
+    opts = {
+      highlight_groups = {
+        -- Global background
+        Normal = { bg = "#000000" },
+        NormalNC = { bg = "#000000" },
+        SignColumn = { bg = "#000000" },
+        StatusLine = { bg = "#000000" },
+
+        -- Floating/sidebar windows (dimmed)
+        NormalFloat = { bg = "#000000", fg = "#6e6a86" },
+        FloatBorder = { bg = "#000000", fg = "#3f3d52" },
+        VertSplit = { fg = "#1a1a1a" },
+
+        -- Neo-tree: dimmed Rosé Pine style
+        NeoTreeNormal = { bg = "#000000", fg = "#6e6a86" },
+        NeoTreeNormalNC = { bg = "#000000", fg = "#6e6a86" },
+        NeoTreeEndOfBuffer = { bg = "#000000", fg = "#000000" },
+        NeoTreeIndentMarker = { fg = "#3f3d52" },
+
+        -- File/folder colors
+        NeoTreeFileName = { fg = "#797593" },
+        NeoTreeFileNameOpened = { fg = "#908caa" },
+        NeoTreeDirectoryName = { fg = "#56949f" },
+        NeoTreeDirectoryIcon = { fg = "#56949f" },
+
+        -- Git status (dimmed)
+        NeoTreeGitAdded = { fg = "#1f4c5c" },
+        NeoTreeGitModified = { fg = "#907aa9" },
+        NeoTreeGitDeleted = { fg = "#b4637a" },
+        NeoTreeGitConflict = { fg = "#eb6f92" },
+        NeoTreeGitIgnored = { fg = "#393552" },
+      },
+    },
   },
   {
     "LazyVim/LazyVim",
