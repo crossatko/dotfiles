@@ -1,6 +1,6 @@
 
 [font]
-size = 15
+size = 16
 
 [font.bold]
 family = "ComicCodeLigatures Nerd Font Mono"
@@ -20,14 +20,14 @@ style = "Regular"
 
 [font.offset]
 x = 0
-y = -3
+y = -2
 
 [terminal.shell]
 program = "/bin/zsh"
 
 [window.padding]
-x = 13
-y = 13
+x = 6
+y = 0
 
 [general]
 import = ["~/.config/alacritty/rose-pine.toml"]
@@ -35,5 +35,5 @@ import = ["~/.config/alacritty/rose-pine.toml"]
 [terminal]
 
 [window]
-opacity = 0.95
+opacity = 0.8
 decorations = 'none'
