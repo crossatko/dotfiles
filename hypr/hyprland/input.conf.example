@@ -13,3 +13,10 @@ input {
 
     sensitivity = 0 # -1.0 - 1.0, 0 means no modification.
 }
+
+
+# disable dualsense touchpad pointer
+device {
+  name = sony-interactive-entertainment-dualsense-wireless-controller-touchpad
+  enabled = 0
+}
