@@ -1,0 +1,13 @@
+backend = "resized"
+threshold = 10
+palette = "dark"
+
+[templates]
+kitty.template = 'kitty-template.conf'
+kitty.target = '~/.config/kitty/wallust.conf'
+alacritty.template = 'alacritty-template.toml'
+alacritty.target = '~/.config/alacritty/wallust.toml'
+zellij.template = 'zellij-template.kdl'
+zellij.target = '~/.config/zellij/themes/wallust.kdl'
+nvim.template = 'nvim-template.vim'
+nvim.target = '~/.cache/wal/colors-wal.vim'
