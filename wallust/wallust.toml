@@ -11,3 +11,4 @@ zellij.template = 'zellij-template.kdl'
 zellij.target = '~/.config/zellij/themes/wallust.kdl'
 nvim.template = 'nvim-template.vim'
 nvim.target = '~/.cache/wal/colors-wal.vim'
+

@@ -102,35 +102,6 @@ function calc() {
   echo "$*" | bc -l
 }
 
-# Function alias for yay
-yay() {
-  case "$1" in
-    -S)
-      shift
-      sudo dnf install "$@"
-      ;;
-    -R)
-      shift
-      sudo dnf remove "$@"
-      ;;
-    -Sy)
-      sudo dnf check-update
-      ;;
-    -Syu)
-      sudo dnf update
-      ;;
-    -Ss)
-      shift
-      dnf search "$@"
-      ;;
-    -Su)
-      sudo dnf upgrade "$@"
-      ;;
-    *)
-      echo "Command not recognized: yay $@"
-      ;;
-  esac
-}
 
 
 imgs() {

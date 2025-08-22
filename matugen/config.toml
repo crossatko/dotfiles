@@ -39,3 +39,4 @@ output_path = '~/.config/Kvantum/Fluent-round/Fluent-roundDark.kvconfig'
 [templates.alacritty]
 input_path = '~/.config/matugen/templates/alacritty-template.toml'
 output_path = '~/.config/alacritty/matugen.toml'
+
