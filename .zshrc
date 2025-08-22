@@ -35,10 +35,6 @@ alias brave="brave-browser"
 # system
 alias sleep="systemctl suspend"
 alias :q="exit"
-alias dnfu="sudo dnf update"
-alias dnfi="sudo dnf install"
-# alias sudo="sudo "
-# alias dnf="dnf5"
 
 # dev
 unset rc
@@ -50,31 +46,10 @@ alias sa="cd ../api && a serve"
 alias sail="./vendor/bin/sail"
 alias vim="nvim"
 alias v="nvim"
-alias nvim-kickstart='NVIM_APPNAME="nvim-kickstart" nvim'
-alias z="zellij attach --create work"
+alias z="zellij"
 alias "??"="gh copilot suggest"
 alias "???"="gh copilot explain"
-
-# _code_completion() {
-#     local cur=${COMP_WORDS[COMP_CWORD]}
-#     local projects=$(ls "$HOME/code")
-#
-#     COMPREPLY=($(compgen -W "$projects" -- "$cur"))
-# }
-#
-# complete -F _code_completion code
-#
-# code() {
-#     local project_path="$HOME/code/$1"
-#     if [ -d "$project_path" ]; then
-#         cd "$project_path" || return
-#         nvim
-#     else
-#         echo "Project not found in code folder."
-#     fi
-# }
-
-  
+ 
 c() {
   local dir
   dir=$(find ~/code -mindepth 1 -maxdepth 1 -type d | fzf  --prompt="Select project: ") || return
@@ -101,8 +76,6 @@ export NVM_DIR="$HOME/.nvm"
 function calc() {
   echo "$*" | bc -l
 }
-
-
 
 imgs() {
     local width=${1:-}         # Optional width (first argument)
