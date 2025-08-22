@@ -36,6 +36,7 @@ output_path = '~/.config/quickshell/matugen.json'
 input_path = '~/.config/matugen/templates/fluent-template.kvconfig'
 output_path = '~/.config/Kvantum/Fluent-round/Fluent-roundDark.kvconfig'
 
+
 [templates.alacritty]
 input_path = '~/.config/matugen/templates/alacritty-template.toml'
 output_path = '~/.config/alacritty/matugen.toml'
