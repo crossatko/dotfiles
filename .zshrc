@@ -30,8 +30,6 @@ plugins=(git)
 
 source $ZSH/oh-my-zsh.sh
 
-alias brave="brave-browser"
-
 # system
 alias sleep="systemctl suspend"
 alias :q="exit"
