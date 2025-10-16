@@ -1,63 +1,85 @@
 return {
   "nvim-treesitter/nvim-treesitter",
+  branch = "main",
+  version = false, -- last release is way too old and doesn't work on Windows
+  build = function()
+    local TS = require("nvim-treesitter")
+    if not TS.get_installed then
+      LazyVim.error("Please restart Neovim and run `:TSUpdate` to use the `nvim-treesitter` **main** branch.")
+      return
+    end
+    TS.update(nil, { summary = true })
+  end,
+  lazy = vim.fn.argc(-1) == 0, -- load treesitter early when opening a file from the cmdline
+  event = { "LazyFile", "VeryLazy" },
+  cmd = { "TSUpdate", "TSInstall", "TSLog", "TSUninstall" },
+  opts_extend = { "ensure_installed" },
+  ---@class lazyvim.TSConfig: TSConfig
   opts = {
+    -- LazyVim config for treesitter
     ensure_installed = {
       "bash",
+      "c",
       "diff",
       "html",
       "javascript",
       "jsdoc",
+      "json",
+      "jsonc",
       "lua",
       "luadoc",
       "luap",
       "markdown",
       "markdown_inline",
-      "php",
-      "php_only",
-      "phpdoc",
+      "printf",
       "python",
       "query",
       "regex",
-      "rust",
-      "sql",
       "toml",
       "tsx",
       "typescript",
       "vim",
       "vimdoc",
-      "vue",
+      "xml",
       "yaml",
-      "css",
-    },
-    autotag = {
-      enable = true,
-      enable_rename = true,
-      enable_close = true,
-      enable_close_on_slash = true,
-    },
-    highlight = {
-      enable = true,
-      additional_vim_regex_highlighting = { "markdown" },
     },
   },
+  ---@param opts lazyvim.TSConfig
   config = function(_, opts)
-    local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
+    local TS = require("nvim-treesitter")
 
-    parser_config.blade = {
-      install_info = {
-        url = "https://github.com/EmranMR/tree-sitter-blade",
-        files = { "src/parser.c" },
-        branch = "main",
-      },
-      filetype = "blade",
-    }
+    -- some quick sanity checks
+    if not TS.get_installed then
+      return LazyVim.error("Please use `:Lazy` and update `nvim-treesitter`")
+    elseif vim.fn.executable("tree-sitter") == 0 then
+      return LazyVim.error({
+        "**treesitter-main** requires the `tree-sitter` CLI executable to be installed.",
+        "Run `:checkhealth nvim-treesitter` for more information.",
+      })
+    elseif type(opts.ensure_installed) ~= "table" then
+      return LazyVim.error("`nvim-treesitter` opts.ensure_installed must be a table")
+    end
 
-    vim.filetype.add({
-      pattern = {
-        [".*%.blade%.php"] = "blade",
-      },
+    -- setup treesitter
+    TS.setup(opts)
+
+    -- install missing parsers
+    local install = vim.tbl_filter(function(lang)
+      return not LazyVim.treesitter.have(lang)
+    end, opts.ensure_installed or {})
+    if #install > 0 then
+      TS.install(install, { summary = true }):await(function()
+        LazyVim.treesitter.get_installed(true) -- refresh the installed langs
+      end)
+    end
+
+    -- treesitter highlighting
+    vim.api.nvim_create_autocmd("FileType", {
+      callback = function(ev)
+        if LazyVim.treesitter.have(ev.match) then
+          pcall(vim.treesitter.start)
+        end
+      end,
     })
-
-    require("nvim-treesitter.configs").setup(opts)
   end,
 }
