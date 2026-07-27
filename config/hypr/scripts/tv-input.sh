@@ -42,8 +42,18 @@ run() {
 	home)
 		timeout 3 adb -s "$TV" shell input keyevent KEYCODE_HOME >/dev/null 2>&1
 		;;
+	wakeup)
+		# Counterpart to tv-sleep.sh's KEYCODE_SLEEP. That only puts the
+		# screen into standby -- the network/Android stack stays fully up,
+		# so adb reachability and even an `am start` input-switch intent
+		# both succeed immediately while the screen stays dark. Confirmed
+		# live: switching input after a KEYCODE_SLEEP never brought the
+		# picture back on its own across 3 real tests, all logged SUCCESS.
+		# Only the direct wake keyevent actually un-blanks the screen.
+		timeout 3 adb -s "$TV" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1
+		;;
 	*)
-		echo "usage: tv-input.sh hdmi2|home" >&2
+		echo "usage: tv-input.sh hdmi2|home|wakeup" >&2
 		exit 1
 		;;
 	esac

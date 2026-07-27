@@ -15,5 +15,27 @@
 # poller do everything else, exactly once, fixes that.
 
 MAC="7c:01:3e:f4:0b:6c"
+DEBUG_LOG="$HOME/.local/state/androidtv-remote/poll-debug.log"
+mkdir -p "$(dirname "$DEBUG_LOG")"
 
-~/.local/state/androidtv-remote/venv/bin/python3 ~/.local/state/androidtv-remote/wol.py "$MAC" >/dev/null 2>&1
+# Called right after a system resume, when this machine's own network
+# interface hasn't necessarily reconnected yet -- the driver/link needs to
+# come back and NetworkManager needs to re-associate (WiFi) or renegotiate
+# (ethernet) before there's even a route to broadcast on, and that can
+# take longer than a couple seconds. Wait for a default route first
+# instead of guessing a fixed delay.
+for i in $(seq 1 30); do
+	ip route show default 2>/dev/null | grep -q . && break
+	sleep 1
+done
+
+# Sent silently for years with no way to tell if it actually worked --
+# fixed now that a real failure mode showed up (see above). WoL packets
+# are cheap, harmless to resend, and idempotent -- a few retries here is
+# just extra margin in case the route above appeared before the interface
+# was fully usable.
+for i in $(seq 1 10); do
+	out="$(~/.local/state/androidtv-remote/venv/bin/python3 ~/.local/state/androidtv-remote/wol.py "$MAC" 2>&1)"
+	echo "$(date +%s.%N) WOL[$i] $out" >>"$DEBUG_LOG"
+	sleep 1
+done
