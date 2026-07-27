@@ -12,9 +12,19 @@
 # launched with PROTON_ENABLE_WAYLAND=1 has nowhere to actually connect --
 # its Wayland surface silently never gets created, which is exactly why
 # that experiment hung forever on Steam's "waiting for game" spinner rather
-# than showing an error. Only applies to gamescope-session's own launch
-# (this wrapper is only first in PATH for that one service, via the
-# override, not system-wide), so this doesn't affect any other use of
-# gamescope on this machine (e.g. a per-game `gamescope -- %command%`
-# launch option from a normal desktop Steam install).
+# than showing an error. Harmless to keep even with PROTON_ENABLE_WAYLAND
+# unset -- XWayland-hosted games are unaffected either way.
+#
+# Tried --hdr-enabled --hdr-itm-enable here too (gamescope's own
+# compositor-level HDR + inverse-tone-mapping, separate from the per-game
+# WSI hooking) -- no improvement, tested both with and without the WSI
+# layer enabled alongside it. Photographed proof (two distinct dialogs,
+# CreateSwapchainKHR and QueuePresentKHR, both "hooking has failed
+# somewhere") confirmed the actual bug is in gamescope's own surface-hook
+# registration itself, upstream of anything fixable via flags or env vars
+# -- clicking OK on either dialog just continues with a fully unhooked
+# swapchain, so gamescope never gets a chance to treat that window's
+# buffer as HDR regardless of --hdr-enabled. Reverted; only
+# --expose-wayland remains, since that one is still correct/harmless
+# regardless of whether native-Wayland mode ever gets used again.
 exec /usr/bin/gamescope --expose-wayland "$@"
