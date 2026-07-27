@@ -244,12 +244,24 @@ local function apply_dim()
 	hl.notification.create({ text = "Steam Big Picture on TV: dimmed other displays", timeout = 2500 })
 end
 
-local function apply_restore(show_notification)
-	debug_log("apply_restore called (-> switch_tv_input home)")
+-- restore_tv_input is false whenever the TV was never connected in
+-- Hyprland's own monitor model to begin with (every hyprland.start fires
+-- this once, dimmed starting nil) -- most importantly, that's always the
+-- case right after returning from gamescope-session (a fresh Hyprland
+-- instance always starts with the TV disabled by default), where sending
+-- "home" here would wake the TV's screen right back up moments after
+-- gamescope-session-wake.service's own ExecStop already put it to sleep --
+-- confirmed live. This mechanism has no knowledge of that separate,
+-- gamescope-side sleep action, so it must not touch the TV at all unless
+-- its own model says it was actually the one driving it.
+local function apply_restore(show_notification, restore_tv_input)
+	debug_log("apply_restore called (-> switch_tv_input home: " .. tostring(restore_tv_input) .. ")")
 	set_external_brightness(RESTORE_BRIGHTNESS)
 	restart_hypridle()
 	set_wallpaper(DEFAULT_WALLPAPER)
-	switch_tv_input("home")
+	if restore_tv_input then
+		switch_tv_input("home")
+	end
 	if show_notification then
 		hl.notification.create({ text = "Restored display brightness + restarted hypridle", timeout = 2500 })
 	end
@@ -321,7 +333,7 @@ local function sync_dim_state()
 
 	set_gate_reason("tv=" .. tostring(tv) .. ", big_picture=" .. tostring(big_picture))
 	if dimmed ~= false then
-		apply_restore(dimmed == true)
+		apply_restore(dimmed == true, tv)
 		dimmed = false
 	end
 
