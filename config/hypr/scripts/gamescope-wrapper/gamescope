@@ -1,0 +1,20 @@
+#!/bin/bash
+# Shadows the real gamescope binary via PATH (see
+# gamescope-session.service.d/override.conf's PATH= override) --
+# /usr/lib/steamos/gamescope-session's own `exec gamescope \ ...` line is
+# hardcoded with no env-var-driven way to append extra flags, so this is
+# the only way to inject --expose-wayland without patching that packaged
+# script directly (which would get overwritten on the next
+# gamescope-session-cachyos update).
+#
+# --expose-wayland: confirmed via the ArchWiki Gamescope page -- "Gamescope
+# does not support Wayland clients by default." Without this flag, a game
+# launched with PROTON_ENABLE_WAYLAND=1 has nowhere to actually connect --
+# its Wayland surface silently never gets created, which is exactly why
+# that experiment hung forever on Steam's "waiting for game" spinner rather
+# than showing an error. Only applies to gamescope-session's own launch
+# (this wrapper is only first in PATH for that one service, via the
+# override, not system-wide), so this doesn't affect any other use of
+# gamescope on this machine (e.g. a per-game `gamescope -- %command%`
+# launch option from a normal desktop Steam install).
+exec /usr/bin/gamescope --expose-wayland "$@"
