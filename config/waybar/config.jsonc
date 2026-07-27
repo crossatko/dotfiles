@@ -1,6 +1,6 @@
 [
   {
-    "output": ["DP-3", "Virtual-1"],
+    "output": ["Dell Inc. DELL U2515H 9X2VY5AK1D5L", "Virtual-1"],
     "layer": "top", // Waybar at top layer
     "position": "bottom", // Waybar position (top|bottom|left|right)
     "height": 24, // Waybar height (to be removed for auto height)
@@ -30,8 +30,10 @@
       "clock",
       "custom/notification",
     ],
-  },
+  }
 
+  // WORKSTATION-ONLY-START (stripped by waybar.sh on non-workstation hosts)
+  ,
   {
     "output": ["HDMI-A-1"],
     "layer": "top", // Waybar at top layer
@@ -63,5 +65,6 @@
       "clock",
       "custom/notification",
     ],
-  },
+  }
+  // WORKSTATION-ONLY-END
 ]

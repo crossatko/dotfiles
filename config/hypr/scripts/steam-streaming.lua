@@ -11,9 +11,29 @@ local DIM_BRIGHTNESS = 0
 local DIM_WALLPAPER = "~/.config/hypr/black.png"
 local DEFAULT_WALLPAPER = "~/.config/hypr/nier.jpg"
 
+-- DP connector-to-I2C-bus enumeration on this GPU/driver isn't guaranteed
+-- stable across boots, so the bus number is resolved by EDID model match
+-- rather than hardcoded (see scripts/ddc-bus.sh).
+local function resolve_ddc_bus(model)
+	local p = io.popen("bash ~/.config/hypr/scripts/ddc-bus.sh " .. model .. " 2>/dev/null")
+	if not p then
+		return nil
+	end
+	local out = (p:read("*a") or ""):gsub("%s+", "")
+	p:close()
+	return tonumber(out)
+end
+
 local ddc_buses = {}
 if host.is_battlestation then
-	ddc_buses = { 8, 9 }
+	local msi_bus = resolve_ddc_bus("MPG271QX")
+	local dell_bus = resolve_ddc_bus("U2515H")
+	if msi_bus then
+		table.insert(ddc_buses, msi_bus)
+	end
+	if dell_bus then
+		table.insert(ddc_buses, dell_bus)
+	end
 elseif host.is_workstation then
 	ddc_buses = { 8, 6 }
 end

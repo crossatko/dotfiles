@@ -1,0 +1,74 @@
+#!/bin/bash
+# Switches the living room TV (TCL 75C6K) input via adb. Requires Developer
+# options + Network debugging enabled on the TV, and this host already
+# authorized (adb keys persist in ~/.android once accepted on-screen once).
+#
+# The TV drops its network interface entirely in standby, so this only works
+# while the TV is already on -- there is no way to wake it from here.
+
+TV=192.168.0.128:5555
+HDMI2_INPUT_ID='com.tcl.tvinput/.TvPassThroughService/HW16'
+LOCK_DIR="$HOME/.local/state/androidtv-remote"
+LOCK="$LOCK_DIR/tv-input.lock"
+
+action="$1"
+
+# Multiple independent triggers (Big Picture's own window.open event and the
+# reachability poller's transition detection) can legitimately fire around
+# the same moment -- without this, two near-simultaneous invocations send
+# two concurrent adb commands (adb shares one server process across every
+# call on this machine), and the TV's input framework has been observed
+# landing on neither input as a result, stuck showing its home screen
+# instead. Waiting for any in-flight invocation to finish, rather than
+# racing it, is what actually fixes that -- not just deduplicating one
+# specific pair of trigger paths.
+mkdir -p "$LOCK_DIR"
+DEBUG_LOG="$LOCK_DIR/poll-debug.log"
+CALL_ID="$$-$action"
+echo "$(date +%s.%N) TV-INPUT[$CALL_ID] waiting for lock" >>"$DEBUG_LOG"
+exec 9>"$LOCK"
+flock -w 200 9 || {
+	echo "$(date +%s.%N) TV-INPUT[$CALL_ID] LOCK TIMEOUT" >>"$DEBUG_LOG"
+	exit 1
+}
+echo "$(date +%s.%N) TV-INPUT[$CALL_ID] lock acquired, action=$action" >>"$DEBUG_LOG"
+
+run() {
+	case "$action" in
+	hdmi2)
+		timeout 3 adb -s "$TV" shell am start -a android.intent.action.VIEW \
+			-d "content://android.media.tv/passthrough/${HDMI2_INPUT_ID//\//%2F}" >/dev/null 2>&1
+		;;
+	home)
+		timeout 3 adb -s "$TV" shell input keyevent KEYCODE_HOME >/dev/null 2>&1
+		;;
+	*)
+		echo "usage: tv-input.sh hdmi2|home" >&2
+		exit 1
+		;;
+	esac
+}
+
+# Right after system wake, adb connectivity comes back before the TV's own
+# tv_input framework is actually ready to act on an input-switch intent --
+# confirmed via debug logging across multiple wakes: `adb connect` succeeds
+# and stays reachable while `dumpsys tv_input` still reports no active
+# session at all, and the `am start` intent fails fast (not a timeout) every
+# one of those attempts. The readiness delay isn't a fixed value -- one wake
+# cleared in ~12s, another took over two minutes (confirmed: a manual retry
+# succeeded on the first try once dumpsys finally showed a session, ~125s
+# after the TV became network-reachable) -- so the retry budget needs a wide
+# margin rather than a number tuned to a single observation. 150 retries
+# (~150s at the common fast-fail pace) covers that with room to spare.
+# `timeout` still wraps each attempt as a hard backstop (adb's own
+# connect-to-unreachable failure isn't instant, and without a bound, a call
+# queued while the TV is off can run far longer than expected -- starving a
+# legitimate subsequent call waiting on the lock above).
+for _ in $(seq 1 150); do
+	if timeout 2 adb connect "$TV" >/dev/null 2>&1 && run; then
+		echo "$(date +%s.%N) TV-INPUT[$CALL_ID] SUCCESS" >>"$DEBUG_LOG"
+		exit 0
+	fi
+	sleep 1
+done
+echo "$(date +%s.%N) TV-INPUT[$CALL_ID] FAILED after 150 attempts" >>"$DEBUG_LOG"

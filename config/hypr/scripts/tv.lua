@@ -5,7 +5,16 @@ local FALLBACK_OUTPUT = monitors.primary.output
 local MEDIA_WORKSPACES = { "9", "10", "11", "12" }
 local MEDIA_WORKSPACE_SET = { ["9"] = true, ["10"] = true, ["11"] = true, ["12"] = true }
 
-local TV_AUDIO_MATCH = "HDMI 4"
+-- Matched by EDID monitor name (via ALSA ELD), not a fragile "HDMI N" port
+-- number: this GPU's audio codec exposes 4 pins for its DP/HDMI outputs,
+-- and only one can be the card's active profile at a time, but WHICH pin
+-- the TV lands on isn't stable -- it silently changed from "HDMI 4" to
+-- "HDMI 3" the last time the TV moved to a different physical GPU port,
+-- and the hardcoded match string went stale (audio just stopped switching,
+-- with no visible error).
+local TV_AUDIO_MODEL = "Beyond TV"
+local TV_AUDIO_CARD = "alsa_card.pci-0000_03_00.1"
+local TV_AUDIO_PCI = TV_AUDIO_CARD:match("pci%-(.+)"):gsub("_", ":")
 
 local audioOutputBeforeTV = ""
 local tvConnected = false
@@ -25,9 +34,18 @@ local function get_default_sink_id()
 end
 
 local function get_tv_sink_id()
-	return cmd_output(
-		"wpctl status | sed -n '/Sinks:/,/Sources:/p' | grep '" .. TV_AUDIO_MATCH .. "' | grep -oE '[0-9]+' | head -n 1"
-	)
+	local profile =
+		cmd_output("bash ~/.config/hypr/scripts/tv-audio-profile.sh '" .. TV_AUDIO_MODEL .. "' '" .. TV_AUDIO_PCI .. "'")
+	if profile == "" then
+		return ""
+	end
+
+	-- Only one of the card's 4 audio pins can be active at once -- switching
+	-- to the TV's profile (a no-op if already active) is what actually makes
+	-- its sink exist/appear at all, not just a naming lookup.
+	os.execute("pactl set-card-profile " .. TV_AUDIO_CARD .. " " .. profile .. " >/dev/null 2>&1")
+	os.execute("sleep 0.3")
+	return cmd_output("wpctl status | sed -n '/Sinks:/,/Sources:/p' | grep 'Navi 48.*HDMI' | grep -oE '[0-9]+' | head -n 1")
 end
 
 local function move_workspace_to_output(workspace, output)

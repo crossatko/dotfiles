@@ -3,6 +3,14 @@ local actions = {
 	shutdown = "hyprshutdown -t 'Shutting down...' --post-cmd 'shutdown now'",
 	reboot = "hyprshutdown -t 'Restarting...' --post-cmd 'reboot'",
 	["exit hyprland"] = "hyprshutdown",
+	-- Writes the session-supervisor's marker file *before* exiting, not
+	-- after (as a hyprshutdown --post-cmd) -- if the write ever failed,
+	-- better to notice while still in this session than land at a shell
+	-- prompt with no way to tell why. No sudo needed for this anymore --
+	-- SDDM (and its account-wide autologin config) is gone entirely;
+	-- session-supervisor.sh just reads this plain file under $HOME.
+	["switch to gamescope"] = "echo gamescope > ~/.local/state/next-session"
+		.. " && hyprshutdown -t 'Switching to Gamescope...'",
 }
 
 local options = {
@@ -10,6 +18,7 @@ local options = {
 	"shutdown",
 	"reboot",
 	"exit hyprland",
+	"switch to gamescope",
 }
 
 local function shell_quote(value)

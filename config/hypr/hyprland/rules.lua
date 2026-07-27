@@ -3,17 +3,7 @@ local is_battlestation = host.is_battlestation
 local is_workstation = host.is_workstation
 local monitors = require("hyprland.monitors")
 
-local monitor1 = monitors.primary
 local monitor2 = monitors.secondary
-local tv = monitors.tv
-
-local function tvOrPrimary()
-	if hl.get_monitor(tv.output) ~= nil then
-		return tv.output
-	else
-		return monitor1.output
-	end
-end
 
 hl.window_rule({
 	name = "suppress-maximize-events",
@@ -159,9 +149,13 @@ hl.window_rule({
 })
 
 if is_battlestation then
+	-- Kept on the same workspace as an actual launched game (9), not a
+	-- separate one (10) -- controller-only navigation can't switch
+	-- workspaces, so Big Picture itself and any game launched from it must
+	-- always land in the same place.
 	hl.window_rule({
 		name = "steam-big-picture-media-workspace",
-		workspace = "10",
+		workspace = "9",
 		float = false,
 		fullscreen = true,
 		no_dim = true,
@@ -178,22 +172,10 @@ hl.window_rule({
 	workspace = "9",
 	float = false,
 	fullscreen = true,
-	monitor = tvOrPrimary(),
 	no_dim = true,
 	opaque = true,
 	focus_on_activate = true,
 	match = { class = "^steam_app_\\d+$" },
-})
-
-hl.window_rule({
-	name = "gamescope",
-	workspace = "9",
-	float = false,
-	fullscreen = true,
-	no_dim = true,
-	opaque = true,
-	focus_on_activate = true,
-	match = { class = "^gamescope" },
 })
 
 hl.window_rule({

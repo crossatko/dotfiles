@@ -25,7 +25,21 @@ local workspaces = {
 	{ id = "7", key = "e", monitor = monitor2.output, app = apps.discord, default = true },
 	{ id = "8", key = "r", monitor = monitor2.output, app = apps.mail },
 
-	{ id = "9", key = "z", monitor = mediaWorkspaceOutput },
+	-- monocle: whatever's focused fills the screen, inherently, unlike a
+	-- per-window `fullscreen = true` rule (rules.lua) which only applies
+	-- once at match time and doesn't re-assert itself when a sibling
+	-- window (e.g. a game) closes -- that's what left Big Picture's own
+	-- window windowed instead of fullscreen after quitting a game.
+	{
+		id = "9",
+		key = "z",
+		monitor = mediaWorkspaceOutput,
+		layout = "monocle",
+		no_border = true,
+		no_rounding = true,
+		gaps_in = 0,
+		gaps_out = 0,
+	},
 	{ id = "10", key = "x", monitor = mediaWorkspaceOutput },
 	{ id = "11", key = "c", monitor = mediaWorkspaceOutput },
 	{ id = "12", key = "v", monitor = mediaWorkspaceOutput },
@@ -35,6 +49,11 @@ for _, ws in ipairs(workspaces) do
 	hl.workspace_rule({
 		workspace = ws.id,
 		monitor = ws.monitor,
+		layout = ws.layout,
+		no_border = ws.no_border,
+		no_rounding = ws.no_rounding,
+		gaps_in = ws.gaps_in,
+		gaps_out = ws.gaps_out,
 		on_created_empty = ws.app,
 		default = ws.default or false,
 		persistent = ws.persistent or false,
