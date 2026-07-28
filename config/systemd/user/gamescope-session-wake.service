@@ -1,0 +1,18 @@
+[Unit]
+Description=Wake/sleep the TV, switch input, and force a VT refresh around a gamescope-session
+PartOf=graphical-session.target
+After=graphical-session.target
+ConditionPathExists=%t/gamescope-environment
+
+[Service]
+Type=oneshot
+# RemainAfterExit is what makes ExecStop fire at all: a plain oneshot is
+# already "inactive" the instant ExecStart returns, so without this,
+# graphical-session.target stopping (i.e. leaving gamescope-session) would
+# have nothing to actually stop.
+RemainAfterExit=yes
+ExecStart=/home/kreejzak/.config/hypr/scripts/gamescope-session-wake.sh
+ExecStop=/home/kreejzak/.config/hypr/scripts/tv-sleep.sh
+
+[Install]
+WantedBy=graphical-session.target

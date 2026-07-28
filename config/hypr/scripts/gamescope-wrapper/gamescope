@@ -15,16 +15,21 @@
 # than showing an error. Harmless to keep even with PROTON_ENABLE_WAYLAND
 # unset -- XWayland-hosted games are unaffected either way.
 #
-# Tried --hdr-enabled --hdr-itm-enable here too (gamescope's own
-# compositor-level HDR + inverse-tone-mapping, separate from the per-game
-# WSI hooking) -- no improvement, tested both with and without the WSI
-# layer enabled alongside it. Photographed proof (two distinct dialogs,
-# CreateSwapchainKHR and QueuePresentKHR, both "hooking has failed
-# somewhere") confirmed the actual bug is in gamescope's own surface-hook
-# registration itself, upstream of anything fixable via flags or env vars
-# -- clicking OK on either dialog just continues with a fully unhooked
-# swapchain, so gamescope never gets a chance to treat that window's
-# buffer as HDR regardless of --hdr-enabled. Reverted; only
-# --expose-wayland remains, since that one is still correct/harmless
-# regardless of whether native-Wayland mode ever gets used again.
-exec /usr/bin/gamescope --expose-wayland "$@"
+# --hdr-enabled: turns on gamescope's HDR output path at startup. Strictly
+# speaking optional -- the packaged session passes STEAM_GAMESCOPE_HDR_
+# SUPPORTED=1 and Steam flips HDR on at runtime over the gamescope control
+# protocol, so HDR worked here before this wrapper existed. Kept because it
+# makes the output's HDR state explicit and independent of Steam's setting
+# rather than something that has to be re-toggled in the UI.
+#
+# --hdr-itm-enable: inverse tone mapping, i.e. expand *SDR* content to fill
+# the HDR range. It does not touch genuinely HDR titles (those carry their
+# own colorspace and metadata through the WSI layer). Purely taste -- drop
+# it if SDR games look over-lifted.
+#
+# Note neither HDR flag was the fix for the long "washed out HDR" hunt.
+# That was a leaked WAYLAND_DISPLAY disabling gamescope's WSI layer inside
+# the game's pressure-vessel container, so gamescope never learned the
+# app's real colorspace and treated HDR content as sRGB. See
+# config/systemd/README.md and steam-launcher.service.d/override.conf.
+exec /usr/bin/gamescope --expose-wayland --hdr-enabled --hdr-itm-enable "$@"

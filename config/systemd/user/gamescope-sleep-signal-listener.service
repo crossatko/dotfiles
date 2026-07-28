@@ -1,0 +1,10 @@
+[Unit]
+Description=Listen for logind PrepareForSleep and drive TV sleep/wake around gamescope-session
+
+[Service]
+ExecStart=/home/kreejzak/.config/hypr/scripts/gamescope-sleep-signal-listener.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
