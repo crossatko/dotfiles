@@ -13,6 +13,13 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStart=/home/kreejzak/.config/hypr/scripts/gamescope-session-wake.sh
 ExecStop=/home/kreejzak/.config/hypr/scripts/tv-sleep.sh
+# Multiple ExecStart=/ExecStop= lines run in order (Type=oneshot allows
+# more than one ExecStart=, and ExecStop= always allows more than one) --
+# this second pair is an independent concern (Home Assistant notification,
+# not TV power) firing on the exact same start/end of the gamescope-
+# session lifecycle. See gamescope-webhook-notify.sh.
+ExecStart=/home/kreejzak/.config/hypr/scripts/gamescope-webhook-notify.sh true
+ExecStop=/home/kreejzak/.config/hypr/scripts/gamescope-webhook-notify.sh false
 
 [Install]
 WantedBy=graphical-session.target

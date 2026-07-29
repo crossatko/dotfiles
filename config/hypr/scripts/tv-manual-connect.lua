@@ -29,6 +29,17 @@ local function is_big_picture_running()
 	return false
 end
 
+-- Tracks whether the TV's current Hyprland-enabled state was THIS script's
+-- doing, not Big Picture's own enable_tv_monitor() (scripts/steam-tv-dim.lua)
+-- -- exposed via hypr_tv_is_manual_connect_active() so that script's resync
+-- path can tell the difference and avoid fighting a manual connection it
+-- doesn't own (see the comment there for the confirmed-live failure mode).
+local manual_connect_active = false
+
+function hypr_tv_is_manual_connect_active()
+	return manual_connect_active
+end
+
 -- Called externally via `hyprctl eval` from scripts/tv-input-poll.sh, which
 -- polls the TV's own currently-selected input over ADB -- there's no
 -- push-based signal for "the TV was manually pointed at this input" (no CEC
@@ -46,9 +57,11 @@ function hypr_tv_set_manual_connect(connected)
 			end
 			hl.monitor(spec)
 		end
+		manual_connect_active = true
 	else
 		if is_tv_connected() and not is_big_picture_running() then
 			hl.monitor({ output = TV_OUTPUT, disabled = true })
 		end
+		manual_connect_active = false
 	end
 end

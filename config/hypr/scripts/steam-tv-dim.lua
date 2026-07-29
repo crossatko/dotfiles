@@ -332,6 +332,22 @@ local function sync_dim_state()
 	end
 
 	set_gate_reason("tv=" .. tostring(tv) .. ", big_picture=" .. tostring(big_picture))
+
+	-- A TV connected purely via tv-manual-connect.lua (physically switching
+	-- input to HDMI2 outside of any Big Picture session) is a different
+	-- owner than this dimming state machine -- confirmed live that without
+	-- this guard, hypr_tv_dim_force_resync() (fired on every reachability
+	-- transition, including a plain poller restart) treated "tv enabled,
+	-- big_picture not running" as stale leftover state and forced it back
+	-- off (switch_tv_input("home") via apply_restore below, then
+	-- disable_tv_monitor()), fighting a manual connection it never owned.
+	-- tv-manual-connect.lua's own hypr_tv_set_manual_connect(false) already
+	-- disables the output itself once the physical input actually moves off
+	-- HDMI2, so nothing here needs to duplicate that.
+	if hypr_tv_is_manual_connect_active and hypr_tv_is_manual_connect_active() then
+		return
+	end
+
 	if dimmed ~= false then
 		apply_restore(dimmed == true, tv)
 		dimmed = false

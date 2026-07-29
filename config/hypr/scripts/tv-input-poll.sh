@@ -45,16 +45,60 @@ mkdir -p "$STATE_DIR"
 # pile up silently (multiple pollers each independently hitting the TV over
 # ADB and calling hyprctl eval, racing each other). A held, non-blocking
 # flock means any second launch just exits immediately instead of stacking.
+#
+# NOTE: if you ever kill a running instance of this script by hand, its adb
+# server child inherits fd 201 and keeps holding this lock even after the
+# script itself is dead -- confirmed live, a relaunch silently no-ops until
+# that orphaned `adb ... fork-server server` process is also killed.
 exec 201>"$STATE_DIR/tv-input-poll.lock"
 flock -n 201 || exit 0
+
+# This poller is a long-lived background loop (started once from
+# hyprland.start in autostart.lua) that outlives any single Hyprland
+# process -- confirmed live: Hyprland restarted underneath an already-running
+# instance of this script, which kept the OLD HYPRLAND_INSTANCE_SIGNATURE it
+# inherited at launch, so every `hyprctl eval` call below silently targeted a
+# dead compositor (stderr discarded) while still correctly detecting HDMI2
+# over adb -- the TV was never actually switched over in Hyprland, and with
+# no signal reaching it the TV's own passthrough view eventually gave up and
+# fell back to its home launcher. `hyprctl instances -j` doesn't depend on
+# the caller's own (possibly stale) signature -- it reads the live
+# control-socket directory directly -- so re-resolving it fresh every loop
+# iteration (~2ms measured here, negligible next to the adb calls already in
+# this loop) keeps every hyprctl call below targeting whichever compositor is
+# actually running right now. Picks the instance with the highest "time" if
+# more than one is somehow live; empty (no live instance at all, e.g. mid
+# gamescope-only session) if none.
+current_instance_signature() {
+	hyprctl instances -j 2>/dev/null | jq -r 'sort_by(.time) | last | .instance // empty'
+}
 
 consecutive_failures=0
 # Empty, not 0/1: forces the first loop iteration to treat whatever it finds
 # as a transition, so state (workspace/dim/audio) gets reconciled at least
 # once on startup instead of assuming a prior poller already left it correct.
 was_reachable=""
+was_hdmi2=""
+# Empty, not a real signature: same reasoning as was_reachable above --
+# forces the first iteration's signature "change" check below to fire too.
+last_synced_signature=""
 
 while true; do
+	sig="$(current_instance_signature)"
+	export HYPRLAND_INSTANCE_SIGNATURE="$sig"
+	# A compositor swap can happen with no accompanying reachability or
+	# input-state change at all -- that's exactly what broke this originally
+	# (Hyprland restarted, nothing on the ADB side ever moved). Forcing both
+	# transition trackers to fire below is what actually re-asserts state
+	# into a freshly-(re)started Hyprland, instead of trusting was_reachable/
+	# was_hdmi2 flags that were only ever confirmed true against the
+	# previous, now-dead, compositor.
+	if [ "$sig" != "$last_synced_signature" ]; then
+		was_reachable=""
+		was_hdmi2=""
+		last_synced_signature="$sig"
+	fi
+
 	# Every adb call here is timeout-wrapped: a single hung call (adb shares
 	# one background server process across every invocation on this machine,
 	# including any manual ad-hoc adb commands run elsewhere) must never be
@@ -80,10 +124,24 @@ while true; do
 		was_reachable=1
 		current_input="$(timeout 5 adb -s "$TV" shell dumpsys tv_input 2>/dev/null | grep "inputId:" | tail -1 | awk '{print $2}')"
 		echo "$(date +%s.%N) POLLER DUMPSYS current_input=[$current_input]" >>"$DEBUG_LOG"
+		# Only called on an actual transition, not every 2s forever --
+		# hypr_tv_set_manual_connect() already checks is_tv_connected() before
+		# doing anything, so a repeat call with the same state was always a
+		# silent no-op; skipping it here just cuts the redundant hyprctl
+		# invocations in the (overwhelmingly common) steady-state case, with
+		# no behavior change. The was_hdmi2="" reset above still forces this
+		# to re-fire against a newly-(re)started compositor even when the
+		# input itself never moved.
 		if [ "$current_input" = "$HDMI2_INPUT_ID" ]; then
-			hyprctl eval 'hypr_tv_set_manual_connect(true)' >/dev/null 2>&1
+			if [ "$was_hdmi2" != "1" ]; then
+				hyprctl eval 'hypr_tv_set_manual_connect(true)' >/dev/null 2>&1
+				was_hdmi2=1
+			fi
 		else
-			hyprctl eval 'hypr_tv_set_manual_connect(false)' >/dev/null 2>&1
+			if [ "$was_hdmi2" != "0" ]; then
+				hyprctl eval 'hypr_tv_set_manual_connect(false)' >/dev/null 2>&1
+				was_hdmi2=0
+			fi
 		fi
 	else
 		consecutive_failures=$((consecutive_failures + 1))

@@ -105,11 +105,26 @@ local function restore_audio_before_tv()
 	audioOutputBeforeTV = ""
 end
 
+-- Fire-and-forget: hl.exec_cmd backgrounds this itself (see the script's own
+-- comment on why a network call must never block Hyprland's Lua execution).
+-- Unconditional, not gated by the `notify` param below -- that param only
+-- controls the desktop popup, and this should still reassert the true state
+-- to Home Assistant every time handle_tv_connected/disconnected runs,
+-- including the notify=false reconciliation on hyprland.start. That's what
+-- makes it self-heal across a Hyprland restart: tvConnected always resets to
+-- its Lua default on reload, so the very next reconcile_tv_state() call is
+-- guaranteed to re-fire one of these two functions at least once, reflecting
+-- whatever the physical state actually is right now.
+local function post_tv_webhook(connected)
+	hl.exec_cmd("bash ~/.config/hypr/scripts/tv-webhook-notify.sh " .. tostring(connected) .. " >/dev/null 2>&1 &")
+end
+
 local function handle_tv_connected(notify)
 	apply_media_workspace_rules(TV_OUTPUT)
 	normalize_tv_workspace()
 	move_media_workspaces(TV_OUTPUT)
 	enable_tv_audio()
+	post_tv_webhook(true)
 	if notify ~= false then
 		hl.notification.create({ text = "TV connected", timeout = 3000 })
 	end
@@ -119,6 +134,7 @@ local function handle_tv_disconnected(notify)
 	apply_media_workspace_rules(FALLBACK_OUTPUT)
 	move_media_workspaces(FALLBACK_OUTPUT)
 	restore_audio_before_tv()
+	post_tv_webhook(false)
 	if notify ~= false then
 		hl.notification.create({ text = "TV disconnected", timeout = 3000 })
 	end
