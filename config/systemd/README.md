@@ -17,8 +17,10 @@ Edit the live files and re-copy, or convert to a symlink (see bottom).
 | `user/steam-launcher.service.d/override.conf` | `~/.config/systemd/user/` |
 | `user/gamescope-session-wake.service` | `~/.config/systemd/user/` |
 | `user/gamescope-sleep-signal-listener.service` | `~/.config/systemd/user/` |
+| `user/gamescope-webhook-notify.service` | `~/.config/systemd/user/` |
 | `user/hypr-focus-daemon.service` | `~/.config/systemd/user/` |
 | `../../system/etc/systemd/system/getty@tty1.service.d/autologin.conf` | `/etc/systemd/system/` (root) |
+| `../../system/etc/systemd/logind.conf.d/inhibit-delay.conf` | `/etc/systemd/logind.conf.d/` (root) |
 
 Packages: `gamescope`, `lib32-gamescope` (**must match `gamescope`'s exact
 version** or pacman refuses the dependency), `gamescope-session-cachyos`.
@@ -84,6 +86,84 @@ override the correct discovered value.
   environment files". Switch via the power menu or Steam's own UI.
 - `steam-launcher.service` can be restarted on its own safely; that reloads
   Steam's environment without touching the compositor.
+- **`graphical-session.target` is not gamescope-specific** — it starts for
+  Hyprland too. Any unit that must only run for gamescope-session needs
+  `ConditionPathExists=%t/gamescope-environment` (the marker the packaged
+  launcher writes), or it fires on every Hyprland login as well.
+- **Suspend/resume is invisible to `graphical-session.target`.** It never
+  stops, so a `Type=oneshot` + `RemainAfterExit=yes` unit's `ExecStop=` does
+  *not* fire on suspend and its `ExecStart=` does not re-fire on resume.
+  Anything that must track "is gamescope actually on the TV" (rather than
+  "does a session exist") needs the logind `PrepareForSleep` listener as
+  well — `gamescope-sleep-signal-listener.sh` covers both halves. This is
+  why the HA notification has *four* call sites, two per mechanism.
+- **One concern per oneshot.** A `Type=oneshot` aborts its remaining
+  `ExecStart=` lines as soon as one fails, and a unit whose `ExecStart=`
+  failed never runs `ExecStop=` at all — so piggybacking a second, unrelated
+  command onto an existing unit silently couples it to the first one's exit
+  status *in both directions*. `gamescope-webhook-notify.service` is split
+  out of `gamescope-session-wake.service` for exactly this reason.
+
+## Wake source decides the session
+
+`gamescope-sleep-signal-listener.service` does more than TV power: on resume it
+asks `wake-source-switch.sh` which device woke the machine and switches session
+accordingly — controller → gamescope-session, keyboard/mouse → Hyprland. It
+runs on `default.target`, not `graphical-session.target`, which is what lets it
+survive the switch it performs.
+
+Attribution is a before/after diff of per-device `power/wakeup_*` counters,
+snapshotted on `PrepareForSleep (true,)`. Two measured facts that a from-first-
+principles implementation gets wrong:
+
+- **`wakeup_count` never moves on this hardware** — only
+  `wakeup_active_count` does (plus `wakeup_last_time_ms` becoming non-zero).
+  Keying off `wakeup_count` alone classifies every wake as unknown and the
+  feature silently does nothing.
+- **The counters are cumulative and never reset**, so only the *delta* across
+  the suspend identifies the waking device. An absolute-value check sees last
+  week's wake and misfires.
+
+Only three devices have `power/wakeup == enabled` and can wake it at all:
+Corne (`4653:0001`) and Logitech receiver (`046d:c54d`) → desk, Steam
+Controller Puck (`28de:1304`) → controller. The MSI "Gaming Controller"
+(`1462:3fa4`) is the *monitor's* HID, has no `power/wakeup` file, and is not a
+gamepad. Unknown/ambiguous wakes (RTC, network, spurious) always stay put.
+
+```sh
+wake-source-switch.sh report            # counters + snapshot + flags
+tail ~/.local/state/wake-source/log     # every decision, with its reasoning
+touch ~/.local/state/wake-source/dry-run   # log decisions, act on none
+touch ~/.local/state/wake-source/disabled  # kill switch: always stay
+```
+
+### Watching PrepareForSleep is not enough — you need a delay inhibitor
+
+`PrepareForSleep (true,)` is an announcement, not a request for permission.
+Measured here, `PM: suspend entry (deep)` lands **3ms** after it is broadcast.
+A `gdbus monitor` subscriber that merely reacts to the signal gets no window
+at all: the first version of the TV-sleep-on-suspend logic was frozen mid-`adb`
+and only returned 24s later, *after* the resume, having left the TV awake on a
+"no input" screen for the entire suspend.
+
+The fix is a `mode=delay` inhibitor, which logind genuinely waits on (up to
+`InhibitDelayMaxSec`, hence the drop-in above raising it to 15s for
+`tv-sleep.sh`'s ~6s worst case). The listener holds one continuously via
+`systemd-inhibit … sleep infinity &`, and *releasing* it — killing that child —
+is what allows the suspend to proceed. So the release must be unconditional and
+last, or a suspend stalls until the cap expires.
+
+Two traps here:
+
+- **Don't clean up stale locks with `pkill -f`.** The inhibit child lives in the
+  unit's cgroup and systemd's default `KillMode=control-group` already reaps it
+  on stop/restart, even after SIGKILL where the EXIT trap never runs. An
+  earlier `pkill -f "systemd-inhibit.*$INHIBIT_WHO"` killed the interactive
+  shell that was grepping for that same string, because `-f` matches any
+  process whose command line merely *contains* the pattern.
+- **`/usr/lib/systemd/system-sleep/` hooks do not fire on this system** —
+  confirmed across multiple real cycles, including the pre-existing `nvidia`
+  one. That is why this is a D-Bus subscriber rather than a sleep hook.
 
 ## Verifying a working session
 
