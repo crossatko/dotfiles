@@ -1,5 +1,10 @@
 local actions = {
-	sleep = "systemctl suspend",
+	-- Not a bare `systemctl suspend`: suspend.sh releases the TV's input first
+	-- and only then requests the suspend. Doing it the other way round cannot
+	-- work -- NetworkManager tears the network down ~1ms after the request, so
+	-- anything hooked on PrepareForSleep (hypridle's before_sleep_cmd included)
+	-- is already too late to reach the TV. See suspend.sh's header.
+	sleep = "~/.config/hypr/scripts/suspend.sh",
 	shutdown = "hyprshutdown -t 'Shutting down...' --post-cmd 'shutdown now'",
 	reboot = "hyprshutdown -t 'Restarting...' --post-cmd 'reboot'",
 	["exit hyprland"] = "hyprshutdown",

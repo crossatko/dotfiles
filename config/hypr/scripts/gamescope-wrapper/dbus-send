@@ -1,0 +1,79 @@
+#!/bin/bash
+# Shadows dbus-send via PATH for the gamescope session only (same mechanism and
+# same directory as the gamescope wrapper next to this file -- see
+# gamescope-session.service.d/override.conf's PATH= line, which steam-launcher
+# inherits through EnvironmentFile=%t/gamescope-environment).
+#
+# Purpose: put the TV into standby *before* the suspend is actually requested.
+#
+# WHY THIS CANNOT BE DONE FROM THE PrepareForSleep HANDLER
+# gamescope-sleep-signal-listener.sh subscribes to logind's PrepareForSleep and
+# holds a mode=delay inhibitor, which does successfully hold the suspend open
+# until tv-sleep.sh returns -- confirmed in the logs. It still didn't work, and
+# measurement showed why: NetworkManager holds a delay inhibitor of its own
+# ("NetworkManager needs to turn off networks") and uses it to tear the network
+# down the instant the same broadcast arrives. From one real suspend:
+#
+#   01:23:40.633779  logind: suspend requested from client PID ... ('dbus-send')
+#   01:23:40.634510  NetworkManager: sleep: sleep requested
+#   01:23:40.634852  NetworkManager: state is now DISABLED (ASLEEP)
+#   01:23:40.635650  RTM_DELROUTE: default route via 192.168.0.1 deleted
+#   01:23:40.677     tv-sleep.sh starts  <-- 42ms after the route is gone
+#
+# adb then just times out (exactly 3s, one `timeout 3`), the TV stays awake, and
+# the webhook curl fails the same way ("Could not resolve host"). Delay
+# inhibitors run concurrently with no ordering between them, and there is no
+# NetworkManager option to opt out of its sleep handling, so this is not a race
+# that can be won by being quicker -- NM finishes in ~1ms and bash needs ~40ms
+# just to start. The only fix is to act before the request exists at all, which
+# is what this wrapper does: at this point the network is still completely up.
+#
+# Steam spawns `dbus-send` itself to request the suspend (nothing in the
+# gamescope-session package does it), which is what makes a PATH shadow viable.
+
+REAL=/usr/bin/dbus-send
+SCRIPTS=/home/kreejzak/.config/hypr/scripts
+DEBUG_LOG="$HOME/.local/state/androidtv-remote/poll-debug.log"
+
+log() { echo "$(date +%s.%N) DBUS-WRAPPER $*" >>"$DEBUG_LOG"; }
+
+# Matches the real suspend call but NOT the CanSuspend query, which Steam makes
+# routinely: "Manager.CanSuspend" does not contain the substring
+# "Manager.Suspend" (what follows "Manager." there is "CanSuspend"), so the
+# pattern below distinguishes them without needing to special-case it.
+# SuspendThenHibernate does match, which is correct -- it also blanks the TV.
+case "$*" in
+*login1*Manager.Suspend*)
+	# Only when this really is a gamescope session. The wrapper directory is
+	# only on PATH there, so this is belt-and-braces in case it ever ends up
+	# on a PATH elsewhere -- it must not blank the TV for an unrelated
+	# suspend requested from the desktop.
+	if [ -e "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/gamescope-environment" ]; then
+		log "suspend request seen, sleeping TV first: $*"
+		# Bounded: tv-sleep.sh already wraps each adb call in `timeout 3`,
+		# but a wedged script here would delay the user's suspend, so cap
+		# the whole thing rather than trusting its internals.
+		timeout 8 "$SCRIPTS/tv-sleep.sh"
+		log "tv-sleep.sh exited $?"
+		# The session-inactive webhook has to go out here too, for exactly
+		# the same reason -- from the PrepareForSleep handler its curl dies
+		# on DNS, since resolv.conf is already gone by then.
+		timeout 6 "$SCRIPTS/gamescope-webhook-notify.sh" false
+		# Tells gamescope-sleep-signal-listener.sh not to redo any of this when
+		# PrepareForSleep arrives a moment from now -- by then the network is
+		# gone and it would only spend ~3s failing while holding the suspend
+		# open. The listener treats a stamp older than 60s as stale, so an
+		# unrelated later suspend still gets its fallback attempt.
+		touch "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tv-slept-preemptively"
+	else
+		log "suspend request seen but no gamescope session, forwarding untouched"
+	fi
+	;;
+*)
+	# Deliberately silent and immediate for everything else: Steam makes
+	# plenty of unrelated dbus-send calls and none of them should pay for
+	# this hook, or clutter the log.
+	;;
+esac
+
+exec "$REAL" "$@"
