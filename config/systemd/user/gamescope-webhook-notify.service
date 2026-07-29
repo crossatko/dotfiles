@@ -1,0 +1,45 @@
+[Unit]
+Description=Notify Home Assistant that a gamescope-session started/ended
+PartOf=graphical-session.target
+After=graphical-session.target
+# Essential, not just an optimisation: graphical-session.target starts for
+# *Hyprland* too. This marker file is written only by gamescope-session's own
+# launcher, so it is the one thing that distinguishes "a gamescope-session is
+# starting" from "Hyprland is starting". Without it every Hyprland login would
+# POST active:true. Conditions are evaluated at start only, so ExecStop still
+# runs later even though the marker is gone by then.
+ConditionPathExists=%t/gamescope-environment
+
+[Service]
+Type=oneshot
+# RemainAfterExit is what makes ExecStop fire at all: a plain oneshot is
+# already "inactive" the instant ExecStart returns, so without this,
+# graphical-session.target stopping (i.e. leaving gamescope-session) would
+# have nothing to actually stop.
+RemainAfterExit=yes
+ExecStart=/home/kreejzak/.config/hypr/scripts/gamescope-webhook-notify.sh true
+ExecStop=/home/kreejzak/.config/hypr/scripts/gamescope-webhook-notify.sh false
+
+[Install]
+WantedBy=graphical-session.target
+
+# Deliberately its own unit rather than extra ExecStart=/ExecStop= lines on
+# gamescope-session-wake.service (where this started out), for two reasons:
+#
+#  1. A Type=oneshot aborts its remaining ExecStart= lines the moment one
+#     fails, and a unit whose ExecStart failed never runs ExecStop= at all --
+#     so any failure inside gamescope-session-wake.sh (it ends in
+#     `sudo -n chvt`, which depends on a sudoers NOPASSWD rule continuing to
+#     exist) would have silently taken the webhook down with it, in *both*
+#     directions.
+#  2. gamescope-session-wake.sh deliberately sleeps ~3s before bouncing the
+#     VT. As a second ExecStart= the POST inherited that delay; as its own
+#     unit it starts in parallel and fires immediately -- and conversely a
+#     slow/hanging curl can no longer delay that VT bounce, which is what
+#     makes gamescope's first frame actually appear.
+#
+# This unit covers session start/end only. Suspend/resume *within* a
+# gamescope-session never stops graphical-session.target, so neither hook here
+# fires for it -- those two transitions are handled by
+# gamescope-sleep-signal-listener.sh, which watches logind's PrepareForSleep
+# directly. Between the two, all four transitions are covered.
