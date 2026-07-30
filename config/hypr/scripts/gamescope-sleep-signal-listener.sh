@@ -56,6 +56,17 @@ take_lock() {
 		--why="Put the TV into standby and record the wake-source baseline" \
 		sleep infinity >/dev/null 2>&1 &
 	LOCK_PID=$!
+	# Removes it from this shell's job table so that no `wait` can ever block on
+	# it. This is defence in depth against a bug that really happened: the
+	# handlers below background a webhook and then wait for it, and a bare `wait`
+	# there also waits for THIS child, which by design never exits. The loop then
+	# reads no further lines and the listener is silently dead while systemd
+	# still reports the unit active -- it sat wedged like that for eight hours
+	# overnight, attributing no wakes and switching no sessions. Both waits are
+	# now PID-scoped, but this makes the whole class impossible rather than
+	# relying on that staying true. kill by PID still works on a disowned job,
+	# so release_lock is unaffected.
+	disown "$LOCK_PID" 2>/dev/null
 }
 
 release_lock() {
@@ -176,11 +187,20 @@ gdbus monitor --system --dest org.freedesktop.login1 2>>"$DEBUG_LOG" | while IFS
 				# actually being awake -- gamescope is already displaying again
 				# by this point, which is what active:true is reporting.
 				/home/kreejzak/.config/hypr/scripts/gamescope-webhook-notify.sh true &
+				WEBHOOK_PID=$!
 				/home/kreejzak/.config/hypr/scripts/tv-wake-and-resync.sh
 				/home/kreejzak/.config/hypr/scripts/tv-input.sh wakeup
 				/home/kreejzak/.config/hypr/scripts/tv-input.sh hdmi2
 				echo "$(date +%s.%N) SIGNAL-LISTENER wake+input done" >>"$DEBUG_LOG"
-				wait
+				# Specifically the webhook, NEVER a bare `wait`. take_lock at the
+				# top of this branch makes the inhibitor's `systemd-inhibit ...
+				# sleep infinity` a background child of this very subshell, so a
+				# bare `wait` blocks on it forever -- the loop then reads no
+				# further lines and the listener is silently dead while systemd
+				# still reports it active. That is not hypothetical: it wedged
+				# here for eight hours overnight, so no wake was ever attributed
+				# and every resume stayed in whichever session it was already in.
+				wait "$WEBHOOK_PID" 2>/dev/null
 			else
 				echo "$(date +%s.%N) SIGNAL-LISTENER no marker, skipping wake" >>"$DEBUG_LOG"
 			fi
