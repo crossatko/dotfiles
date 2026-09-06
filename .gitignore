@@ -25,3 +25,7 @@ hypr/.secrets
 config/hypr/.secrets
 config/hypr/scripts/diacritics.log
 hypr/.secrets
+
+# WiVRn pairing secrets — cookie is an auth token, known_keys ties to real devices.
+config/wivrn/cookie
+config/wivrn/known_keys.json

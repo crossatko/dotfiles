@@ -3,6 +3,8 @@ local workspaces = require("hyprland.workspaces")
 local leave_computer = require("scripts.leave-computer").leave_computer
 local show_power_menu = require("scripts.power-menu").show_power_menu
 local show_sound_output_menu = require("scripts.sound-output-menu").show_sound_output_menu
+local focus_direction = require("scripts.focus-direction")
+local switch_workspace = require("scripts.switch-workspace")
 
 local mod = "SUPER"
 local alt = "ALT"
@@ -20,8 +22,8 @@ local bind = function(keys, action, opts)
 end
 
 local myPin = function()
-	hl.dispatch(hl.dsp.window.pin({ action = "on" }))
-	hl.dispatch(hl.dsp.window.float({ action = "on" }))
+	hl.dispatch(hl.dsp.window.float({ action = true }))
+	hl.dispatch(hl.dsp.window.pin({ action = true }))
 	hl.dispatch(hl.dsp.window.resize({ x = 866, y = 1416 }))
 	hl.dispatch(hl.dsp.window.move({ x = 2560, y = 12 }))
 end
@@ -61,7 +63,9 @@ local directions = {
 }
 
 for key, dir in pairs(directions) do
-	bind({ mod, key }, hl.dsp.focus({ direction = dir }))
+	bind({ mod, key }, function()
+		focus_direction(dir)
+	end)
 	bind({ mod, alt, key }, hl.dsp.window.move({ direction = dir, group_aware = true }))
 end
 
@@ -83,7 +87,9 @@ end
 
 for _, ws in ipairs(workspaces.workspaces) do
 	local ws_num = tonumber(ws.id) or ws.id
-	bind({ alt, ws.key }, hl.dsp.focus({ workspace = ws_num }))
+	bind({ alt, ws.key }, function()
+		switch_workspace(ws_num)
+	end)
 	bind({ mod, alt, ws.key }, hl.dsp.window.move({ workspace = ws_num }))
 end
 

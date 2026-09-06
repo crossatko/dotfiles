@@ -199,7 +199,7 @@ def main():
 
     if set_clipboard(corrected):
         if paste():
-            # notify("Czech Diacritics", "✓ Corrected & pasted")
+            notify("Czech Diacritics", "✓ Corrected & pasted")
         else:
             notify("Czech Diacritics", "Corrected — paste manually with Ctrl+V")
     else:

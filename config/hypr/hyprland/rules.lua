@@ -49,30 +49,27 @@ if is_battlestation then
 		match = { initial_class = "^(mpv)$" },
 	})
 elseif is_workstation then
+	-- Placement (monitor/move/size) is handled dynamically in scripts/pip-orientation.lua
+	-- based on the video's aspect ratio. Pinning also happens there, AFTER the
+	-- window is moved - pinning it here immediately at open time latches its
+	-- monitor/workspace ownership to wherever it originally spawned (often the
+	-- wrong monitor), even though its pixels get moved correctly right after.
 	hl.window_rule({
 		name = "cw-pip",
 		float = true,
-		pin = true,
 		no_initial_focus = true,
 		opacity = "1 override 1 override",
 		no_dim = true,
 		rounding = 0,
 		group = "barred",
-		monitor = monitor2.output,
-		move = "0 1245",
-		size = "1200 675",
 		match = { title = "^(Picture in picture)$" },
 	})
 
 	hl.window_rule({
 		name = "cw-mpv",
 		float = true,
-		pin = true,
 		no_initial_focus = true,
 		no_dim = true,
-		monitor = monitor2.output,
-		move = "0 1245",
-		size = "1200 675",
 		match = { initial_class = "^(mpv)$" },
 	})
 end

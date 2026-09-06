@@ -71,36 +71,9 @@ if is_battlestation then
 		},
 	})
 end
-if is_workstation then
-	hl.workspace_rule({
-		workspace = "m[" .. monitor1.output .. "]w[p1-9]",
-		gaps_out = {
-			top = 12,
-			bottom = 12,
-			left = 12,
-			right = 892,
-		},
-	})
-	hl.workspace_rule({
-		workspace = "m[" .. monitor1.output .. "]w[t1]",
-		gaps_out = {
-			top = 12,
-			bottom = 12,
-			left = 12,
-			right = 892,
-		},
-	})
-
-	hl.workspace_rule({
-		workspace = "m[" .. monitor2.output .. "]w[p1-9]",
-		gaps_out = {
-			top = 12,
-			bottom = 687,
-			left = 12,
-			right = 12,
-		},
-	})
-end
+-- Both monitors' reservations for pinned PiP/mpv windows are now handled
+-- dynamically at runtime via reserved_area (hyprland/monitors.lua), toggled
+-- by scripts/pip-orientation.lua - not static per-workspace gaps.
 
 return {
 	workspaces = workspaces,
