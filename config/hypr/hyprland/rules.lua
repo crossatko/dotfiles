@@ -98,6 +98,13 @@ hl.window_rule({
 })
 
 hl.window_rule({
+	name = "reaper",
+	no_dim = true,
+	opacity = "1 override 1 override",
+	match = { class = "^(REAPER)$" },
+})
+
+hl.window_rule({
 	name = "pinned",
 	border_size = 0,
 	no_initial_focus = true,
@@ -228,6 +235,11 @@ hl.window_rule({
 	workspace = "7",
 	match = { class = "discord" },
 })
+hl.window_rule({
+	name = "discord-popout-stream",
+	no_dim = true,
+	match = { class = "discord", initial_title = "^(Discord Popout)$" },
+})
 hl.window_rule({ name = "thunderbird", workspace = "8", match = { class = "thunderbird" } })
 hl.window_rule({ name = "whatsapp", workspace = "7", match = { class = "^(brave-web\\.whatsapp\\.com__-Default)$" } })
 hl.window_rule({ name = "messages", workspace = "7", match = { class = "^(brave-messages\\.google\\.com__-Default)$" } })
@@ -269,6 +281,15 @@ hl.window_rule({
 
 hl.layer_rule({ match = { namespace = "waybar" }, blur = true })
 hl.layer_rule({ match = { namespace = "launcher" }, blur = true })
+-- Quickshell bar (~/dotfiles/config/quickshell) -- each module/group is its own
+-- layer-shell surface so it gets independent blur/refraction, hence one rule per
+-- namespace instead of a single "quickshell" match.
+hl.layer_rule({ match = { namespace = "qs-workspaces" }, blur = true })
+hl.layer_rule({ match = { namespace = "qs-clock" }, blur = true })
+hl.layer_rule({ match = { namespace = "qs-tray" }, blur = true })
+hl.layer_rule({ match = { namespace = "qs-audio" }, blur = true })
+hl.layer_rule({ match = { namespace = "qs-system" }, blur = true })
+hl.layer_rule({ match = { namespace = "qs-idle-notif" }, blur = true })
 hl.layer_rule({ match = { namespace = "swaync-control-center" }, blur = true })
 hl.layer_rule({ match = { namespace = "swaync-control-center" }, ignore_alpha = 0.2 })
 hl.layer_rule({ match = { namespace = "swaync-control-center" }, animation = "slide right" })

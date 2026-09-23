@@ -1,6 +1,5 @@
 return {
   "milanglacier/minuet-ai.nvim",
-  event = "InsertEnter",
   opts = {
     provider = "openai_compatible",
     request_timeout = 3,
@@ -56,20 +55,20 @@ return {
       openai_compatible = {
         name = "Openrouter",
         end_point = "https://openrouter.ai/api/v1/chat/completions",
-        model = "xiaomi/mimo-v2.5",
+        model = "deepseek/deepseek-v4-flash",
         optional = {
           max_tokens = 256,
           top_p = 0.9,
-          provider = {
-            order = {
-              "DigitalOcean",
-              "Hetzner",
-              "Vultr",
-              "OVHcloud",
-              "Scaleway",
-            },
-            allow_fallbacks = true,
-          },
+          -- provider = {
+          --   order = {
+          --     "DigitalOcean",
+          --     "Hetzner",
+          --     "Vultr",
+          --     "OVHcloud",
+          --     "Scaleway",
+          --   },
+          --   allow_fallbacks = true,
+          -- },
         },
       },
     },

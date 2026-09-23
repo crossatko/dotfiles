@@ -6,12 +6,12 @@ local GAME_WORKSPACE = "9"
 local RESTORE_BRIGHTNESS = 80
 local DIM_BRIGHTNESS = 1
 local DIM_WALLPAPER = "~/.config/hypr/black.png"
-local DEFAULT_WALLPAPER = "~/.config/hypr/nier.jpg"
+local DEFAULT_WALLPAPER = "~/.config/hypr/nier2.jpg"
 
 -- Temporary diagnostic logging while chasing the TV-wake input-switch race
 -- -- remove once root-caused for good.
 local function debug_log(msg)
-	os.execute("echo \"$(date +%s.%N) LUA: " .. msg .. "\" >> ~/.local/state/androidtv-remote/poll-debug.log")
+	os.execute('echo "$(date +%s.%N) LUA: ' .. msg .. '" >> ~/.local/state/androidtv-remote/poll-debug.log')
 end
 
 -- DP connector-to-I2C-bus enumeration on this GPU/driver isn't guaranteed
@@ -199,10 +199,14 @@ local function is_big_picture_window(win)
 	local class_b = (win.initial_class or ""):lower()
 	local title_a = (win.title or ""):lower()
 	local title_b = (win.initial_title or ""):lower()
-	local class_ok = class_a:find("steam", 1, true) ~= nil or class_a == "gamescope"
-		or class_b:find("steam", 1, true) ~= nil or class_b == "gamescope"
-	local title_ok = title_a:find("big picture", 1, true) ~= nil or title_a:find("gamepadui", 1, true) ~= nil
-		or title_b:find("big picture", 1, true) ~= nil or title_b:find("gamepadui", 1, true) ~= nil
+	local class_ok = class_a:find("steam", 1, true) ~= nil
+		or class_a == "gamescope"
+		or class_b:find("steam", 1, true) ~= nil
+		or class_b == "gamescope"
+	local title_ok = title_a:find("big picture", 1, true) ~= nil
+		or title_a:find("gamepadui", 1, true) ~= nil
+		or title_b:find("big picture", 1, true) ~= nil
+		or title_b:find("gamepadui", 1, true) ~= nil
 	return class_ok and title_ok
 end
 
@@ -421,7 +425,9 @@ end)
 local function ensure_game_on_workspace()
 	for _, win in ipairs(hl.get_windows()) do
 		if is_game_window(win) and tostring(win.workspace and win.workspace.id) ~= GAME_WORKSPACE then
-			hl.dispatch(hl.dsp.window.move({ workspace = tonumber(GAME_WORKSPACE), window = "address:" .. win.address }))
+			hl.dispatch(
+				hl.dsp.window.move({ workspace = tonumber(GAME_WORKSPACE), window = "address:" .. win.address })
+			)
 			-- The controller-focus hop is a Big Picture-specific need (no
 			-- keyboard/mouse to just click the window into focus), not a
 			-- workspace-placement concern -- kept conditional here.
@@ -448,4 +454,3 @@ function hypr_tv_dim_force_resync()
 	dimmed = nil
 	sync_dim_state()
 end
-

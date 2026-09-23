@@ -28,6 +28,9 @@ while true; do
 	gamescope)
 		start-gamescope-session
 		;;
+	kde)
+		startplasma-wayland >"$HOME/.local/state/kde-session.log" 2>&1
+		;;
 	*)
 		start-hyprland
 		;;

@@ -3,13 +3,13 @@
     "output": ["Dell Inc. DELL U2515H 9X2VY5AK1D5L", "Virtual-1"],
     "layer": "top", // Waybar at top layer
     "position": "bottom", // Waybar position (top|bottom|left|right)
-    "height": 24, // Waybar height (to be removed for auto height)
+    "height": 40, // Waybar height (to be removed for auto height)
     "width": "full", // Waybar width
     "spacing": 0, // Gaps between modules (4px)
-    "margin-bottom": 0,
+    "margin-bottom": 8,
     "margin-top": 0,
-    "margin-left": 0,
-    "margin-right": 0,
+    "margin-left": 8,
+    "margin-right": 8,
     "include": ["$HOME/.config/waybar/modules.jsonc"],
     "modules-left": ["hyprland/workspaces"],
     // "modules-center": ["hyprland/window"],
@@ -38,13 +38,13 @@
     "output": ["HDMI-A-1"],
     "layer": "top", // Waybar at top layer
     "position": "top", // Waybar position (top|bottom|left|right)
-    "height": 24, // Waybar height (to be removed for auto height)
+    "height": 40, // Waybar height (to be removed for auto height)
     "width": "full", // Waybar width
     "spacing": 0, // Gaps between modules (4px)
     "margin-bottom": 0,
-    "margin-top": 0,
-    "margin-left": 0,
-    "margin-right": 0,
+    "margin-top": 8,
+    "margin-left": 8,
+    "margin-right": 8,
     "include": ["$HOME/.config/waybar/modules.jsonc"],
     "modules-left": ["hyprland/workspaces"],
     "modules-center": [],

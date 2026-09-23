@@ -170,6 +170,7 @@ in
         recursive = true;
       }) configs)
       // {
+        "brave-flags.conf".source = create_symlink "${dotfiles}/brave-flags.conf";
         "gtk-3.0/bookmarks".text = ''
           file:///home/${user}/Documents
           file:///home/${user}/Downloads

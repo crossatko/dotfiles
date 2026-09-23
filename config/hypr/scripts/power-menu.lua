@@ -16,6 +16,8 @@ local actions = {
 	-- session-supervisor.sh just reads this plain file under $HOME.
 	["switch to gamescope"] = "echo gamescope > ~/.local/state/next-session"
 		.. " && hyprshutdown -t 'Switching to Gamescope...'",
+	["switch to kde"] = "echo kde > ~/.local/state/next-session"
+		.. " && hyprshutdown -t 'Switching to KDE...'",
 }
 
 local options = {
@@ -24,6 +26,7 @@ local options = {
 	"reboot",
 	"exit hyprland",
 	"switch to gamescope",
+	"switch to kde",
 }
 
 local function shell_quote(value)

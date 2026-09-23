@@ -2,10 +2,10 @@ local M = {}
 
 -- pick one tint only
 -- pink | mint | green | yellow | orange | cyan | blue | red | gray
-M.selected = "mint"
+M.selected = "green"
 
 M.glass = {
-	border_size = 4,
+	border_size = 3,
 	window_rounding = 10,
 	window_rounding_power = 10,
 	group_rounding = 8,

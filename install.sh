@@ -127,6 +127,14 @@ for app in "${CONFIG_APPS[@]}"; do
   ln -s "$SOURCE" "$TARGET"
 done
 
+# Chromium 141+ enables the WaylandWpColorManagerV1 protocol by default,
+# which fights with Hyprland's own dcip3 color management and makes
+# Brave render bland/shifted colors. brave-flags.conf disables it.
+if [ -e "$HOME/.config/brave-flags.conf" ] || [ -L "$HOME/.config/brave-flags.conf" ]; then
+  rm -f "$HOME/.config/brave-flags.conf"
+fi
+ln -s "$CONFIG_DIR/brave-flags.conf" "$HOME/.config/brave-flags.conf"
+
 # --- THEMING SETUP ---
 echo "Applying GTK Dark Theme and Icons..."
 mkdir -p "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"

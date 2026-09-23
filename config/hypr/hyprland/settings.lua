@@ -75,7 +75,7 @@ hl.config({
 		rounding = theme.glass.window_rounding,
 		rounding_power = theme.glass.window_rounding_power,
 		active_opacity = 1.0,
-		inactive_opacity = 0.75,
+		inactive_opacity = 1.0,
 		dim_inactive = true,
 		dim_strength = 0.5,
 		shadow = {
@@ -83,18 +83,176 @@ hl.config({
 			range = 24,
 			render_power = 3,
 			color = theme.active.shadow,
-			offset = "3 3",
+			offset = { 3, 3 },
 		},
+		-- blur = {
+		-- 	enabled = true,
+		-- 	size = 4,
+		-- 	passes = 3,
+		-- 	xray = false,
+		-- 	new_optimizations = true,
+		-- 	-- vibrancy = 0.1696,
+		-- },
+	},
+})
+
+-- =====================================================================
+-- Blur variants from Hyprland PR #15661 (unmerged, open with conflicts
+-- as of 2026-08-18 -- vaxerski/Hyprland branch
+-- "more-blur-XDDDDDDDDDDDDDDDDDDDDDD"). These decoration:blur:* keys
+-- only exist in that experimental build, ~/code/hyprland-blur-test.
+-- Keep this whole section commented out for the real hyprland-git
+-- session on tty1 -- it will not recognize these keys.
+--
+-- To test: uncomment ONE variant block below (the `variant` line plus
+-- its matching options table), save, then from the test session (tty2)
+-- run `hyprctl reload`. Re-comment and reload again before switching
+-- back to daily use.
+-- =====================================================================
+
+-- hl.config({ decoration = { blur = { variant = "kawase" } } }) -- default, no extra options
+
+-- hl.config({ decoration = { blur = { variant = "frost" } } })
+-- hl.config({
+-- 	decoration = {
+-- 		blur = {
+-- 			glass = {
+-- 				refraction = 20.0, -- max refraction displacement (px), range 0-20, default 3.0
+-- 				size = 32.0, -- pattern size (px), range 4-512, default 48.0
+-- 				roughness = 0.1, -- relief shading strength, range 0-1, default 0.4
+-- 			},
+-- 		},
+-- 	},
+-- })
+
+-- hl.config({ decoration = { blur = { variant = "ripple" } } })
+-- hl.config({
+-- 	decoration = {
+-- 		blur = {
+-- 			ripple = {
+-- 				strength = 6.0, -- max refraction displacement of click ripples (px), range 0-32, default 6.0
+-- 				radius = 180.0, -- max ripple radius (px), range 1-1000, default 180.0
+-- 				width = 24.0, -- ripple wave width (px), range 1-200, default 24.0
+-- 				duration = 0.45, -- ripple duration (s), range 0.05-5, default 0.45
+-- 			},
+-- 		},
+-- 	},
+-- })
+
+-- hl.config({ decoration = { blur = { variant = "drops" } } })
+-- hl.config({
+-- 	decoration = {
+-- 		blur = {
+-- 			drops = {
+-- 				speed = 0.6, -- animation speed, range 0-10, default 0 (disabled). NOTE: enabling significantly increases GPU usage
+-- 			},
+-- 		},
+-- 	},
+-- })
+
+-- hl.config({ decoration = { blur = { variant = "water" } } })
+-- hl.config({
+-- 	decoration = {
+-- 		blur = {
+-- 			water = {
+-- 				strength = 12.0, -- refraction + injection strength (px), range 0-32, default 12.0
+-- 				radius = 180.0, -- pointer radius (px), range 1-1000, default 180.0
+-- 				speed = 1.0, -- propagation speed, range 0-10, default 1.0
+-- 				damping = 0.995, -- decay damping, range 0-1, default 0.995
+-- 				duration = 12.0, -- max animation duration (s), range 0.5-60, default 12.0
+-- 			},
+-- 		},
+-- 	},
+-- })
+
+-- hl.config({ decoration = { blur = { variant = "fluid_jar" } } })
+-- hl.config({ decoration = { blur = { fluid_jar = {
+-- 	color = "rgba(cc3399ff)",  -- fluid color, default 0xCC3399FF
+-- 	speed = 1.0,               -- animation speed, range 0-10, default 1.0
+-- 	fill_amount = 0.4,         -- fill level, range 0-1, default 0.4
+-- 	mass = 1.0,                -- inertial mass, range 0.1-10, default 1.0
+-- 	precision = 1.0,           -- sim precision multiplier, range 0.5-8, default 1.0
+-- 	turbulence = 1.0,          -- interior turbulence multiplier, range 0-5, default 1.0
+-- 	distortion = 1.0,          -- refraction distortion multiplier, range 0-10, default 1.0
+-- } } } })
+
+-- hl.config({ decoration = { blur = { variant = "prism" } } }) -- triangular refraction, no extra options
+
+-- hl.config({ decoration = { blur = { variant = "heat_shimmer" } } })
+-- hl.config({
+-- 	decoration = {
+-- 		blur = {
+-- 			heat_shimmer = {
+-- 				speed = 1.0, -- animation speed, range not specified upstream, default 1.0, 0 disables. NOTE: increases GPU usage
+-- 			},
+-- 		},
+-- 	},
+-- })
+
+-- hl.config({ decoration = { blur = { variant = "acrylic" } } })
+-- hl.config({
+-- 	decoration = {
+-- 		blur = {
+-- 			acrylic = {
+-- 				refraction = 24.0, -- max lens displacement (px), range 0-48, default 24.0
+-- 				bulb = 48.0, -- width of curved acrylic edge (px), range 4-256, default 48.0
+-- 				clarity = 0.82, -- amount of sharp backdrop transmitted through surface, range 0-1, default 0.82
+-- 				aberration = 0.025, -- relative chromatic separation in the lens, range 0-0.25, default 0.025
+-- 				tint = "rgba(14eef5ff)", -- tint color, alpha controls optical absorption, default 0x14EEF5FF
+-- 			},
+-- 		},
+-- 	},
+-- })
+
+-- solid_glass: a from-scratch reworking of acrylic (only exists in this
+-- ~/code/hyprland-blur-test build, patched locally -- not upstream) aimed at an
+-- Apple-style "liquid glass" look, with depth/edge_curve/light_angle/specular_*/
+-- sheen/saturation on top of acrylic's original refraction/bulb/clarity/aberration/tint.
+hl.config({
+	decoration = {
 		blur = {
-			enabled = true,
 			size = 4,
 			passes = 2,
-			xray = true,
-			new_optimizations = true,
-			vibrancy = 0.1696,
+			vibrancy = 0.8,
+			popups = true,
+			-- variant = "solid_glass",
+			-- solid_glass = {
+			-- 	refraction = 48.0, -- max lens displacement (px), range 0-48, default 24.0 -- lower = subtler edge bend
+			-- 	bulb = 32.0, -- width of curved edge (px), range 4-256, default 48.0 -- keep well under half the window's smallest dimension or the whole window becomes "edge"
+			-- 	clarity = 0, -- amount of sharp backdrop transmitted through surface, uniformly across the whole edge including the true boundary, range 0-1, default 0.82
+			-- 	aberration = 0.05, -- relative chromatic separation in the lens, range 0-0.25, default 0.025 -- subtle fringe, not a rainbow
+			-- 	tint = "rgba(00000066)", -- light neutral tint, alpha controls optical absorption
+			-- 	depth = 0.5, -- refraction bend strength: 0 = flat glass, no bend; 1 = normal; >1 = bends harder, range 0-3
+			-- 	edge_curve = 0.75, -- shape of the 3d edge curve the bend follows across the bulb width, range 0.2-5 -- 1.0 = linear/default. <1.0 bends earlier, right at the true edge (convex, rounded bead). >1.0 stays flat near the edge and bends later, closer to the interior (beveled look). try 0.5 or 2.0
+			-- 	light_angle = 55, -- degrees, 0 = right, 90 = up -- unused while specular_intensity is 0
+			-- 	specular_intensity = 0, -- brightness of the ENTIRE synthetic light model (fresnel rim, specular glint, sheen, directional edge highlight/shadow), range 0-3 -- 0 = pure refraction of the real backdrop, no invented lighting. Raise this later if you want some glass-catching-light shine back
+			-- 	specular_power = 60, -- sharpness of the glint, range 1-200 -- unused while specular_intensity is 0
+			-- 	sheen = 0.25, -- rim-only glint tracing the edge facing the light, range 0-1 -- unused while specular_intensity is 0
+			-- 	saturation = 1.2, -- vividness of the backdrop color seen through the glass, range 0-3
+			-- },
 		},
 	},
 })
+
+-- hl.config({ decoration = { blur = { variant = "aurora" } } })
+-- hl.config({
+-- 	decoration = {
+-- 		blur = {
+-- 			aurora = {
+-- 				speed = 1.0, -- animation speed, default 1.0, 0 freezes it. NOTE: increases GPU usage
+-- 				intensity = 0.35, -- strength of aurora color contribution, range 0-1, default 0.35
+-- 				color1 = "rgba(29f0a0ff)", -- first curtain color, alpha controls contribution, default 0x29F0A0FF
+-- 				color2 = "rgba(7a4dffff)", -- second curtain color, alpha controls contribution, default 0x7A4DFFFF
+-- 			},
+-- 		},
+-- 	},
+-- })
+
+-- hl.config({ decoration = { blur = { variant = "haze" } } })
+-- hl.config({ decoration = { blur = { haze = {
+-- 	intensity = 0.35,     -- strength of pearlescent sheen, range 0-1, default 0.35
+-- 	iridescence = 0.7,    -- strength of pearlescent color shift, range 0-1, default 0.7
+-- } } } })
 
 hl.config({
 	animations = {

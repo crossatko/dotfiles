@@ -27,14 +27,8 @@ window#waybar {
 /* The Main Container */
 window#waybar > box {
   padding: 0;
-  background: linear-gradient(
-    135deg,
-    @glass-dark,
-    @glass-tint 30%,
-    rgba(60, 60, 60, 0.4) 40%,
-    /* Sharper, darker reflection streak */ @glass-tint 50%,
-    @glass-dark
-  );
+  background-color: transparent;
+  border-radius: 10px; /* matches theme.glass.window_rounding */
   border-top: 1px solid rgba(255, 255, 255, 0.08); /* Darker edge */
   box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.6);
 }

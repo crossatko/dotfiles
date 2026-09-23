@@ -1,0 +1,305 @@
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import Quickshell.Hyprland
+import Quickshell.Io
+import Quickshell.Widgets
+import Quickshell.Services.SystemTray
+import Quickshell.Services.Pipewire
+
+ShellRoot {
+    id: root
+
+    property string cpuText: "0% "
+    property string memText: "0% "
+    property string notifText: ""
+
+    function wsLabel(id) {
+        const labels = {
+            1: "A", 2: "S", 3: "D", 4: "F",
+            5: "Q", 6: "W", 7: "E", 8: "R",
+            9: "Z", 10: "X", 11: "C", 12: "V"
+        }
+        return labels[id] || id
+    }
+
+    function runDetached(command) {
+        actionProc.command = ["sh", "-lc", command]
+        actionProc.startDetached()
+    }
+
+    Process { id: actionProc }
+
+    Process {
+        id: cpuProc
+        running: true
+        command: ["sh", "-lc", "while :; do awk '/^cpu / {u=$2+$4; t=$2+$4+$5; if (pt>0) printf \"%d%% \\n\", (u-pu)*100/(t-pt); pu=u; pt=t; fflush();} /^cpu /{next}' /proc/stat /proc/stat; sleep 2; done"]
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: function(line) {
+                if (line && line.length)
+                    root.cpuText = line
+            }
+        }
+    }
+
+    Process {
+        id: memProc
+        running: true
+        command: ["sh", "-lc", "while :; do awk '/MemTotal/ {t=$2} /MemAvailable/ {a=$2} END {printf \"%d%% \\n\", (t-a)*100/t}' /proc/meminfo; sleep 3; done"]
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: function(line) {
+                if (line && line.length)
+                    root.memText = line
+            }
+        }
+    }
+
+    Process {
+        id: notifProc
+        running: true
+        command: ["sh", "-lc", "while :; do swaync-client -swb 2>/dev/null || echo ''; sleep 2; done"]
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: function(line) {
+                if (line && line.length)
+                    root.notifText = line
+            }
+        }
+    }
+
+    SystemClock {
+        id: clock
+        enabled: true
+        precision: SystemClock.Minutes
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        PanelWindow {
+            required property var modelData
+
+            screen: modelData
+            color: "transparent"
+            implicitHeight: 32
+            anchors {
+                left: true
+                right: true
+                top: modelData.name === "HDMI-A-1"
+                bottom: modelData.name !== "HDMI-A-1"
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: "#80000000"
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 4
+                    spacing: 8
+
+                    Row {
+                        spacing: 4
+
+                        Repeater {
+                            model: Hyprland.workspaces
+
+                            Rectangle {
+                                required property var modelData
+                                readonly property bool active: modelData.active || modelData.focused
+
+                                visible: modelData.id > 0
+                                implicitWidth: active ? 40 : 24
+                                implicitHeight: 24
+                                radius: 12
+                                color: active ? "#f2cdcd" : "#bf1e1e2e"
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: root.wsLabel(parent.modelData.id)
+                                    color: parent.active ? "#191724" : "#cdd6f4"
+                                    font.family: "TX-02"
+                                    font.bold: true
+                                    font.pixelSize: 12
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: parent.modelData.activate()
+                                    onEntered: if (!parent.active) parent.color = "#33cba6f7"
+                                    onExited: if (!parent.active) parent.color = "#bf1e1e2e"
+                                }
+                            }
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Row {
+                        spacing: 6
+
+                        Rectangle {
+                            implicitWidth: 24
+                            implicitHeight: 24
+                            radius: 12
+                            color: "#bf1e1e2e"
+                            Text {
+                                anchors.centerIn: parent
+                                text: ""
+                                color: "#cdd6f4"
+                                font.pixelSize: 12
+                            }
+                        }
+
+                        Rectangle {
+                            implicitHeight: 24
+                            implicitWidth: cpu.implicitWidth + 14
+                            radius: 12
+                            color: "#bf1e1e2e"
+                            Text {
+                                id: cpu
+                                anchors.centerIn: parent
+                                text: root.cpuText
+                                color: "#cdd6f4"
+                                font.family: "TX-02"
+                                font.pixelSize: 12
+                            }
+                        }
+
+                        Rectangle {
+                            implicitHeight: 24
+                            implicitWidth: mem.implicitWidth + 14
+                            radius: 12
+                            color: "#bf1e1e2e"
+                            Text {
+                                id: mem
+                                anchors.centerIn: parent
+                                text: root.memText
+                                color: "#cdd6f4"
+                                font.family: "TX-02"
+                                font.pixelSize: 12
+                            }
+                        }
+
+                        Rectangle {
+                            implicitHeight: 24
+                            implicitWidth: vol.implicitWidth + 14
+                            radius: 12
+                            color: "#bf1e1e2e"
+
+                            Text {
+                                id: vol
+                                anchors.centerIn: parent
+                                text: {
+                                    const sink = Pipewire.defaultAudioSink
+                                    if (!sink || !sink.audio)
+                                        return "--%"
+                                    if (sink.audio.muted)
+                                        return "MUT"
+                                    return Math.round((sink.audio.volume || 0) * 100) + "%"
+                                }
+                                color: "#cdd6f4"
+                                font.family: "TX-02"
+                                font.pixelSize: 12
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: root.runDetached("pavucontrol")
+                            }
+                        }
+
+                        Rectangle {
+                            implicitHeight: 24
+                            implicitWidth: trayRow.implicitWidth + 14
+                            radius: 12
+                            color: "#bf1e1e2e"
+
+                            Row {
+                                id: trayRow
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                Repeater {
+                                    model: SystemTray.items
+
+                                    Item {
+                                        required property var modelData
+                                        implicitWidth: 16
+                                        implicitHeight: 16
+
+                                        IconImage {
+                                            anchors.fill: parent
+                                            source: parent.modelData.icon
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: parent.modelData.activate()
+                                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                            onPressed: function(mouse) {
+                                                if (mouse.button === Qt.RightButton)
+                                                    parent.modelData.secondaryActivate()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            implicitHeight: 24
+                            implicitWidth: clk.implicitWidth + 16
+                            radius: 12
+                            color: "#bf1e1e2e"
+
+                            Text {
+                                id: clk
+                                anchors.centerIn: parent
+                                text: Qt.formatDateTime(clock.date, "yyyy-MM-dd HH:mm")
+                                color: "#cdd6f4"
+                                font.family: "TX-02"
+                                font.bold: true
+                                font.pixelSize: 13
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: root.runDetached("thunderbird --calendar")
+                            }
+                        }
+
+                        Rectangle {
+                            implicitHeight: 24
+                            implicitWidth: note.implicitWidth + 12
+                            radius: 12
+                            color: "#bf1e1e2e"
+
+                            Text {
+                                id: note
+                                anchors.centerIn: parent
+                                text: root.notifText
+                                color: "#cdd6f4"
+                                font.pixelSize: 14
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                onPressed: function(mouse) {
+                                    if (mouse.button === Qt.LeftButton)
+                                        root.runDetached("swaync-client -t -sw")
+                                    if (mouse.button === Qt.RightButton)
+                                        root.runDetached("swaync-client -d -sw")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

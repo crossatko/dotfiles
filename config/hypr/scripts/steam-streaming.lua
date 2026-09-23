@@ -9,7 +9,7 @@ local STREAM_WORKSPACE = "9"
 local RESTORE_BRIGHTNESS = 0
 local DIM_BRIGHTNESS = 0
 local DIM_WALLPAPER = "~/.config/hypr/black.png"
-local DEFAULT_WALLPAPER = "~/.config/hypr/nier.jpg"
+local DEFAULT_WALLPAPER = "~/.config/hypr/nier2.jpg"
 
 -- DP connector-to-I2C-bus enumeration on this GPU/driver isn't guaranteed
 -- stable across boots, so the bus number is resolved by EDID model match
