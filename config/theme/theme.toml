@@ -2,7 +2,7 @@
 #   ~/.config/theme/theme.py render      (re-render, no wallpaper analysis)
 #   ~/.config/theme/theme.py apply [img] (analyse wallpaper, render, reload apps)
 
-wallpaper = "~/Pictures/wallpapers/arch.jpg"
+wallpaper = "~/Pictures/wallpapers/wallhaven-8g8v11.png"
 # folders the quickshell picker (SUPER+T) scans for images
 wallpaper_dirs = ["~/Pictures/wallpapers"]
 
