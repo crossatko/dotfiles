@@ -24,3 +24,5 @@ AudioPanel 1.0 AudioPanel.qml
 singleton BarConfig 1.0 BarConfig.qml
 BarLabel 1.0 BarLabel.qml
 TrayMenu 1.0 TrayMenu.qml
+ClickCatcher 1.0 ClickCatcher.qml
+singleton BarWidgets 1.0 BarWidgets.qml

@@ -66,9 +66,11 @@ PanelWindow {
         Popups.toggle(name, bar.screen.name, Math.max(8, bar.width - (p.x + item.width)))
     }
 
+    // the playing MPRIS player wins; a paused one only shows while the Twitch app isn't playing
     readonly property var player: {
         const ps = Mpris.players.values
-        return ps.find(p => p.isPlaying) || ps.find(p => p.trackTitle) || null
+        const twitchPlaying = twitchActive && twitchNow.playing
+        return ps.find(p => p.isPlaying) || (twitchPlaying ? null : ps.find(p => p.trackTitle)) || null
     }
     // Twitch player (~/code/crossatko/twitch-qs-mpv): embedded libmpv has no MPRIS, so it publishes a status
     // file instead. Shown when no MPRIS player is active; ignored once it is older than 45 s (player gone).
@@ -84,17 +86,27 @@ PanelWindow {
         onLoadFailed: bar.twitchNow = null
     }
     readonly property bool twitchActive: twitchNow !== null && twitchClock - twitchNow.updated < 45000
-    // Brand glyph (Font Awesome Brands) for whatever is playing; "" = fall back to plain play/pause
+    // Brand glyph (Font Awesome Brands) for whatever is playing; "" = fall back to plain play/pause.
+    // The service (YouTube, Twitch, ...) wins over the browser playing it. Browsers' MPRIS has no URL, so
+    // the service comes from the browser window title minus the track title ("<track> - YouTube - Brave").
+    readonly property var services: [["spotify", "\uf1bc"], ["youtube", "\uf167"], ["youtu.be", "\uf167"], ["twitch", "\uf1e8"],
+        ["soundcloud", "\uf1be"], ["deezer", "\ue077"], ["tidal", "\ue7dc"], ["apple music", "\uf179"], ["music.apple", "\uf179"],
+        ["bandcamp", "\uf2d5"], ["vimeo", "\uf40a"], ["mixcloud", "\uf289"], ["last.fm", "\uf202"], ["pandora", "\ue7da"],
+        ["tiktok", "\ue07b"], ["reddit", "\uf1a1"]]
+    readonly property var browsers: [["brave", "\ue63c"], ["firefox", "\uf269"], ["chrom", "\uf268"], ["edge", "\uf282"]]
+    function brandIn(list, s) { for (const m of list) if (s.indexOf(m[0]) >= 0) return m[1]; return "" }
     readonly property string mediaBrand: {
         if (!player) return twitchNow && twitchNow.playing ? "\uf1e8" : ""
-        const s = ((player.identity || "") + " " + (player.desktopEntry || "") + " " + (player.trackTitle || "")).toLowerCase()
-        const map = [["spotify", "\uf1bc"], ["youtube", "\uf167"], ["twitch", "\uf1e8"], ["soundcloud", "\uf1be"],
-                     ["deezer", "\ue077"], ["tidal", "\ue7dc"], ["apple music", "\uf179"], ["bandcamp", "\uf2d5"],
-                     ["vimeo", "\uf40a"], ["mixcloud", "\uf289"], ["last.fm", "\uf202"], ["pandora", "\ue7da"],
-                     ["tiktok", "\ue07b"], ["reddit", "\uf1a1"], ["brave", "\ue63c"], ["firefox", "\uf269"],
-                     ["chrom", "\uf268"], ["edge", "\uf282"]]
-        for (const m of map) if (s.indexOf(m[0]) >= 0) return m[1]
-        return ""
+        const md = player.metadata || {}
+        const app = ((player.identity || "") + " " + (player.desktopEntry || "")).toLowerCase()
+        const title = player.trackTitle || ""
+        let win = ""
+        if (title) {
+            const t = ToplevelManager.toplevels.values.find(w => w.title && w.title.indexOf(title) >= 0)
+            if (t) win = t.title.replace(title, "")
+        }
+        const where = (app + " " + (md["xesam:url"] || "") + " " + win).toLowerCase()
+        return brandIn(services, where) || brandIn(services, title.toLowerCase()) || brandIn(browsers, app)
     }
     readonly property bool showTwitch: twitchActive && player === null
     // network: wired link wins, else Wi-Fi; dimmed when nothing is connected
@@ -149,8 +161,11 @@ PanelWindow {
         .filter(w => w.id > 0 && (soloBar || (w.monitor !== null && w.monitor.name === bar.screen.name)))
         .sort((a, b) => a.id - b.id)
 
+    // every module except the notification / control-center chip can be hidden (BarWidgets, set from the
+    // control center's gear section); a Row skips invisible children, so hidden ones leave no gap
     Row {
         anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+        visible: BarWidgets.shown("workspaces")
         spacing: 4
         Repeater {
             model: bar.shownWorkspaces
@@ -174,7 +189,7 @@ PanelWindow {
         Chip {
             id: mediaChip
             active: bar.isOpen("media")
-            visible: bar.player !== null || bar.showTwitch
+            visible: BarWidgets.shown("media") && (bar.player !== null || bar.showTwitch)
             onClicked: mouse => {
                 if (bar.player === null) {   // Twitch player: raise its window
                     bar.run("hyprctl clients -j | jq -r '.[]|select(.class==\"org.quickshell\" and (.title|startswith(\"Twitch - \")))|.address' | head -n1 | xargs -I{} hyprctl dispatch 'hl.dsp.focus({window=\"address:{}\"})'")
@@ -196,23 +211,27 @@ PanelWindow {
         }
 
         Chip {
+            visible: BarWidgets.shown("caffeine")
             active: bar.inhibit
             implicitWidth: 34
             onClicked: bar.inhibit = !bar.inhibit
             BarLabel { text: bar.inhibit ? "\uf7b6" : "\uf0f4"; color: bar.inhibit ? Theme.accent : Theme.muted; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
         }
         Chip {
+            visible: BarWidgets.shown("cpu")
             BarLabel { text: "\uf2db"; color: Theme.fgDim; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
             BarLabel { text: bar.cpu; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
             BarLabel { text: bar.spark(bar.cpuHist, 25, false); color: Theme.accent; Layout.preferredWidth: sparkMetrics.width }
         }
         Chip {
+            visible: BarWidgets.shown("memory")
             BarLabel { text: "\uf538"; color: Theme.fgDim; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
             BarLabel { text: bar.mem; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
             BarLabel { text: bar.spark(bar.memHist, 10, true); color: Theme.accent2; Layout.preferredWidth: sparkMetrics.width }
         }
         Chip {
             id: audioChip
+            visible: BarWidgets.shown("volume")
             active: bar.isOpen("audio")
             dim: bar.muted
             // click: audio popup (volume, mic, devices) | middle: mute | right: pavucontrol | wheel: volume
@@ -230,6 +249,7 @@ PanelWindow {
         }
         Chip {
             id: netChip
+            visible: BarWidgets.shown("network")
             active: bar.isOpen("net")
             dim: !bar.wiredUp && !bar.wifiUp
             onClicked: bar.pop("net", netChip)
@@ -237,6 +257,7 @@ PanelWindow {
         }
         Chip {
             id: btChip
+            visible: BarWidgets.shown("bluetooth")
             active: bar.isOpen("bt")
             dim: !bar.btOn
             onClicked: bar.pop("bt", btChip)
@@ -244,7 +265,7 @@ PanelWindow {
             BarLabel { visible: bar.btConnected > 0; text: bar.btConnected }
         }
         Chip {
-            visible: SystemTray.items.values.some(i => !bar.isApplet(i))
+            visible: BarWidgets.shown("tray") && SystemTray.items.values.some(i => !bar.isApplet(i))
             Repeater {
                 model: SystemTray.items
                 Item {
@@ -286,12 +307,13 @@ PanelWindow {
         }
         Chip {
             id: clockChip
+            visible: BarWidgets.shown("clock")
             active: bar.isOpen("cal")
             onClicked: mouse => mouse.button === Qt.RightButton ? bar.run("thunderbird --calendar") : bar.pop("cal", clockChip)
             BarLabel { text: Qt.formatDateTime(clock.date, "yyyy-MM-dd HH:mm") }
         }
         Chip {
-            id: bellChip
+            id: bellChip               // always shown: it opens the control center, where widgets are toggled
             active: bar.isOpen("center")
             implicitWidth: Notifs.count > 0 ? 50 : 34
             onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("center", bellChip)

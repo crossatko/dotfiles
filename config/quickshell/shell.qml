@@ -35,6 +35,12 @@ ShellRoot {
         PopupHost {}
     }
 
+    // click-away on the other monitors: closes whatever popup / launcher / picker / tray menu is open
+    Variants {
+        model: Quickshell.screens
+        ClickCatcher {}
+    }
+
 
     // qs ipc call popup toggle center|net|bt|cal|media   (focused monitor)
     IpcHandler {

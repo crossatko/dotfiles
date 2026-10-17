@@ -152,6 +152,13 @@ PanelWindow {
             "mkdir -p \"$HOME/.cache/qmenu\" && printf '%s\\n' \"$1\" >> \"" + historyFile + "\"", "sh", id])
     }
 
+    // one click-away thing at a time; a click on another monitor (ClickCatcher) closes it too
+    onShownChanged: shown ? Popups.opened("menu", screen ? screen.name : "") : Popups.closed("menu")
+    Connections {
+        target: Popups
+        function onDismiss(except) { if (except !== "menu" && menu.shown) menu.close() }
+    }
+
     function close() {
         const wasOpen = shown
         shown = false

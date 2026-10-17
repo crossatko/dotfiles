@@ -82,6 +82,60 @@ GridLayout {
                     }
                 }
             }
+
+            // which modules the bars show (all bars alike). The notification chip that opens this panel is
+            // not listed: it always stays, so nothing here can lock you out.
+            SectionHead {
+                Layout.topMargin: 6
+                title: "Bar widgets"
+                detail: BarWidgets.shownCount + " of " + BarWidgets.widgets.length + " shown"
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 6
+                columnSpacing: 6
+                Repeater {
+                    model: BarWidgets.widgets
+                    Rectangle {
+                        id: wid
+                        required property var modelData
+                        readonly property bool on: BarWidgets.shown(modelData.id)
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 1          // equal columns
+                        implicitHeight: 40
+                        radius: Math.max(0, Theme.rounding - 4)
+                        color: Theme.alpha(Theme.fg, 0.06)
+                        border.width: on ? 1 : 0
+                        border.color: Theme.alpha(Theme.accent, 0.5)
+
+                        MouseArea {                       // the whole row toggles, not just the switch
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: BarWidgets.set(wid.modelData.id, !wid.on)
+                        }
+                        RowLayout {
+                            anchors { fill: parent; leftMargin: 10; rightMargin: 8 }
+                            spacing: 8
+                            Label {
+                                text: wid.modelData.icon
+                                font.family: Theme.iconFont; font.styleName: "Regular"
+                                font.pixelSize: 14
+                                horizontalAlignment: Text.AlignHCenter
+                                Layout.preferredWidth: 18
+                                color: wid.on ? Theme.accent : Theme.muted
+                            }
+                            Label { text: wid.modelData.title; Layout.fillWidth: true; elide: Text.ElideRight; color: wid.on ? Theme.fg : Theme.fgDim }
+                            Toggle {
+                                implicitWidth: 34; implicitHeight: 18
+                                checked: wid.on
+                                onToggled: want => BarWidgets.set(wid.modelData.id, want)
+                            }
+                        }
+                    }
+                }
+            }
             Rectangle { Layout.fillWidth: true; Layout.topMargin: 4; height: 1; color: Theme.alpha(Theme.overlay, 0.5) }
         }
 

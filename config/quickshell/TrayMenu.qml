@@ -17,6 +17,14 @@ PopupWindow {
     function show() { stack = []; visible = true }
     function hide() { visible = false }
 
+    // one click-away thing at a time; a click on another monitor (ClickCatcher) closes it too
+    readonly property string kind: "tray-" + tm.toString()
+    onVisibleChanged: visible ? Popups.opened(kind, host && host.screen ? host.screen.name : "") : Popups.closed(kind)
+    Connections {
+        target: Popups
+        function onDismiss(except) { if (except !== tm.kind && tm.visible) tm.visible = false }
+    }
+
     anchor.window: host
     anchor.rect.x: anchorX
     anchor.rect.y: atTop ? host.height : 0

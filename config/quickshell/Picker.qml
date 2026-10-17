@@ -33,7 +33,15 @@ PanelWindow {
         shown = !shown
     }
 
-    onShownChanged: if (shown) { files = []; scan.running = true; grid.forceActiveFocus() }
+    onShownChanged: {
+        if (shown) { files = []; scan.running = true; grid.forceActiveFocus() }
+        shown ? Popups.opened("picker", screen ? screen.name : "") : Popups.closed("picker")
+    }
+    // one click-away thing at a time; a click on another monitor (ClickCatcher) closes it too
+    Connections {
+        target: Popups
+        function onDismiss(except) { if (except !== "picker" && picker.shown) picker.shown = false }
+    }
 
     Process {
         id: scan
