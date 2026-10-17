@@ -48,7 +48,13 @@ local function is_visible(window)
 end
 
 -- nil if `window` isn't actually in `spec`'s direction from (ax, ay);
--- otherwise a distance score where lower = closer/more directly aligned.
+-- otherwise a distance score where lower = closer/more directly aligned, plus
+-- whether it's within a 45-degree cone of the direction (perpendicular
+-- offset no bigger than the primary one). Without the cone check, a floating
+-- window sitting mostly to the SIDE (e.g. a pinned PIP) can still out-score a
+-- window that's genuinely further away but properly in-line - e.g. one on an
+-- adjacent monitor - because the perpendicular penalty (2x) isn't enough to
+-- offset a big primary-axis gap like a monitor boundary.
 local function score_of(ax, ay, window, spec)
 	local cx, cy = center(window)
 	local dx, dy = cx - ax, cy - ay
@@ -57,23 +63,45 @@ local function score_of(ax, ay, window, spec)
 		return nil
 	end
 	local perpendicular = spec.axis == "x" and dy or dx
-	return math.abs(primary) + math.abs(perpendicular) * 2
+	local score = math.abs(primary) + math.abs(perpendicular) * 2
+	local in_cone = math.abs(perpendicular) <= math.abs(primary)
+	return score, in_cone
+end
+
+-- Lower tier = preferred. Squarely in-line beats merely "technically in
+-- that direction", and a regular window beats a pinned overlay (PIP, OSK,
+-- docks, ...) - those persist across every workspace/monitor so they'd
+-- otherwise constantly outrank the actual window you're navigating to, just
+-- for happening to sit a bit closer. Either dimension is only a tie-breaker.
+-- A pinned/off-axis window is still reachable when it's the only candidate.
+local function tier_of(in_cone, pinned)
+	return (in_cone and 0 or 2) + (pinned and 1 or 0)
+end
+
+-- nil tier/score if `window` isn't in `spec`'s direction at all.
+local function rank_of(ax, ay, window, spec)
+	local score, in_cone = score_of(ax, ay, window, spec)
+	if score == nil then
+		return nil, nil
+	end
+	return tier_of(in_cone, window.pinned), score
 end
 
 local function find_candidate(active, ax, ay, spec)
-	local best, best_score = nil, math.huge
+	local best, best_score, best_tier = nil, math.huge, math.huge
 
 	for _, w in ipairs(hl.get_windows()) do
 		if w.address ~= active.address and w.mapped and w.visible and not w.hidden and is_visible(w) then
-			local score = score_of(ax, ay, w, spec)
-			if score ~= nil and score < best_score then
+			local tier, score = rank_of(ax, ay, w, spec)
+			if tier ~= nil and (tier < best_tier or (tier == best_tier and score < best_score)) then
+				best_tier = tier
 				best_score = score
 				best = w
 			end
 		end
 	end
 
-	return best, best_score
+	return best, best_tier, best_score
 end
 
 return function(dir)
@@ -90,19 +118,22 @@ return function(dir)
 	end
 
 	local ax, ay = center(active)
-	local candidate, candidate_score = find_candidate(active, ax, ay, spec)
+	local candidate, candidate_tier, candidate_score = find_candidate(active, ax, ay, spec)
 
 	hl.dispatch(hl.dsp.focus({ direction = dir }))
 	local moved = hl.get_active_window()
 
-	local moved_score = nil
+	local moved_tier, moved_score = nil, nil
 	if moved ~= nil and moved.address ~= active.address then
-		moved_score = score_of(ax, ay, moved, spec)
+		moved_tier, moved_score = rank_of(ax, ay, moved, spec)
 	end
 
-	if candidate ~= nil and (moved_score == nil or candidate_score < moved_score) then
+	local candidate_is_better = candidate ~= nil
+		and (moved_tier == nil or candidate_tier < moved_tier or (candidate_tier == moved_tier and candidate_score < moved_score))
+
+	if candidate_is_better then
 		hl.dispatch(hl.dsp.focus({ window = "address:" .. candidate.address }))
-	elseif moved_score == nil and moved ~= nil and moved.address ~= active.address then
+	elseif moved_tier == nil and moved ~= nil and moved.address ~= active.address then
 		-- Native moved somewhere invalid (wrapped, or off-axis with nothing
 		-- better available) - revert rather than keep the bad move.
 		hl.dispatch(hl.dsp.focus({ window = "address:" .. active.address }))

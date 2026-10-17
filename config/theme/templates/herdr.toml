@@ -1,0 +1,22 @@
+[theme]
+name = "catppuccin"
+
+[theme.custom]
+sidebar_bg = "{{bg_alt}}"
+panel_bg = "{{bg}}"
+active_row_bg = "{{surface2}}"
+selection_bg = "{{overlay}}"
+surface0 = "{{surface}}"
+surface1 = "{{surface2}}"
+overlay0 = "{{overlay}}"
+overlay1 = "{{muted}}"
+subtext0 = "{{fg_dim}}"
+text = "{{fg}}"
+accent = "{{accent}}"
+mauve = "{{accent}}"
+red = "{{red}}"
+green = "{{green}}"
+yellow = "{{yellow}}"
+blue = "{{blue}}"
+teal = "{{cyan}}"
+peach = "{{orange}}"

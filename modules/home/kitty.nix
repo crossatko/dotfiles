@@ -44,7 +44,7 @@
       color15 = "#a6adc8";
     };
 
-    font.name = "TX-02";
+    font.name = "Paper Mono";
 
   };
 

@@ -3,6 +3,7 @@ local workspaces = require("hyprland.workspaces")
 local leave_computer = require("scripts.leave-computer").leave_computer
 local show_power_menu = require("scripts.power-menu").show_power_menu
 local show_sound_output_menu = require("scripts.sound-output-menu").show_sound_output_menu
+local show_twitch_menu = require("scripts.twitch-menu").show_twitch_menu
 local focus_direction = require("scripts.focus-direction")
 local switch_workspace = require("scripts.switch-workspace")
 
@@ -32,7 +33,8 @@ bind({ mod, "SHIFT", "P" }, myPin)
 
 bind("Print", exec(apps.screenshot))
 bind({ mod, "D" }, exec(apps.menu))
--- bind({ mod, "SHIFT", "V" }, exec("cliphist list | tofi | cliphist decode | wl-copy"))
+bind({ mod, "T" }, exec("qs ipc call picker toggle")) -- wallpaper + theme picker
+-- bind({ mod, "SHIFT", "V" }, exec("cliphist list | ~/.config/quickshell/bin/qmenu | cliphist decode | wl-copy"))
 bind({ mod, "Return" }, exec(apps.terminal))
 bind({ mod, "B" }, exec(apps.browser))
 bind({ mod, "E" }, exec(apps.filemanager))
@@ -54,6 +56,7 @@ bind({ mod, "TAB" }, hl.dsp.group.next())
 
 bind({ mod, "SHIFT", "E" }, show_power_menu)
 bind({ mod, "SHIFT", "S" }, show_sound_output_menu)
+bind({ mod, "SHIFT", "T" }, show_twitch_menu)
 
 local directions = {
 	h = "left",
@@ -102,8 +105,8 @@ local media_controls = {
 	{ "XF86AudioMute", "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle", { locked = true, repeating = true } },
 	{ "XF86AudioMicMute", "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle", { locked = true, repeating = true } },
 
-	{ "XF86MonBrightnessUp", "brightnessctl -e4 -n2 set 5%+", { locked = true, repeating = true } },
-	{ "XF86MonBrightnessDown", "brightnessctl -e4 -n2 set 5%-", { locked = true, repeating = true } },
+	{ "XF86MonBrightnessUp", "brightnessctl -e4 -n2 set 5%+ && qs ipc call osd brightness", { locked = true, repeating = true } },
+	{ "XF86MonBrightnessDown", "brightnessctl -e4 -n2 set 5%- && qs ipc call osd brightness", { locked = true, repeating = true } },
 
 	{ "XF86AudioNext", "playerctl next", { locked = true } },
 	{ "XF86AudioPrev", "playerctl previous", { locked = true } },

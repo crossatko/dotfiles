@@ -1,13 +1,8 @@
-/* --- Hyprland-Matched Smoked Palette --- */
-@define-color glass-dark      rgba(5, 5, 5, 0.85);
-@define-color glass-tint      rgba(34, 34, 34, 0.6);
-@define-color glass-edge      rgba(136, 136, 136, 0.4);
-
-@define-color text-light      rgba(255, 255, 255, 0.9);
-@define-color active-glow     rgba(187, 187, 187, 0.2);
+/* palette is generated: edit ~/.config/theme/theme.toml */
+@import url("../theme/out/swaync.css");
 
 * {
-  font-family: "TX-02", Helvetica, Arial, sans-serif;
+  font-family: "Paper Mono", Helvetica, Arial, sans-serif;
   transition: all 0.2s ease;
 }
 
@@ -20,7 +15,7 @@
     @glass-tint 50%,
     @glass-dark
   );
-  border: 4px solid rgba(136, 136, 136, 0.3);
+  border: 4px solid @glass-edge;
   border-radius: 10px;
   margin: 12px;
   overflow: hidden; /* Fix for image_7471da.png */
@@ -110,7 +105,7 @@
 
 .widget-buttons-grid > button:checked {
   background-color: @active-glow;
-  border: 1px solid rgba(187, 187, 187, 0.5);
+  border: 1px solid @accent;
 }
 
 .widget-mpris {

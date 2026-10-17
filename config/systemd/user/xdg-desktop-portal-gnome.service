@@ -1,0 +1,12 @@
+# Override of /usr/lib/systemd/user/xdg-desktop-portal-gnome.service.
+# The packaged unit has Requisite=/PartOf=graphical-session.target, but Hyprland here never activates
+# that target, so the unit refuses to start ("dependency failed") and every file dialog routed to the
+# GNOME portal backend breaks. Same service, without the graphical-session requirement; D-Bus
+# activation starts it on demand.
+[Unit]
+Description=Portal service (GNOME implementation)
+
+[Service]
+Type=dbus
+BusName=org.freedesktop.impl.portal.desktop.gnome
+ExecStart=/usr/lib/xdg-desktop-portal-gnome

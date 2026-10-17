@@ -1,0 +1,26 @@
+onboarding = false
+
+# >>> theme (generated, do not edit) >>>
+[theme]
+name = "catppuccin"
+
+[theme.custom]
+sidebar_bg = "#181818"
+panel_bg = "#131313"
+active_row_bg = "#2b2a2a"
+selection_bg = "#464545"
+surface0 = "#20201f"
+surface1 = "#2b2a2a"
+overlay0 = "#464545"
+overlay1 = "#727170"
+subtext0 = "#9c9a98"
+text = "#c9c7c5"
+accent = "#cf5b59"
+mauve = "#cf5b59"
+red = "#cf5b59"
+green = "#82c680"
+yellow = "#c6b380"
+blue = "#809cc6"
+teal = "#80c6c6"
+peach = "#c69980"
+# <<< theme <<<

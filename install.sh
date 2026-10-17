@@ -36,12 +36,12 @@ PACKAGES=(
   gnome-themes-extra qt5-wayland qt6-wayland dconf
 
   # Terminal & Shell
-  zellij wl-clipboard kitty zsh starship fastfetch bash-completion zsh-completions
+  zellij fzf wl-clipboard kitty zsh starship fastfetch bash-completion zsh-completions
   zsh-autosuggestions zsh-syntax-highlighting
 
   # Hyprland Ecosystem
-  waybar hyprland hyprpaper hypridle hyprlock hyprpolkitagent hyprshot tofi swaync
-  xdg-desktop-portal-hyprland xdg-desktop-portal-gtk
+  quickshell imagemagick hyprland hyprpaper hypridle hyprlock hyprpolkitagent hyprshot tofi
+  xdg-desktop-portal-hyprland xdg-desktop-portal-gtk xdg-desktop-portal-gnome
   bibata-cursor-theme
 
   # GUI Apps (Swapped appimagelauncher for gearlever)
@@ -111,7 +111,7 @@ echo "QT_QPA_PLATFORMTHEME=gtk3" | sudo tee -a /etc/environment # Forces Qt to u
 echo "Symlinking config files..."
 mkdir -p "$HOME/.config"
 
-CONFIG_APPS=("hypr" "nvim" "kitty" "zellij" "tofi" "waybar" "opencode" "wivrn")
+CONFIG_APPS=("hypr" "nvim" "kitty" "zellij" "tofi" "theme" "quickshell" "opencode" "wivrn")
 
 for app in "${CONFIG_APPS[@]}"; do
   TARGET="$HOME/.config/$app"
@@ -126,6 +126,28 @@ for app in "${CONFIG_APPS[@]}"; do
   echo "  Symlinking $app..."
   ln -s "$SOURCE" "$TARGET"
 done
+
+# Nautilus right-click scripts (Scripts -> Send via LocalSend)
+mkdir -p "$HOME/.local/share/nautilus/scripts"
+for s in "$CONFIG_DIR"/nautilus/scripts/*; do
+  ln -sfn "$s" "$HOME/.local/share/nautilus/scripts/$(basename "$s")"
+done
+
+# qmenu: dmenu-style picker rendered by quickshell (power / sound-output menus, clipboard)
+ln -sfn "$CONFIG_DIR/quickshell/bin/qmenu" "$HOME/.local/bin/qmenu"
+
+# Portal routing (screen sharing pinned to hyprland, file dialogs -> Nautilus chooser) and the GNOME portal
+# unit override: Hyprland never activates graphical-session.target, which the packaged unit requires
+mkdir -p "$HOME/.config/xdg-desktop-portal" "$HOME/.config/systemd/user"
+ln -sfn "$CONFIG_DIR/xdg-desktop-portal/portals.conf" "$HOME/.config/xdg-desktop-portal/portals.conf"
+ln -sfn "$CONFIG_DIR/systemd/user/xdg-desktop-portal-gnome.service" "$HOME/.config/systemd/user/xdg-desktop-portal-gnome.service"
+
+# Launcher shim: applies the wallpaper theme to Brave's profile just before it starts
+mkdir -p "$HOME/.local/bin"
+ln -sfn "$CONFIG_DIR/theme/bin/brave" "$HOME/.local/bin/brave"
+
+# Generate every app's colors from the wallpaper (see config/theme/README.md)
+python3 -I "$CONFIG_DIR/theme/theme.py" render || true
 
 # Chromium 141+ enables the WaylandWpColorManagerV1 protocol by default,
 # which fights with Hyprland's own dcip3 color management and makes

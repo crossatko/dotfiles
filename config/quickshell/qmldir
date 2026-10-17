@@ -1,0 +1,26 @@
+singleton Theme 1.0 Theme.qml
+Chip 1.0 Chip.qml
+Label 1.0 Label.qml
+Bar 1.0 Bar.qml
+Picker 1.0 Picker.qml
+Menu 1.0 Menu.qml
+singleton Popups 1.0 Popups.qml
+singleton Notifs 1.0 Notifs.qml
+NotifCard 1.0 NotifCard.qml
+Toasts 1.0 Toasts.qml
+Btn 1.0 Btn.qml
+Osd 1.0 Osd.qml
+PopupHost 1.0 PopupHost.qml
+NotifIcon 1.0 NotifIcon.qml
+singleton Icons 1.0 Icons.qml
+BarReserve 1.0 BarReserve.qml
+Toggle 1.0 Toggle.qml
+Slider 1.0 Slider.qml
+Tile 1.0 Tile.qml
+DevicePicker 1.0 DevicePicker.qml
+SectionHead 1.0 SectionHead.qml
+AudioSection 1.0 AudioSection.qml
+AudioPanel 1.0 AudioPanel.qml
+singleton BarConfig 1.0 BarConfig.qml
+BarLabel 1.0 BarLabel.qml
+TrayMenu 1.0 TrayMenu.qml

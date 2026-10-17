@@ -60,17 +60,16 @@ for _, ws in ipairs(workspaces) do
 	})
 end
 
-if is_battlestation then
-	hl.workspace_rule({
-		workspace = "m[" .. monitor2.output .. "]w[p1-9]",
-		gaps_out = {
-			top = 12,
-			bottom = 12,
-			left = 12,
-			right = 1588,
-		},
-	})
-end
+-- Smart gaps: a lone tiled window gets no gaps (borders/rounding are removed
+-- in rules.lua). w[tv1] = exactly one visible tiled window; f[1] = one
+-- fullscreen-capable window. Declared before the battlestation monitor2 rule
+-- below so that rule's reserved right gap still wins there.
+hl.workspace_rule({ workspace = "m[" .. monitor1.output .. "]w[tv1]", gaps_out = 0, gaps_in = 0 })
+hl.workspace_rule({ workspace = "f[1]", gaps_out = 0, gaps_in = 0 })
+
+-- Battlestation: the right strip reserved for the pinned video window is a monitor reserved_area
+-- toggled by scripts/pip-reserve.lua (a w[p1-9] workspace rule only matched the workspace that owns the
+-- pinned window, so it was missing on the monitor's other workspaces).
 -- Both monitors' reservations for pinned PiP/mpv windows are now handled
 -- dynamically at runtime via reserved_area (hyprland/monitors.lua), toggled
 -- by scripts/pip-orientation.lua - not static per-workspace gaps.

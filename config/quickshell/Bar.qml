@@ -1,0 +1,302 @@
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import Quickshell.Wayland
+import Quickshell.Hyprland
+import Quickshell.Io
+import Quickshell.Services.SystemTray
+import Quickshell.Services.Pipewire
+import Quickshell.Services.Mpris
+import Quickshell.Networking
+import Quickshell.Bluetooth
+
+// One floating glass bar on one screen. `atTop` picks the edge.
+PanelWindow {
+    id: bar
+
+    required property var modelData
+    property bool atTop: false
+    screen: modelData
+
+    anchors { left: true; right: true; top: atTop; bottom: !atTop }
+    margins { left: Theme.barGap; right: Theme.barGap; top: atTop ? Theme.barGap : 0; bottom: atTop ? 0 : Theme.barGap }
+    implicitHeight: Theme.barHeight
+    exclusiveZone: -1                  // full width even next to a reserved strip; BarReserve.qml reserves the space
+    color: "transparent"
+    WlrLayershell.namespace: "qs-bar"
+
+    // ---- shared state -------------------------------------------------------
+    property string cpu: "0%"
+    property string mem: "0%"
+    property var cpuHist: []                 // last HIST_N samples, 0..100
+    property var memHist: []
+    readonly property int histN: 14
+
+    // reserve the width of the widest value / full graph so chips never resize as numbers or history change
+    TextMetrics { id: pctMetrics; text: "100%"; font.family: Theme.font; font.pixelSize: Theme.fontSize }
+    TextMetrics { id: sparkMetrics; text: "▁".repeat(bar.histN); font.family: Theme.font; font.pixelSize: Theme.fontSize }
+
+    function pushSample(arr, v) {
+        const a = arr.concat([v])
+        return a.length > histN ? a.slice(a.length - histN) : a
+    }
+    // ▁▂▃▄▅▆▇█ sparkline. floor = smallest top-of-scale, so an idle CPU stays a flat low line instead of
+    // being stretched to full height; memory passes a `lo` (its own minimum) since its changes are tiny.
+    function spark(arr, floorSpan, useMin) {
+        const blocks = "▁▂▃▄▅▆▇█"
+        const hi0 = Math.max.apply(null, arr)
+        const lo = useMin ? Math.min.apply(null, arr) : 0
+        const span = Math.max(floorSpan, hi0 - lo)
+        let s = " ".repeat(histN - arr.length)        // not enough history yet: pad on the left, graph grows in from the right
+        for (const v of arr) s += blocks[Math.max(0, Math.min(7, Math.floor((v - lo) / span * 7.999)))]
+        return s
+    }
+    property bool inhibit: false
+
+    readonly property var kana: ({
+        1: "ち", 2: "と", 3: "し", 4: "は", 5: "た", 6: "て",
+        7: "い", 8: "す", 9: "つ", 10: "さ", 11: "そ", 12: "ひ"
+    })
+
+    // open a popup hung off `item` (a chip); toggles if it is already the open one
+    // true while this bar's popup of that name is showing: the chip that opened it stays highlighted
+    function isOpen(name) { return Popups.name === name && Popups.screen === bar.screen.name }
+    function pop(name, item) {
+        const p = item.mapToItem(null, 0, 0)
+        Popups.toggle(name, bar.screen.name, Math.max(8, bar.width - (p.x + item.width)))
+    }
+
+    readonly property var player: {
+        const ps = Mpris.players.values
+        return ps.find(p => p.isPlaying) || ps.find(p => p.trackTitle) || null
+    }
+    // Twitch player (~/code/crossatko/twitch-qs-mpv): embedded libmpv has no MPRIS, so it publishes a status
+    // file instead. Shown when no MPRIS player is active; ignored once it is older than 45 s (player gone).
+    property var twitchNow: null
+    property double twitchClock: Date.now()
+    Timer { interval: 10000; running: true; repeat: true; onTriggered: bar.twitchClock = Date.now() }
+    FileView {
+        path: Quickshell.env("XDG_RUNTIME_DIR") + "/twitch-qs-mpv-now.json"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: { try { bar.twitchNow = JSON.parse(text()) } catch (e) { bar.twitchNow = null } }
+        onLoadFailed: bar.twitchNow = null
+    }
+    readonly property bool twitchActive: twitchNow !== null && twitchClock - twitchNow.updated < 45000
+    // Brand glyph (Font Awesome Brands) for whatever is playing; "" = fall back to plain play/pause
+    readonly property string mediaBrand: {
+        if (!player) return twitchNow && twitchNow.playing ? "\uf1e8" : ""
+        const s = ((player.identity || "") + " " + (player.desktopEntry || "") + " " + (player.trackTitle || "")).toLowerCase()
+        const map = [["spotify", "\uf1bc"], ["youtube", "\uf167"], ["twitch", "\uf1e8"], ["soundcloud", "\uf1be"],
+                     ["deezer", "\ue077"], ["tidal", "\ue7dc"], ["apple music", "\uf179"], ["bandcamp", "\uf2d5"],
+                     ["vimeo", "\uf40a"], ["mixcloud", "\uf289"], ["last.fm", "\uf202"], ["pandora", "\ue7da"],
+                     ["tiktok", "\ue07b"], ["reddit", "\uf1a1"], ["brave", "\ue63c"], ["firefox", "\uf269"],
+                     ["chrom", "\uf268"], ["edge", "\uf282"]]
+        for (const m of map) if (s.indexOf(m[0]) >= 0) return m[1]
+        return ""
+    }
+    readonly property bool showTwitch: twitchActive && player === null
+    // network: wired link wins, else Wi-Fi; dimmed when nothing is connected
+    readonly property var netDevs: Networking.devices.values
+    readonly property bool wiredUp: netDevs.some(d => d.type === DeviceType.Wired && d.connected)
+    readonly property bool wifiUp: netDevs.some(d => d.type === DeviceType.Wifi && d.connected)
+    readonly property bool btOn: Bluetooth.defaultAdapter !== null && Bluetooth.defaultAdapter.enabled
+    readonly property int btConnected: Bluetooth.defaultAdapter ? Bluetooth.defaultAdapter.devices.values.filter(d => d.connected).length : 0
+    // the applets stay running (they are the bluez / NetworkManager secret agents) but their tray icons are redundant
+    function isApplet(i) {
+        const s = ((i.id || "") + " " + (i.title || "")).toLowerCase()
+        return s.includes("blueman") || s.includes("nm-applet") || s.includes("networkmanager")
+    }
+
+    function run(cmd) { runner.command = ["sh", "-c", cmd]; runner.startDetached() }
+    Process { id: runner }
+
+    IdleInhibitor { window: bar; enabled: bar.inhibit }
+
+    Process {
+        running: true
+        // one long-lived awk: it needs the PREVIOUS /proc/stat sample to compute a percentage (starting a new
+        // awk per sample, as before, never had one, so the chip stayed at 0%)
+        command: ["awk", "BEGIN { while (1) { getline l < \"/proc/stat\"; close(\"/proc/stat\"); split(l, a, \" \"); busy = a[2] + a[3] + a[4]; tot = busy + a[5] + a[6] + a[7] + a[8] + a[9]; if (pt > 0 && tot > pt) printf \"%d\\n\", (busy - pb) * 100 / (tot - pt); pb = busy; pt = tot; fflush(); system(\"sleep 2\") } }"]
+        stdout: SplitParser { onRead: line => { if (line) { bar.cpu = line + "%"; bar.cpuHist = bar.pushSample(bar.cpuHist, parseInt(line)) } } }
+    }
+    Process {
+        running: true
+        command: ["sh", "-c", "while :; do awk '/MemTotal/{t=$2} /MemAvailable/{a=$2} END{printf \"%d\\n\",(t-a)*100/t}' /proc/meminfo; sleep 3; done"]
+        stdout: SplitParser { onRead: line => { if (line) { bar.mem = line + "%"; bar.memHist = bar.pushSample(bar.memHist, parseInt(line)) } } }
+    }
+    SystemClock { id: clock; precision: SystemClock.Minutes }
+
+    PwObjectTracker { objects: [Pipewire.defaultAudioSink] }
+    readonly property var sink: Pipewire.defaultAudioSink
+    readonly property real volume: sink && sink.audio ? sink.audio.volume : 0
+    readonly property bool muted: sink && sink.audio ? sink.audio.muted : false
+
+    // ---- visuals --------------------------------------------------------------
+    Rectangle {
+        anchors.fill: parent
+        radius: Theme.barRadius
+        color: Theme.alpha(Theme.bg, Theme.barOpacity)
+        border.width: Theme.barBorder
+        border.color: Theme.alpha(Theme.overlay, 0.55)
+    }
+
+    // left: workspaces. With a bar on every monitor each bar shows its own monitor's workspaces; with a
+    // single bar it shows all of them (it is the only place to switch workspaces on the other monitors).
+    readonly property bool soloBar: BarConfig.enabledCount <= 1
+    readonly property var shownWorkspaces: Hyprland.workspaces.values
+        .filter(w => w.id > 0 && (soloBar || (w.monitor !== null && w.monitor.name === bar.screen.name)))
+        .sort((a, b) => a.id - b.id)
+
+    Row {
+        anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+        spacing: 4
+        Repeater {
+            model: bar.shownWorkspaces
+            Chip {
+                required property var modelData
+                visible: modelData.id > 0
+                active: modelData.focused
+                dim: !modelData.active && !modelData.focused
+                implicitWidth: 34
+                onClicked: bar.run("hyprctl dispatch 'hl.dsp.focus({workspace=" + modelData.id + "})'")
+                BarLabel { text: bar.kana[modelData.id] || modelData.id; color: modelData.focused ? Theme.accent : Theme.fg }
+            }
+        }
+    }
+
+    // right: status modules
+    Row {
+        anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
+        spacing: 4
+
+        Chip {
+            id: mediaChip
+            active: bar.isOpen("media")
+            visible: bar.player !== null || bar.showTwitch
+            onClicked: mouse => {
+                if (bar.player === null) {   // Twitch player: raise its window
+                    bar.run("hyprctl clients -j | jq -r '.[]|select(.class==\"org.quickshell\" and (.title|startswith(\"Twitch - \")))|.address' | head -n1 | xargs -I{} hyprctl dispatch 'hl.dsp.focus({window=\"address:{}\"})'")
+                } else if (mouse.button === Qt.MiddleButton) bar.player.togglePlaying()
+                else bar.pop("media", mediaChip)
+            }
+            BarLabel {
+                text: bar.mediaBrand ? bar.mediaBrand : bar.player ? (bar.player.isPlaying ? "\uf04b" : "\uf04c") : "\uf04c"
+                color: bar.player && !bar.player.isPlaying ? Theme.muted : Theme.accent
+                font.family: bar.mediaBrand ? "Font Awesome 7 Brands" : Theme.iconFont
+                font.styleName: "Regular"; font.pixelSize: Theme.iconSize
+            }
+            BarLabel {
+                text: bar.player ? bar.player.trackTitle + (bar.player.trackArtist ? "  ·  " + bar.player.trackArtist : "")
+                    : bar.showTwitch ? bar.twitchNow.channel + (bar.twitchNow.game ? "  ·  " + bar.twitchNow.game : "") : ""
+                elide: Text.ElideRight
+                Layout.maximumWidth: 460
+            }
+        }
+
+        Chip {
+            active: bar.inhibit
+            implicitWidth: 34
+            onClicked: bar.inhibit = !bar.inhibit
+            BarLabel { text: bar.inhibit ? "\uf7b6" : "\uf0f4"; color: bar.inhibit ? Theme.accent : Theme.muted; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+        }
+        Chip {
+            BarLabel { text: "\uf2db"; color: Theme.fgDim; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarLabel { text: bar.cpu; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
+            BarLabel { text: bar.spark(bar.cpuHist, 25, false); color: Theme.accent; Layout.preferredWidth: sparkMetrics.width }
+        }
+        Chip {
+            BarLabel { text: "\uf538"; color: Theme.fgDim; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarLabel { text: bar.mem; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
+            BarLabel { text: bar.spark(bar.memHist, 10, true); color: Theme.accent2; Layout.preferredWidth: sparkMetrics.width }
+        }
+        Chip {
+            id: audioChip
+            active: bar.isOpen("audio")
+            dim: bar.muted
+            // click: audio popup (volume, mic, devices) | middle: mute | right: pavucontrol | wheel: volume
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton) bar.run("pavucontrol")
+                else if (mouse.button === Qt.MiddleButton) { if (bar.sink && bar.sink.audio) bar.sink.audio.muted = !bar.sink.audio.muted }
+                else bar.pop("audio", audioChip)
+            }
+            onWheel: dy => {
+                if (bar.sink && bar.sink.audio)
+                    bar.sink.audio.volume = Math.max(0, Math.min(1.0, bar.sink.audio.volume + (dy > 0 ? 0.03 : -0.03)))
+            }
+            BarLabel { text: bar.muted ? "\uf6a9" : bar.volume < 0.01 ? "\uf026" : bar.volume < 0.5 ? "\uf027" : "\uf028"; color: bar.muted ? Theme.muted : Theme.accent; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: Theme.iconSize + 4; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarLabel { text: Math.round(bar.volume * 100) + "%"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
+        }
+        Chip {
+            id: netChip
+            active: bar.isOpen("net")
+            dim: !bar.wiredUp && !bar.wifiUp
+            onClicked: bar.pop("net", netChip)
+            BarLabel { text: bar.wiredUp ? "\uf796" : bar.wifiUp ? "\uf1eb" : "\uf6ac"; color: bar.wiredUp || bar.wifiUp ? Theme.accent : Theme.muted; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+        }
+        Chip {
+            id: btChip
+            active: bar.isOpen("bt")
+            dim: !bar.btOn
+            onClicked: bar.pop("bt", btChip)
+            BarLabel { text: "\uf293"; color: bar.btConnected > 0 ? Theme.accent : bar.btOn ? Theme.fg : Theme.muted; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarLabel { visible: bar.btConnected > 0; text: bar.btConnected }
+        }
+        Chip {
+            visible: SystemTray.items.values.some(i => !bar.isApplet(i))
+            Repeater {
+                model: SystemTray.items
+                Item {
+                    id: trayItem
+                    required property var modelData
+                    visible: !bar.isApplet(modelData)
+                    implicitWidth: 18
+                    implicitHeight: 18
+                    Rectangle {      // highlight while this item's menu is open (same look as an active chip)
+                        anchors { fill: parent; margins: -4 }
+                        radius: Theme.rounding
+                        visible: menu.visible
+                        color: Theme.alpha(Theme.accent, 0.28)
+                        border.width: 1
+                        border.color: Theme.alpha(Theme.accent, 0.8)
+                    }
+                    Image {
+                        anchors.fill: parent
+                        source: trayItem.modelData.icon
+                        sourceSize: Qt.size(36, 36)
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                        onClicked: mouse => {
+                            if (mouse.button === Qt.LeftButton) trayItem.modelData.activate()
+                            else if (mouse.button === Qt.MiddleButton) trayItem.modelData.secondaryActivate()
+                            else if (trayItem.modelData.hasMenu) { menu.anchorX = trayItem.mapToItem(null, 0, 0).x; menu.show() }
+                        }
+                    }
+                    TrayMenu {
+                        id: menu
+                        handle: trayItem.modelData.menu
+                        host: bar
+                        atTop: bar.atTop
+                    }
+                }
+            }
+        }
+        Chip {
+            id: clockChip
+            active: bar.isOpen("cal")
+            onClicked: mouse => mouse.button === Qt.RightButton ? bar.run("thunderbird --calendar") : bar.pop("cal", clockChip)
+            BarLabel { text: Qt.formatDateTime(clock.date, "yyyy-MM-dd HH:mm") }
+        }
+        Chip {
+            id: bellChip
+            active: bar.isOpen("center")
+            implicitWidth: Notifs.count > 0 ? 50 : 34
+            onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("center", bellChip)
+            BarLabel { text: Notifs.dnd ? "\uf1f6" : Notifs.count > 0 ? "\uf8fa" : "\uf0f3"; color: Notifs.dnd ? Theme.muted : Notifs.count > 0 ? Theme.accent : Theme.fg; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: Theme.accent; font.pixelSize: 11 }
+        }
+    }
+}

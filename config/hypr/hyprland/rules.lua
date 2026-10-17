@@ -25,6 +25,8 @@ hl.window_rule({
 })
 
 if is_battlestation then
+	-- Pinned video windows fill the free strip right of the tiled area (workspaces.lua reserves 1588px
+	-- there) at 16:9 (1588x893), sitting right on top of the 40px bar: y = monitor_h - 40 - 893.
 	hl.window_rule({
 		name = "cb-pip",
 		float = true,
@@ -33,8 +35,8 @@ if is_battlestation then
 		no_dim = true,
 		-- workspace = "7 silent",
 		monitor = monitor2.output,
-		move = "(monitor_w-1580) (monitor_h-926)",
-		size = "1568 882",
+		move = "(monitor_w-1588) (monitor_h-933)",
+		size = "1588 893",
 		match = { initial_title = "Picture in picture" },
 	})
 
@@ -44,8 +46,8 @@ if is_battlestation then
 		pin = true,
 		no_dim = true,
 		monitor = monitor2.output,
-		move = "(monitor_w-1568) (monitor_h-914)",
-		size = "1568 882",
+		move = "(monitor_w-1588) (monitor_h-933)",
+		size = "1588 893",
 		match = { initial_class = "^(mpv)$" },
 	})
 elseif is_workstation then
@@ -73,6 +75,48 @@ elseif is_workstation then
 		match = { initial_class = "^(mpv)$" },
 	})
 end
+
+-- Twitch player (~/code/crossatko/twitch-qs-mpv): a Quickshell FloatingWindow, so the class is
+-- always org.quickshell. Matched on class ONLY: the title ("Twitch - <channel>") is not yet set when
+-- Hyprland evaluates window rules for a Quickshell window, so title/initial_title matches never fire.
+-- (Any other Quickshell FloatingWindow would get this rule too.)
+-- Same treatment as the Picture-in-picture rules above (floating, never dimmed, per-host placement);
+-- it keeps the screen awake while focused.
+if is_battlestation then
+	hl.window_rule({
+		name = "twitch-player",
+		float = true,
+		pin = true,
+		opaque = true,
+		no_dim = true,
+		idle_inhibit = "focus",
+		monitor = monitor2.output,
+		move = "(monitor_w-1588) (monitor_h-933)",
+		size = "1588 893",
+		match = { class = "^(org\\.quickshell)$" },
+	})
+elseif is_workstation then
+	hl.window_rule({
+		name = "twitch-player",
+		float = true,
+		no_initial_focus = true,
+		opacity = "1 override 1 override",
+		no_dim = true,
+		rounding = 0,
+		idle_inhibit = "focus",
+		match = { class = "^(org\\.quickshell)$" },
+	})
+end
+-- Fallback when the embedded chat is unavailable: Brave's popout chat (class brave-www.twitch.tv__popout_<channel>_chat-Default)
+hl.window_rule({
+	name = "twitch-popout-chat",
+	float = true,
+	no_initial_focus = true,
+	no_dim = true,
+	size = "420 900",
+	move = "(monitor_w-440) 60",
+	match = { class = "^(brave-www\\.twitch\\.tv__popout_.*)$" },
+})
 
 hl.window_rule({
 	name = "jellyfin-media-player",
@@ -102,6 +146,20 @@ hl.window_rule({
 	no_dim = true,
 	opacity = "1 override 1 override",
 	match = { class = "^(REAPER)$" },
+})
+
+-- Smart gaps: no border/rounding on a lone tiled window (gaps: workspaces.lua)
+hl.window_rule({
+	name = "no-border-single-wtv1",
+	match = { float = false, workspace = "w[tv1]" },
+	border_size = 0,
+	rounding = 0,
+})
+hl.window_rule({
+	name = "no-border-single-f1",
+	match = { float = false, workspace = "f[1]" },
+	border_size = 0,
+	rounding = 0,
 })
 
 hl.window_rule({
@@ -281,15 +339,21 @@ hl.window_rule({
 
 hl.layer_rule({ match = { namespace = "waybar" }, blur = true })
 hl.layer_rule({ match = { namespace = "launcher" }, blur = true })
--- Quickshell bar (~/dotfiles/config/quickshell) -- each module/group is its own
--- layer-shell surface so it gets independent blur/refraction, hence one rule per
--- namespace instead of a single "quickshell" match.
-hl.layer_rule({ match = { namespace = "qs-workspaces" }, blur = true })
-hl.layer_rule({ match = { namespace = "qs-clock" }, blur = true })
-hl.layer_rule({ match = { namespace = "qs-tray" }, blur = true })
-hl.layer_rule({ match = { namespace = "qs-audio" }, blur = true })
-hl.layer_rule({ match = { namespace = "qs-system" }, blur = true })
-hl.layer_rule({ match = { namespace = "qs-idle-notif" }, blur = true })
+-- Quickshell (~/dotfiles/config/quickshell): bar and picker opt in to the global
+-- decoration:blur:* settings (size/passes/vibrancy/variant all apply as-is).
+-- ignore_alpha keeps the blur inside the drawn shape: fully transparent pixels
+-- (the rounded corners) get no blur, so the blur follows the bar's rounding even
+-- though layer surfaces have no rounding of their own. Keep it below
+-- bar_opacity/picker_opacity in ~/.config/theme/theme.toml.
+hl.layer_rule({ match = { namespace = "qs-bar" }, blur = true })
+hl.layer_rule({ match = { namespace = "qs-bar" }, ignore_alpha = 0.1 })
+hl.layer_rule({ match = { namespace = "qs-picker" }, blur = true })
+hl.layer_rule({ match = { namespace = "qs-picker" }, ignore_alpha = 0.1 })
+-- notification toasts, popups (calendar / network / bluetooth / media / notification center) and the OSD
+for _, ns in ipairs({ "qs-toast", "qs-popup", "qs-osd" }) do
+	hl.layer_rule({ match = { namespace = ns }, blur = true })
+	hl.layer_rule({ match = { namespace = ns }, ignore_alpha = 0.1 })
+end
 hl.layer_rule({ match = { namespace = "swaync-control-center" }, blur = true })
 hl.layer_rule({ match = { namespace = "swaync-control-center" }, ignore_alpha = 0.2 })
 hl.layer_rule({ match = { namespace = "swaync-control-center" }, animation = "slide right" })

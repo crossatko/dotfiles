@@ -8,8 +8,12 @@ local STREAM_WORKSPACE = "9"
 
 local RESTORE_BRIGHTNESS = 0
 local DIM_BRIGHTNESS = 0
-local DIM_WALLPAPER = "~/.config/hypr/black.png"
-local DEFAULT_WALLPAPER = "~/.config/hypr/nier2.jpg"
+local DIM_WALLPAPER = "~/Pictures/wallpapers/black.png"
+-- the restore target is whatever the theme currently has (changes with the picker)
+local function default_wallpaper()
+	local ok, palette = pcall(dofile, os.getenv("HOME") .. "/.config/theme/out/palette.lua")
+	return (ok and palette.wallpaper) or "~/Pictures/wallpapers/black.png"
+end
 
 -- DP connector-to-I2C-bus enumeration on this GPU/driver isn't guaranteed
 -- stable across boots, so the bus number is resolved by EDID model match
@@ -170,7 +174,7 @@ local function apply_stream_inactive()
 	move_workspace_to(get_media_output())
 	remove_stream_monitor()
 	set_external_brightness(RESTORE_BRIGHTNESS)
-	set_wallpaper(DEFAULT_WALLPAPER)
+	set_wallpaper(default_wallpaper())
 	resume_hypridle()
 	hl.notification.create({ text = "Steam Streaming ended: displays + hypridle restored", timeout = 2500 })
 end

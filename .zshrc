@@ -276,3 +276,19 @@ fi
 # The actual key lives in ~/.config/secrets/env (gitignored, not in the public dotfiles repo).
 # Get one at: https://openrouter.ai/keys
 [[ -f "$HOME/.config/secrets/env" ]] && source "$HOME/.config/secrets/env"
+
+# Update system (yay) and flatpaks. Prompts for confirmation unless -y is passed.
+update() {
+  if [[ "$1" != "-y" ]]; then
+    read -k 1 "REPLY?Update system and flatpaks? [Y/n] "
+    [[ "$REPLY" != $'\n' ]] && echo
+    [[ "$REPLY" == [nN] ]] && return 1
+  fi
+  yay -Syu --noconfirm && flatpak update -y
+}
+# >>> Photon CLI >>>
+case ":$PATH:" in
+  *:'/home/kreejzak/.photon/bin':*) ;;
+  *) export PATH="$PATH":'/home/kreejzak/.photon/bin' ;;
+esac
+# <<< Photon CLI <<<

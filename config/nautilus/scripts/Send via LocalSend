@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Nautilus right-click -> Scripts -> "Send via LocalSend".
+# Nautilus hands the selection to scripts as newline-separated local paths.
+# Folders work too (LocalSend sends them as a set of files).
+mapfile -t files <<<"${NAUTILUS_SCRIPT_SELECTED_FILE_PATHS:-}"
+files=("${files[@]//$'\r'/}")
+[ "${#files[@]}" -gt 0 ] && [ -n "${files[0]}" ] || {
+  notify-send -a LocalSend "Send via LocalSend" "Nothing selected, or the selection is not a local file." 2>/dev/null
+  exit 1
+}
+# detached, so Nautilus doesn't wait on (or kill) the app
+setsid localsend "${files[@]}" >/dev/null 2>&1 &

@@ -13,6 +13,7 @@ require("hyprland.permissions")
 -- Scripts
 require("scripts.pip-fix")
 require("scripts.pip-orientation")
+require("scripts.pip-reserve")
 require("scripts.tv")
 require("scripts.steam-tv-dim")
 require("scripts.tv-manual-connect")

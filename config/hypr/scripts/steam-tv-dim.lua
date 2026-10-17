@@ -5,8 +5,12 @@ local TV_OUTPUT = monitors.tv.output
 local GAME_WORKSPACE = "9"
 local RESTORE_BRIGHTNESS = 80
 local DIM_BRIGHTNESS = 1
-local DIM_WALLPAPER = "~/.config/hypr/black.png"
-local DEFAULT_WALLPAPER = "~/.config/hypr/nier2.jpg"
+local DIM_WALLPAPER = "~/Pictures/wallpapers/black.png"
+-- the restore target is whatever the theme currently has (changes with the picker)
+local function default_wallpaper()
+	local ok, palette = pcall(dofile, os.getenv("HOME") .. "/.config/theme/out/palette.lua")
+	return (ok and palette.wallpaper) or "~/Pictures/wallpapers/black.png"
+end
 
 -- Temporary diagnostic logging while chasing the TV-wake input-switch race
 -- -- remove once root-caused for good.
@@ -262,7 +266,7 @@ local function apply_restore(show_notification, restore_tv_input)
 	debug_log("apply_restore called (-> switch_tv_input home: " .. tostring(restore_tv_input) .. ")")
 	set_external_brightness(RESTORE_BRIGHTNESS)
 	restart_hypridle()
-	set_wallpaper(DEFAULT_WALLPAPER)
+	set_wallpaper(default_wallpaper())
 	if restore_tv_input then
 		switch_tv_input("home")
 	end

@@ -1,0 +1,148 @@
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import Quickshell.Services.Notifications
+
+// One notification, used for toasts (toast: true) and in the notification center.
+Rectangle {
+    id: card
+
+    required property var n
+    property bool toast: false
+    readonly property bool hovered: hover.hovered
+    readonly property bool critical: n.urgency === NotificationUrgency.Critical
+    // The server hands themed icon *names* over as "image://icon/<name>" in n.image (and leaves
+    // appIcon empty); unwrap that so NotifIcon can look for a symbolic variant. Anything else in
+    // n.image is genuine image data (avatar, cover art) and is shown as is.
+    readonly property bool imageIsIcon: n.image.startsWith("image://icon/")
+    readonly property string iconName: imageIsIcon ? decodeURIComponent(n.image.substring(13)) : n.appIcon
+    readonly property string realImage: imageIsIcon ? "" : n.image
+    readonly property var defaultAction: {
+        for (const a of n.actions) if (a.identifier === "default") return a
+        return null
+    }
+
+    implicitHeight: content.implicitHeight + 24
+    radius: Theme.rounding
+    color: toast ? Theme.alpha(Theme.bg, Math.min(1, Theme.barOpacity + 0.3)) : Theme.alpha(Theme.surface, 0.85)
+    border.width: 1
+    border.color: critical ? Theme.alpha(Theme.red, 0.8) : Theme.alpha(Theme.overlay, 0.5)
+
+    // Notification center: slide out to the right, then let the row collapse (the parent reads `collapse`), then dismiss.
+    property real collapse: 1
+    property bool leaving: false
+    function leave() {
+        if (leaving) return
+        leaving = true
+        leaveAnim.start()
+    }
+    SequentialAnimation {
+        id: leaveAnim
+        NumberAnimation { target: card; property: "x"; to: card.width + 40; duration: 240; easing.type: Easing.InCubic }
+        NumberAnimation { target: card; property: "collapse"; to: 0; duration: 160; easing.type: Easing.OutCubic }
+        ScriptAction { script: card.n.dismiss() }
+    }
+
+    HoverHandler { id: hover }
+    // Clicking a notification takes you to the app: run its default action (so the app can open the right
+    // conversation itself) and focus the app's window. bin/focus-app matches the window from the
+    // notification's desktop entry / app name and focuses it, which also switches Hyprland group tabs
+    // and workspaces/monitors. The notification is dismissed once acted on.
+    function activate() {
+        if (defaultAction) defaultAction.invoke()
+        const de = n.desktopEntry ? DesktopEntries.byId(n.desktopEntry) : null
+        console.log("notification click: desktopEntry=[" + n.desktopEntry + "] appName=[" + n.appName + "] startupClass=[" + (de ? de.startupClass : "") + "]")
+        Quickshell.execDetached([Quickshell.shellDir + "/bin/focus-app", n.desktopEntry || "", n.appName || "",
+            de && de.startupClass ? de.startupClass : ""])
+        if (toast) { Notifs.dismissPopup(n); Notifs.releaseLater(n) }
+        else card.leave()
+    }
+    TapHandler { onTapped: card.activate() }
+    // right click: just dismiss, without going to the app
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        onTapped: { if (card.toast) { Notifs.dismissPopup(card.n); Notifs.releaseLater(card.n) } else card.leave() }
+    }
+
+    // urgency stripe
+    Rectangle {
+        x: 0; y: card.radius; width: 3; height: parent.height - card.radius * 2
+        color: card.critical ? Theme.red : n.urgency === NotificationUrgency.Low ? Theme.muted : Theme.accent
+    }
+
+    RowLayout {
+        id: content
+        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12; leftMargin: 16 }
+        spacing: 12
+
+        NotifIcon {
+            Layout.alignment: Qt.AlignTop
+            name: card.iconName
+            image: card.realImage
+            size: 40
+            // semantic color: errors/critical red, warnings yellow, everything else the accent
+            tint: card.critical || /error|critical/.test(card.iconName) ? Theme.red
+                : /warning/.test(card.iconName) ? Theme.yellow : Theme.accent
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 3
+
+            RowLayout {
+                Layout.fillWidth: true
+                Label {
+                    text: n.appName
+                    color: Theme.fgDim
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+                Label {
+                    text: "\uf00d"
+                    font.family: Theme.iconFont; font.styleName: "Regular"
+                    color: closeArea.containsMouse ? Theme.accent : Theme.muted
+                    font.pixelSize: 13
+                    MouseArea { id: closeArea; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true; onClicked: { if (card.toast) { Notifs.dismissPopup(n); Notifs.releaseLater(n) } else card.leave() } }
+                }
+            }
+            Label {
+                Layout.fillWidth: true
+                text: n.summary
+                font.bold: true
+                wrapMode: Text.Wrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
+            }
+            Label {
+                Layout.fillWidth: true
+                visible: n.body !== ""
+                text: n.body
+                textFormat: Text.StyledText
+                color: Theme.fgDim
+                font.pixelSize: 12
+                wrapMode: Text.Wrap
+                maximumLineCount: card.toast ? 4 : 8
+                elide: Text.ElideRight
+            }
+            Flow {
+                Layout.fillWidth: true
+                spacing: 6
+                visible: actions.count > 0
+                Repeater {
+                    id: actions
+                    model: n.actions.filter(a => a.identifier !== "default")
+                    Rectangle {
+                        required property var modelData
+                        radius: Math.max(0, Theme.rounding - 4)
+                        color: btn.containsMouse ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.1)
+                        implicitWidth: label.implicitWidth + 20
+                        implicitHeight: 28
+                        Label { id: label; anchors.centerIn: parent; text: modelData.text; font.pixelSize: 12 }
+                        MouseArea { id: btn; anchors.fill: parent; hoverEnabled: true; onClicked: modelData.invoke() }
+                    }
+                }
+            }
+        }
+    }
+}

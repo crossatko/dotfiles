@@ -6,10 +6,25 @@ hl.env("XCURSOR_THEME", "Oxygen-White")
 hl.env("NIXOS_OZONE_WL", "1")
 hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 hl.env("QT_QPA_PLATFORM", "wayland")
-hl.env("QT_QPA_PLATFORMTHEME", "qt6ct")
+-- The KDE platform theme reads ~/.config/kdeglobals (colors, fonts, icons, style), which
+-- ~/.config/theme/theme.py keeps in sync with the wallpaper. qt6ct made KDE apps such as Dolphin
+-- fall back to stock Breeze Light. Qt 5 has no such plugin here, so Qt 5 apps lose theming (only a
+-- few utilities such as qrenderdoc use it).
+hl.env("QT_QPA_PLATFORMTHEME", "kde")
 hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
 hl.env("XDG_SESSION_TYPE", "wayland")
 hl.env("XDG_SESSION_DESKTOP", "Hyprland")
+
+-- ~/.local/bin first. Hyprland's own PATH lacks it, so anything spawned from a keybind or
+-- the quickshell launcher would skip user shims (brave -> theme shim, qmenu). Guarded so
+-- config reloads don't keep prepending it.
+do
+	local bin = os.getenv("HOME") .. "/.local/bin"
+	local path = os.getenv("PATH") or ""
+	if not path:find(bin, 1, true) then
+		hl.env("PATH", bin .. ":" .. path)
+	end
+end
 
 if host.is_battlestation then
 	hl.env("PROTON_LOW_LATENCY", "1")

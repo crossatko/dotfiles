@@ -29,3 +29,5 @@ hypr/.secrets
 # WiVRn pairing secrets — cookie is an auth token, known_keys ties to real devices.
 config/wivrn/cookie
 config/wivrn/known_keys.json
+config/theme/out/*.tmp
+__pycache__/

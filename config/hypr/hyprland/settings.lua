@@ -17,8 +17,8 @@ hl.config({ xwayland = { force_zero_scaling = true } })
 
 hl.config({
 	general = {
-		gaps_in = 4,
-		gaps_out = 12,
+		gaps_in = 0,
+		gaps_out = 0,
 		border_size = theme.glass.border_size,
 		col = {
 			active_border = {
@@ -51,8 +51,8 @@ hl.config({
 			height = 6,
 			indicator_height = 0,
 			stacked = false,
-			gaps_in = 2,
-			gaps_out = 3,
+			gaps_in = 0,
+			gaps_out = 0,
 			keep_upper_gap = true,
 			rounding = theme.glass.group_rounding,
 			rounding_power = theme.glass.group_rounding_power,

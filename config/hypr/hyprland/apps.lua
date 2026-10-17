@@ -1,6 +1,6 @@
 return {
-	menu = "tofi-drun --drun-launch=true",
-	terminal = "kitty || ghostty || alacritty",
+	menu = "qs ipc call menu drun", -- quickshell launcher (config/quickshell/Menu.qml)
+	terminal = "kitty",
 	browser = "brave",
 	whatsapp = "brave --app='https://web.whatsapp.com'",
 	messages = "brave --app='https://messages.google.com'",

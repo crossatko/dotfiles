@@ -1,31 +1,22 @@
 local M = {}
 
--- pick one tint only
--- pink | mint | green | yellow | orange | cyan | blue | red | gray
-M.selected = "green"
+-- Colors come from ~/.config/theme (edit theme.toml there, run theme.py apply).
+local P = dofile(os.getenv("HOME") .. "/.config/theme/out/palette.lua")
+
+-- which palette key tints the border glow; any key of out/palette.lua works
+M.selected = "accent"
 
 M.glass = {
-	border_size = 3,
-	window_rounding = 10,
-	window_rounding_power = 10,
-	group_rounding = 8,
+	border_size = 2,
+	window_rounding = 0, -- Hyprland windows are square (the quickshell bar elements still use theme.toml `rounding`)
+	window_rounding_power = 2,
+	group_rounding = 0,
 	group_rounding_power = 2,
-	gradient_rounding = 8,
+	gradient_rounding = 0,
 	gradient_rounding_power = 2,
 }
 
--- catppuccin accents (mocha values)
-M.colors = {
-	pink = "#f5c2e7",
-	mint = "#94e2d5",
-	green = "#a6e3a1",
-	yellow = "#f9e2af",
-	orange = "#fab387",
-	cyan = "#89dceb",
-	blue = "#89b4fa",
-	red = "#f38ba8",
-	gray = "#a6adc8",
-}
+M.colors = P
 
 local function clamp(v)
 	if v < 0 then
@@ -72,7 +63,7 @@ local alphas = { "aa", "66", "ff", "88", "44", "66", "aa" }
 -- low tint on dark edges, higher tint on bright highlight band
 local tint_amount = { 0.06, 0.12, 0.28, 0.36, 0.28, 0.12, 0.06 }
 
-local accent = M.colors[M.selected] or M.colors.pink
+local accent = M.colors[M.selected] or M.colors.accent
 local gradient = {}
 for i = 1, #gray_stops do
 	local tinted = mix(gray_stops[i], accent, tint_amount[i])

@@ -44,13 +44,13 @@ local function build_menu_command()
 
 	return "choice=$(printf '%s\\n' "
 		.. table.concat(quoted_options, " ")
-		.. " | tofi --prompt-text 'Power: '); case \"$choice\" in "
+		.. " | ~/.config/quickshell/bin/qmenu --prompt-text 'Power: '); case \"$choice\" in "
 		.. table.concat(case_branches, " ")
 		.. " esac"
 end
 
 local function show_power_menu()
-	-- Do not use io.popen here. Running tofi synchronously from the Hyprland Lua
+	-- Do not use io.popen here. Running the menu synchronously from the Hyprland Lua
 	-- callback blocks Hyprland's event loop and can freeze the whole desktop.
 	hl.exec_cmd("sh -c " .. shell_quote(build_menu_command()))
 end

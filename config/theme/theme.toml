@@ -1,0 +1,41 @@
+# The one place to edit theme settings. After changing anything here run:
+#   ~/.config/theme/theme.py render      (re-render, no wallpaper analysis)
+#   ~/.config/theme/theme.py apply [img] (analyse wallpaper, render, reload apps)
+
+wallpaper = "~/Pictures/wallpapers/arch.jpg"
+# folders the quickshell picker (SUPER+T) scans for images
+wallpaper_dirs = ["~/Pictures/wallpapers"]
+
+[settings]
+ansi_saturation = 0.38   # 0 = greyscale terminal colors, 1 = vivid
+ansi_lightness = 0.64
+bg_max_lightness = 0.075 # keeps backgrounds near-black whatever the image is
+restart_hyprpaper = true
+icons = true             # generate a hue-matched copy of Adwaita (Wall-Adwaita) and use it
+icon_base = "Adwaita"
+icon_recolor = "blue"    # "blue": only Adwaita's blue family follows the accent; "all": every color
+icon_saturation = 0.8    # scales icon saturation (greyscale wallpapers desaturate automatically)
+ui_font = "Paper Mono"   # UI font for Qt, KDE and GTK apps ("" = leave fonts alone)
+ui_font_size = 11
+qt_style = "Fusion"      # Qt widget style: draws purely from the palette (Oxygen ignores it)
+brave = true             # write a seed-color theme into Brave (applied when Brave is closed)
+brave_seed = "accent_soft"  # palette key used as the seed; brave_variant: 0 system,1 tonal,2 neutral,3 vibrant
+brave_variant = 2
+quit_on_apply = []       # GTK4/libadwaita apps cannot restyle open windows; e.g. ["nautilus -q"] closes them so the next one is themed
+rounding = 0             # corner radius of the quickshell elements (px); Hyprland windows are set in hypr/hyprland/theme.lua
+bar_gap = 0              # px between the bar and the screen edges
+bar_radius = 0           # corner rounding of the bar itself
+bar_border = 0           # px width of the bar outline
+bar_opacity = 0.55       # quickshell bar background alpha; hyprland blur shows through
+picker_opacity = 0.60    # keep both above ignore_alpha (0.1) in hypr/hyprland/rules.lua
+
+# Pin any palette color by name; everything else follows the wallpaper.
+# Keys: bg bg_alt surface surface2 overlay muted subtle fg_dim fg accent accent2 accent_soft
+#       red orange yellow green cyan blue magenta black white bright_<name> error warn ok info
+[overrides]
+# accent = "#c0392b"
+
+# Free-form values templates can use as {{name}}
+[vars]
+font = "Paper Mono"
+tv_wallpaper = "~/Pictures/wallpapers/nier.jpg"   # HDMI-A-1 only; not touched by the picker

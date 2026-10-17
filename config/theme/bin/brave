@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Launcher shim (symlinked to ~/.local/bin/brave, ahead of /usr/bin in PATH).
+# Brave rewrites its Preferences on exit, so the wallpaper theme can only be written
+# while it is NOT running -- i.e. right here, just before it starts.
+if ! pgrep -x brave >/dev/null 2>&1; then
+  python3 -I "$HOME/.config/theme/theme.py" brave >/dev/null 2>&1 || true
+fi
+# Chromium's GTK file dialogs (Open / Save) ignore ~/.config/gtk-3.0 settings and user CSS but obey
+# GTK_THEME, so point them at the generated "Wall" theme. Set only for Brave: a global GTK_THEME
+# would also hit libadwaita apps (Nautilus), which treat it as "use a non-Adwaita stylesheet".
+export GTK_THEME=Wall:dark
+exec /usr/bin/brave "$@"

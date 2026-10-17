@@ -50,7 +50,7 @@ awk -v current="$current" '
 	}
 ' > "$map_file"
 
-choice=$(cut -f1 "$map_file" | tofi --prompt-text 'Output: ')
+choice=$(cut -f1 "$map_file" | ~/.config/quickshell/bin/qmenu --prompt-text 'Output: ')
 [ -n "$choice" ] || exit 0
 
 sink=$(awk -F '\t' -v choice="$choice" '$1 == choice { print $2; exit }' "$map_file")
