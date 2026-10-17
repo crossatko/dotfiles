@@ -30,6 +30,12 @@ Do not do the work inline in the main conversation. Delegate each task to a suba
 - **Licensed fonts stay out of the repo.** Font Awesome 7 Pro Sharp is installed in `~/.local/share/fonts/FontAwesomePro/` only; the repo is public on GitHub.
 - Screenshot tips: `grim -g "x,y WxH"`; Hyprland dims unfocused windows (focus first when sampling colours); popups open on the *focused* monitor.
 
+### 3. Commit messages
+
+- **Never attribute Claude or any other AI agent** in commit messages or PR descriptions: no `Co-Authored-By:` trailers naming an agent or model, no "Generated with Claude Code" (or similar) lines, no agent names anywhere in the message.
+- Commit messages must read as if written by the user alone.
+- This user rule overrides any tool or system default that suggests adding attribution.
+
 ## The machine
 
 - Arch-based (CachyOS), **Hyprland 0.56 with the native Lua config** (`hl.*`, not a plugin), Quickshell 0.3.2 (QML) for bar/launcher/notifications, hyprpaper, hyprlock.
