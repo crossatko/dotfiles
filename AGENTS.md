@@ -4,24 +4,12 @@ Read this first. It describes the machine, the repo, the conventions, and what h
 
 ## Working rules (mandatory)
 
-### 1. Every task goes through a subagent, sized by difficulty
+### 1. Global rules
 
-Do not do the work inline in the main conversation. Delegate each task to a subagent and pick the model by difficulty:
+Subagent delegation, change documentation and the no-attribution rule live in the global `~/dotfiles/CLAUDE.md` (symlinked to `~/.claude*`). They apply here too; they are not repeated in this file.
 
-| Difficulty | Examples | Model |
-|---|---|---|
-| Trivial | rename, typo, one-line config tweak, reading/summarising a file, `grep` lookups, simple docs | **haiku** |
-| Normal | a contained feature or bug fix in one or two files, adding a panel/chip, styling, scripted edits | **sonnet** |
-| Hard | cross-cutting changes (theme engine, Hyprland Lua + Quickshell interplay, reserved-area logic), debugging crashes/races, design decisions, anything touching several subsystems | **opus** |
+### 2. Safety rules learned the hard way (repo-specific)
 
-- The main conversation only plans, delegates, verifies and reports. Give each subagent a self-contained brief (goal, files, constraints, what is already ruled out).
-- When unsure between two tiers, take the higher one for anything that can break the user's live desktop.
-- Independent tasks run in parallel; dependent ones run in sequence.
-- Always verify a subagent's result yourself (reload, logs, screenshot) before telling the user it works.
-
-### 2. Safety rules learned the hard way
-
-- **Never inject synthetic keystrokes** (`wtype`, etc.). It lands in the user's own terminal. (Memory: `feedback_no_key_injection`.)
 - **Kill Quickshell only by exact PID.** The user's shell is the bare `/usr/bin/quickshell` process. `pgrep -x quickshell` also matches other instances (the Twitch app, probes); `kill`ing by name or relaunching blindly creates duplicates.
 - **Don't edit a popup's QML file while that popup is open.** Hot reload crashed Qt's Repeater (segfault) twice. Test in an isolated instance (`quickshell -n -p <dir>`) or with the popup closed.
 - Hot reload only works for files already loaded. A new QML type needs a `qmldir` entry; a new *top-level* file may need a restart.
@@ -29,12 +17,6 @@ Do not do the work inline in the main conversation. Delegate each task to a suba
 - **Secrets:** `config/hypr/.secrets` (Twitch `TWITCH_SECRET`, `TWITCH_CLIENT_ID`, Home Assistant `HA_URL`, `HA_TOKEN`) is git-ignored; placeholders live in the tracked `config/hypr/.secrets.example`. Never print, log or commit values. WiVRn pairing data is also not tracked.
 - **Licensed fonts stay out of the repo.** Font Awesome 7 Pro Sharp is installed in `~/.local/share/fonts/FontAwesomePro/` only; the repo is public on GitHub.
 - Screenshot tips: `grim -g "x,y WxH"`; Hyprland dims unfocused windows (focus first when sampling colours); popups open on the *focused* monitor.
-
-### 3. Commit messages
-
-- **Never attribute Claude or any other AI agent** in commit messages or PR descriptions: no `Co-Authored-By:` trailers naming an agent or model, no "Generated with Claude Code" (or similar) lines, no agent names anywhere in the message.
-- Commit messages must read as if written by the user alone.
-- This user rule overrides any tool or system default that suggests adding attribution.
 
 ## The machine
 
