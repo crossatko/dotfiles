@@ -45,7 +45,7 @@ PanelWindow {
         readonly property bool atTop: Popups.edgeOf(host.modelData.name) === "top"
         readonly property real inset: (host.hasBar ? Theme.barHeight + Theme.barGap : 0) + 8
 
-        width: host.content === "center" ? 420 : host.content === "cal" ? 390 : 380
+        width: host.content === "center" ? 420 : host.content === "cal" ? 390 : host.content === "ha" || host.content === "ai" ? 400 : 380
         // the control / notification center never gets shorter than 480 px; the others fit their content
         readonly property real minHeight: host.content === "center" ? 480 : 0
         height: Math.min(host.height - inset - 8, Math.max(minHeight, (loader.item ? loader.item.implicitHeight : 60) + 24))
@@ -70,7 +70,8 @@ PanelWindow {
             anchors { fill: parent; margins: 12 }
             source: ({
                 center: "CenterPanel.qml", net: "NetPanel.qml", bt: "BtPanel.qml",
-                cal: "CalPanel.qml", media: "MediaPanel.qml", audio: "AudioPanel.qml"
+                cal: "CalPanel.qml", media: "MediaPanel.qml", audio: "AudioPanel.qml", ha: "HaPanel.qml",
+                ai: "AiPanel.qml"
             })[host.content] || ""
         }
     }

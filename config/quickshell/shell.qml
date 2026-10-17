@@ -52,11 +52,22 @@ ShellRoot {
         function close(): void { Popups.close() }
     }
 
-    // qs ipc call osd brightness   (called by the brightness keybinds)
+    // qs ipc call osd brightness   (shows the focused display's brightness)
     IpcHandler {
         target: "osd"
         function brightness(): void { osd.brightness() }
     }
+
+    // qs ipc call brightness step 5 | step -5 | set 60   (brightness keys; focused monitor, DDC/CI or backlight)
+    IpcHandler {
+        target: "brightness"
+        function step(delta: int): void { Brightness.step(delta) }
+        function set(percent: int): void { const n = Brightness.focused(); if (n) Brightness.set(n, percent) }
+        function get(): string { return Brightness.displays.map(n => n + " " + Brightness.percentOf(n)).join("\n") }
+        function refresh(): void { Brightness.refresh() }
+    }
+    // detect the displays once at start, so the control center's slider section doesn't pop in on first open
+    Timer { interval: 4000; running: true; onTriggered: Brightness.refresh() }
 
     // qs ipc call notif dnd | clear
     IpcHandler {

@@ -20,6 +20,8 @@ Singleton {
         { id: "caffeine",   title: "Keep awake",   icon: "" },
         { id: "cpu",        title: "CPU",          icon: "" },
         { id: "memory",     title: "Memory",       icon: "" },
+        { id: "homeassistant", title: "Home Assistant", icon: "\uf015" },
+        { id: "ai",         title: "AI usage",     icon: "\uf890" },
         { id: "volume",     title: "Volume",       icon: "" },
         { id: "network",    title: "Network",      icon: "" },
         { id: "bluetooth",  title: "Bluetooth",    icon: "" },

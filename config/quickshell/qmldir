@@ -21,8 +21,18 @@ DevicePicker 1.0 DevicePicker.qml
 SectionHead 1.0 SectionHead.qml
 AudioSection 1.0 AudioSection.qml
 AudioPanel 1.0 AudioPanel.qml
+singleton Brightness 1.0 Brightness.qml
+BrightnessSection 1.0 BrightnessSection.qml
 singleton BarConfig 1.0 BarConfig.qml
 BarLabel 1.0 BarLabel.qml
 TrayMenu 1.0 TrayMenu.qml
 ClickCatcher 1.0 ClickCatcher.qml
 singleton BarWidgets 1.0 BarWidgets.qml
+singleton HomeAssistant 1.0 HomeAssistant.qml
+HaStrip 1.0 HaStrip.qml
+HaEntity 1.0 HaEntity.qml
+HaPanel 1.0 HaPanel.qml
+HaVacuum 1.0 HaVacuum.qml
+singleton AiUsage 1.0 AiUsage.qml
+AiLimit 1.0 AiLimit.qml
+AiPanel 1.0 AiPanel.qml

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Lists the displays whose brightness the shell can control, one per line:
+#   ddc <i2c-bus> <connector>        external monitor with DDC/CI (ddcutil)
+#   bl  <device>  <connector>        built-in backlight (brightnessctl, only if installed)
+# Used by Brightness.qml. Displays that ddcutil reports as "Invalid display" (no DDC/CI, e.g. the TV) are
+# skipped. Bus numbers are not stable (they can shift when the TV output is toggled, see steam-tv-dim.lua),
+# so the shell re-runs this every time the control center opens.
+
+if command -v ddcutil >/dev/null 2>&1; then
+	ddcutil detect --brief 2>/dev/null | awk '
+		/^Display /          { ok = 1; bus = ""; next }
+		/^Invalid display/   { ok = 0; next }
+		/I2C bus:/           { bus = $3; sub(/.*-/, "", bus) }
+		/DRM.connector:/     { if (ok && bus != "") { c = $3; sub(/^card[0-9]+-/, "", c); print "ddc", bus, c } }
+	'
+fi
+
+if command -v brightnessctl >/dev/null 2>&1; then
+	panel=""
+	for c in /sys/class/drm/card*-eDP-* /sys/class/drm/card*-LVDS-* /sys/class/drm/card*-DSI-*; do
+		[ -e "$c" ] || continue
+		panel="${c##*/}"; panel="${panel#card*-}"
+		break
+	done
+	for d in /sys/class/backlight/*; do
+		[ -e "$d" ] || continue
+		echo "bl ${d##*/} ${panel:-Built-in}"
+		break                                   # one backlight per panel; extra ones are usually firmware duplicates
+	done
+fi
+exit 0

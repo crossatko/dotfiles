@@ -6,6 +6,7 @@ Item {
     id: sl
     property real value: 0
     property bool dim: false
+    property real floor: 0              // lowest value a drag / wheel can emit (brightness keeps screens from going black)
     signal moved(real v)
 
     implicitHeight: 24
@@ -40,9 +41,9 @@ Item {
         id: drag
         anchors.fill: parent
         property real live: 0
-        function set(x) { live = Math.max(0, Math.min(1, x / width)); sl.moved(live) }
+        function set(x) { live = Math.max(sl.floor, Math.min(1, x / width)); sl.moved(live) }
         onPressed: mouse => set(mouse.x)
         onPositionChanged: mouse => { if (pressed) set(mouse.x) }
-        onWheel: w => { live = Math.max(0, Math.min(1, sl.value + (w.angleDelta.y > 0 ? 0.03 : -0.03))); sl.moved(live) }
+        onWheel: w => { live = Math.max(sl.floor, Math.min(1, sl.value + (w.angleDelta.y > 0 ? 0.03 : -0.03))); sl.moved(live) }
     }
 }

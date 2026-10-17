@@ -7,7 +7,7 @@ import Quickshell.Hyprland
 import Quickshell.Services.Pipewire
 
 // Volume / brightness pill, bottom-center of the focused monitor. Volume is observed from
-// Pipewire (so wpctl keybinds just work); brightness is pushed: qs ipc call osd brightness
+// Pipewire (so wpctl keybinds just work); brightness when the keys step it (Brightness.stepped)
 PanelWindow {
     id: osd
 
@@ -54,15 +54,15 @@ PanelWindow {
         function onMutedChanged() { if (osd.armed) osd.show("volume", osd.audio.volume, osd.audio.muted) }
     }
 
-    // brightness: ask brightnessctl (where installed) after the keybind changed it
-    Process {
-        id: bright
-        command: ["sh", "-c", "brightnessctl -m 2>/dev/null | head -n1 | cut -d, -f4 | tr -d %"]
-        stdout: StdioCollector {
-            onStreamFinished: { const p = parseFloat(text); if (!isNaN(p)) osd.show("brightness", p / 100, false) }
-        }
+    // brightness: the keys go through the Brightness backend (qs ipc call brightness step N), shown here
+    Connections {
+        target: Brightness
+        function onStepped(name, percent) { osd.show("brightness", percent / 100, false) }
     }
-    function brightness() { bright.running = true }
+    function brightness() {                // legacy `qs ipc call osd brightness`: show the focused display's value
+        const n = Brightness.focused()
+        if (n) osd.show("brightness", Brightness.percentOf(n) / 100, false)
+    }
 
     Rectangle {
         anchors.fill: parent

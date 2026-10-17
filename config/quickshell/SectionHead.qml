@@ -19,7 +19,13 @@ RowLayout {
         font.letterSpacing: 1.2
         font.bold: true
     }
-    Rectangle { Layout.fillWidth: true; height: 1; color: Theme.alpha(Theme.overlay, 0.55) }
+    // the rule takes all the width the title, detail and trailing items leave
+    Item {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 8
+        Layout.preferredHeight: 1
+        Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; height: 1; color: Theme.alpha(Theme.overlay, 0.55) }
+    }
     Label { visible: head.detail !== ""; text: head.detail; color: Theme.muted; font.pixelSize: 11 }
-    RowLayout { id: extra; spacing: 6 }
+    RowLayout { id: extra; spacing: 6; visible: visibleChildren.length > 0 }   // no slot (or gap) while the trailing item is hidden
 }

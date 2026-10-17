@@ -229,6 +229,26 @@ PanelWindow {
             BarLabel { text: bar.mem; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
             BarLabel { text: bar.spark(bar.memHist, 10, true); color: Theme.accent2; Layout.preferredWidth: sparkMetrics.width }
         }
+        // Home Assistant (HomeAssistant.qml): opens the control popup; shows how many lights are on
+        Chip {
+            id: haChip
+            visible: BarWidgets.shown("homeassistant")
+            active: bar.isOpen("ha")
+            dim: !HomeAssistant.configured || (HomeAssistant.status !== "ok" && HomeAssistant.status !== "loading")
+            onClicked: bar.pop("ha", haChip)
+            BarLabel { text: HomeAssistant.lightsOn > 0 ? "\uf672" : "\uf015"; color: HomeAssistant.lightsOn > 0 ? Theme.accent : HomeAssistant.configured && HomeAssistant.status === "ok" ? Theme.fg : Theme.muted; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarLabel { visible: HomeAssistant.lightsOn > 0; text: HomeAssistant.lightsOn }
+        }
+        // AI usage (AiUsage.qml): opens the accounts / limits popup; shows the fullest limit window
+        Chip {
+            id: aiChip
+            visible: BarWidgets.shown("ai")
+            active: bar.isOpen("ai")
+            dim: AiUsage.loaded && AiUsage.profiles.length === 0 && AiUsage.others.length === 0
+            onClicked: bar.pop("ai", aiChip)
+            BarLabel { text: "\uf890"; color: AiUsage.anyExpired ? Theme.muted : Theme.accent; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarLabel { visible: AiUsage.worst >= 0; text: Math.round(AiUsage.worst) + "%"; color: Theme.fg }
+        }
         Chip {
             id: audioChip
             visible: BarWidgets.shown("volume")

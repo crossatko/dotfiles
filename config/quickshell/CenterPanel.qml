@@ -5,7 +5,7 @@ import Quickshell.Networking
 import Quickshell.Bluetooth
 import Quickshell.Services.Pipewire
 
-// Control + notification center: quick toggles, volume / microphone, then the notification history.
+// Control + notification center: quick toggles, volume / microphone, brightness, then the notification history.
 GridLayout {
     id: cc
     columns: 1
@@ -183,6 +183,7 @@ GridLayout {
         }
 
         AudioSection { Layout.fillWidth: true }
+        BrightnessSection { Layout.fillWidth: true }
     }
 
     Rectangle {

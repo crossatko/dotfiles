@@ -105,8 +105,9 @@ local media_controls = {
 	{ "XF86AudioMute", "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle", { locked = true, repeating = true } },
 	{ "XF86AudioMicMute", "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle", { locked = true, repeating = true } },
 
-	{ "XF86MonBrightnessUp", "brightnessctl -e4 -n2 set 5%+ && qs ipc call osd brightness", { locked = true, repeating = true } },
-	{ "XF86MonBrightnessDown", "brightnessctl -e4 -n2 set 5%- && qs ipc call osd brightness", { locked = true, repeating = true } },
+	-- Quickshell's Brightness backend (DDC/CI via ddcutil, or brightnessctl on a laptop panel): focused monitor, shows the OSD
+	{ "XF86MonBrightnessUp", "qs ipc call brightness step 5", { locked = true, repeating = true } },
+	{ "XF86MonBrightnessDown", "qs ipc call brightness step -5", { locked = true, repeating = true } },
 
 	{ "XF86AudioNext", "playerctl next", { locked = true } },
 	{ "XF86AudioPrev", "playerctl previous", { locked = true } },
