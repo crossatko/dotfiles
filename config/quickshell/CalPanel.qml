@@ -104,9 +104,9 @@ GridLayout {
                 required property var modelData
                 width: agenda.width
                 height: row.implicitHeight + 12
-                radius: Math.max(0, Theme.rounding - 4)
+                radius: Theme.radiusItem
                 color: Theme.alpha(Theme.fg, 0.06)
-                Rectangle { x: 0; y: 0; width: 3; height: parent.height; color: modelData.color }
+                Rectangle { x: 0; y: parent.radius; width: 3; height: parent.height - parent.radius * 2; color: modelData.color }   // clear of the rounded corners
                 ColumnLayout {
                     id: row
                     anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 10 }
@@ -191,7 +191,7 @@ GridLayout {
 
                     Layout.fillWidth: true
                     implicitHeight: 38
-                    radius: Math.max(0, Theme.rounding - 4)
+                    radius: Theme.radiusItem
                     color: isToday ? Theme.alpha(Theme.accent, 0.32) : hover.containsMouse ? Theme.alpha(Theme.fg, 0.10) : "transparent"
                     border.width: isSel ? 1 : 0
                     border.color: Theme.accent

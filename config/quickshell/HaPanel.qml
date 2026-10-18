@@ -80,7 +80,7 @@ ColumnLayout {
         visible: setup || bad || HomeAssistant.actionError !== "" || hp.editing || (HomeAssistant.status === "loading" && hp.sectionCount === 0)
         Layout.fillWidth: true
         implicitHeight: noticeCol.implicitHeight + 20
-        radius: Math.max(0, Theme.rounding - 4)
+        radius: Theme.radiusItem
         color: bad || HomeAssistant.actionError !== "" ? Theme.alpha(Theme.red, 0.14) : Theme.alpha(Theme.fg, 0.06)
         border.width: 1
         border.color: bad || HomeAssistant.actionError !== "" ? Theme.alpha(Theme.red, 0.6) : Theme.alpha(Theme.overlay, 0.6)
@@ -116,6 +116,7 @@ ColumnLayout {
             Layout.fillWidth: true
             spacing: 8
             Btn {
+                outerRadius: notice.radius       // inside the notice's 12 px padding
                 text: HomeAssistant.retrying || HomeAssistant.refreshing ? "Retrying…" : "Retry"
                 active: true
                 onClicked: HomeAssistant.refresh(true)

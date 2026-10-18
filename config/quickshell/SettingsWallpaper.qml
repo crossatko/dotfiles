@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
@@ -116,7 +117,7 @@ ColumnLayout {
                     Rectangle {
                         id: swatch
                         required property var modelData
-                        width: pal.sw; height: 20; radius: 0
+                        width: pal.sw; height: 20; radius: Math.min(4, Theme.radiusPage)   // small squares, barely rounded
                         color: modelData.c
                         border.width: 1; border.color: Theme.alpha(Theme.fg, swatchArea.containsMouse ? 0.8 : 0.25)
                         MouseArea {
@@ -162,32 +163,53 @@ ColumnLayout {
                 readonly property bool busy: modelData === page.applying
                 width: page.cellW
                 height: page.cellH
-                radius: Theme.radius
+                radius: Theme.radiusPage
                 color: Theme.surface
                 border.width: current || cursor || ma.containsMouse ? 3 : 1
                 border.color: current ? Theme.accent : (cursor || ma.containsMouse) ? Theme.fg : Theme.alpha(Theme.overlay, 0.6)
                 clip: true
 
-                Image {
+                // thumbnail + caption, 3 px inside the cell (room for the 3 px border). clip only cuts the
+                // bounding box, so with rounded cells the content is masked to a concentric rounded rect.
+                Item {
+                    id: thumb
+                    readonly property int innerRadius: Theme.inner(cell.radius, 3)
                     anchors.fill: parent
                     anchors.margins: 3
-                    source: "file://" + cell.modelData
-                    sourceSize: Qt.size(640, 360)
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
+                    layer.enabled: innerRadius > 0
+                    layer.effect: MultiEffect {
+                        maskEnabled: true
+                        maskSource: thumbMask
+                        maskThresholdMin: 0.5
+                        maskSpreadAtMin: 1.0
+                    }
+                    Image {
+                        anchors.fill: parent
+                        source: "file://" + cell.modelData
+                        sourceSize: Qt.size(640, 360)
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                    }
+                    Rectangle {
+                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                        height: 24
+                        color: Theme.alpha(Theme.bg, 0.75)
+                        Label {
+                            anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                            font.pixelSize: 11
+                            elide: Text.ElideMiddle
+                            verticalAlignment: Text.AlignVCenter
+                            text: cell.busy ? "Applying…" : cell.current ? "✓ " + cell.modelData.split("/").pop() : cell.modelData.split("/").pop()
+                            color: cell.current || cell.busy ? Theme.accent : Theme.fg
+                        }
+                    }
                 }
                 Rectangle {
-                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 3 }
-                    height: 24
-                    color: Theme.alpha(Theme.bg, 0.75)
-                    Label {
-                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                        font.pixelSize: 11
-                        elide: Text.ElideMiddle
-                        verticalAlignment: Text.AlignVCenter
-                        text: cell.busy ? "Applying…" : cell.current ? "✓ " + cell.modelData.split("/").pop() : cell.modelData.split("/").pop()
-                        color: cell.current || cell.busy ? Theme.accent : Theme.fg
-                    }
+                    id: thumbMask
+                    anchors.fill: thumb
+                    radius: thumb.innerRadius
+                    visible: false
+                    layer.enabled: thumb.innerRadius > 0
                 }
                 MouseArea {
                     id: ma

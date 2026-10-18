@@ -23,7 +23,7 @@ Rectangle {
     }
 
     implicitHeight: content.implicitHeight + 24
-    radius: Theme.rounding
+    radius: toast ? Theme.radius : Theme.radiusItem      // toast = outer element; center = item inside the popup card
     color: toast ? Theme.alpha(Theme.bg, Math.min(1, Theme.barOpacity + 0.3)) : Theme.alpha(Theme.surface, 0.85)
     border.width: 1
     border.color: critical ? Theme.alpha(Theme.red, 0.8) : Theme.alpha(Theme.overlay, 0.5)
@@ -134,7 +134,7 @@ Rectangle {
                     model: n.actions.filter(a => a.identifier !== "default")
                     Rectangle {
                         required property var modelData
-                        radius: Math.max(0, Theme.rounding - 4)
+                        radius: Math.min(Theme.inner(card.radius, 12), Math.floor(height / 3))   // like Btn: concentric, never a pill
                         color: btn.containsMouse ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.1)
                         implicitWidth: label.implicitWidth + 20
                         implicitHeight: 28

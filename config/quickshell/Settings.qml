@@ -18,7 +18,8 @@ PanelWindow {
 
     readonly property var pages: [
         { id: "bar",      title: "Bar",      icon: "\uf0db", source: "SettingsBar.qml" },
-        { id: "wallpaper", title: "Wallpaper & theme", icon: "\uf03e", source: "SettingsWallpaper.qml" }
+        { id: "wallpaper", title: "Wallpaper & theme", icon: "\uf03e", source: "SettingsWallpaper.qml" },
+        { id: "appearance", title: "Appearance", icon: "\uf53f", source: "SettingsAppearance.qml" }
     ]
     property string page: "bar"
     readonly property var current: pages.find(p => p.id === page) || pages[0]
@@ -82,7 +83,7 @@ PanelWindow {
         anchors.centerIn: parent
         width: Math.min(parent.width - 80, Math.max(920, parent.width * 0.6))   // 920: content area no narrower than before the wider sidebar
         height: Math.min(parent.height - 80, Math.max(600, parent.height * 0.62))
-        radius: Theme.rounding
+        radius: Theme.radius
         color: Theme.alpha(Theme.bg, 0.96)     // a big card of small text: near-opaque, unlike the small popups
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
@@ -97,12 +98,17 @@ PanelWindow {
 
             // ---- sidebar ----
             // width follows the widest entry (icon + label at Theme.fontSize + padding), so the selected entry's
-            // box always holds its whole label; 200 is the floor
-            Rectangle {
+            // box always holds its whole label; 200 is the floor. Flush with the card's left side: only the left
+            // corners follow the card radius, the right ones are clipped square (clip = bounding box)
+            Item {
                 Layout.fillHeight: true
                 Layout.preferredWidth: Math.max(200, Math.ceil(side.implicitWidth) + 24)
-                color: Theme.alpha(Theme.fg, 0.04)
-                radius: Theme.rounding
+                clip: true
+                Rectangle {
+                    anchors { fill: parent; rightMargin: -radius }
+                    color: Theme.alpha(Theme.fg, 0.04)
+                    radius: Theme.radius
+                }
 
                 ColumnLayout {
                     id: side
@@ -118,7 +124,7 @@ PanelWindow {
                             Layout.fillWidth: true
                             implicitWidth: navRow.implicitWidth + 12 + 18    // left padding + right padding with some air
                             implicitHeight: 36
-                            radius: Math.max(0, Theme.rounding - 4)
+                            radius: Theme.radiusItem
                             color: sel ? Theme.alpha(Theme.accent, 0.26) : navArea.containsMouse ? Theme.alpha(Theme.fg, 0.10) : "transparent"
                             border.width: sel ? 1 : 0
                             border.color: Theme.alpha(Theme.accent, 0.8)
@@ -159,7 +165,7 @@ PanelWindow {
                         Layout.alignment: Qt.AlignVCenter
                         sourceComponent: pageLoader.item && pageLoader.item.headerItem ? pageLoader.item.headerItem : null
                     }
-                    Btn { id: closeBtn; icon: true; text: "\uf00d"; Layout.alignment: Qt.AlignVCenter; onClicked: win.close() }
+                    Btn { id: closeBtn; icon: true; text: "\uf00d"; inset: 18; Layout.alignment: Qt.AlignVCenter; onClicked: win.close() }
                 }
 
                 Flickable {

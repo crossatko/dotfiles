@@ -30,7 +30,7 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         implicitHeight: 30
-        radius: Math.max(0, Theme.rounding - 4)
+        radius: Theme.radiusItem
         color: head.containsMouse ? Theme.alpha(Theme.fg, 0.13) : Theme.alpha(Theme.fg, 0.07)
         border.width: dp.open ? 1 : 0
         border.color: Theme.alpha(Theme.accent, 0.8)
@@ -69,7 +69,7 @@ ColumnLayout {
                     readonly property bool isCurrent: dp.current !== null && modelData.id === dp.current.id
                     Layout.fillWidth: true
                     implicitHeight: 30
-                    radius: Math.max(0, Theme.rounding - 4)
+                    radius: Theme.radiusItem
                     color: isCurrent ? Theme.alpha(Theme.accent, 0.22) : opt.containsMouse ? Theme.alpha(Theme.fg, 0.12) : "transparent"
                     RowLayout {
                         anchors { fill: parent; leftMargin: 10; rightMargin: 10 }

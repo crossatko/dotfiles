@@ -6,7 +6,7 @@ import Quickshell.Hyprland
 // Entry point. Colors: ~/.config/theme/theme.toml -> Theme.qml (live).
 ShellRoot {
     id: root
-    // Which screens get a bar and on which edge: BarConfig (Settings -> Monitors).
+    // Which screens get a bar and on which edge: BarConfig (Settings -> Bar, monitor cards).
     readonly property var bars: BarConfig.bars
     Binding { target: Popups; property: "bars"; value: root.bars }
 
@@ -44,11 +44,13 @@ ShellRoot {
 
 
     // qs ipc call popup toggle center|net|bt|cal|media   (focused monitor)
+    // No chip to measure: hang it under the right end of the bar, where the bell chip is (same measure
+    // as Bar.pop(): screen edge -> bar window (Theme.barGap) -> right section (Theme.barPad); docked = 8).
     IpcHandler {
         target: "popup"
         function toggle(name: string): void {
             const m = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
-            Popups.toggle(name, m, 8)
+            Popups.toggle(name, m, Math.max(8, Theme.barGap + Theme.barPad))
         }
         function close(): void { Popups.close() }
     }
@@ -77,7 +79,7 @@ ShellRoot {
         function clear(): void { Notifs.clearAll() }
     }
 
-    // qs ipc call settings toggle | open | close | page bar|wallpaper   (focused monitor; "monitors" = bar)
+    // qs ipc call settings toggle | open | close | page bar|wallpaper|appearance   (focused monitor; "monitors" = bar)
     IpcHandler {
         target: "settings"
         function toggle(): void { settings.toggle() }

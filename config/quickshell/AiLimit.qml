@@ -33,7 +33,7 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         implicitHeight: 6
-        radius: Math.min(3, Theme.rounding)
+        radius: Math.min(3, Theme.radius)
         color: Theme.alpha(Theme.fg, 0.14)
         Rectangle {
             width: Math.max(0, Math.min(1, lim.pct / 100)) * parent.width

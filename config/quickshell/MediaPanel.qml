@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Services.Mpris
@@ -36,8 +37,9 @@ ColumnLayout {
         spacing: 12
 
         Rectangle {
+            id: artFrame
             Layout.preferredWidth: 84; Layout.preferredHeight: 84
-            radius: Math.max(0, Theme.rounding - 3)
+            radius: Theme.radiusItem
             color: Theme.alpha(Theme.fg, 0.08)
             clip: true
             Image {
@@ -45,6 +47,22 @@ ColumnLayout {
                 source: media.player ? media.player.trackArtUrl : ""
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
+                // clip only cuts to the bounding box; mask the cover to the frame's rounded shape
+                layer.enabled: artFrame.radius > 0
+                layer.effect: MultiEffect {
+                    maskEnabled: true
+                    maskSource: artMask
+                    maskThresholdMin: 0.5
+                    maskSpreadAtMin: 1.0
+                }
+            }
+            Rectangle {
+                id: artMask
+                anchors.fill: parent
+                radius: artFrame.radius
+                visible: false
+                layer.enabled: true
+                layer.smooth: true
             }
         }
         ColumnLayout {
@@ -63,11 +81,11 @@ ColumnLayout {
         spacing: 3
         Rectangle {
             Layout.fillWidth: true
-            height: 6; radius: 0
+            height: 6; radius: Math.min(height / 2, Theme.radius)     // pill like Slider; square at radius 0
             color: Theme.alpha(Theme.fg, 0.15)
             Rectangle {
                 width: parent.width * (media.player && media.player.length > 0 ? Math.min(1, media.player.position / media.player.length) : 0)
-                height: parent.height; radius: 0
+                height: parent.height; radius: parent.radius
                 color: Theme.accent
             }
             MouseArea {

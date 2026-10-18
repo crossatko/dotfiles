@@ -45,7 +45,7 @@ ColumnLayout {
         visible: AiUsage.loaded && ap.profiles.length === 0
         Layout.fillWidth: true
         implicitHeight: emptyCol.implicitHeight + 24
-        radius: Math.max(0, Theme.rounding - 4)
+        radius: Theme.radiusItem
         color: Theme.alpha(Theme.fg, 0.06)
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.6)
@@ -91,7 +91,7 @@ ColumnLayout {
                     readonly property var p: modelData
                     Layout.fillWidth: true
                     implicitHeight: cardCol.implicitHeight + 24
-                    radius: Math.max(0, Theme.rounding - 4)
+                    radius: Theme.radiusItem
                     color: Theme.alpha(Theme.fg, 0.05)
                     border.width: 1
                     border.color: Theme.alpha(Theme.overlay, 0.55)
@@ -110,7 +110,7 @@ ColumnLayout {
                                 visible: (card.p.plan || "") !== ""
                                 implicitWidth: planText.implicitWidth + 12
                                 implicitHeight: 20
-                                radius: Math.min(3, Theme.rounding)
+                                radius: Math.min(3, Theme.radius)
                                 color: Theme.alpha(Theme.accent, 0.16)
                                 border.width: 1
                                 border.color: Theme.alpha(Theme.accent, 0.6)

@@ -11,8 +11,10 @@ PanelWindow {
     property bool atTop: false
     screen: modelData
     anchors { left: true; right: true; top: atTop; bottom: !atTop }
-    implicitHeight: Theme.barHeight
-    exclusiveZone: Theme.barHeight
+    // bar height, plus the floating bar's gap to the screen edge (Theme.barReserve); Hyprland then adds its
+    // gaps_out beyond this, so the visible bar <-> window gap is gapOut, the same as at the other edges
+    implicitHeight: Theme.barReserve
+    exclusiveZone: Theme.barReserve
     exclusionMode: ExclusionMode.Normal
     color: "transparent"
     mask: Region {}

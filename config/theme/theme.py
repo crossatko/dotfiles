@@ -246,11 +246,15 @@ def render_all(pal, cfg):
         write_atomic(dest, render(tpl.read_text(), pal, extra))
     dirs = [os.path.expanduser(d) for d in cfg.get("wallpaper_dirs", ["~/Pictures/wallpapers"])]
     s = cfg.get("settings", {})
-    ui = {"bar_opacity": s.get("bar_opacity", 0.55),
-          "bar_gap": s.get("bar_gap", 0), "bar_radius": s.get("bar_radius", 0),
-          "bar_border": s.get("bar_border", 0), "rounding": s.get("rounding", 10)}
+    # Quickshell layout defaults (palette.json); Settings > Appearance overrides them via appearance.json
+    # (never touched here). Hyprland does not read them: its values are hand-written in hypr/hyprland/.
+    ui = {"rounding": int(s.get("rounding", 0)), "gap": int(s.get("gap", 0)),
+          "border_size": int(s.get("border_size", 2)),
+          "bar_floating": bool(s.get("bar_floating", False)),
+          "smart_gaps": bool(s.get("smart_gaps", True)),
+          "bar_border": s.get("bar_border", 0), "bar_opacity": s.get("bar_opacity", 0.55)}
     write_atomic(OUT / "palette.json", json.dumps({"wallpaper": wp, "wallpaper_dirs": dirs, **ui, **pal}, indent=2) + "\n")
-    lua = "return {\n" + f'  wallpaper = "{wp}",\n  rounding = {s.get("rounding", 10)},\n' + "".join(f'  {k} = "{v}",\n' for k, v in pal.items()) + "}\n"
+    lua = "return {\n" + f'  wallpaper = "{wp}",\n  rounding = {ui["rounding"]},\n' + "".join(f'  {k} = "{v}",\n' for k, v in pal.items()) + "}\n"
     write_atomic(OUT / "palette.lua", lua)
 
 

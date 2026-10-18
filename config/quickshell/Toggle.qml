@@ -15,7 +15,7 @@ Item {
     implicitHeight: 22
     opacity: enabledLook ? 1 : 0.45
 
-    readonly property real r: Math.min(height / 2, Theme.rounding * 2)   // follows the theme: square at rounding 0
+    readonly property real r: Math.min(height / 2, Theme.radius * 2)   // follows the theme: square at radius 0
 
     Rectangle {
         id: track
@@ -33,7 +33,7 @@ Item {
         readonly property real pad: 3
         width: sw.height - pad * 2 - 2
         height: width
-        radius: Math.max(0, sw.r - pad)
+        radius: Theme.inner(sw.r, pad + 1)     // knob sits pad + 1 inside the track
         y: (sw.height - height) / 2
         x: sw.checked ? sw.width - width - pad - 1 : pad + 1
         color: sw.checked ? Theme.accent : Theme.muted

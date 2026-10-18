@@ -18,7 +18,7 @@ Item {
         id: track
         anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
         height: 6
-        radius: Math.min(height / 2, Theme.rounding)
+        radius: Math.min(height / 2, Theme.radius)
         color: Theme.alpha(Theme.fg, 0.14)
         Rectangle {
             width: Math.max(0, Math.min(1, sl.shown)) * parent.width
@@ -30,7 +30,7 @@ Item {
     }
     Rectangle {
         width: 12; height: 16
-        radius: Math.min(4, Theme.rounding)
+        radius: Math.min(4, Theme.radius)
         anchors.verticalCenter: parent.verticalCenter
         x: Math.max(0, Math.min(1, sl.shown)) * (sl.width - width)
         color: Theme.fg

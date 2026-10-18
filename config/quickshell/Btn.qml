@@ -7,11 +7,17 @@ Rectangle {
     property bool active: false
     property bool enabledLook: true
     property bool icon: false     // text is a Font Awesome glyph
+    // Concentric corner: the radius of whatever the button sits in and the padding between them.
+    // Default = directly in a popup card (outer R, 12 px padding) = Theme.radiusItem. A button inside an
+    // item-level box sets e.g. outerRadius: Theme.radiusItem; inset: 8. Never more than a third of the
+    // height, so a small button stays a rounded rectangle instead of turning into a pill at large R.
+    property real outerRadius: Theme.radius
+    property real inset: 12
     signal clicked(var mouse)
 
     implicitWidth: label.implicitWidth + 22
     implicitHeight: 30
-    radius: Math.max(0, Theme.rounding - 4)
+    radius: Math.min(Theme.inner(outerRadius, inset), Math.floor(height / 3))
     opacity: enabledLook ? 1 : 0.5
     color: active ? Theme.alpha(Theme.accent, 0.3)
          : area.containsMouse ? Theme.alpha(Theme.fg, 0.14)

@@ -148,20 +148,6 @@ hl.window_rule({
 	match = { class = "^(REAPER)$" },
 })
 
--- Smart gaps: no border/rounding on a lone tiled window (gaps: workspaces.lua)
-hl.window_rule({
-	name = "no-border-single-wtv1",
-	match = { float = false, workspace = "w[tv1]" },
-	border_size = 0,
-	rounding = 0,
-})
-hl.window_rule({
-	name = "no-border-single-f1",
-	match = { float = false, workspace = "f[1]" },
-	border_size = 0,
-	rounding = 0,
-})
-
 hl.window_rule({
 	name = "pinned",
 	border_size = 0,

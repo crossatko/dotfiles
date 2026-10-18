@@ -33,16 +33,22 @@ Item {
     function dragTo(px, py) { proxy.x = px - proxy.Drag.hotSpot.x; proxy.y = py - proxy.Drag.hotSpot.y }
     function endDrag() { if (dragging) proxy.Drag.drop(); dragId = "" }
 
+    // concentric radii: monitor cards, section boxes and the preview are page-level (Theme.radiusPage);
+    // chips sit 8 px inside a section box; preview minis sit 6 px inside the preview strip (like bar chips)
+    readonly property int chipRadius: Theme.inner(Theme.radiusPage, 8)
+
     component Mini: Rectangle {
         property string glyph: ""
         width: 26; height: 22
-        radius: Theme.rounding
+        radius: Theme.inner(Theme.radiusPage, 6)
         color: Theme.alpha(Theme.fg, 0.08)
         Label { anchors.centerIn: parent; text: parent.glyph; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 12; color: Theme.fgDim }
     }
 
     component Mb: Btn {
         implicitWidth: 22; implicitHeight: 22
+        outerRadius: Theme.inner(Theme.radiusPage, 8)    // inside a 34 px chip (chipRadius)
+        inset: 6
         icon: true
         visible: enabledLook
     }
@@ -55,7 +61,7 @@ Item {
         property var editor
         readonly property var w: BarWidgets.info(wid)
         implicitHeight: 34
-        radius: Math.max(0, Theme.rounding - 4)
+        radius: editor.chipRadius
         color: chipArea.containsMouse ? Theme.alpha(Theme.fg, 0.12) : Theme.alpha(Theme.fg, 0.06)
         border.width: 1
         border.color: section === "hidden" ? Theme.alpha(Theme.overlay, 0.5) : Theme.alpha(Theme.accent, 0.45)
@@ -105,7 +111,7 @@ Item {
         property int dropIndex: -1
 
         implicitHeight: content.implicitHeight + 16
-        radius: Math.max(0, Theme.rounding - 2)
+        radius: Theme.radiusPage
         color: drop.containsDrag ? Theme.alpha(Theme.accent, 0.10) : Theme.alpha(Theme.fg, 0.03)
         border.width: 1
         border.color: drop.containsDrag ? Theme.alpha(Theme.accent, 0.8) : Theme.alpha(Theme.overlay, 0.45)
@@ -156,7 +162,7 @@ Item {
                         visible: box.locked
                         width: list.width
                         height: 34
-                        radius: Math.max(0, Theme.rounding - 4)
+                        radius: box.editor.chipRadius
                         color: Theme.alpha(Theme.fg, 0.03)
                         border.width: 1
                         border.color: Theme.alpha(Theme.overlay, 0.4)
@@ -189,6 +195,7 @@ Item {
                 Rectangle {                   // insertion marker
                     visible: drop.containsDrag && !box.horizontal
                     x: 0; width: parent.width; height: 2
+                    radius: box.editor.chipRadius > 0 ? 1 : 0
                     color: Theme.accent
                     y: {
                         const kids = []
@@ -226,7 +233,7 @@ Item {
                     readonly property string edge: BarConfig.edge(modelData)
                     width: monFlow.cardW
                     height: 70
-                    radius: Math.max(0, Theme.rounding - 4)
+                    radius: Theme.radiusPage
                     color: picked ? Theme.alpha(Theme.accent, 0.12) : monArea.containsMouse ? Theme.alpha(Theme.fg, 0.08) : Theme.alpha(Theme.fg, 0.04)
                     border.width: 1
                     border.color: picked ? Theme.alpha(Theme.accent, 0.85) : Theme.alpha(Theme.overlay, 0.45)
@@ -253,8 +260,8 @@ Item {
                             Layout.fillWidth: true
                             spacing: 2
                             Label { text: mon.modelData.name + "  ·  " + mon.modelData.width + "×" + mon.modelData.height; Layout.fillWidth: true; Layout.leftMargin: 26; elide: Text.ElideRight; font.pixelSize: 11; color: Theme.muted }
-                            Btn { text: "Top"; implicitHeight: 22; implicitWidth: 58; active: mon.on && mon.edge === "top"; enabledLook: mon.on; onClicked: BarConfig.set(mon.modelData, "edge", "top") }
-                            Btn { text: "Bottom"; implicitHeight: 22; implicitWidth: 58; active: mon.on && mon.edge === "bottom"; enabledLook: mon.on; onClicked: BarConfig.set(mon.modelData, "edge", "bottom") }
+                            Btn { text: "Top"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 22; implicitWidth: 58; active: mon.on && mon.edge === "top"; enabledLook: mon.on; onClicked: BarConfig.set(mon.modelData, "edge", "top") }
+                            Btn { text: "Bottom"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 22; implicitWidth: 58; active: mon.on && mon.edge === "bottom"; enabledLook: mon.on; onClicked: BarConfig.set(mon.modelData, "edge", "bottom") }
                         }
                     }
                 }
@@ -270,12 +277,13 @@ Item {
                 model: Quickshell.screens.filter(s => s.name !== ed.selName)
                 Btn {
                     required property var modelData
+                    inset: 18                 // page level, like the monitor cards (radiusPage)
                     implicitHeight: 24
                     text: "Copy from " + ed.screenTitle(modelData)
                     onClicked: BarWidgets.copyFrom(ed.key, BarWidgets.keyOf(modelData))
                 }
             }
-            Btn { implicitHeight: 24; text: "Reset"; enabledLook: ed.own; onClicked: if (ed.own) BarWidgets.reset(ed.key) }
+            Btn { inset: 18; implicitHeight: 24; text: "Reset"; enabledLook: ed.own; onClicked: if (ed.own) BarWidgets.reset(ed.key) }
         }
         Label {
             visible: ed.sel ? !BarConfig.enabled(ed.sel) : false
@@ -291,7 +299,7 @@ Item {
             id: preview
             Layout.fillWidth: true
             implicitHeight: 34
-            radius: Theme.barRadius
+            radius: Theme.barFloating ? Theme.radiusPage : 0     // docked bar = square, like the real one
             color: Theme.alpha(Theme.bg, Theme.barOpacity)
             border.width: 1
             border.color: Theme.alpha(Theme.overlay, 0.55)
@@ -344,7 +352,7 @@ Item {
         visible: ed.dragging
         z: 100
         height: 34
-        radius: Math.max(0, Theme.rounding - 4)
+        radius: ed.chipRadius
         color: Theme.alpha(Theme.accent, 0.30)
         border.width: 1
         border.color: Theme.accent

@@ -14,10 +14,11 @@ PanelWindow {
     visible: Notifs.popups.length > 0 || items.count > 0   // stays up while the last card is still animating out
     anchors { top: true; right: true }
     margins {
-        top: 12 + (bars[(screen ? screen.name : "")] === "top" ? Theme.barHeight : 0)
+        // Theme.edgeGap from the screen edge, or below a top bar (incl. a floating bar's gap) by the same amount
+        top: Theme.edgeGap + (bars[(screen ? screen.name : "")] === "top" ? Theme.barReserve : 0)
         right: 0
     }
-    implicitWidth: 412                 // 400 for the cards + 12 of room: the slide-out then leaves through the screen edge
+    implicitWidth: 400 + Theme.edgeGap // the cards + edgeGap of room: the slide-out then leaves through the screen edge
     implicitHeight: Math.max(1, col.implicitHeight)
     color: "transparent"
     exclusiveZone: -1                  // ignore the monitor's reserved area (the pinned-video strip), so it stays in the screen corner

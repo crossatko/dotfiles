@@ -60,13 +60,6 @@ for _, ws in ipairs(workspaces) do
 	})
 end
 
--- Smart gaps: a lone tiled window gets no gaps (borders/rounding are removed
--- in rules.lua). w[tv1] = exactly one visible tiled window; f[1] = one
--- fullscreen-capable window. Declared before the battlestation monitor2 rule
--- below so that rule's reserved right gap still wins there.
-hl.workspace_rule({ workspace = "m[" .. monitor1.output .. "]w[tv1]", gaps_out = 0, gaps_in = 0 })
-hl.workspace_rule({ workspace = "f[1]", gaps_out = 0, gaps_in = 0 })
-
 -- Battlestation: the right strip reserved for the pinned video window is a monitor reserved_area
 -- toggled by scripts/pip-reserve.lua (a w[p1-9] workspace rule only matched the workspace that owns the
 -- pinned window, so it was missing on the monitor's other workspaces).

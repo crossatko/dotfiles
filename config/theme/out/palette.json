@@ -3,11 +3,13 @@
   "wallpaper_dirs": [
     "/home/kreejzak/Pictures/wallpapers"
   ],
-  "bar_opacity": 0.55,
-  "bar_gap": 0,
-  "bar_radius": 0,
-  "bar_border": 0,
   "rounding": 0,
+  "gap": 0,
+  "border_size": 2,
+  "bar_floating": false,
+  "smart_gaps": true,
+  "bar_border": 0,
+  "bar_opacity": 0.55,
   "bg": "#08090b",
   "fg": "#d5b9bb",
   "accent": "#e7313c",

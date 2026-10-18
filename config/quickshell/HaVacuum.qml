@@ -49,7 +49,7 @@ Rectangle {
     function batteryIcon(p) { return p >= 88 ? "" : p >= 63 ? "" : p >= 38 ? "" : p >= 13 ? "" : "" }
 
     implicitHeight: body.implicitHeight + 24
-    radius: Math.max(0, Theme.rounding - 4)
+    radius: Theme.radiusItem
     color: cleaning ? Theme.alpha(Theme.accent, 0.10) : Theme.alpha(Theme.fg, 0.05)
     border.width: cleaning ? 1 : 0
     border.color: Theme.alpha(Theme.accent, 0.45)
@@ -70,7 +70,7 @@ Rectangle {
         signal clicked()
         implicitHeight: 34
         implicitWidth: row.implicitWidth + 24
-        radius: Math.max(0, Theme.rounding - 4)
+        radius: Theme.inner(Theme.radiusItem, 12)    // inside the card's 12 px padding
         opacity: enabledLook ? 1 : 0.5
         color: primary ? (abArea.containsMouse ? Theme.alpha(Theme.accent, 0.42) : Theme.alpha(Theme.accent, 0.3))
              : active ? Theme.alpha(Theme.accent, 0.3)
@@ -116,7 +116,7 @@ Rectangle {
         signal picked(var value)
         implicitHeight: 30
         color: "transparent"
-        radius: Math.max(0, Theme.rounding - 4)
+        radius: Theme.inner(Theme.radiusItem, 12)    // inside the card's 12 px padding
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.6)
         Row {
@@ -131,6 +131,12 @@ Rectangle {
                     readonly property bool on: seg.current !== undefined && String(seg.current) === String(modelData)
                     width: (seg.width - 2) / Math.max(1, seg.options.length)
                     height: parent.height
+                    // end cells follow the frame's rounded corners (1 px inside its border)
+                    readonly property real endR: Theme.inner(seg.radius, 1)
+                    topLeftRadius: index === 0 ? endR : 0
+                    bottomLeftRadius: index === 0 ? endR : 0
+                    topRightRadius: index === seg.options.length - 1 ? endR : 0
+                    bottomRightRadius: index === seg.options.length - 1 ? endR : 0
                     color: on ? Theme.alpha(Theme.accent, 0.3) : cellArea.containsMouse ? Theme.alpha(Theme.fg, 0.12) : Theme.alpha(Theme.fg, 0.04)
                     Behavior on color { ColorAnimation { duration: 100 } }
                     Rectangle {                      // hairline between cells
@@ -141,6 +147,8 @@ Rectangle {
                     Rectangle {                      // accent outline on the selected cell
                         visible: cell.on
                         anchors.fill: parent
+                        topLeftRadius: cell.topLeftRadius; bottomLeftRadius: cell.bottomLeftRadius
+                        topRightRadius: cell.topRightRadius; bottomRightRadius: cell.bottomRightRadius
                         color: "transparent"
                         border.width: 1
                         border.color: Theme.alpha(Theme.accent, 0.8)
@@ -211,6 +219,7 @@ Rectangle {
                 Label { text: vac.battery + "%"; font.pixelSize: 12; color: Theme.fg; anchors.verticalCenter: parent.verticalCenter }
             }
             Btn {
+                outerRadius: vac.radius        // inside the card's 12 px padding
                 visible: vac.editing
                 icon: true
                 text: vac.hiddenNow ? "" : ""
@@ -297,7 +306,7 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1                    // equal columns
                         implicitHeight: 34
-                        radius: Math.max(0, Theme.rounding - 4)
+                        radius: Theme.inner(Theme.radiusItem, 12)    // inside the card's 12 px padding
                         color: sel ? Theme.alpha(Theme.accent, 0.3) : tileArea.containsMouse ? Theme.alpha(Theme.fg, 0.14) : Theme.alpha(Theme.fg, 0.07)
                         border.width: sel ? 1 : 0
                         border.color: Theme.alpha(Theme.accent, 0.8)

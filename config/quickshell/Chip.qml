@@ -14,7 +14,7 @@ Rectangle {
 
     implicitHeight: Theme.barHeight - 12
     implicitWidth: row.implicitWidth + 20
-    radius: Theme.rounding
+    radius: Theme.radiusChip   // inset barPad inside the bar
     color: active ? Theme.alpha(Theme.accent, 0.28)
          : hover.containsMouse ? Theme.alpha(Theme.fg, 0.10)
          : Theme.alpha(Theme.bg, 0.35)

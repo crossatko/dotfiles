@@ -27,7 +27,9 @@ PopupWindow {
 
     anchor.window: host
     anchor.rect.x: anchorX
-    anchor.rect.y: atTop ? host.height : 0
+    // a floating bar gets popupGap of air between bar and menu; docked stays flush with the bar
+    readonly property int gapToBar: Theme.barFloating ? Theme.popupGap : 0
+    anchor.rect.y: atTop ? host.height + gapToBar : -gapToBar
     anchor.rect.width: 18
     anchor.rect.height: 1
     anchor.edges: (atTop ? Edges.Bottom : Edges.Top) | Edges.Left
@@ -42,7 +44,7 @@ PopupWindow {
 
     Rectangle {
         anchors.fill: parent
-        radius: Theme.rounding
+        radius: Theme.radius
         color: Theme.alpha(Theme.bg, 0.92)
         border.width: 1
         border.color: Theme.alpha(Theme.fg, 0.12)
@@ -56,7 +58,7 @@ PopupWindow {
                 visible: tm.stack.length > 0
                 Layout.fillWidth: true
                 implicitHeight: 28
-                radius: Math.max(0, Theme.rounding - 4)
+                radius: Theme.inner(Theme.radius, 6)
                 color: backArea.containsMouse ? Theme.alpha(Theme.fg, 0.14) : "transparent"
                 RowLayout {
                     anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
@@ -85,7 +87,7 @@ PopupWindow {
                     Rectangle {
                         visible: !row.modelData.isSeparator
                         anchors.fill: parent
-                        radius: Math.max(0, Theme.rounding - 4)
+                        radius: Theme.inner(Theme.radius, 6)
                         color: rowArea.containsMouse && row.modelData.enabled ? Theme.alpha(Theme.accent, 0.28) : "transparent"
                     }
                     RowLayout {

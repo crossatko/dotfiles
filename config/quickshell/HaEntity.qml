@@ -110,7 +110,7 @@ Rectangle {
     }
 
     implicitHeight: body.implicitHeight + (compact ? 16 : 18)
-    radius: Math.max(0, Theme.rounding - 4)
+    radius: Theme.radiusItem
     color: compact && tileArea.containsMouse && !editing ? Theme.alpha(Theme.fg, 0.12)
          : on ? Theme.alpha(Theme.accent, 0.14) : Theme.alpha(Theme.fg, 0.05)
     border.width: on ? 1 : 0
@@ -153,6 +153,7 @@ Rectangle {
 
             // hide / unhide
             Btn {
+                outerRadius: Theme.radiusItem; inset: 8      // ~8-10 px inside the entity card
                 visible: ent.editing
                 icon: true
                 text: ent.hiddenNow ? "" : ""
@@ -162,6 +163,7 @@ Rectangle {
 
             // colour controls (lights with colour / temperature)
             Btn {
+                outerRadius: Theme.radiusItem; inset: 8
                 visible: !ent.editing && ent.on && (ent.hasColor || ent.hasCt)
                 icon: true
                 text: ""
@@ -171,7 +173,7 @@ Rectangle {
             // covers: open / stop / close
             Repeater {
                 model: !ent.editing && ent.domain === "cover" ? [["", "open_cover"], ["", "stop_cover"], ["", "close_cover"]] : []
-                Btn { required property var modelData; icon: true; text: modelData[0]; enabledLook: !ent.unavailable; onClicked: if (!ent.unavailable) ent.now("cover", modelData[1]) }
+                Btn { required property var modelData; outerRadius: Theme.radiusItem; inset: 8; icon: true; text: modelData[0]; enabledLook: !ent.unavailable; onClicked: if (!ent.unavailable) ent.now("cover", modelData[1]) }
             }
             Toggle {
                 visible: !ent.editing && ["light", "switch", "input_boolean", "fan", "climate"].indexOf(ent.domain) >= 0
@@ -272,9 +274,9 @@ Rectangle {
                 ent.localTemp = t
                 ent.later("climate", "set_temperature", { temperature: t })
             }
-            Btn { icon: true; text: ""; onClicked: tempRow.step(-1) }
+            Btn { outerRadius: Theme.radiusItem; inset: 8; icon: true; text: ""; onClicked: tempRow.step(-1) }
             Label { text: tempRow.target.toFixed(ent.tStep < 1 ? 1 : 0) + ent.unit; font.pixelSize: 15; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 64 }
-            Btn { icon: true; text: ""; onClicked: tempRow.step(1) }
+            Btn { outerRadius: Theme.radiusItem; inset: 8; icon: true; text: ""; onClicked: tempRow.step(1) }
             Item { Layout.fillWidth: true }
             Label { visible: typeof ent.a.current_humidity === "number"; text: ent.a.current_humidity + "% RH"; color: Theme.fgDim; font.pixelSize: 11 }
         }
@@ -287,6 +289,7 @@ Rectangle {
                 model: ent.domain === "climate" ? (ent.a.hvac_modes || []) : []
                 Btn {
                     required property var modelData
+                    outerRadius: Theme.radiusItem; inset: 8
                     text: ({ heat_cool: "Auto", fan_only: "Fan", off: "Off" })[modelData] || ent.pretty(modelData)
                     active: ent.st === modelData
                     onClicked: ent.now("climate", "set_hvac_mode", { hvac_mode: modelData })

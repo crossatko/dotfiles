@@ -22,7 +22,7 @@ PanelWindow {
     screen: target
     visible: shown
     anchors { bottom: true }
-    margins.bottom: 70 + (bars[(screen ? screen.name : "")] === "bottom" ? Theme.barHeight : 0)
+    margins.bottom: 70 + (bars[(screen ? screen.name : "")] === "bottom" ? Theme.barReserve : 0)   // above a (floating) bottom bar
     implicitWidth: 320
     implicitHeight: 56
     color: "transparent"
@@ -66,7 +66,7 @@ PanelWindow {
 
     Rectangle {
         anchors.fill: parent
-        radius: Theme.rounding
+        radius: Theme.radius
         color: Theme.alpha(Theme.bg, Math.min(1, Theme.barOpacity + 0.3))
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
@@ -83,12 +83,12 @@ PanelWindow {
             Rectangle {
                 Layout.fillWidth: true
                 height: 6
-                radius: 0
+                radius: Math.min(height / 2, Theme.inner(Theme.radius, 18))
                 color: Theme.alpha(Theme.fg, 0.15)
                 Rectangle {
                     width: parent.width * (osd.muted ? 0 : osd.value)
                     height: parent.height
-                    radius: 0
+                    radius: parent.radius
                     color: Theme.accent
                     Behavior on width { NumberAnimation { duration: 80 } }
                 }

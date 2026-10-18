@@ -19,7 +19,38 @@ local monitors = require("hyprland.monitors")
 local monitor2 = monitors.secondary
 
 local BOX = { w = 1588, h = 893 } -- 16:9, the width of the reserved strip
-local BAR_HEIGHT = 40 -- the quickshell bar: the box sits on top of it when the bar is at the bottom
+
+-- Bar height and floating gap come from hyprland/managed.lua (Settings -> Appearance); fallbacks = docked 40px bar.
+local ok_managed, managed = pcall(require, "hyprland.managed")
+if not ok_managed or type(managed) ~= "table" then
+	managed = nil
+end
+
+-- The space a bottom bar takes off the screen edge: its height, plus the gap below it when it floats.
+local function bar_reserve()
+	if managed ~= nil then
+		local ok, e = pcall(managed.get)
+		if ok and type(e) == "table" and type(e.barReserve) == "number" then
+			return e.barReserve
+		end
+	end
+	return 40
+end
+
+-- Small-file read that cannot block on a FIFO or swallow a huge file (managed.lua); plain read as fallback.
+local function read_state(path)
+	if managed ~= nil and type(managed.read_small_file) == "function" then
+		local ok, text = pcall(managed.read_small_file, path, 65536)
+		return ok and text or nil
+	end
+	local f = io.open(path, "r")
+	if f == nil then
+		return nil
+	end
+	local text = f:read(65536)
+	f:close()
+	return text
+end
 
 -- Where is the bar on this monitor? Mirrors config/quickshell/BarConfig.qml: ~/.local/state/quickshell/bars.json
 -- (keyed "<monitor model>|<serial>", the serial is usually empty there) with the pre-settings layout as the
@@ -27,10 +58,8 @@ local BAR_HEIGHT = 40 -- the quickshell bar: the box sits on top of it when the 
 local FALLBACK = { ["DP-5"] = "bottom", ["DP-3"] = "bottom", ["Virtual-1"] = "bottom", ["HDMI-A-1"] = "top" }
 
 local function bar_edge(mon)
-	local f = io.open(os.getenv("HOME") .. "/.local/state/quickshell/bars.json", "r")
-	if f then
-		local text = f:read("*a")
-		f:close()
+	local text = read_state(os.getenv("HOME") .. "/.local/state/quickshell/bars.json")
+	if text then
 		-- Lua monitors have no `model` field, only a description ("Dell Inc. DELL U2515H 9X2VY5AK1D5L"), so
 		-- match the key's model (and serial, when it has one) inside that
 		local desc = mon.description or ""
@@ -47,9 +76,10 @@ local function bar_edge(mon)
 	return FALLBACK[mon.name] or "none"
 end
 
--- How far the box is lifted off the bottom edge: over a bottom bar, flush with the edge otherwise.
+-- How far the box is lifted off the bottom edge: over a bottom bar (and its floating gap), flush with the
+-- edge otherwise.
 local function bottom_offset(mon)
-	return bar_edge(mon) == "bottom" and BAR_HEIGHT or 0
+	return bar_edge(mon) == "bottom" and bar_reserve() or 0
 end
 
 local function is_video_window(window)
@@ -126,19 +156,20 @@ local function heal()
 	return fixed
 end
 
-local last_edge = nil
+local last_offset = nil
 
--- Bar edge changed (or first run): put every pinned video window back in the box for the new layout.
+-- Bar edge, height or floating gap changed (or first run): put every pinned video window back in the box
+-- for the new layout.
 local function refit()
 	local mon = secondary()
 	if mon == nil then
 		return
 	end
-	local edge = bar_edge(mon)
-	if edge == last_edge then
+	local offset = bottom_offset(mon)
+	if offset == last_offset then
 		return
 	end
-	last_edge = edge
+	last_offset = offset
 	for _, w in ipairs(pinned_video_windows()) do
 		reposition(w)
 	end
@@ -184,6 +215,7 @@ sync()
 
 -- Called from Quickshell (config/quickshell/BarConfig.qml) right after the bar layout is saved, through
 -- `hyprctl dispatch`, since Lua cannot watch the file: re-reads it and re-places the pinned windows.
+-- layout_apply() (hyprland/managed.lua) calls it too after an Appearance change (floating bar / edge gap).
 function pip_bar_changed()
 	sync()
 end

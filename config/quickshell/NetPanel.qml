@@ -70,7 +70,7 @@ ColumnLayout {
         visible: net.confirm !== null
         Layout.fillWidth: true
         implicitHeight: confirmRow.implicitHeight + 16
-        radius: Math.max(0, Theme.rounding - 4)
+        radius: Theme.radiusItem
         color: Theme.alpha(Theme.red, 0.16)
         border.width: 1
         border.color: Theme.alpha(Theme.red, 0.7)
@@ -86,8 +86,8 @@ ColumnLayout {
             }
             RowLayout {
                 spacing: 6
-                Btn { text: "Cancel"; onClicked: net.confirm = null }
-                Btn { text: "Disconnect"; active: true; onClicked: { const c = net.confirm; net.confirm = null; c.run() } }
+                Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Cancel"; onClicked: net.confirm = null }
+                Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Disconnect"; active: true; onClicked: { const c = net.confirm; net.confirm = null; c.run() } }
             }
         }
     }
@@ -109,7 +109,7 @@ ColumnLayout {
                 required property var modelData
                 Layout.fillWidth: true
                 implicitHeight: net.rowH
-                radius: Math.max(0, Theme.rounding - 4)
+                radius: Theme.radiusItem
                 color: Theme.alpha(Theme.fg, 0.07)
                 RowLayout {
                     anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
@@ -177,7 +177,7 @@ ColumnLayout {
                 width: wifiList.width
                 height: net.rowH + (asking ? form.implicitHeight + 10 : 0)
                 clip: true
-                radius: Math.max(0, Theme.rounding - 4)
+                radius: Theme.radiusItem
                 color: asking ? Theme.alpha(Theme.accent, 0.12)
                     : area.containsMouse ? Theme.alpha(Theme.fg, 0.12) : modelData.connected ? Theme.alpha(Theme.accent, 0.18) : Theme.alpha(Theme.fg, 0.05)
                 border.width: asking ? 1 : 0
@@ -230,7 +230,7 @@ ColumnLayout {
                     Rectangle {
                         Layout.fillWidth: true
                         implicitHeight: 34
-                        radius: Math.max(0, Theme.rounding - 4)
+                        radius: Theme.inner(card.radius, 12)    // inside the card's 12 px padding
                         color: Theme.alpha(Theme.bg, 0.6)
                         border.width: 1
                         border.color: card.failed ? Theme.alpha(Theme.red, 0.9) : pw.activeFocus ? Theme.alpha(Theme.accent, 0.9) : Theme.alpha(Theme.overlay, 0.6)
@@ -269,8 +269,8 @@ ColumnLayout {
                     Label { visible: card.failed; text: "Could not connect. Wrong password?"; color: Theme.red; font.pixelSize: 11 }
                     RowLayout {
                         spacing: 6
-                        Btn { text: "Cancel"; onClicked: net.asking = null }
-                        Btn { text: "Connect"; active: true; enabledLook: pw.text.length >= 8; onClicked: net.submit(card.modelData, pw.text) }
+                        Btn { outerRadius: card.radius; text: "Cancel"; onClicked: net.asking = null }
+                        Btn { outerRadius: card.radius; text: "Connect"; active: true; enabledLook: pw.text.length >= 8; onClicked: net.submit(card.modelData, pw.text) }
                     }
                 }
             }

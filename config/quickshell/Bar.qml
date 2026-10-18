@@ -10,7 +10,8 @@ import Quickshell.Services.Mpris
 import Quickshell.Networking
 import Quickshell.Bluetooth
 
-// One floating glass bar on one screen. `atTop` picks the edge.
+// One glass bar on one screen. `atTop` picks the edge. Docked (Theme.barGap 0, radius 0): flush with the
+// screen edge, square. Floating: Theme.barGap away from the edge and both sides, corner radius Theme.barRadius.
 PanelWindow {
     id: bar
 
@@ -61,9 +62,10 @@ PanelWindow {
     // open a popup hung off `item` (a chip); toggles if it is already the open one
     // true while this bar's popup of that name is showing: the chip that opened it stays highlighted
     function isOpen(name) { return Popups.name === name && Popups.screen === bar.screen.name }
+    // Popups.right is measured from the SCREEN edge: the bar window is inset by Theme.barGap when floating
     function pop(name, item) {
         const p = item.mapToItem(null, 0, 0)
-        Popups.toggle(name, bar.screen.name, Math.max(8, bar.width - (p.x + item.width)))
+        Popups.toggle(name, bar.screen.name, Math.max(8, Theme.barGap + bar.width - (p.x + item.width)))
     }
 
     // the playing MPRIS player wins; a paused one only shows while the Twitch app isn't playing
@@ -215,7 +217,7 @@ PanelWindow {
     // a Repeater of Loaders over one section's id list (copied per section: an inline component here broke hot reload)
     Row {
         id: leftSec
-        anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
+        anchors { left: parent.left; leftMargin: Theme.barPad; verticalCenter: parent.verticalCenter }
         spacing: 4
         Repeater {
             model: bar.layout.left
@@ -247,7 +249,7 @@ PanelWindow {
     }
     Row {
         id: rightSec
-        anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
+        anchors { right: parent.right; rightMargin: Theme.barPad; verticalCenter: parent.verticalCenter }
         spacing: 4
         Repeater {
             model: bar.layout.right
@@ -371,8 +373,8 @@ PanelWindow {
             BarLabel { visible: HomeAssistant.lightsOn > 0; text: HomeAssistant.lightsOn }
         }
     }
-    // AI usage (AiUsage.qml): opens the accounts / limits popup; shows the fullest limit window of the most
-    // recently used account with fresh values (AiUsage.current), muted when only stale values are known
+    // AI usage (AiUsage.qml): opens the accounts / limits popup; shows the short-window (daily / 5 h) limit of
+    // the most recently used account with fresh values (AiUsage.currentPercent), muted when only stale values are known
     Component {
         id: aiComp
         Chip {
@@ -439,7 +441,7 @@ PanelWindow {
                     implicitHeight: 18
                     Rectangle {      // highlight while this item's menu is open (same look as an active chip)
                         anchors { fill: parent; margins: -4 }
-                        radius: Theme.rounding
+                        radius: Theme.radiusChip
                         visible: menu.visible
                         color: Theme.alpha(Theme.accent, 0.28)
                         border.width: 1

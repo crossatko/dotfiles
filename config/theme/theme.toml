@@ -22,9 +22,11 @@ brave = true             # write a seed-color theme into Brave (applied when Bra
 brave_seed = "accent_soft"  # palette key used as the seed; brave_variant: 0 system,1 tonal,2 neutral,3 vibrant
 brave_variant = 2
 quit_on_apply = []       # GTK4/libadwaita apps cannot restyle open windows; e.g. ["nautilus -q"] closes them so the next one is themed
-rounding = 0             # corner radius of the quickshell elements (px); Hyprland windows are set in hypr/hyprland/theme.lua
-bar_gap = 0              # px between the bar and the screen edges
-bar_radius = 0           # corner rounding of the bar itself
+rounding = 0             # default corner radius (px) of the quickshell elements; Hyprland windows: hypr/hyprland/theme.lua. Settings > Appearance overrides both
+gap = 0                  # quickshell default window gap (px, floating bar margin); keep in sync with gaps in hypr/hyprland/settings.lua
+border_size = 2          # quickshell default for the window border shown in Settings > Appearance; Hyprland: hypr/hyprland/theme.lua
+bar_floating = false     # default bar mode: false = docked, true = floating (margins = gap, radius = rounding)
+smart_gaps = true        # quickshell default of the lone-window toggle (the rules live in hypr/hyprland/managed.lua, on unless overridden)
 bar_border = 0           # px width of the bar outline
 bar_opacity = 0.55       # quickshell bar background alpha; hyprland blur shows through; keep above ignore_alpha (0.1) in hypr/hyprland/rules.lua
 

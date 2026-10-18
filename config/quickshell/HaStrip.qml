@@ -11,6 +11,8 @@ Item {
 
     implicitHeight: 16
     readonly property real shown: drag.pressed ? drag.live : value
+    // rounded ends: only the first / last gradient segment gets the outer corners (per-corner radii, Qt >= 6.7)
+    readonly property real r: Math.min(height / 2, Theme.radiusDeep)
 
     Row {
         anchors.fill: parent
@@ -20,6 +22,10 @@ Item {
                 required property int index
                 width: strip.width / (strip.colors.length - 1)
                 height: strip.height
+                topLeftRadius: index === 0 ? strip.r : 0
+                bottomLeftRadius: index === 0 ? strip.r : 0
+                topRightRadius: index === strip.colors.length - 2 ? strip.r : 0
+                bottomRightRadius: index === strip.colors.length - 2 ? strip.r : 0
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
                     GradientStop { position: 0; color: strip.colors[index] }
@@ -30,6 +36,7 @@ Item {
     }
     Rectangle {
         anchors.fill: parent
+        radius: strip.r
         color: "transparent"
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.7)

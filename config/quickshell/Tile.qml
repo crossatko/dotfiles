@@ -12,7 +12,7 @@ Rectangle {
     signal secondary()
 
     implicitHeight: 54
-    radius: Math.max(0, Theme.rounding - 2)
+    radius: Theme.radiusItem
     color: on ? Theme.alpha(Theme.accent, area.containsMouse ? 0.34 : 0.26)
               : Theme.alpha(Theme.fg, area.containsMouse ? 0.13 : 0.07)
     border.width: 1

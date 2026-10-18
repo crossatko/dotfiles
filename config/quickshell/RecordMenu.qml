@@ -43,6 +43,8 @@ PanelWindow {
     property int lastMode: 0          // the menu reopens on the last used mode
     property string pendingMode: ""
     readonly property bool optStacked: card.width < 440   // frame rate / format rows stacked on a narrow card
+    // concentric radii: card = R; tiles / segment rows / audio row sit 20 px inside it; key badges sit 8 px inside a tile
+    readonly property int badgeRadius: Theme.inner(Theme.radiusModal, 8)
 
     visible: shown
     anchors { left: true; right: true; top: true; bottom: true }
@@ -165,7 +167,7 @@ PanelWindow {
         anchors.centerIn: parent
         width: Math.min(parent.width - 32, 520)
         height: body.implicitHeight + 40
-        radius: Theme.rounding
+        radius: Theme.radius
         color: Theme.alpha(Theme.bg, 0.98)     // small card over arbitrary content: nearly opaque
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
@@ -182,7 +184,7 @@ PanelWindow {
                 spacing: 10
                 Label { text: "\uf03d"; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 16; color: Theme.red }   // video
                 Label { text: "Screen recording"; font.pixelSize: 17; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight }
-                Btn { icon: true; text: "\uf00d"; onClicked: win.close() }
+                Btn { icon: true; text: "\uf00d"; inset: 20; onClicked: win.close() }   // 20 px inside the card
             }
 
             RowLayout {
@@ -198,7 +200,7 @@ PanelWindow {
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1                 // equal thirds
                         implicitHeight: 128
-                        radius: Math.max(0, Theme.rounding - 2)
+                        radius: Theme.radiusModal
                         color: sel ? Theme.alpha(Theme.accent, tileArea.pressed ? 0.36 : 0.26) : Theme.alpha(Theme.fg, 0.07)
                         border.width: 1
                         border.color: sel ? Theme.alpha(Theme.accent, 0.85) : Theme.alpha(Theme.overlay, 0.45)
@@ -209,7 +211,7 @@ PanelWindow {
                         Rectangle {
                             x: 8; y: 8
                             width: 20; height: 20
-                            radius: Math.max(0, Theme.rounding - 6)
+                            radius: win.badgeRadius
                             color: tile.sel ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.08)
                             Label { anchors.centerIn: parent; text: tile.index + 1; font.pixelSize: 11; color: tile.sel ? Theme.accent : Theme.muted }
                         }
@@ -260,7 +262,7 @@ PanelWindow {
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1
                         implicitHeight: 44
-                        radius: Math.max(0, Theme.rounding - 4)
+                        radius: Theme.radiusModal
                         color: sel ? Theme.alpha(Theme.accent, 0.14) : Theme.alpha(Theme.fg, 0.05)
                         border.width: 1
                         border.color: sel ? Theme.alpha(Theme.accent, 0.7) : "transparent"
@@ -277,7 +279,7 @@ PanelWindow {
                             Label { text: opt.modelData.title; color: opt.sel ? Theme.fg : Theme.fgDim; Layout.fillWidth: true; elide: Text.ElideRight }
                             Rectangle {
                                 implicitWidth: 20; implicitHeight: 20
-                                radius: Math.max(0, Theme.rounding - 6)
+                                radius: win.badgeRadius
                                 color: opt.sel ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.08)
                                 Label { anchors.centerIn: parent; text: opt.modelData.badge; font.pixelSize: 11; color: opt.sel ? Theme.accent : Theme.muted }
                             }
@@ -288,6 +290,8 @@ PanelWindow {
                                     Btn {
                                         required property var modelData
                                         required property int index
+                                        outerRadius: Theme.radiusModal   // concentric with the row box, like the badges
+                                        inset: 8
                                         implicitHeight: 26
                                         implicitWidth: opt.modelData.segW
                                         text: opt.modelData.labels[index]
@@ -307,7 +311,7 @@ PanelWindow {
                 readonly property bool sel: win.cur === 5
                 Layout.fillWidth: true
                 implicitHeight: 44
-                radius: Math.max(0, Theme.rounding - 4)
+                radius: Theme.radiusModal
                 color: sel ? Theme.alpha(Theme.accent, 0.14) : Theme.alpha(Theme.fg, 0.05)
                 border.width: 1
                 border.color: sel ? Theme.alpha(Theme.accent, 0.7) : "transparent"
@@ -333,7 +337,7 @@ PanelWindow {
                     Label { text: "Record desktop audio"; color: win.audio ? Theme.fg : Theme.fgDim; Layout.fillWidth: true; elide: Text.ElideRight }
                     Rectangle {
                         implicitWidth: 20; implicitHeight: 20
-                        radius: Math.max(0, Theme.rounding - 6)
+                        radius: win.badgeRadius
                         color: audioRow.sel ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.08)
                         Label { anchors.centerIn: parent; text: "A"; font.pixelSize: 11; color: audioRow.sel ? Theme.accent : Theme.muted }
                     }

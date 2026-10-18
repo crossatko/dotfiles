@@ -9,6 +9,7 @@ require("hyprland.binds")
 require("hyprland.workspaces")
 require("hyprland.rules")
 require("hyprland.permissions")
+pcall(require, "hyprland.managed") -- Settings > Appearance overrides (managed file): keep it after the modules above
 
 -- Scripts
 require("scripts.pip-fix")

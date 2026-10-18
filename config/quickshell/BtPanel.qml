@@ -67,7 +67,7 @@ ColumnLayout {
             required property var modelData
             width: list.width
             height: 46
-            radius: Math.max(0, Theme.rounding - 4)
+            radius: Theme.radiusItem
             color: area.containsMouse ? Theme.alpha(Theme.fg, 0.12) : modelData.connected ? Theme.alpha(Theme.accent, 0.18) : Theme.alpha(Theme.fg, 0.05)
             RowLayout {
                 anchors { fill: parent; leftMargin: 12; rightMargin: 12 }

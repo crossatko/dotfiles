@@ -20,6 +20,18 @@ overrides ──┘                      │
 * **Pin a color**: `[overrides]` in `theme.toml` (e.g. `accent = "#c0392b"`), then `render`.
 * **Tone down / punch up terminal colors**: `ansi_saturation`, `ansi_lightness`.
 * **Picker folders**: `wallpaper_dirs`.
+* **Layout defaults** (`[settings]`, Quickshell only): `rounding` (default corner radius, px), `gap` (window gap, px),
+  `border_size`, `bar_floating` (false = docked bar), `smart_gaps` (lone window: no gaps/border/rounding),
+  plus `bar_border` and `bar_opacity`. They are static (the wallpaper only drives colors) and are written
+  to `out/palette.json` as real booleans/numbers (`out/palette.lua` only carries `rounding`, as before).
+  The old `bar_gap` / `bar_radius` keys are gone: the bar margin and radius are derived from `gap` /
+  `rounding` when `bar_floating` is on. Hyprland does not read these: its own values are hand-written in
+  `hypr/hyprland/` (theme.lua, settings.lua), so keep the two in sync if you change a default.
+* **User overrides**: Settings > Appearance writes `~/.local/state/quickshell/appearance.json`
+  (missing key = use the default). Quickshell: appearance.json > `theme.toml` > built-in fallbacks.
+  Hyprland: `hypr/hyprland/managed.lua` applies only the keys set in appearance.json on top of the
+  hand-written config. `theme.py` never reads or writes that file, so the overrides survive wallpaper
+  applies and `hyprctl reload`.
 * **Add an app**: drop a file in `templates/` using `{{key}}`, `{{key.bare}}` (no `#`),
   `{{key.rgb}}` (`r, g, b`), `{{key.argb}}` (`0xffRRGGBB`), or `{{font}}`/`{{wallpaper}}`.
   It renders to `out/<same name>`; point the app at it (include/import/symlink).
