@@ -90,7 +90,53 @@ end
 -- from the "pinned" rule in hyprland/rules.lua; keep PIN_BORDER equal to it.
 local PIN_BORDER = 0
 
-local function margins()
+-- "No gaps for a single window" (smart gaps): Hyprland gives a lone tiled window gaps 0 (workspace rules
+-- w[tv1] / f[1] in hyprland/managed.lua), so the box follows: margin 0 while the rule applies on the monitor.
+-- The rule applies when (a) managed.smart_enabled(mon) is true for the monitor and (b) its active workspace
+-- has exactly ONE visible tiled window (what w[tv1] counts: floating and pinned windows do not, hidden or
+-- unmapped ones neither) or a maximized window (f[1] = fullscreen state 1; true fullscreen, state 0, is
+-- f[0] and does not match, so it keeps the gaps). Unknown fields count as "does not apply": an old box.
+-- NB: hl.* monitors, workspaces and windows are USERDATA in the real API (type() is "userdata"): test them with
+-- nil checks, never type(x) == "table". Their fields are plain Lua values (booleans, numbers, strings; at/size tables).
+local closing = nil -- address of the window whose close/kill/destroy event is being handled (may still be listed)
+
+local function smart_gaps_apply(mon)
+	if managed == nil or type(managed.smart_enabled) ~= "function" or mon == nil then
+		return false
+	end
+	local ok, res = pcall(function()
+		local ws = mon.active_workspace
+		if ws == nil or ws.id == nil or managed.smart_enabled(mon) ~= true then
+			return false
+		end
+		local tiled = 0
+		for _, w in ipairs(hl.get_windows()) do
+			if
+				w.address ~= closing
+				and w.mapped ~= false
+				and w.hidden ~= true
+				and w.monitor ~= nil
+				and w.monitor.name == mon.name
+				and w.workspace ~= nil
+				and w.workspace.id == ws.id
+			then
+				if w.floating ~= true and not w.pinned then
+					tiled = tiled + 1
+				end
+				if w.fullscreen == 1 and w.floating ~= true then
+					return true
+				end
+			end
+		end
+		return tiled == 1
+	end)
+	return ok and res == true
+end
+
+local function margins(mon)
+	if smart_gaps_apply(mon) then
+		return { top = 0, right = 0, bottom = 0, left = 0 }
+	end
 	if managed ~= nil and type(managed.edge_margins) == "function" then
 		local ok, m = pcall(managed.edge_margins)
 		if ok and type(m) == "table" then
@@ -114,7 +160,7 @@ end
 -- The strip width never changes; the video shrinks by the margin and stays 16:9 (h from BOX). Gap 0 ->
 -- exactly BOX.w x BOX.h at the old place.
 local function box(mon)
-	local m = margins()
+	local m = margins(mon)
 	local b = PIN_BORDER
 	local w = BOX.w - m.right - 2 * b
 	local h = math.floor(BOX.h * w / BOX.w + 0.5)
@@ -289,19 +335,38 @@ on("window.title", function(w)
 		return
 	end
 	placed[w.address] = true
-	local m = margins()
+	local m = margins(secondary())
 	if (m.right ~= 0 or m.bottom ~= 0) and not in_box(w) then
 		reposition(w)
 		sync()
 	end
 end)
 -- window.close does not fire for every way a window can disappear (see pip-orientation.lua)
-on("window.close", sync)
-on("window.kill", sync)
-on("window.destroy", sync)
+-- the closing window can still be listed while its event runs: leave it out of the tiled count
+local function sync_closing(w)
+	-- the event argument is a window userdata
+	local okw, addr = pcall(function()
+		return w ~= nil and w.address or nil
+	end)
+	closing = okw and type(addr) == "string" and addr or nil
+	local ok, err = pcall(sync)
+	closing = nil
+	if not ok then
+		error(err, 0)
+	end
+end
+on("window.close", sync_closing)
+on("window.kill", sync_closing)
+on("window.destroy", sync_closing)
 on("window.pin", sync)
 on("window.move_to_workspace", sync)
 on("workspace.active", sync)
+-- smart gaps follow the tiled window count, a maximized window and the workspaces on the monitor; the refit
+-- only moves the box when its computed place changes, so extra triggers cost one comparison. Events a
+-- Hyprland version does not know are skipped (hl.on is protected).
+for _, ev in ipairs({ "window.fullscreen", "workspace.move_to_monitor", "workspace.removed", "window.update_rules" }) do
+	pcall(on, ev, sync)
+end
 
 sync()
 

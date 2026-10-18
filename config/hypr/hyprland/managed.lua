@@ -540,6 +540,27 @@ function M.apply_smart(s)
 	return added
 end
 
+-- Is "no gaps for a single window" in force for this monitor right now? `mon` = HL.Monitor (or a bare
+-- smartMonitors key). The rule set registered for the monitor decides (its smartMonitors entry, else
+-- smartGaps, else true = M.smart_for); a monitor without a set falls under the catch-all rules
+-- (M.catch_all_on). Re-reads the file. Used by scripts/pip-reserve.lua to let the pinned video box follow a
+-- lone tiled window's zero gaps. Never raises; false on any failure (= the box keeps its gaps).
+function M.smart_enabled(mon, s)
+	local ok, on = pcall(function()
+		s = type(s) == "table" and s or M.read()
+		local key = type(mon) == "string" and mon or M.monitor_key(mon)
+		if key ~= nil then
+			for _, set in ipairs(smart_sets) do
+				if set.key == key then
+					return M.smart_for(s, key)
+				end
+			end
+		end
+		return M.catch_all_on(s)
+	end)
+	return ok and on == true
+end
+
 -- settings -> writes the four options: set keys are written, keys that were overridden before and are
 -- no longer set get their baseline back, everything else is left alone. -> true, or false plus the first error.
 function M.apply_options(s)
