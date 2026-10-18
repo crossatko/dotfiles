@@ -38,7 +38,7 @@ ColumnLayout {
         RowLayout {
             anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
             spacing: 8
-            Label { text: dp.label(dp.current); Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 12 }
+            Label { text: dp.label(dp.current); Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: Theme.fontSmall }
             Icon {
                 text: "\uf078"
                 font.pixelSize: 12
@@ -72,13 +72,13 @@ ColumnLayout {
                     color: isCurrent ? Theme.alpha(Theme.accent, 0.22) : opt.containsMouse ? Theme.alpha(Theme.fg, 0.12) : "transparent"
                     RowLayout {
                         anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
-                        Label { text: dp.label(modelData); Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 12; color: parent.parent.isCurrent ? Theme.accent : Theme.fg }
+                        Label { text: dp.label(modelData); Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: Theme.fontSmall; color: parent.parent.isCurrent ? Theme.accent : Theme.fg }
                         Icon { visible: parent.parent.isCurrent; text: "\uf00c"; font.pixelSize: 12; color: Theme.accent }
                     }
                     MouseArea { id: opt; anchors.fill: parent; hoverEnabled: true; onClicked: dp.choose(modelData) }
                 }
             }
-            Label { visible: dp.devices.length === 0; text: "No devices"; color: Theme.muted; font.pixelSize: 12 }
+            Label { visible: dp.devices.length === 0; text: "No devices"; color: Theme.muted; font.pixelSize: Theme.fontSmall }
         }
     }
 }

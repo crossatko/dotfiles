@@ -183,7 +183,7 @@ PanelWindow {
                 Layout.fillWidth: true
                 spacing: 10
                 Icon { text: "\uf03d"; font.pixelSize: 16; color: Theme.red }   // video
-                Label { text: "Screen recording"; font.pixelSize: 17; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight }
+                Label { text: "Screen recording"; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight }
                 Btn { icon: true; text: "\uf00d"; inset: 20; onClicked: win.close() }   // 20 px inside the card
             }
 
@@ -213,7 +213,7 @@ PanelWindow {
                             width: 20; height: 20
                             radius: win.badgeRadius
                             color: tile.sel ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.08)
-                            Label { anchors.centerIn: parent; text: tile.index + 1; font.pixelSize: 11; color: tile.sel ? Theme.accent : Theme.muted }
+                            Label { anchors.centerIn: parent; text: tile.index + 1; font.pixelSize: Theme.fontCaption; color: tile.sel ? Theme.accent : Theme.muted }
                         }
 
                         ColumnLayout {
@@ -229,7 +229,7 @@ PanelWindow {
                             }
                             Label { text: tile.modelData.title; font.pixelSize: 14; color: tile.sel ? Theme.fg : Theme.fgDim; Layout.alignment: Qt.AlignHCenter }
                             Label {
-                                text: tile.modelData.sub; font.pixelSize: 11; color: Theme.muted
+                                text: tile.modelData.sub; font.pixelSize: Theme.fontCaption; color: Theme.muted
                                 Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
                             }
                         }
@@ -281,7 +281,7 @@ PanelWindow {
                                 implicitWidth: 20; implicitHeight: 20
                                 radius: win.badgeRadius
                                 color: opt.sel ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.08)
-                                Label { anchors.centerIn: parent; text: opt.modelData.badge; font.pixelSize: 11; color: opt.sel ? Theme.accent : Theme.muted }
+                                Label { anchors.centerIn: parent; text: opt.modelData.badge; font.pixelSize: Theme.fontCaption; color: opt.sel ? Theme.accent : Theme.muted }
                             }
                             Row {
                                 spacing: 2
@@ -339,7 +339,7 @@ PanelWindow {
                         implicitWidth: 20; implicitHeight: 20
                         radius: win.badgeRadius
                         color: audioRow.sel ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.08)
-                        Label { anchors.centerIn: parent; text: "A"; font.pixelSize: 11; color: audioRow.sel ? Theme.accent : Theme.muted }
+                        Label { anchors.centerIn: parent; text: "A"; font.pixelSize: Theme.fontCaption; color: audioRow.sel ? Theme.accent : Theme.muted }
                     }
                     Toggle { checked: win.audio; onToggled: v => win.setAudio(v) }
                 }
@@ -351,7 +351,7 @@ PanelWindow {
                 wrapMode: Text.WordWrap
                 text: "1 2 3 start · ←→↑↓ Enter · F fps · M format · A audio · Esc close"
                 color: Theme.muted
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontCaption
             }
         }
     }

@@ -147,7 +147,7 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 0
                 Label { text: ent.title; Layout.fillWidth: true; elide: Text.ElideRight }
-                Label { visible: !ent.compact || ent.editing; text: ent.sub(); Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.fgDim; font.pixelSize: 11 }
+                Label { visible: !ent.compact || ent.editing; text: ent.sub(); Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
             }
 
             // hide / unhide
@@ -253,7 +253,7 @@ Rectangle {
                 Label {
                     text: ent.localCt < 0 && (ent.ct < 0 || ent.a.color_mode !== "color_temp") ? "—"
                         : Math.round(ent.ctMin + (ent.localCt >= 0 ? ent.localCt : ent.ct) * (ent.ctMax - ent.ctMin)) + "K"
-                    color: Theme.fgDim; font.pixelSize: 11
+                    color: Theme.fgDim; font.pixelSize: Theme.fontCaption
                     Layout.preferredWidth: 42
                     horizontalAlignment: Text.AlignRight
                 }
@@ -277,7 +277,7 @@ Rectangle {
             Label { text: tempRow.target.toFixed(ent.tStep < 1 ? 1 : 0) + ent.unit; font.pixelSize: 15; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 64 }
             Btn { outerRadius: Theme.radiusItem; inset: 8; icon: true; text: ""; onClicked: tempRow.step(1) }
             Item { Layout.fillWidth: true }
-            Label { visible: typeof ent.a.current_humidity === "number"; text: ent.a.current_humidity + "% RH"; color: Theme.fgDim; font.pixelSize: 11 }
+            Label { visible: typeof ent.a.current_humidity === "number"; text: ent.a.current_humidity + "% RH"; color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
         }
         Flow {
             visible: !ent.editing && ent.domain === "climate" && !ent.unavailable && (ent.a.hvac_modes || []).length > 0

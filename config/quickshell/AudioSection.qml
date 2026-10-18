@@ -28,7 +28,7 @@ ColumnLayout {
             dim: !au.sink || au.sink.muted
             onMoved: v => { if (au.sink) { au.sink.muted = false; au.sink.volume = v } }
         }
-        Label { text: au.sink ? Math.round(au.sink.volume * 100) + "%" : "–"; Layout.preferredWidth: 40; horizontalAlignment: Text.AlignRight; color: Theme.fgDim; font.pixelSize: 12 }
+        Label { text: au.sink ? Math.round(au.sink.volume * 100) + "%" : "–"; Layout.preferredWidth: 40; horizontalAlignment: Text.AlignRight; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
     }
     DevicePicker { Layout.fillWidth: true; isSink: true }
 
@@ -50,7 +50,7 @@ ColumnLayout {
             dim: !au.source || au.source.muted
             onMoved: v => { if (au.source) { au.source.muted = false; au.source.volume = v } }
         }
-        Label { text: au.source ? Math.round(au.source.volume * 100) + "%" : "–"; Layout.preferredWidth: 40; horizontalAlignment: Text.AlignRight; color: Theme.fgDim; font.pixelSize: 12 }
+        Label { text: au.source ? Math.round(au.source.volume * 100) + "%" : "–"; Layout.preferredWidth: 40; horizontalAlignment: Text.AlignRight; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
     }
     DevicePicker { Layout.fillWidth: true; isSink: false; visible: au.source !== null }
 }

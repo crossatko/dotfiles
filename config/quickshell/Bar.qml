@@ -281,7 +281,7 @@ PanelWindow {
             active: bar.isOpen("center")
             onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("center", bellChip)
             BarIcon { text: Notifs.dnd ? "\uf1f6" : Notifs.count > 0 ? "\uf8fa" : "\uf0c9"; color: Notifs.dnd ? Theme.muted : Notifs.count > 0 ? Theme.accent : Theme.fg }
-            BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: Theme.accent; font.pixelSize: 11 }
+            BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: Theme.accent; font.pixelSize: Theme.fontCaption }
         }
     }
 
@@ -339,7 +339,7 @@ PanelWindow {
             BarIcon {
                 text: bar.mediaBrand ? bar.mediaBrand : bar.player ? (bar.player.isPlaying ? "\uf04b" : "\uf04c") : "\uf04c"
                 color: bar.player && !bar.player.isPlaying ? Theme.muted : Theme.accent
-                family: bar.mediaBrand ? "Font Awesome 7 Brands" : Theme.iconFont
+                family: bar.mediaBrand ? Theme.brandFont : Theme.iconFont
             }
             BarLabel {
                 text: bar.player ? bar.player.trackTitle + (bar.player.trackArtist ? "  ·  " + bar.player.trackArtist : "")

@@ -36,8 +36,13 @@ Singleton {
 
     // layout/typography knobs shared by everything in the shell
     readonly property string font: "Paper Mono"
-    readonly property int fontSize: 13
+    readonly property int fontSize: 13      // body text (Label default)
+    readonly property int fontTitle: 17     // popup / modal / Settings sidebar title
+    readonly property int fontSmall: 12     // buttons, secondary lines, values next to sliders
+    readonly property int fontCaption: 11   // sub lines under a row title, captions, hints, section heads
+    readonly property int fontTiny: 10      // badges and footnotes
     readonly property string iconFont: "Font Awesome 7 Sharp"   // Pro desktop font, installed in ~/.local/share/fonts (not in this repo)
+    readonly property string brandFont: "Font Awesome 7 Brands" // brand logos (system package)
     readonly property int iconSize: 15      // FA glyphs are far larger than the old Nerd Font ones
     readonly property int barHeight: 40
 

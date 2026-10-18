@@ -104,7 +104,7 @@ ColumnLayout {
                 anchors { left: parent.left; right: swatchRow.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
                 horizontalAlignment: Text.AlignRight
                 elide: Text.ElideMiddle
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontCaption
                 color: pal.hovered !== "" ? Theme.fg : Theme.muted
                 text: pal.hovered !== "" ? pal.hovered : page.currentPath.split("/").pop()
             }
@@ -196,7 +196,7 @@ ColumnLayout {
                         color: Theme.alpha(Theme.bg, 0.75)
                         Label {
                             anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontCaption
                             elide: Text.ElideMiddle
                             verticalAlignment: Text.AlignVCenter
                             text: cell.busy ? "Applying…" : cell.current ? "✓ " + cell.modelData.split("/").pop() : cell.modelData.split("/").pop()
@@ -227,7 +227,7 @@ ColumnLayout {
         Layout.topMargin: 4
         wrapMode: Text.WordWrap
         color: Theme.muted
-        font.pixelSize: 11
+        font.pixelSize: Theme.fontCaption
         text: "Click a wallpaper (or arrows + Enter) to apply it: theme.py re-extracts the palette and restyles every app. Folders: wallpaper_dirs in ~/.config/theme/theme.toml."
     }
 }

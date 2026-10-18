@@ -198,7 +198,7 @@ ColumnLayout {
         Layout.topMargin: -4
         text: ts.tailnet
         color: Theme.muted
-        font.pixelSize: 11
+        font.pixelSize: Theme.fontCaption
         elide: Text.ElideRight
     }
     Label {
@@ -206,7 +206,7 @@ ColumnLayout {
         Layout.fillWidth: true
         text: ts.error
         color: Theme.red
-        font.pixelSize: 11
+        font.pixelSize: Theme.fontCaption
         wrapMode: Text.Wrap
     }
 
@@ -227,7 +227,7 @@ ColumnLayout {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 text: "Tailscale refused: this user is not its operator. Run once in a terminal:"
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSmall
             }
             Rectangle {
                 Layout.fillWidth: true
@@ -238,7 +238,7 @@ ColumnLayout {
                     anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 10 }
                     text: ts.copied === "operator" ? "Copied" : "sudo tailscale set --operator=$USER"
                     color: ts.copied === "operator" ? Theme.accent : Theme.fg
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSmall
                     elide: Text.ElideRight
                 }
             }
@@ -296,7 +296,7 @@ ColumnLayout {
                 Label {
                     readonly property string brand: ts.osGlyph(card.p.os)
                     text: brand || ""
-                    font.family: brand ? "Font Awesome 7 Brands" : Theme.iconFont
+                    font.family: brand ? Theme.brandFont : Theme.iconFont
                     font.styleName: "Regular"
                     horizontalAlignment: Text.AlignHCenter
                     Layout.preferredWidth: 22
@@ -310,15 +310,15 @@ ColumnLayout {
                         spacing: 6
                         Layout.fillWidth: true
                         Label { text: card.p.name; elide: Text.ElideRight; Layout.preferredWidth: implicitWidth; Layout.minimumWidth: 24; color: card.p.online ? Theme.fg : Theme.fgDim }
-                        Label { visible: card.p.self; text: "this device"; color: Theme.accent; font.pixelSize: 10 }
-                        Label { visible: card.p.exitNode; text: "exit node"; color: Theme.orange; font.pixelSize: 10 }
+                        Label { visible: card.p.self; text: "this device"; color: Theme.accent; font.pixelSize: Theme.fontTiny }
+                        Label { visible: card.p.exitNode; text: "exit node"; color: Theme.orange; font.pixelSize: Theme.fontTiny }
                         Item { Layout.fillWidth: true }
                     }
                     Label {
                         text: !card.p.online ? (card.p.lastSeen ? "Last seen " + ts.ago(card.p.lastSeen) : "Offline")
                             : [card.p.tags.map(t => t.replace(/^tag:/, "")).join(", "), card.p.exitOption && !card.p.exitNode ? "exit node available" : ""].filter(s => s).join(" · ") || card.p.os
                         color: Theme.fgDim
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontCaption
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                     }
@@ -328,7 +328,7 @@ ColumnLayout {
                     id: ipLabel
                     readonly property bool done: ts.copied === card.p.id + "/4"
                     text: done ? "Copied" : card.p.ipv4
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSmall
                     color: done ? Theme.accent : ipArea.containsMouse ? Theme.fg : Theme.fgDim
                     MouseArea { id: ipArea; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ts.copy(card.p.id + "/4", card.p.ipv4) }
                 }
@@ -365,12 +365,12 @@ ColumnLayout {
                         readonly property bool done: modelData.c !== "" && ts.copied === card.p.id + modelData.c
                         Layout.fillWidth: true
                         spacing: 8
-                        Label { text: kv.modelData.k; color: Theme.muted; font.pixelSize: 11; Layout.preferredWidth: 64 }
+                        Label { text: kv.modelData.k; color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.preferredWidth: 64 }
                         Label {
                             Layout.fillWidth: true
                             text: kv.done ? "Copied" : kv.modelData.v
                             color: kv.done ? Theme.accent : kv.modelData.c !== "" && valArea.containsMouse ? Theme.fg : Theme.fgDim
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontCaption
                             elide: Text.ElideMiddle
                             MouseArea {
                                 id: valArea

@@ -6,6 +6,6 @@ ColumnLayout {
     spacing: 12
     implicitHeight: 200
 
-    Label { text: "Audio"; font.pixelSize: 17; font.bold: true }
+    Label { text: "Audio"; font.pixelSize: Theme.fontTitle; font.bold: true }
     AudioSection { Layout.fillWidth: true }
 }

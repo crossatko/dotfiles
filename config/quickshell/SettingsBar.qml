@@ -90,7 +90,7 @@ Item {
             spacing: 6
             Icon { text: "\uf58e"; font.pixelSize: 11; color: Theme.muted }
             Icon { text: chip.w.icon; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: chip.section === "hidden" ? Theme.muted : Theme.accent }
-            Label { text: chip.w.title; Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 12; color: chip.section === "hidden" ? Theme.fgDim : Theme.fg }
+            Label { text: chip.w.title; Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: Theme.fontSmall; color: chip.section === "hidden" ? Theme.fgDim : Theme.fg }
             Mb {
                 text: chip.section === "hidden" ? "\uf06e" : "\uf070"
                 enabledLook: true
@@ -143,8 +143,8 @@ Item {
             spacing: 6
             RowLayout {
                 Layout.fillWidth: true
-                Label { text: box.title.toUpperCase(); font.pixelSize: 11; font.bold: true; font.letterSpacing: 1.2; color: Theme.fgDim; Layout.fillWidth: true }
-                Label { text: box.ids.length; font.pixelSize: 11; color: Theme.muted }
+                Label { text: box.title.toUpperCase(); font.pixelSize: Theme.fontCaption; font.bold: true; font.letterSpacing: 1.2; color: Theme.fgDim; Layout.fillWidth: true }
+                Label { text: box.ids.length; font.pixelSize: Theme.fontCaption; color: Theme.muted }
             }
             Item {
                 Layout.fillWidth: true
@@ -171,15 +171,15 @@ Item {
                             spacing: 6
                             Icon { text: "\uf023"; font.pixelSize: 11; color: Theme.muted }
                             Icon { text: "\uf0f3"; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: Theme.fgDim }
-                            Label { text: "Control center"; Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 12; color: Theme.fgDim }
-                            Label { text: "fixed"; font.pixelSize: 11; color: Theme.muted }
+                            Label { text: "Control center"; Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: Theme.fontSmall; color: Theme.fgDim }
+                            Label { text: "fixed"; font.pixelSize: Theme.fontCaption; color: Theme.muted }
                         }
                     }
                 }
                 Label {
                     visible: !box.horizontal && box.ids.length === 0 && !box.locked
                     anchors.centerIn: parent
-                    text: "drop here"; color: Theme.muted; font.pixelSize: 11
+                    text: "drop here"; color: Theme.muted; font.pixelSize: Theme.fontCaption
                 }
                 Flow {
                     id: flow
@@ -190,7 +190,7 @@ Item {
                         model: box.horizontal ? box.ids : []
                         WChip { required property string modelData; wid: modelData; section: box.section; editor: box.editor; width: 200 }
                     }
-                    Label { visible: box.ids.length === 0; text: "Nothing hidden. Drop a chip here to hide it."; color: Theme.muted; font.pixelSize: 11; height: 34 }
+                    Label { visible: box.ids.length === 0; text: "Nothing hidden. Drop a chip here to hide it."; color: Theme.muted; font.pixelSize: Theme.fontCaption; height: 34 }
                 }
                 Rectangle {                   // insertion marker
                     visible: drop.containsDrag && !box.horizontal
@@ -249,7 +249,7 @@ Item {
                             spacing: 8
                             Icon { text: "\uf390"; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: mon.picked ? Theme.accent : Theme.fgDim; opacity: mon.on ? 1 : 0.55 }
                             Label { text: ed.screenTitle(mon.modelData); Layout.fillWidth: true; elide: Text.ElideRight; font.bold: mon.picked; color: mon.on ? Theme.fg : Theme.fgDim; opacity: mon.on ? 1 : 0.7 }
-                            Label { visible: !mon.on; text: "no bar"; font.pixelSize: 11; color: Theme.muted }
+                            Label { visible: !mon.on; text: "no bar"; font.pixelSize: Theme.fontCaption; color: Theme.muted }
                             Toggle {
                                 checked: mon.on
                                 enabledLook: !mon.onlyOne
@@ -259,7 +259,7 @@ Item {
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 2
-                            Label { text: mon.modelData.name + "  ·  " + mon.modelData.width + "×" + mon.modelData.height; Layout.fillWidth: true; Layout.leftMargin: 26; elide: Text.ElideRight; font.pixelSize: 11; color: Theme.muted }
+                            Label { text: mon.modelData.name + "  ·  " + mon.modelData.width + "×" + mon.modelData.height; Layout.fillWidth: true; Layout.leftMargin: 26; elide: Text.ElideRight; font.pixelSize: Theme.fontCaption; color: Theme.muted }
                             Btn { text: "Top"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 22; implicitWidth: 58; active: mon.on && mon.edge === "top"; enabledLook: mon.on; onClicked: BarConfig.set(mon.modelData, "edge", "top") }
                             Btn { text: "Bottom"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 22; implicitWidth: 58; active: mon.on && mon.edge === "bottom"; enabledLook: mon.on; onClicked: BarConfig.set(mon.modelData, "edge", "bottom") }
                         }
@@ -290,7 +290,7 @@ Item {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             color: Theme.fgDim
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontCaption
             text: "The bar is off on this monitor. The layout is kept and used again when you turn it back on."
         }
 
@@ -338,7 +338,7 @@ Item {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             color: Theme.muted
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontCaption
             text: "Drag chips between the columns to move or reorder them, onto Hidden to hide them (or use the eye). Monitors without their own layout use the default one; changes apply to the bar right away. The last bar can't be turned off: its bell chip is the way back into Settings."
         }
 
@@ -362,7 +362,7 @@ Item {
             anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 10 }
             spacing: 8
             Icon { text: proxy.icon; font.pixelSize: 13; color: Theme.accent }
-            Label { text: proxy.text; font.pixelSize: 12 }
+            Label { text: proxy.text; font.pixelSize: Theme.fontSmall }
         }
     }
 }

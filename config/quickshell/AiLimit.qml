@@ -19,13 +19,13 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         spacing: 6
-        Label { text: lim.win.title || ""; font.pixelSize: 12 }
-        Label { text: lim.win.detail || ""; color: Theme.fgDim; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
-        Label { text: lim.resetText; color: Theme.muted; font.pixelSize: 11 }
+        Label { text: lim.win.title || ""; font.pixelSize: Theme.fontSmall }
+        Label { text: lim.win.detail || ""; color: Theme.fgDim; font.pixelSize: Theme.fontCaption; elide: Text.ElideRight; Layout.fillWidth: true }
+        Label { text: lim.resetText; color: Theme.muted; font.pixelSize: Theme.fontCaption }
         Label {
             text: Math.round(lim.pct) + "%"
             color: Theme.fg
-            font.pixelSize: 12; font.bold: true
+            font.pixelSize: Theme.fontSmall; font.bold: true
             horizontalAlignment: Text.AlignRight
             Layout.preferredWidth: 38
         }

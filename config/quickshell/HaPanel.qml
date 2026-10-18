@@ -51,11 +51,11 @@ ColumnLayout {
         id: header
         Layout.fillWidth: true
         spacing: 6
-        Label { text: "Home"; font.pixelSize: 17; font.bold: true }
+        Label { text: "Home"; font.pixelSize: Theme.fontTitle; font.bold: true }
         Label {
             Layout.fillWidth: true
             text: HomeAssistant.status === "ok" && HomeAssistant.lightsOn > 0 ? HomeAssistant.lightsOn + (HomeAssistant.lightsOn === 1 ? " light on" : " lights on") : ""
-            color: Theme.fgDim; font.pixelSize: 12
+            color: Theme.fgDim; font.pixelSize: Theme.fontSmall
         }
         Btn {
             visible: HomeAssistant.configured
@@ -95,7 +95,7 @@ ColumnLayout {
             lineHeight: 1.15
             textFormat: Text.StyledText
             color: Theme.fg
-            font.pixelSize: 12
+            font.pixelSize: Theme.fontSmall
             text: notice.setup
                 ? "<b>Connect Home Assistant</b><br>"
                   + "1. In Home Assistant open your profile → Security → Long-lived access tokens → Create token.<br>"
@@ -121,7 +121,7 @@ ColumnLayout {
                 active: true
                 onClicked: HomeAssistant.refresh(true)
             }
-            Label { visible: HomeAssistant.lastUpdate > 0; text: "Last update " + Qt.formatTime(new Date(HomeAssistant.lastUpdate), "HH:mm"); color: Theme.fgDim; font.pixelSize: 11 }
+            Label { visible: HomeAssistant.lastUpdate > 0; text: "Last update " + Qt.formatTime(new Date(HomeAssistant.lastUpdate), "HH:mm"); color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
             Item { Layout.fillWidth: true }
         }
         }
@@ -211,7 +211,7 @@ ColumnLayout {
         visible: HomeAssistant.configured && HomeAssistant.status === "ok" && hp.unavailableCount > 0
         text: hp.unavailableCount + " unavailable"
         color: Theme.muted
-        font.pixelSize: 11
+        font.pixelSize: Theme.fontCaption
         Layout.alignment: Qt.AlignRight
     }
 

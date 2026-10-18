@@ -100,7 +100,7 @@ Rectangle {
                 Label {
                     text: n.appName
                     color: Theme.fgDim
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontCaption
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                 }
@@ -125,7 +125,7 @@ Rectangle {
                 text: n.body
                 textFormat: Text.StyledText
                 color: Theme.fgDim
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSmall
                 wrapMode: Text.Wrap
                 maximumLineCount: card.toast ? 4 : 8
                 elide: Text.ElideRight
@@ -143,7 +143,7 @@ Rectangle {
                         color: btn.containsMouse ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.1)
                         implicitWidth: label.implicitWidth + 20
                         implicitHeight: 28
-                        Label { id: label; anchors.centerIn: parent; text: modelData.text; font.pixelSize: 12 }
+                        Label { id: label; anchors.centerIn: parent; text: modelData.text; font.pixelSize: Theme.fontSmall }
                         MouseArea { id: btn; anchors.fill: parent; hoverEnabled: true; onClicked: modelData.invoke() }
                     }
                 }

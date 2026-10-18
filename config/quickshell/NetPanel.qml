@@ -63,7 +63,7 @@ ColumnLayout {
     RowLayout {
         id: header
         Layout.fillWidth: true
-        Label { text: "Network"; font.pixelSize: 17; font.bold: true; Layout.fillWidth: true }
+        Label { text: "Network"; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.fillWidth: true }
     }
 
     Rectangle {
@@ -82,7 +82,7 @@ ColumnLayout {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 text: net.confirm ? "Disconnect " + net.confirm.label + "? It is your only active connection." : ""
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSmall
             }
             RowLayout {
                 spacing: 6
@@ -131,7 +131,7 @@ ColumnLayout {
                     ColumnLayout {
                         spacing: 0
                         Label { text: modelData.name }
-                        Label { text: net.stateText(modelData.state) + (modelData.linkSpeed > 0 ? " · " + modelData.linkSpeed + " Mb/s" : ""); color: Theme.fgDim; font.pixelSize: 11 }
+                        Label { text: net.stateText(modelData.state) + (modelData.linkSpeed > 0 ? " · " + modelData.linkSpeed + " Mb/s" : ""); color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
                     }
                     Item { Layout.fillWidth: true }
                     RowState {
@@ -266,7 +266,7 @@ ColumnLayout {
                                 onTextChanged: card.failed = false
                                 onAccepted: net.submit(card.modelData, text)
                                 Keys.onEscapePressed: { Popups.escAt = Date.now(); net.asking = null }
-                                Label { visible: pw.text === ""; anchors.verticalCenter: parent.verticalCenter; text: "Password"; color: Theme.muted; font.pixelSize: 12 }
+                                Label { visible: pw.text === ""; anchors.verticalCenter: parent.verticalCenter; text: "Password"; color: Theme.muted; font.pixelSize: Theme.fontSmall }
                             }
                             Icon {
                                 id: reveal
@@ -278,7 +278,7 @@ ColumnLayout {
                             }
                         }
                     }
-                    Label { visible: card.failed; text: "Could not connect. Wrong password?"; color: Theme.red; font.pixelSize: 11 }
+                    Label { visible: card.failed; text: "Could not connect. Wrong password?"; color: Theme.red; font.pixelSize: Theme.fontCaption }
                     RowLayout {
                         spacing: 6
                         Btn { outerRadius: card.radius; text: "Cancel"; onClicked: net.asking = null }

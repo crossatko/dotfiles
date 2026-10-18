@@ -114,7 +114,7 @@ PanelWindow {
                     id: side
                     anchors { fill: parent; margins: 12 }
                     spacing: 4
-                    Label { text: "Settings"; font.pixelSize: 17; font.bold: true; Layout.bottomMargin: 10; Layout.leftMargin: 6 }
+                    Label { text: "Settings"; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.bottomMargin: 10; Layout.leftMargin: 6 }
                     Repeater {
                         model: win.pages
                         Rectangle {
@@ -139,7 +139,7 @@ PanelWindow {
                         }
                     }
                     Item { Layout.fillHeight: true }
-                    Label { text: "Esc to close"; color: Theme.muted; font.pixelSize: 11; Layout.leftMargin: 6 }
+                    Label { text: "Esc to close"; color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.leftMargin: 6 }
                 }
             }
 

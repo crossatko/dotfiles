@@ -28,7 +28,7 @@ Rectangle {
             Layout.fillWidth: true
             spacing: 0
             Label { text: tile.title; Layout.fillWidth: true; elide: Text.ElideRight }
-            Label { text: tile.sub; Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.fgDim; font.pixelSize: 11 }
+            Label { text: tile.sub; Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
         }
     }
     MouseArea {

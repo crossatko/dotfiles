@@ -15,7 +15,7 @@ RowLayout {
     Label {
         text: head.title.toUpperCase()
         color: Theme.fgDim
-        font.pixelSize: 11
+        font.pixelSize: Theme.fontCaption
         font.letterSpacing: 1.2
         font.bold: true
     }
@@ -27,7 +27,7 @@ RowLayout {
         Layout.preferredHeight: 1
         Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; height: 1; color: Theme.alpha(Theme.overlay, 0.55) }
     }
-    Label { visible: head.detail !== ""; Layout.leftMargin: 8; text: head.detail; color: Theme.muted; font.pixelSize: 11 }
+    Label { visible: head.detail !== ""; Layout.leftMargin: 8; text: head.detail; color: Theme.muted; font.pixelSize: Theme.fontCaption }
     // No slot (or gap) while the trailing items are hidden. The slot itself stays visible: binding its own
     // `visible` to `visibleChildren` latched it off for good whenever it was evaluated while the children were
     // still hidden (a hidden parent makes every child report visible = false), e.g. the Wi-Fi switch before

@@ -57,7 +57,7 @@ Rectangle {
 
     // ---- building blocks ----
     // small label above a control
-    component Caption: Label { color: Theme.fgDim; font.pixelSize: 11; font.letterSpacing: 0.6 }
+    component Caption: Label { color: Theme.fgDim; font.pixelSize: Theme.fontCaption; font.letterSpacing: 0.6 }
 
     // icon + text button; `primary` is the filled accent one
     component ActBtn: Rectangle {
@@ -92,7 +92,7 @@ Rectangle {
             Label {
                 visible: ab.text !== ""
                 text: ab.text
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSmall
                 font.bold: ab.primary
                 color: ab.primary || ab.active ? Theme.accent : Theme.fg
                 anchors.verticalCenter: parent.verticalCenter
@@ -159,7 +159,7 @@ Rectangle {
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideRight
                         text: seg.labels[cell.index] !== undefined ? seg.labels[cell.index] : String(cell.modelData)
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontCaption
                         color: cell.on ? Theme.accent : Theme.fg
                     }
                     MouseArea {
@@ -197,7 +197,7 @@ Rectangle {
                 Label {
                     text: vac.unavailable ? "Unavailable" : (vac.area !== "" ? vac.area + " · " : "") + vac.pretty(vac.status)
                     Layout.fillWidth: true; elide: Text.ElideRight
-                    color: Theme.fgDim; font.pixelSize: 11
+                    color: Theme.fgDim; font.pixelSize: Theme.fontCaption
                 }
             }
             Row {
@@ -216,7 +216,7 @@ Rectangle {
                     color: vac.battery < 20 ? Theme.red : Theme.fgDim
                     anchors.verticalCenter: parent.verticalCenter
                 }
-                Label { text: vac.battery + "%"; font.pixelSize: 12; color: Theme.fg; anchors.verticalCenter: parent.verticalCenter }
+                Label { text: vac.battery + "%"; font.pixelSize: Theme.fontSmall; color: Theme.fg; anchors.verticalCenter: parent.verticalCenter }
             }
             Btn {
                 outerRadius: vac.radius        // inside the card's 12 px padding
@@ -276,7 +276,7 @@ Rectangle {
                     Label {
                         required property var modelData
                         text: modelData[0]
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontCaption
                         color: linkArea.containsMouse ? Theme.accent : Theme.fgDim
                         font.underline: linkArea.containsMouse
                         MouseArea {
@@ -289,7 +289,7 @@ Rectangle {
                     }
                 }
             }
-            FontMetrics { id: fm; font.family: Theme.font; font.pixelSize: 12 }
+            FontMetrics { id: fm; font.family: Theme.font; font.pixelSize: Theme.fontSmall }
             GridLayout {
                 id: roomGrid
                 Layout.fillWidth: true
@@ -323,7 +323,7 @@ Rectangle {
                                 text: tile.modelData.name
                                 Layout.fillWidth: true
                                 elide: Text.ElideRight
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontSmall
                                 color: tile.sel ? Theme.accent : Theme.fg
                             }
                         }

@@ -24,12 +24,12 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         spacing: 6
-        Label { text: "AI usage"; font.pixelSize: 17; font.bold: true }
+        Label { text: "AI usage"; font.pixelSize: Theme.fontTitle; font.bold: true }
         Label {
             Layout.fillWidth: true
             text: AiUsage.loading && !AiUsage.loaded ? "Loading…" : AiUsage.error !== "" ? AiUsage.error : ""
             color: AiUsage.error !== "" ? Theme.red : Theme.fgDim
-            font.pixelSize: 12
+            font.pixelSize: Theme.fontSmall
             elide: Text.ElideRight
         }
         Btn {
@@ -58,7 +58,7 @@ ColumnLayout {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 text: "Looked for ~/.claude* directories (one per CLAUDE_CONFIG_DIR). Run claude and log in, then refresh."
-                color: Theme.fgDim; font.pixelSize: 12
+                color: Theme.fgDim; font.pixelSize: Theme.fontSmall
             }
         }
     }
@@ -114,7 +114,7 @@ ColumnLayout {
                                 color: Theme.alpha(Theme.accent, 0.16)
                                 border.width: 1
                                 border.color: Theme.alpha(Theme.accent, 0.6)
-                                Label { id: planText; anchors.centerIn: parent; text: card.p.plan || ""; color: Theme.accent; font.pixelSize: 11; font.bold: true }
+                                Label { id: planText; anchors.centerIn: parent; text: card.p.plan || ""; color: Theme.accent; font.pixelSize: Theme.fontCaption; font.bold: true }
                             }
                         }
                         Label {
@@ -123,7 +123,7 @@ ColumnLayout {
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                             text: [card.p.label !== card.p.dir ? "~/" + card.p.dir : "", card.p.org || ""].filter(s => s).join("  ·  ")
-                            color: Theme.muted; font.pixelSize: 11
+                            color: Theme.muted; font.pixelSize: Theme.fontCaption
                         }
 
                         // problem / note (expired, offline, rate limited, API key, ...)
@@ -142,7 +142,7 @@ ColumnLayout {
                                 wrapMode: Text.Wrap
                                 text: card.p.message || ""
                                 color: ap.statusColor(card.p.status)
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontSmall
                             }
                         }
 
@@ -168,16 +168,16 @@ ColumnLayout {
                             visible: !!card.p.local && (card.p.windows || []).length === 0
                             Layout.fillWidth: true
                             spacing: 4
-                            Label { text: "Local estimate · session logs" + (card.p.local && card.p.local.partial ? " (still counting)" : ""); color: Theme.fgDim; font.pixelSize: 11; font.bold: true }
+                            Label { text: "Local estimate · session logs" + (card.p.local && card.p.local.partial ? " (still counting)" : ""); color: Theme.fgDim; font.pixelSize: Theme.fontCaption; font.bold: true }
                             RowLayout {
                                 Layout.fillWidth: true
-                                Label { text: "Today"; font.pixelSize: 12; Layout.preferredWidth: 56 }
-                                Label { text: card.p.local ? ap.statsLine(card.p.local.today) : ""; color: Theme.fgDim; font.pixelSize: 12; Layout.fillWidth: true; elide: Text.ElideRight }
+                                Label { text: "Today"; font.pixelSize: Theme.fontSmall; Layout.preferredWidth: 56 }
+                                Label { text: card.p.local ? ap.statsLine(card.p.local.today) : ""; color: Theme.fgDim; font.pixelSize: Theme.fontSmall; Layout.fillWidth: true; elide: Text.ElideRight }
                             }
                             RowLayout {
                                 Layout.fillWidth: true
-                                Label { text: "7 days"; font.pixelSize: 12; Layout.preferredWidth: 56 }
-                                Label { text: card.p.local ? ap.statsLine(card.p.local.week) : ""; color: Theme.fgDim; font.pixelSize: 12; Layout.fillWidth: true; elide: Text.ElideRight }
+                                Label { text: "7 days"; font.pixelSize: Theme.fontSmall; Layout.preferredWidth: 56 }
+                                Label { text: card.p.local ? ap.statsLine(card.p.local.week) : ""; color: Theme.fgDim; font.pixelSize: Theme.fontSmall; Layout.fillWidth: true; elide: Text.ElideRight }
                             }
                         }
 
@@ -185,7 +185,7 @@ ColumnLayout {
                             visible: !!card.p.fetchedAt && (card.p.windows || []).length > 0
                             Layout.alignment: Qt.AlignRight
                             text: "updated " + AiUsage.ago(card.p.fetchedAt)
-                            color: Theme.muted; font.pixelSize: 10
+                            color: Theme.muted; font.pixelSize: Theme.fontTiny
                         }
                     }
                 }
@@ -207,8 +207,8 @@ ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 8
                         Label { text: other.modelData.name; font.bold: true }
-                        Label { text: other.modelData.detail || ""; color: Theme.fgDim; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
-                        Label { visible: !!other.modelData.lastUsed; text: other.modelData.lastUsed ? AiUsage.ago(other.modelData.lastUsed) : ""; color: Theme.muted; font.pixelSize: 11 }
+                        Label { text: other.modelData.detail || ""; color: Theme.fgDim; font.pixelSize: Theme.fontCaption; elide: Text.ElideRight; Layout.fillWidth: true }
+                        Label { visible: !!other.modelData.lastUsed; text: other.modelData.lastUsed ? AiUsage.ago(other.modelData.lastUsed) : ""; color: Theme.muted; font.pixelSize: Theme.fontCaption }
                     }
                     Repeater {
                         model: other.modelData.windows || []

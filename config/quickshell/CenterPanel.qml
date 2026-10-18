@@ -33,7 +33,7 @@ GridLayout {
 
         RowLayout {
             Layout.fillWidth: true
-            Label { text: "Control center"; font.pixelSize: 17; font.bold: true; Layout.fillWidth: true }
+            Label { text: "Control center"; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.fillWidth: true }
             // gear: Settings window (bar layout, monitors); opens on this popup's monitor
             Btn { icon: true; text: "\uf013"; onClicked: Popups.settingsRequest("open", "") }
         }
@@ -104,7 +104,7 @@ GridLayout {
             Layout.fillWidth: true
             spacing: 6
             Label { text: "Notifications"; font.pixelSize: 15; font.bold: true; Layout.fillWidth: true }
-            Label { visible: Notifs.count > 0; text: Notifs.count; color: Theme.fgDim; font.pixelSize: 12 }
+            Label { visible: Notifs.count > 0; text: Notifs.count; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
             Btn { text: "Clear"; enabledLook: Notifs.count > 0; onClicked: Notifs.clearAll() }
         }
 

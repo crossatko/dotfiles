@@ -67,8 +67,8 @@ Item {
                 checked: Appearance.overridden("edgeGap")
                 onToggled: want => want ? Appearance.set("edgeGap", Theme.gapOut) : Appearance.unset("edgeGap")
             }
-            Label { text: "Separate edge gap"; color: Theme.fgDim; font.pixelSize: 12 }
-            Label { text: "gap at the screen edges"; color: Theme.muted; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+            Label { text: "Separate edge gap"; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
+            Label { text: "gap at the screen edges"; color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.fillWidth: true; wrapMode: Text.WordWrap }
         }
         Repeater {
             model: [{ key: "edgeGap", title: "Edge gap", max: 40, step: 1 }]
@@ -84,14 +84,14 @@ Item {
                 checked: pg.soleKey !== "" ? Appearance.smartFor(pg.soleKey, Theme.smartGaps) : Theme.smartGaps
                 onToggled: want => Appearance.setSmartAll(want)
             }
-            Label { text: "No gaps for a single window"; color: Theme.fgDim; font.pixelSize: 12 }
+            Label { text: "No gaps for a single window"; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
             Label {
                 text: pg.multiMonitor ? "a lone tiled window fills the screen · all monitors" : "a lone tiled window fills the screen"
-                color: Theme.muted; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap
+                color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.fillWidth: true; wrapMode: Text.WordWrap
             }
             Label {
                 visible: !Appearance.overridden("smartGaps") && !(pg.soleKey !== "" && Appearance.smartOverridden(pg.soleKey))
-                text: "(default)"; color: Theme.muted; font.pixelSize: 11
+                text: "(default)"; color: Theme.muted; font.pixelSize: Theme.fontCaption
             }
         }
         // one row per monitor (only with 2+ monitors): its own switch, "(default)" = follows the one above
@@ -112,9 +112,9 @@ Item {
                     onToggled: want => Appearance.setSmartFor(srow.key, want)
                 }
                 Icon { text: "\uf390"; font.pixelSize: 12; color: Theme.fgDim; Layout.preferredWidth: 16; horizontalAlignment: Text.AlignHCenter }
-                Label { text: srow.modelData.model || srow.modelData.name; color: Theme.fgDim; font.pixelSize: 12; elide: Text.ElideRight; Layout.maximumWidth: 220 }
-                Label { text: srow.modelData.name; color: Theme.muted; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
-                Label { text: srow.own ? "" : "(default)"; color: Theme.muted; font.pixelSize: 11 }
+                Label { text: srow.modelData.model || srow.modelData.name; color: Theme.fgDim; font.pixelSize: Theme.fontSmall; elide: Text.ElideRight; Layout.maximumWidth: 220 }
+                Label { text: srow.modelData.name; color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.fillWidth: true; elide: Text.ElideRight }
+                Label { text: srow.own ? "" : "(default)"; color: Theme.muted; font.pixelSize: Theme.fontCaption }
             }
         }
 
@@ -123,7 +123,7 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
-            Label { text: "Bar mode"; Layout.preferredWidth: pg.titleW; color: Theme.fgDim; font.pixelSize: 12 }
+            Label { text: "Bar mode"; Layout.preferredWidth: pg.titleW; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
             RowLayout {
                 spacing: 2
                 Btn { objectName: "btn-docked"; text: "Docked"; inset: 18; implicitHeight: 24; implicitWidth: 78; active: !Theme.barFloating; onClicked: Appearance.set("barFloating", false) }
@@ -131,9 +131,9 @@ Item {
             }
             Label {
                 text: Theme.barFloating ? "edge gap from the screen edges, corner radius" : "flush with the screen edge, square"
-                color: Theme.muted; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight
+                color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.fillWidth: true; elide: Text.ElideRight
             }
-            Label { visible: !Appearance.overridden("barFloating"); text: "(default)"; color: Theme.muted; font.pixelSize: 11 }
+            Label { visible: !Appearance.overridden("barFloating"); text: "(default)"; color: Theme.muted; font.pixelSize: Theme.fontCaption }
         }
 
         // ---- previews ----
@@ -150,21 +150,21 @@ Item {
                 color: Theme.alpha(Theme.bg, 0.9)
                 border.width: 1
                 border.color: Theme.alpha(Theme.overlay, 0.6)
-                Label { x: 12; y: 6; height: 16; text: "card · " + Theme.radius; color: Theme.muted; font.pixelSize: 11 }
+                Label { x: 12; y: 6; height: 16; text: "card · " + Theme.radius; color: Theme.muted; font.pixelSize: Theme.fontCaption }
                 Rectangle {
                     anchors { fill: parent; margins: 12; topMargin: 24 }
                     radius: Theme.radiusItem
                     color: Theme.alpha(Theme.fg, 0.07)
                     border.width: 1
                     border.color: Theme.alpha(Theme.overlay, 0.5)
-                    Label { x: 8; y: 4; height: 16; text: "item · " + Theme.radiusItem; color: Theme.muted; font.pixelSize: 11 }
+                    Label { x: 8; y: 4; height: 16; text: "item · " + Theme.radiusItem; color: Theme.muted; font.pixelSize: Theme.fontCaption }
                     Rectangle {
                         anchors { fill: parent; margins: 8; topMargin: 22 }
                         radius: Theme.radiusDeep
                         color: Theme.alpha(Theme.accent, 0.22)
                         border.width: 1
                         border.color: Theme.alpha(Theme.accent, 0.7)
-                        Label { anchors.centerIn: parent; text: "chip · " + Theme.radiusDeep; color: Theme.accent; font.pixelSize: 11 }
+                        Label { anchors.centerIn: parent; text: "chip · " + Theme.radiusDeep; color: Theme.accent; font.pixelSize: Theme.fontCaption }
                     }
                 }
             }
@@ -256,7 +256,7 @@ Item {
             Label {
                 Layout.fillWidth: true
                 text: "Changes apply to Hyprland and the shell immediately and survive wallpaper changes."
-                color: Theme.muted; font.pixelSize: 11
+                color: Theme.muted; font.pixelSize: Theme.fontCaption
                 wrapMode: Text.WordWrap
             }
         }
@@ -273,15 +273,15 @@ Item {
             Layout.fillWidth: true
             visible: modelData.key !== "edgeGap" || own
             spacing: 10
-            Label { text: row.modelData.title; Layout.preferredWidth: pg.titleW; color: Theme.fgDim; font.pixelSize: 12; elide: Text.ElideRight }
+            Label { text: row.modelData.title; Layout.preferredWidth: pg.titleW; color: Theme.fgDim; font.pixelSize: Theme.fontSmall; elide: Text.ElideRight }
             Slider {
                 objectName: "slider-" + row.modelData.key
                 Layout.fillWidth: true
                 value: row.cur / row.modelData.max
                 onMoved: v => pg.slide(row.modelData.key, v, row.modelData.max, row.modelData.step)
             }
-            Label { text: row.cur + " px"; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: 12 }
-            Label { text: row.own ? "" : "(default)"; Layout.preferredWidth: pg.noteW; color: Theme.muted; font.pixelSize: 11 }
+            Label { text: row.cur + " px"; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
+            Label { text: row.own ? "" : "(default)"; Layout.preferredWidth: pg.noteW; color: Theme.muted; font.pixelSize: Theme.fontCaption }
         }
     }
 }

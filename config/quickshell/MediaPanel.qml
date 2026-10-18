@@ -70,7 +70,7 @@ ColumnLayout {
             spacing: 2
             Label { Layout.fillWidth: true; text: media.player ? media.player.trackTitle : ""; font.bold: true; font.pixelSize: 15; elide: Text.ElideRight; wrapMode: Text.Wrap; maximumLineCount: 2 }
             Label { Layout.fillWidth: true; text: media.player ? media.player.trackArtist : ""; color: Theme.fgDim; elide: Text.ElideRight }
-            Label { Layout.fillWidth: true; text: media.player ? media.player.identity : ""; color: Theme.muted; font.pixelSize: 11; elide: Text.ElideRight }
+            Label { Layout.fillWidth: true; text: media.player ? media.player.identity : ""; color: Theme.muted; font.pixelSize: Theme.fontCaption; elide: Text.ElideRight }
         }
     }
 
@@ -98,9 +98,9 @@ ColumnLayout {
         }
         RowLayout {
             Layout.fillWidth: true
-            Label { text: media.player ? media.fmt(media.player.position) : ""; color: Theme.muted; font.pixelSize: 11 }
+            Label { text: media.player ? media.fmt(media.player.position) : ""; color: Theme.muted; font.pixelSize: Theme.fontCaption }
             Item { Layout.fillWidth: true }
-            Label { text: media.player ? media.fmt(media.player.length) : ""; color: Theme.muted; font.pixelSize: 11 }
+            Label { text: media.player ? media.fmt(media.player.length) : ""; color: Theme.muted; font.pixelSize: Theme.fontCaption }
         }
     }
 

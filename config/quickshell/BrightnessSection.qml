@@ -15,7 +15,7 @@ ColumnLayout {
     TextMetrics {
         id: longest
         font.family: Theme.font
-        font.pixelSize: 12
+        font.pixelSize: Theme.fontSmall
         text: Brightness.displays.reduce((a, b) => b.length > a.length ? b : a, "")
     }
 
@@ -33,14 +33,14 @@ ColumnLayout {
                 font.pixelSize: 17
                 color: Theme.accent
             }
-            Label { text: row.modelData; Layout.preferredWidth: Math.ceil(longest.advanceWidth); color: Theme.fgDim; font.pixelSize: 12 }
+            Label { text: row.modelData; Layout.preferredWidth: Math.ceil(longest.advanceWidth); color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
             Slider {
                 Layout.fillWidth: true
                 value: row.pct / 100
                 floor: Brightness.minPercent / 100
                 onMoved: v => Brightness.set(row.modelData, v * 100)
             }
-            Label { text: row.pct + "%"; Layout.preferredWidth: 40; horizontalAlignment: Text.AlignRight; color: Theme.fgDim; font.pixelSize: 12 }
+            Label { text: row.pct + "%"; Layout.preferredWidth: 40; horizontalAlignment: Text.AlignRight; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
         }
     }
 }

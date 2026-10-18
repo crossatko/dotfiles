@@ -114,18 +114,18 @@ GridLayout {
                     RowLayout {
                         spacing: 8
                         Label { text: modelData.title; Layout.fillWidth: true; elide: Text.ElideRight; font.bold: true }
-                        Label { text: cal.when(modelData); color: Theme.fgDim; font.pixelSize: 11 }
+                        Label { text: cal.when(modelData); color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
                     }
                     Label {
                         visible: modelData.location !== ""
                         textFormat: Text.StyledText
-                        text: "<font face=\"Font Awesome 7 Sharp\">\uf3c5</font>  " + modelData.location
+                        text: "<font face=\"" + Theme.iconFont + "\">\uf3c5</font>  " + modelData.location
                         Layout.fillWidth: true
                         elide: Text.ElideRight
                         color: Theme.fgDim
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontCaption
                     }
-                    Label { text: modelData.calendar; color: Theme.muted; font.pixelSize: 10 }
+                    Label { text: modelData.calendar; color: Theme.muted; font.pixelSize: Theme.fontTiny }
                 }
             }
             Label {
@@ -175,7 +175,7 @@ GridLayout {
                     horizontalAlignment: Text.AlignHCenter
                     text: modelData
                     color: Theme.muted
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontCaption
                 }
             }
             Repeater {
@@ -235,6 +235,6 @@ GridLayout {
         // these CalDAV calendars have no local copy, so their events can't be shown here
         text: "Not shown: " + cal.uncached.join(", ") + " (enable Offline support in Thunderbird)"
         color: Theme.muted
-        font.pixelSize: 10
+        font.pixelSize: Theme.fontTiny
     }
 }

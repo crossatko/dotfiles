@@ -31,14 +31,14 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         spacing: 6
-        Label { text: "Bluetooth"; font.pixelSize: 17; font.bold: true; Layout.fillWidth: true }
+        Label { text: "Bluetooth"; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.fillWidth: true }
         Btn {
             visible: bt.adapter !== null && bt.adapter.enabled
             text: "Scan"
             active: bt.adapter && bt.adapter.discovering
             onClicked: bt.adapter.discovering = !bt.adapter.discovering
         }
-        Label { visible: bt.adapter !== null; text: "Power"; color: Theme.fgDim; font.pixelSize: 12 }
+        Label { visible: bt.adapter !== null; text: "Power"; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
         Toggle {
             visible: bt.adapter !== null
             checked: bt.adapter !== null && bt.adapter.enabled
@@ -77,7 +77,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 0
                     Label { text: modelData.name || modelData.address; Layout.fillWidth: true; elide: Text.ElideRight }
-                    Label { text: bt.sub(modelData); color: Theme.fgDim; font.pixelSize: 11 }
+                    Label { text: bt.sub(modelData); color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
                 }
                 RowState {
                     connected: modelData.connected
