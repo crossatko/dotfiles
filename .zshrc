@@ -26,7 +26,7 @@ alias killdocker='docker kill $(docker ps -q)'
 alias kd='docker kill $(docker ps -q)'
 alias cd="z"
 alias claudep='CLAUDE_CONFIG_DIR=~/.claude-personal claude --dangerously-skip-permissions'
-alias claude='CLAUDE_CONFIG_DIR=~/.claude claude --dangerously-skip-permissions'
+alias claudew='CLAUDE_CONFIG_DIR=~/.claude claude --dangerously-skip-permissions'
 
 # Zellij
 # Auto-rename tab to current directory name
