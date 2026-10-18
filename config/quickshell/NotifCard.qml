@@ -64,9 +64,15 @@ Rectangle {
         onTapped: { if (card.toast) { Notifs.dismissPopup(card.n); Notifs.releaseLater(card.n) } else card.leave() }
     }
 
-    // urgency stripe
+    // urgency stripe: flush with the left edge when square; with rounded corners a straight stripe looks cut off
+    // by the curve, so it becomes an inset pill (inside the border, level with the content padding)
     Rectangle {
-        x: 0; y: card.radius; width: 3; height: parent.height - card.radius * 2
+        readonly property bool inset: card.radius > 0
+        x: inset ? 6 : 0
+        y: inset ? 12 : 0
+        width: 3
+        height: parent.height - (inset ? 24 : 0)
+        radius: inset ? width / 2 : 0
         color: card.critical ? Theme.red : n.urgency === NotificationUrgency.Low ? Theme.muted : Theme.accent
     }
 
