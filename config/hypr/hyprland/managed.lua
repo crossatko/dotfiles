@@ -21,6 +21,8 @@
 --     is not a valid key. Valid key: 1-96 printable ASCII characters without '"' and '\'. At most 16
 --     entries, values true/false only; anything else makes the whole map "not set".
 --   barFloating only matters for scripts/pip-reserve.lua (the bar reserve, see M.get())
+--   scripts/pip-reserve.lua also keeps the pinned video box gaps_out away from the screen edges and the
+--   bar (M.edge_margins()); layout_apply() re-fits it through pip_bar_changed()
 -- A missing key leaves the hand-written value alone. Values are clamped and rounded; anything odd
 -- (garbage, > 4 KiB, directory, FIFO, NaN, strings) counts as "not set".
 --
@@ -251,7 +253,7 @@ function M.targets(s)
 	return t
 end
 
--- settings -> what other Lua code needs (scripts/pip-reserve.lua): the set values plus
+-- settings -> what other Lua code needs (scripts/pip-reserve.lua, M.edge_margins): the set values plus
 -- barFloating, smartGaps, barGap (floating bar margin, = Quickshell Theme.barGap) and barReserve.
 function M.effective(s)
 	s = type(s) == "table" and s or {}
@@ -280,6 +282,36 @@ function M.get()
 		return e
 	end
 	return M.effective({})
+end
+
+-- The distance a window placed against the screen edges keeps from them, the same as a tiled window's
+-- general.gaps_out: the override (edgeGap, else gap) when set, else the hand-written value read at load
+-- (M.baseline, below; plain integer or {top,right,bottom,left}), else 0. Used by scripts/pip-reserve.lua
+-- for the pinned video box. `e` = M.get() result (read when nil).
+-- -> {top, right, bottom, left} integers in 0..M.EDGE_MARGIN_MAX. Never raises.
+M.EDGE_MARGIN_MAX = 200
+function M.edge_margins(e)
+	local zero = { top = 0, right = 0, bottom = 0, left = 0 }
+	local ok, m = pcall(function()
+		e = type(e) == "table" and e or M.get()
+		local v = e.gapsOut
+		if type(v) ~= "number" then
+			v = M.baseline.gaps_out
+		end
+		local function side(x)
+			if type(x) ~= "number" or x ~= x then
+				return 0
+			end
+			x = math.max(0, math.min(M.EDGE_MARGIN_MAX, x))
+			return math.tointeger(math.floor(x + 0.5)) or 0
+		end
+		if type(v) == "table" then
+			return { top = side(v.top), right = side(v.right), bottom = side(v.bottom), left = side(v.left) }
+		end
+		local s = side(v)
+		return { top = s, right = s, bottom = s, left = s }
+	end)
+	return ok and m or zero
 end
 
 -- ---------------------------------------------------------------- baseline (hand-written values)

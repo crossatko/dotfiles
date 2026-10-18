@@ -1,8 +1,9 @@
 -- Battlestation counterpart of pip-orientation.lua (which only runs on the workstation).
 --
 -- Pinned video windows (PiP, mpv, the Twitch player) live in a 16:9 box in the bottom-right of the
--- secondary monitor, on top of the bar. Tiled windows must never go under them, so the monitor's
--- right strip is reserved while such a window is on it.
+-- secondary monitor, on top of the bar (with window gaps set: gaps_out away from the edge and the bar,
+-- see box()). Tiled windows must never go under them, so the monitor's right strip is reserved while
+-- such a window is on it.
 --
 -- This used to be a workspace rule (`m[..]w[p1-9]` with a right gap). It only matched the workspace
 -- that *owns* the pinned window, and pinning latches that ownership to whatever workspace the window
@@ -82,6 +83,49 @@ local function bottom_offset(mon)
 	return bar_edge(mon) == "bottom" and bar_reserve() or 0
 end
 
+-- Window gaps (Settings -> Appearance): the box keeps the same distance as tiled windows, gaps_out, from the
+-- screen edge and from the bar (managed.edge_margins(); all 0 without the managed module = the old placement).
+-- Hyprland draws the border OUTSIDE a window's at/size, for tiled and floating windows alike (a tiled window
+-- at gaps_out 10 / border 4 reports at = 14), so the visible edge is at - border. Pinned windows get border 0
+-- from the "pinned" rule in hyprland/rules.lua; keep PIN_BORDER equal to it.
+local PIN_BORDER = 0
+
+local function margins()
+	if managed ~= nil and type(managed.edge_margins) == "function" then
+		local ok, m = pcall(managed.edge_margins)
+		if ok and type(m) == "table" then
+			local out = {}
+			for _, k in ipairs({ "top", "right", "bottom", "left" }) do
+				local v = m[k]
+				if type(v) ~= "number" or v ~= v or v < 0 then
+					v = 0
+				end
+				out[k] = math.tointeger(math.floor(math.min(v, 200))) or 0
+			end
+			return out
+		end
+	end
+	return { top = 0, right = 0, bottom = 0, left = 0 }
+end
+
+-- The box on `mon`: it stays inside the reserved right strip (BOX.w wide), the visible window (+ border) keeps
+-- gaps_out from the right screen edge and from the bar or bottom edge, and its left edge is the strip
+-- boundary, where the tiled layout adds its own gaps_out (so tiled windows end gaps_out away from it too).
+-- The strip width never changes; the video shrinks by the margin and stays 16:9 (h from BOX). Gap 0 ->
+-- exactly BOX.w x BOX.h at the old place.
+local function box(mon)
+	local m = margins()
+	local b = PIN_BORDER
+	local w = BOX.w - m.right - 2 * b
+	local h = math.floor(BOX.h * w / BOX.w + 0.5)
+	return {
+		x = mon.x + mon.width - m.right - b - w,
+		y = mon.y + mon.height - bottom_offset(mon) - m.bottom - b - h,
+		w = w,
+		h = h,
+	}
+end
+
 local function is_video_window(window)
 	return window.title == "Picture in picture"
 		or window.initial_class == "mpv"
@@ -109,18 +153,30 @@ end
 
 -- Hyprland pushes a floating window inward when reserved_area grows over it and never pushes it back
 -- when the area shrinks again, so put the box back where the window rules place it.
+-- Windows this load has placed (by address), so a later title change never snaps a moved window back.
+local placed = {}
+
 local function reposition(window)
 	local mon = secondary()
 	if mon == nil then
 		return
 	end
+	local bx = box(mon)
 	local selector = "address:" .. window.address
-	hl.dispatch(hl.dsp.window.resize({ x = BOX.w, y = BOX.h, window = selector }))
-	hl.dispatch(hl.dsp.window.move({
-		x = mon.x + mon.width - BOX.w,
-		y = mon.y + mon.height - bottom_offset(mon) - BOX.h,
-		window = selector,
-	}))
+	placed[window.address] = true
+	hl.dispatch(hl.dsp.window.resize({ x = bx.w, y = bx.h, window = selector }))
+	hl.dispatch(hl.dsp.window.move({ x = bx.x, y = bx.y, window = selector }))
+end
+
+-- Is the window already exactly in the box? (unknown geometry counts as no)
+local function in_box(window)
+	local mon = secondary()
+	if mon == nil then
+		return true
+	end
+	local bx = box(mon)
+	local at, size = window.at, window.size
+	return type(at) == "table" and type(size) == "table" and at.x == bx.x and at.y == bx.y and size.x == bx.w and size.y == bx.h
 end
 
 -- Switching to a workspace on the OTHER monitor can drag a pinned window along to that monitor (Hyprland
@@ -156,20 +212,22 @@ local function heal()
 	return fixed
 end
 
-local last_offset = nil
+local last_fit = nil
 
--- Bar edge, height or floating gap changed (or first run): put every pinned video window back in the box
--- for the new layout.
+-- Bar edge, height, floating gap or window gaps changed (or first run): put every pinned video window back
+-- in the box for the new layout.
 local function refit()
 	local mon = secondary()
 	if mon == nil then
 		return
 	end
-	local offset = bottom_offset(mon)
-	if offset == last_offset then
+	local bx = box(mon)
+	-- relative to the monitor's bottom-right corner, so only a layout change (not a monitor move) refits
+	local fit = table.concat({ mon.x + mon.width - bx.x, mon.y + mon.height - bx.y, bx.w, bx.h }, " ")
+	if fit == last_fit then
 		return
 	end
-	last_offset = offset
+	last_fit = fit
 	for _, w in ipairs(pinned_video_windows()) do
 		reposition(w)
 	end
@@ -196,20 +254,54 @@ local function sync()
 	end
 end
 
-hl.on("window.open", function(w)
-	-- the static window rules (rules.lua) assume a bottom bar; correct the box for the actual layout
+-- A reload that keeps the Lua state must not leave the previous load's handlers running next to these.
+do
+	local old = rawget(_G, "__pip_reserve_subs")
+	if type(old) == "table" then
+		for _, sub in ipairs(old) do
+			pcall(function()
+				sub:remove()
+			end)
+		end
+	end
+	rawset(_G, "__pip_reserve_subs", {})
+end
+local function on(ev, fn)
+	local sub = hl.on(ev, fn)
+	if sub ~= nil then
+		table.insert(rawget(_G, "__pip_reserve_subs"), sub)
+	end
+end
+
+on("window.open", function(w)
+	-- the static window rules (rules.lua) assume a docked bottom bar and no gaps; correct the box for the
+	-- actual layout
 	if w ~= nil and w.pinned and is_video_window(w) then
 		reposition(w)
 	end
 	sync()
 end)
+-- The Twitch player has no title yet when it opens (rules.lua matches it by class only), so it is only
+-- recognized here: put it in the box once if the static rule left it elsewhere because of the gaps.
+-- Without gaps nothing happens here (the old behaviour: the rule's place stays until the next refit).
+on("window.title", function(w)
+	if w == nil or not w.pinned or placed[w.address] or not is_video_window(w) then
+		return
+	end
+	placed[w.address] = true
+	local m = margins()
+	if (m.right ~= 0 or m.bottom ~= 0) and not in_box(w) then
+		reposition(w)
+		sync()
+	end
+end)
 -- window.close does not fire for every way a window can disappear (see pip-orientation.lua)
-hl.on("window.close", sync)
-hl.on("window.kill", sync)
-hl.on("window.destroy", sync)
-hl.on("window.pin", sync)
-hl.on("window.move_to_workspace", sync)
-hl.on("workspace.active", sync)
+on("window.close", sync)
+on("window.kill", sync)
+on("window.destroy", sync)
+on("window.pin", sync)
+on("window.move_to_workspace", sync)
+on("workspace.active", sync)
 
 sync()
 
