@@ -279,12 +279,40 @@ local function refit()
 	end
 end
 
+-- Smart gaps also drop the corner rounding of the pinned video windows (a lone tiled window gets none then).
+-- Window rules with rounding 0, registered once (disabled) and flipped with set_enabled from the same
+-- condition as the margin (smart_gaps_apply on the box's monitor). Matching on pin = true plus the video
+-- matchers (see is_video_window; the Twitch title is not set at open time, so class only there).
+local round_rules = {}
+for i, m in ipairs({
+	{ title = "^(Picture in picture)$" },
+	{ initial_class = "^(mpv)$" },
+	{ class = "^(org\\.quickshell)$" },
+}) do
+	m.pin = true
+	local okr, h = pcall(hl.window_rule, { name = "pip-smart-rounding-" .. i, enabled = false, rounding = 0, match = m })
+	if okr and h ~= nil then
+		round_rules[#round_rules + 1] = h
+	end
+end
+local function sync_rounding(mon)
+	local want = smart_gaps_apply(mon)
+	for _, h in ipairs(round_rules) do
+		pcall(function()
+			if h:is_enabled() ~= want then
+				h:set_enabled(want)
+			end
+		end)
+	end
+end
+
 local function sync()
 	if healing then
 		return
 	end
 	heal()
 	refit()
+	sync_rounding(secondary())
 	local videos = pinned_video_windows()
 	local want = #videos > 0 and BOX.w or 0
 	local current = monitor2.reserved_area
