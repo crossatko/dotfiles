@@ -29,8 +29,11 @@ Item {
         }
     }
     Rectangle {
-        width: 12; height: 16
-        radius: Math.min(4, Theme.radius)
+        // Handle is always square (width == height). Radius = min(size / 2, Theme.radius): a square at
+        // radius 0, rounder as the setting grows, a full circle once radius >= size / 2 (8 px).
+        readonly property int size: 16
+        width: size; height: size
+        radius: Math.min(size / 2, Theme.radius)
         anchors.verticalCenter: parent.verticalCenter
         x: Math.max(0, Math.min(1, sl.shown)) * (sl.width - width)
         color: Theme.fg
