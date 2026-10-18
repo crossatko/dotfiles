@@ -31,7 +31,9 @@ Item {
     implicitHeight: Theme.chipIcon
 
     readonly property int weight: ({ Thin: 100, Light: 300, Regular: 400, Medium: 500, Bold: 700, Solid: 900, Black: 900 })[styleName] || Font.Normal
-    function snap(v) { return Math.ceil(v - 0.6) }   // nearest pixel; near-ties (within 0.1 px) move the ink up
+    // nearest DEVICE pixel (1/dpr logical px at fractional scales); near-ties (within 0.1 device px) move the ink up.
+    // Assumes the box itself sits on the device grid (bar chips: whole logical px from the edge, 12 * scale is whole).
+    function snap(v) { const k = inkH.dpr; return Math.ceil(v * k - 0.6) / k }
 
     InkMeter { id: inkH; text: icon.measure; family: icon.family; weight: icon.weight; pixelSize: icon.pixelSize }
     InkMeter { id: inkV; text: icon.vMeasure !== icon.measure ? icon.vMeasure : ""; family: icon.family; weight: icon.weight; pixelSize: icon.pixelSize }
@@ -49,8 +51,8 @@ Item {
         // The glyph is drawn with its origin at x and its baseline at y + baselineOffset (NOT rounded: Qt places the
         // glyph quads at fractional positions); ink is relative to those.
         // x is not snapped: horizontal sub-pixel offsets render cleanly (LCD AA), so the ink lands exactly centred.
-        // The baseline IS put on a whole pixel: a fractional baseline smears horizontal strokes (hamburger bars) over
-        // two rows. The vertical leftover (<= 0.5 px, ties go up) is the price of crisp strokes.
+        // The baseline IS put on a whole device pixel: a fractional baseline smears horizontal strokes (hamburger
+        // bars) over two rows. The vertical leftover (<= 0.5 device px, ties go up) is the price of crisp strokes.
         x: inkH.ink.ok ? icon.width / 2 - (inkH.ink.l + inkH.ink.r) / 2
                        : Math.round(icon.width / 2 - (tm.tightBoundingRect.x + tm.tightBoundingRect.width / 2))
         y: v.ok ? icon.snap(icon.height / 2 - (v.t + v.b) / 2) - baselineOffset
