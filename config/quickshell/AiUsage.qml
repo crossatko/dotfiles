@@ -34,6 +34,17 @@ Singleton {
                 if (typeof w.percent === "number") m = Math.max(m, w.percent)
         return m
     }
+    // the bar chip's account: the most recently used one (lastUsed = newest session log) whose values are fresh
+    // (stale = expired / lapsed token, rate limited, offline, error, or older than 15 min); when none is fresh,
+    // the most recently used one that has values, shown dimmed. Accounts without limit windows are skipped.
+    readonly property var current: {
+        const c = profiles.concat(others).filter(p => (p.windows || []).some(w => typeof w.percent === "number"))
+        c.sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0))
+        return c.find(p => p.stale !== true) || c[0] || null
+    }
+    readonly property real currentPercent: current
+        ? Math.max(...current.windows.filter(w => typeof w.percent === "number").map(w => w.percent)) : -1
+    readonly property bool currentStale: current !== null && current.stale === true
     readonly property bool anyExpired: profiles.some(p => p.status === "expired")
 
     property bool _again: false

@@ -339,16 +339,14 @@ hl.window_rule({
 
 hl.layer_rule({ match = { namespace = "waybar" }, blur = true })
 hl.layer_rule({ match = { namespace = "launcher" }, blur = true })
--- Quickshell (~/dotfiles/config/quickshell): bar and picker opt in to the global
+-- Quickshell (~/dotfiles/config/quickshell): the bar opts in to the global
 -- decoration:blur:* settings (size/passes/vibrancy/variant all apply as-is).
 -- ignore_alpha keeps the blur inside the drawn shape: fully transparent pixels
 -- (the rounded corners) get no blur, so the blur follows the bar's rounding even
 -- though layer surfaces have no rounding of their own. Keep it below
--- bar_opacity/picker_opacity in ~/.config/theme/theme.toml.
+-- bar_opacity in ~/.config/theme/theme.toml.
 hl.layer_rule({ match = { namespace = "qs-bar" }, blur = true })
 hl.layer_rule({ match = { namespace = "qs-bar" }, ignore_alpha = 0.1 })
-hl.layer_rule({ match = { namespace = "qs-picker" }, blur = true })
-hl.layer_rule({ match = { namespace = "qs-picker" }, ignore_alpha = 0.1 })
 -- notification toasts, popups (calendar / network / bluetooth / media / notification center) and the OSD
 for _, ns in ipairs({ "qs-toast", "qs-popup", "qs-osd" }) do
 	hl.layer_rule({ match = { namespace = ns }, blur = true })

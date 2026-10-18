@@ -13,6 +13,7 @@ e.g. ~/.claude, ~/.claude-work). Per profile:
     fresh enough no request is made at all.
   - without subscription windows (API key, no login, endpoint failing with nothing cached): local estimate
     from the session logs projects/**/*.jsonl, parsed incrementally (per-file byte offsets in the cache).
+  - lastUsed: mtime of the newest projects/**/*.jsonl (else of .credentials.json): picks the bar chip's account.
 Other tools: Codex CLI (rate limits from its newest session log), opencode, Gemini CLI: listed when found.
 
 Options: --max-age S (default 60: reuse an answer younger than this), --force (refresh button: max-age 20),
@@ -344,6 +345,10 @@ def claude_profiles(state):
                     or ("API" if api_key else ""),
             "status": "ok", "message": "", "windows": [], "extra": None,
             "fetchedAt": None, "stale": False, "local": None,
+            # last activity: newest session transcript (claude appends to it on every turn); without logs the
+            # credentials file (claude rewrites it when it renews the token). The bar chip follows this.
+            "lastUsed": newest(glob.glob(os.path.join(d, "projects", "**", "*.jsonl"), recursive=True))[1]
+                        or mtime(creds_path),
         }
 
         st = state.setdefault(d, {})

@@ -2,7 +2,6 @@ singleton Theme 1.0 Theme.qml
 Chip 1.0 Chip.qml
 Label 1.0 Label.qml
 Bar 1.0 Bar.qml
-Picker 1.0 Picker.qml
 Menu 1.0 Menu.qml
 singleton Popups 1.0 Popups.qml
 singleton Notifs 1.0 Notifs.qml
@@ -36,3 +35,7 @@ HaVacuum 1.0 HaVacuum.qml
 singleton AiUsage 1.0 AiUsage.qml
 AiLimit 1.0 AiLimit.qml
 AiPanel 1.0 AiPanel.qml
+Settings 1.0 Settings.qml
+SettingsBar 1.0 SettingsBar.qml
+SettingsWallpaper 1.0 SettingsWallpaper.qml
+RecordMenu 1.0 RecordMenu.qml

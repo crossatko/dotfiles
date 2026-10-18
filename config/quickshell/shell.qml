@@ -6,7 +6,7 @@ import Quickshell.Hyprland
 // Entry point. Colors: ~/.config/theme/theme.toml -> Theme.qml (live).
 ShellRoot {
     id: root
-    // Which screens get a bar and on which edge: BarConfig (control center -> panel settings).
+    // Which screens get a bar and on which edge: BarConfig (Settings -> Monitors).
     readonly property var bars: BarConfig.bars
     Binding { target: Popups; property: "bars"; value: root.bars }
 
@@ -24,8 +24,9 @@ ShellRoot {
         }
     }
 
-    Picker { id: picker }
+    Settings { id: settings }
     Menu { id: menu }
+    RecordMenu { id: recordMenu }
     Toasts { bars: root.bars }
     Osd { id: osd; bars: root.bars }
 
@@ -35,7 +36,7 @@ ShellRoot {
         PopupHost {}
     }
 
-    // click-away on the other monitors: closes whatever popup / launcher / picker / tray menu is open
+    // click-away on the other monitors: closes whatever popup / launcher / Settings / tray menu is open
     Variants {
         model: Quickshell.screens
         ClickCatcher {}
@@ -76,10 +77,26 @@ ShellRoot {
         function clear(): void { Notifs.clearAll() }
     }
 
-    // qs ipc call picker toggle
+    // qs ipc call settings toggle | open | close | page bar|wallpaper   (focused monitor; "monitors" = bar)
+    IpcHandler {
+        target: "settings"
+        function toggle(): void { settings.toggle() }
+        function open(): void { settings.open("") }
+        function close(): void { settings.close() }
+        function page(name: string): void { settings.open(name) }
+    }
+
+    // qs ipc call picker toggle   (SUPER+T) -> Settings on the Wallpaper & theme page; closes it when already there
     IpcHandler {
         target: "picker"
-        function toggle(): void { picker.toggle() }
+        function toggle(): void { settings.togglePage("wallpaper") }
+    }
+
+    // qs ipc call record menu | close   (SHIFT+Print via hypr/scripts/screenrec-key.sh; menu = toggle)
+    IpcHandler {
+        target: "record"
+        function menu(): void { recordMenu.toggle() }
+        function close(): void { recordMenu.close() }
     }
 
     // qs ipc call menu drun            (SUPER+D)

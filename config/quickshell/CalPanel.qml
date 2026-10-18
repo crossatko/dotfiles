@@ -227,9 +227,13 @@ GridLayout {
     Label {
         visible: cal.uncached.length > 0
         Layout.fillWidth: true
+        Layout.preferredWidth: 1                      // don't let the text widen the popup
         Layout.row: 2
+        wrapMode: Text.WordWrap
+        maximumLineCount: 3
         elide: Text.ElideRight
-        text: "+ " + cal.uncached.length + " calendars need Offline support in Thunderbird"
+        // these CalDAV calendars have no local copy, so their events can't be shown here
+        text: "Not shown: " + cal.uncached.join(", ") + " (enable Offline support in Thunderbird)"
         color: Theme.muted
         font.pixelSize: 10
     }

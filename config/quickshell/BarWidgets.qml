@@ -3,46 +3,136 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Which bar widgets are shown (global: the same on every bar). Saved in
-// ~/.local/state/quickshell/bar-widgets.json as { "<widget id>": false, ... }; only an explicit `false`
-// hides a widget, so a missing / corrupt file or a widget added later simply shows up. Changed from the
-// control center's settings (gear) section. The notifications / control-center chip is not listed: it
-// opens that section, so it must always stay on the bar.
+// Bar layout: which widgets each bar shows, in which section (left / center / right) and in what order.
+// Per monitor, keyed like BarConfig (model|serial); a monitor without its own entry uses `default`.
+// Saved in ~/.local/state/quickshell/bar-widgets.json as
+//   { "version": 2, "default": {left, center, right, hidden}, "monitors": { "<key>": {left, center, right, hidden} } }
+// Older files ({ "<widget id>": false, ... } = hidden) are read as the default layout with those widgets hidden.
+// Every layout is normalized on load: unknown ids are dropped, duplicates removed, and registry ids the
+// layout doesn't mention yet are appended to their default section, so adding a widget never breaks a saved
+// layout. The notifications / control-center chip is not part of the layout: it always sits at the right
+// end of every bar (it is the way into Settings, so it can never be hidden).
 Singleton {
     id: root
 
     readonly property string dir: Quickshell.env("HOME") + "/.local/state/quickshell"
 
-    // order = order of the switches in the settings section (bar order, left to right)
+    // registry; `section` = where the widget goes by default, order = default order within that section
     readonly property var widgets: [
-        { id: "workspaces", title: "Workspaces",   icon: "" },
-        { id: "media",      title: "Now playing",  icon: "" },
-        { id: "caffeine",   title: "Keep awake",   icon: "" },
-        { id: "cpu",        title: "CPU",          icon: "" },
-        { id: "memory",     title: "Memory",       icon: "" },
-        { id: "homeassistant", title: "Home Assistant", icon: "\uf015" },
-        { id: "ai",         title: "AI usage",     icon: "\uf890" },
-        { id: "volume",     title: "Volume",       icon: "" },
-        { id: "network",    title: "Network",      icon: "" },
-        { id: "bluetooth",  title: "Bluetooth",    icon: "" },
-        { id: "tray",       title: "Tray",         icon: "" },
-        { id: "clock",      title: "Clock",        icon: "" }
+        { id: "workspaces", title: "Workspaces",   icon: "\uf00a", section: "left" },
+        { id: "recording",  title: "Screen recording", icon: "\uf03d", section: "right" },   // visible only while recording
+        { id: "media",      title: "Now playing",  icon: "\uf001", section: "right" },
+        { id: "caffeine",   title: "Keep awake",   icon: "\uf0f4", section: "right" },
+        { id: "cpu",        title: "CPU",          icon: "\uf2db", section: "right" },
+        { id: "memory",     title: "Memory",       icon: "\uf538", section: "right" },
+        { id: "homeassistant", title: "Home Assistant", icon: "\uf015", section: "right" },
+        { id: "ai",         title: "AI usage",     icon: "\uf890", section: "right" },
+        { id: "volume",     title: "Volume",       icon: "\uf028", section: "right" },
+        { id: "network",    title: "Network",      icon: "\uf1eb", section: "right" },
+        { id: "bluetooth",  title: "Bluetooth",    icon: "\uf293", section: "right" },
+        { id: "tray",       title: "Tray",         icon: "\uf0c9", section: "right" },
+        { id: "clock",      title: "Clock",        icon: "\uf017", section: "right" }
     ]
+    readonly property var sections: ["left", "center", "right", "hidden"]
 
-    property var data: ({})                    // widget id -> false (hidden)
+    function info(id) { return widgets.find(w => w.id === id) || { id: id, title: id, icon: "", section: "right" } }
 
-    function shown(id) { return data[id] !== false }
-    readonly property int shownCount: widgets.filter(w => shown(w.id)).length
+    function normalize(l) {
+        const out = { left: [], center: [], right: [], hidden: [] }
+        const seen = {}
+        if (l && typeof l === "object")
+            for (const s of sections)
+                for (const id of (Array.isArray(l[s]) ? l[s] : []))
+                    if (typeof id === "string" && !seen[id] && widgets.some(w => w.id === id)) { seen[id] = true; out[s].push(id) }
+        for (const w of widgets) if (!seen[w.id]) out[w.section].push(w.id)
+        return out
+    }
+    readonly property var defaultLayout: normalize(null)        // today's bar: workspaces left, the rest right
 
-    function set(id, value) {
-        const d = Object.assign({}, data)
-        if (value) delete d[id]; else d[id] = false
+    // { default: layout, monitors: { key: layout } }, always normalized
+    property var data: ({ default: defaultLayout, monitors: {} })
+
+    function parse(raw) {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { default: defaultLayout, monitors: {} }
+        if (raw.version === 2 || raw.default || raw.monitors) {
+            const mons = {}
+            if (raw.monitors && typeof raw.monitors === "object")
+                for (const k in raw.monitors) mons[k] = normalize(raw.monitors[k])
+            return { default: normalize(raw.default), monitors: mons }
+        }
+        // v1: { id: false } = hidden, everything else in its default place
+        const d = normalize(null)
+        for (const s of ["left", "center", "right"]) d[s] = d[s].filter(id => raw[id] !== false)
+        d.hidden = widgets.filter(w => raw[w.id] === false).map(w => w.id)
+        return { default: d, monitors: {} }
+    }
+
+    function keyOf(screen) { return BarConfig.keyOf(screen) }
+    function hasOwn(key) { return data.monitors[key] !== undefined }
+    function layoutFor(key) { return data.monitors[key] || data.default }
+
+    // true while some bar that is actually showing has this widget (pollers like AiUsage / HomeAssistant idle otherwise)
+    readonly property var shownIds: {
+        const m = {}
+        const add = l => { for (const s of ["left", "center", "right"]) for (const id of l[s]) m[id] = true }
+        let any = false
+        for (const s of Quickshell.screens) if (BarConfig.enabled(s)) { add(layoutFor(keyOf(s))); any = true }
+        if (!any) add(data.default)
+        return m
+    }
+    function shown(id) { return shownIds[id] === true }
+
+    function sectionOf(l, id) { return sections.find(s => l[s].indexOf(id) >= 0) || "" }
+
+    function store(key, l) {
+        const d = { default: data.default, monitors: Object.assign({}, data.monitors) }
+        if (l === null) delete d.monitors[key]; else d.monitors[key] = normalize(l)
         data = d
         saver.restart()
     }
+    function copy(l) { return { left: l.left.slice(), center: l.center.slice(), right: l.right.slice(), hidden: l.hidden.slice() } }
+
+    // put `id` into `section` at `index` (index counted in the list as it is before the move; -1 = end)
+    function move(key, id, section, index) {
+        if (sections.indexOf(section) < 0) return
+        const l = copy(layoutFor(key))
+        const from = sectionOf(l, id)
+        if (!from) return
+        const oldIdx = l[from].indexOf(id)
+        l[from].splice(oldIdx, 1)
+        let i = index < 0 || index === undefined ? l[section].length : index
+        if (from === section && oldIdx < i) i--
+        l[section].splice(Math.max(0, Math.min(i, l[section].length)), 0, id)
+        store(key, l)
+    }
+    // reorder within its section by `delta` (-1 up / left, +1 down / right)
+    function moveBy(key, id, delta) {
+        const l = layoutFor(key)
+        const s = sectionOf(l, id)
+        const i = l[s].indexOf(id)
+        const j = i + delta
+        if (j < 0 || j >= l[s].length) return
+        move(key, id, s, delta > 0 ? j + 1 : j)
+    }
+    // to the neighbouring section (left <-> center <-> right); hidden widgets come back in their default section
+    function shift(key, id, dir) {
+        const order = ["left", "center", "right"]
+        const s = sectionOf(layoutFor(key), id)
+        if (s === "hidden") { move(key, id, info(id).section, -1); return }
+        const j = order.indexOf(s) + dir
+        if (j >= 0 && j < order.length) move(key, id, order[j], dir > 0 ? 0 : -1)
+    }
+    function hide(key, id) { move(key, id, "hidden", -1) }
+    function show(key, id) { if (sectionOf(layoutFor(key), id) === "hidden") move(key, id, info(id).section, -1) }
+    function copyFrom(key, srcKey) { store(key, copy(layoutFor(srcKey))) }
+    function reset(key) { store(key, null) }                         // back to the default layout
 
     Component.onCompleted: Quickshell.execDetached(["mkdir", "-p", root.dir])
-    Timer { id: saver; interval: 400; onTriggered: file.setText(JSON.stringify(root.data, null, 2)) }
+    Timer {
+        id: saver
+        interval: 400
+        onTriggered: file.setText(JSON.stringify({ version: 2, default: root.data.default, monitors: root.data.monitors }, null, 2))
+    }
 
     FileView {
         id: file
@@ -51,11 +141,9 @@ Singleton {
         watchChanges: true
         onFileChanged: reload()
         onLoaded: {
-            try {
-                const parsed = JSON.parse(text())
-                root.data = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : ({})
-            } catch (e) { root.data = ({}) }
+            try { root.data = root.parse(JSON.parse(text())) }
+            catch (e) { root.data = root.parse(null) }
         }
-        onLoadFailed: root.data = ({})          // missing file: everything visible
+        onLoadFailed: root.data = root.parse(null)          // missing file: today's default bar
     }
 }

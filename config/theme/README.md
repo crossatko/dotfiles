@@ -10,7 +10,7 @@ overrides ──┘                      │
 
 | do this | to |
 |---|---|
-| `SUPER+T` | open the quickshell wallpaper picker; click one to apply it everywhere |
+| `SUPER+T` | open quickshell Settings on the Wallpaper & theme page (`qs ipc call picker toggle`; again = close); click a wallpaper (or arrows + Enter) to apply it everywhere |
 | `theme.py apply [image]` | re-analyse a wallpaper, render everything, reload apps |
 | `theme.py render` | re-render after editing `theme.toml` or a template (no re-analysis) |
 | `theme.py show` | print the resolved palette |
@@ -43,7 +43,7 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 | zellij | theme file `themes/wall.kdl` | yes (rewrite of config.kdl triggers its watcher) |
 | herdr | managed `[theme]` block injected into `config/herdr/config.toml` | `herdr server reload-config` |
 | hyprland, hyprlock, hyprtoolkit, hyprpaper | `dofile` / `source` / symlink | yes (`hyprctl reload`, hyprpaper restart); hyprlock reads its wallpaper path on each lock |
-| quickshell bar + picker | watches `out/palette.json` | instant |
+| quickshell bar + Settings | watches `out/palette.json` | instant |
 | swaync | `@import` of `out/swaync.css` | yes (`swaync-client -rs`) |
 | notifications | quickshell `Notifs.qml` server + toasts + notification center (replaced swaync) | instant, palette-driven |
 | launcher / menus | quickshell `Menu.qml` (replaced tofi; fzf does the matching) | instant, palette-driven |
@@ -71,8 +71,8 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
   `theme.py apply` when Brave is closed. Profiles with a web-store theme are left alone.
 * **Nautilus** keeps its icon theme for the whole process, new windows included. `theme.py apply`
   quits it when it has no windows; with windows open it just prints a hint. Close them or `nautilus -q`.
-* **Blur**: the quickshell bar and picker opt in to Hyprland's own blur via the
-  `qs-bar` / `qs-picker` layer rules in `hypr/hyprland/rules.lua`; tune with `bar_opacity`.
+* **Blur**: the quickshell bar opts in to Hyprland's own blur via the `qs-bar` layer rule in
+  `hypr/hyprland/rules.lua`; tune with `bar_opacity`.
 * Not themed: Discord, web page contents.
 * `out/` is committed on purpose so a fresh clone works before the first `apply`.
 

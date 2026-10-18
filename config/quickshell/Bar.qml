@@ -109,6 +109,45 @@ PanelWindow {
         return brandIn(services, where) || brandIn(services, title.toLowerCase()) || brandIn(browsers, app)
     }
     readonly property bool showTwitch: twitchActive && player === null
+    // Screen recording (~/.config/hypr/scripts/screenrec.sh, SHIFT+Print & co.): the script writes key=value
+    // lines (pid, comm, started, file, mode, audio) to $XDG_RUNTIME_DIR/screenrec/state while its recorder runs
+    // and removes the file when it exits. Polled once a second (the file comes and goes, so a watch alone
+    // misses its creation); the recorder's /proc/<pid>/comm is checked too, so a recorder that died without
+    // its wrapper cleaning up doesn't leave the chip on. SCREENREC_RUNTIME_DIR = the script's test override.
+    readonly property string recScript: Quickshell.env("HOME") + "/.config/hypr/scripts/screenrec.sh"
+    readonly property string recDir: Quickshell.env("SCREENREC_RUNTIME_DIR") || (Quickshell.env("XDG_RUNTIME_DIR") + "/screenrec")
+    property var recState: null              // parsed state file, null = no recording
+    property bool recAlive: false
+    readonly property bool recording: recState !== null && recAlive
+    property double recClock: Date.now()
+    readonly property string recElapsed: {
+        if (!recording) return ""
+        const s = Math.max(0, Math.floor(recClock / 1000) - (parseInt(recState.started) || 0))
+        const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, ss = s % 60
+        return (h > 0 ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(ss).padStart(2, "0")
+    }
+    Timer {
+        interval: 1000; running: true; repeat: true
+        onTriggered: { recStateFile.reload(); if (bar.recState) recComm.reload(); bar.recClock = Date.now() }
+    }
+    FileView {
+        id: recStateFile
+        path: bar.recDir + "/state"
+        printErrors: false
+        onLoaded: {
+            const o = {}
+            for (const l of text().split("\n")) { const i = l.indexOf("="); if (i > 0) o[l.slice(0, i)] = l.slice(i + 1) }
+            bar.recState = o.pid ? o : null
+        }
+        onLoadFailed: bar.recState = null
+    }
+    FileView {
+        id: recComm
+        path: bar.recState ? "/proc/" + bar.recState.pid + "/comm" : ""
+        printErrors: false
+        onLoaded: bar.recAlive = bar.recState !== null && text().trim() === bar.recState.comm
+        onLoadFailed: bar.recAlive = false
+    }
     // network: wired link wins, else Wi-Fi; dimmed when nothing is connected
     readonly property var netDevs: Networking.devices.values
     readonly property bool wiredUp: netDevs.some(d => d.type === DeviceType.Wired && d.connected)
@@ -154,42 +193,126 @@ PanelWindow {
         border.color: Theme.alpha(Theme.overlay, 0.55)
     }
 
-    // left: workspaces. With a bar on every monitor each bar shows its own monitor's workspaces; with a
+    // workspaces widget: with a bar on every monitor each bar shows its own monitor's workspaces; with a
     // single bar it shows all of them (it is the only place to switch workspaces on the other monitors).
     readonly property bool soloBar: BarConfig.enabledCount <= 1
     readonly property var shownWorkspaces: Hyprland.workspaces.values
         .filter(w => w.id > 0 && (soloBar || (w.monitor !== null && w.monitor.name === bar.screen.name)))
         .sort((a, b) => a.id - b.id)
 
-    // every module except the notification / control-center chip can be hidden (BarWidgets, set from the
-    // control center's gear section); a Row skips invisible children, so hidden ones leave no gap
+    // ---- layout ---------------------------------------------------------------
+    // Which widget sits in which section is BarWidgets' per-monitor layout (edited in Settings -> Bar).
+    // Every widget is a Component below, keyed by its id; each section is a Row of Loaders over its id list.
+    // A widget that has nothing to show right now (no player, empty tray) sets `show: false` and its Loader
+    // hides, so a Row leaves no gap. The bell (control center) chip is not in the layout: always last on the right.
+    readonly property var layout: BarWidgets.layoutFor(BarWidgets.keyOf(bar.screen))
+    readonly property var widgetComps: ({
+        workspaces: wsComp, recording: recComp, media: mediaComp, caffeine: caffeineComp, cpu: cpuComp, memory: memComp,
+        homeassistant: haComp, ai: aiComp, volume: volumeComp, network: netComp, bluetooth: btComp,
+        tray: trayComp, clock: clockComp
+    })
+
+    // a Repeater of Loaders over one section's id list (copied per section: an inline component here broke hot reload)
     Row {
+        id: leftSec
         anchors { left: parent.left; leftMargin: 6; verticalCenter: parent.verticalCenter }
-        visible: BarWidgets.shown("workspaces")
         spacing: 4
         Repeater {
-            model: bar.shownWorkspaces
-            Chip {
-                required property var modelData
-                visible: modelData.id > 0
-                active: modelData.focused
-                dim: !modelData.active && !modelData.focused
-                implicitWidth: 34
-                onClicked: bar.run("hyprctl dispatch 'hl.dsp.focus({workspace=" + modelData.id + "})'")
-                BarLabel { text: bar.kana[modelData.id] || modelData.id; color: modelData.focused ? Theme.accent : Theme.fg }
+            model: bar.layout.left
+            Loader {
+                required property string modelData
+                sourceComponent: bar.widgetComps[modelData] || null
+                visible: item !== null && item.show !== false
+            }
+        }
+    }
+    // truly centered on the bar; only pushed aside when it would run into the left / right section
+    Row {
+        id: centerSec
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 4
+        x: {
+            const lo = leftSec.x + leftSec.width + (leftSec.width > 0 ? 8 : 0)
+            const hi = rightSec.x - (rightSec.width > 0 ? 8 : 0) - width
+            return Math.round(Math.max(lo, Math.min((bar.width - width) / 2, hi)))
+        }
+        Repeater {
+            model: bar.layout.center
+            Loader {
+                required property string modelData
+                sourceComponent: bar.widgetComps[modelData] || null
+                visible: item !== null && item.show !== false
+            }
+        }
+    }
+    Row {
+        id: rightSec
+        anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
+        spacing: 4
+        Repeater {
+            model: bar.layout.right
+            Loader {
+                required property string modelData
+                sourceComponent: bar.widgetComps[modelData] || null
+                visible: item !== null && item.show !== false
+            }
+        }
+
+        Chip {
+            id: bellChip               // always shown: it opens the control center, whose gear opens Settings
+            active: bar.isOpen("center")
+            implicitWidth: Notifs.count > 0 ? 50 : 34
+            onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("center", bellChip)
+            BarLabel { text: Notifs.dnd ? "\uf1f6" : Notifs.count > 0 ? "\uf8fa" : "\uf0c9"; color: Notifs.dnd ? Theme.muted : Notifs.count > 0 ? Theme.accent : Theme.fg; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: Theme.accent; font.pixelSize: 11 }
+        }
+    }
+
+    // ---- widgets --------------------------------------------------------------
+    Component {
+        id: wsComp
+        Row {
+            spacing: 4
+            Repeater {
+                model: bar.shownWorkspaces
+                Chip {
+                    required property var modelData
+                    visible: modelData.id > 0
+                    active: modelData.focused
+                    dim: !modelData.active && !modelData.focused
+                    implicitWidth: 34
+                    onClicked: bar.run("hyprctl dispatch 'hl.dsp.focus({workspace=" + modelData.id + "})'")
+                    BarLabel { text: bar.kana[modelData.id] || modelData.id; color: modelData.focused ? Theme.accent : Theme.fg }
+                }
             }
         }
     }
 
-    // right: status modules
-    Row {
-        anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-        spacing: 4
-
+    // screen recording: only while one runs (see recState); pulsing red dot + elapsed time, click = stop
+    Component {
+        id: recComp
+        Chip {
+            property bool show: bar.recording
+            onClicked: bar.run("'" + bar.recScript + "' stop")
+            Rectangle {
+                implicitWidth: 9; implicitHeight: 9; radius: 4.5
+                color: Theme.red
+                SequentialAnimation on opacity {
+                    running: bar.recording; loops: Animation.Infinite
+                    NumberAnimation { to: 0.35; duration: 700; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
+                }
+            }
+            BarLabel { text: bar.recElapsed; color: Theme.red }
+            BarLabel { visible: bar.recording && bar.recState.audio === "1"; text: ""; color: Theme.fgDim; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+        }
+    }
+    Component {
+        id: mediaComp
         Chip {
             id: mediaChip
+            property bool show: bar.player !== null || bar.showTwitch
             active: bar.isOpen("media")
-            visible: BarWidgets.shown("media") && (bar.player !== null || bar.showTwitch)
             onClicked: mouse => {
                 if (bar.player === null) {   // Twitch player: raise its window
                     bar.run("hyprctl clients -j | jq -r '.[]|select(.class==\"org.quickshell\" and (.title|startswith(\"Twitch - \")))|.address' | head -n1 | xargs -I{} hyprctl dispatch 'hl.dsp.focus({window=\"address:{}\"})'")
@@ -209,49 +332,62 @@ PanelWindow {
                 Layout.maximumWidth: 460
             }
         }
+    }
 
+    Component {
+        id: caffeineComp
         Chip {
-            visible: BarWidgets.shown("caffeine")
             active: bar.inhibit
             implicitWidth: 34
             onClicked: bar.inhibit = !bar.inhibit
             BarLabel { text: bar.inhibit ? "\uf7b6" : "\uf0f4"; color: bar.inhibit ? Theme.accent : Theme.muted; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
         }
+    }
+    Component {
+        id: cpuComp
         Chip {
-            visible: BarWidgets.shown("cpu")
             BarLabel { text: "\uf2db"; color: Theme.fgDim; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
             BarLabel { text: bar.cpu; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
             BarLabel { text: bar.spark(bar.cpuHist, 25, false); color: Theme.accent; Layout.preferredWidth: sparkMetrics.width }
         }
+    }
+    Component {
+        id: memComp
         Chip {
-            visible: BarWidgets.shown("memory")
             BarLabel { text: "\uf538"; color: Theme.fgDim; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
             BarLabel { text: bar.mem; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
             BarLabel { text: bar.spark(bar.memHist, 10, true); color: Theme.accent2; Layout.preferredWidth: sparkMetrics.width }
         }
-        // Home Assistant (HomeAssistant.qml): opens the control popup; shows how many lights are on
+    }
+    // Home Assistant (HomeAssistant.qml): opens the control popup; shows how many lights are on
+    Component {
+        id: haComp
         Chip {
             id: haChip
-            visible: BarWidgets.shown("homeassistant")
             active: bar.isOpen("ha")
             dim: !HomeAssistant.configured || (HomeAssistant.status !== "ok" && HomeAssistant.status !== "loading")
             onClicked: bar.pop("ha", haChip)
             BarLabel { text: HomeAssistant.lightsOn > 0 ? "\uf672" : "\uf015"; color: HomeAssistant.lightsOn > 0 ? Theme.accent : HomeAssistant.configured && HomeAssistant.status === "ok" ? Theme.fg : Theme.muted; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
             BarLabel { visible: HomeAssistant.lightsOn > 0; text: HomeAssistant.lightsOn }
         }
-        // AI usage (AiUsage.qml): opens the accounts / limits popup; shows the fullest limit window
+    }
+    // AI usage (AiUsage.qml): opens the accounts / limits popup; shows the fullest limit window of the most
+    // recently used account with fresh values (AiUsage.current), muted when only stale values are known
+    Component {
+        id: aiComp
         Chip {
             id: aiChip
-            visible: BarWidgets.shown("ai")
             active: bar.isOpen("ai")
             dim: AiUsage.loaded && AiUsage.profiles.length === 0 && AiUsage.others.length === 0
             onClicked: bar.pop("ai", aiChip)
             BarLabel { text: "\uf890"; color: AiUsage.anyExpired ? Theme.muted : Theme.accent; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
-            BarLabel { visible: AiUsage.worst >= 0; text: Math.round(AiUsage.worst) + "%"; color: Theme.fg }
+            BarLabel { visible: AiUsage.currentPercent >= 0; text: Math.round(AiUsage.currentPercent) + "%"; color: AiUsage.currentStale ? Theme.muted : Theme.fg }
         }
+    }
+    Component {
+        id: volumeComp
         Chip {
             id: audioChip
-            visible: BarWidgets.shown("volume")
             active: bar.isOpen("audio")
             dim: bar.muted
             // click: audio popup (volume, mic, devices) | middle: mute | right: pavucontrol | wheel: volume
@@ -267,25 +403,32 @@ PanelWindow {
             BarLabel { text: bar.muted ? "\uf6a9" : bar.volume < 0.01 ? "\uf026" : bar.volume < 0.5 ? "\uf027" : "\uf028"; color: bar.muted ? Theme.muted : Theme.accent; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: Theme.iconSize + 4; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
             BarLabel { text: Math.round(bar.volume * 100) + "%"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
         }
+    }
+    Component {
+        id: netComp
         Chip {
             id: netChip
-            visible: BarWidgets.shown("network")
             active: bar.isOpen("net")
             dim: !bar.wiredUp && !bar.wifiUp
             onClicked: bar.pop("net", netChip)
             BarLabel { text: bar.wiredUp ? "\uf796" : bar.wifiUp ? "\uf1eb" : "\uf6ac"; color: bar.wiredUp || bar.wifiUp ? Theme.accent : Theme.muted; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
         }
+    }
+    Component {
+        id: btComp
         Chip {
             id: btChip
-            visible: BarWidgets.shown("bluetooth")
             active: bar.isOpen("bt")
             dim: !bar.btOn
             onClicked: bar.pop("bt", btChip)
             BarLabel { text: "\uf293"; color: bar.btConnected > 0 ? Theme.accent : bar.btOn ? Theme.fg : Theme.muted; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
             BarLabel { visible: bar.btConnected > 0; text: bar.btConnected }
         }
+    }
+    Component {
+        id: trayComp
         Chip {
-            visible: BarWidgets.shown("tray") && SystemTray.items.values.some(i => !bar.isApplet(i))
+            property bool show: SystemTray.items.values.some(i => !bar.isApplet(i))
             Repeater {
                 model: SystemTray.items
                 Item {
@@ -325,20 +468,14 @@ PanelWindow {
                 }
             }
         }
+    }
+    Component {
+        id: clockComp
         Chip {
             id: clockChip
-            visible: BarWidgets.shown("clock")
             active: bar.isOpen("cal")
             onClicked: mouse => mouse.button === Qt.RightButton ? bar.run("thunderbird --calendar") : bar.pop("cal", clockChip)
             BarLabel { text: Qt.formatDateTime(clock.date, "yyyy-MM-dd HH:mm") }
-        }
-        Chip {
-            id: bellChip               // always shown: it opens the control center, where widgets are toggled
-            active: bar.isOpen("center")
-            implicitWidth: Notifs.count > 0 ? 50 : 34
-            onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("center", bellChip)
-            BarLabel { text: Notifs.dnd ? "\uf1f6" : Notifs.count > 0 ? "\uf8fa" : "\uf0f3"; color: Notifs.dnd ? Theme.muted : Notifs.count > 0 ? Theme.accent : Theme.fg; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
-            BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: Theme.accent; font.pixelSize: 11 }
         }
     }
 }

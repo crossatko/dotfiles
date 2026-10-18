@@ -246,7 +246,7 @@ def render_all(pal, cfg):
         write_atomic(dest, render(tpl.read_text(), pal, extra))
     dirs = [os.path.expanduser(d) for d in cfg.get("wallpaper_dirs", ["~/Pictures/wallpapers"])]
     s = cfg.get("settings", {})
-    ui = {"bar_opacity": s.get("bar_opacity", 0.55), "picker_opacity": s.get("picker_opacity", 0.6),
+    ui = {"bar_opacity": s.get("bar_opacity", 0.55),
           "bar_gap": s.get("bar_gap", 0), "bar_radius": s.get("bar_radius", 0),
           "bar_border": s.get("bar_border", 0), "rounding": s.get("rounding", 10)}
     write_atomic(OUT / "palette.json", json.dumps({"wallpaper": wp, "wallpaper_dirs": dirs, **ui, **pal}, indent=2) + "\n")

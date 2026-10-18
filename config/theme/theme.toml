@@ -26,8 +26,7 @@ rounding = 0             # corner radius of the quickshell elements (px); Hyprla
 bar_gap = 0              # px between the bar and the screen edges
 bar_radius = 0           # corner rounding of the bar itself
 bar_border = 0           # px width of the bar outline
-bar_opacity = 0.55       # quickshell bar background alpha; hyprland blur shows through
-picker_opacity = 0.60    # keep both above ignore_alpha (0.1) in hypr/hyprland/rules.lua
+bar_opacity = 0.55       # quickshell bar background alpha; hyprland blur shows through; keep above ignore_alpha (0.1) in hypr/hyprland/rules.lua
 
 # Pin any palette color by name; everything else follows the wallpaper.
 # Keys: bg bg_alt surface surface2 overlay muted subtle fg_dim fg accent accent2 accent_soft

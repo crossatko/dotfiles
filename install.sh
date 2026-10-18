@@ -40,7 +40,7 @@ PACKAGES=(
   zsh-autosuggestions zsh-syntax-highlighting
 
   # Hyprland Ecosystem
-  quickshell imagemagick hyprland hyprpaper hypridle hyprlock hyprpolkitagent hyprshot tofi
+  quickshell imagemagick hyprland hyprpaper hypridle hyprlock hyprpolkitagent hyprshot wf-recorder slurp tofi
   xdg-desktop-portal-hyprland xdg-desktop-portal-gtk xdg-desktop-portal-gnome
   bibata-cursor-theme
 

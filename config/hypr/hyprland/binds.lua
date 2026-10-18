@@ -32,6 +32,10 @@ end
 bind({ mod, "SHIFT", "P" }, myPin)
 
 bind("Print", exec(apps.screenshot))
+-- screen recording (scripts/screenrec.sh, wf-recorder + slurp): one key. While recording it stops;
+-- otherwise it opens the Quickshell mode menu (region / window / screen + desktop audio), and if the shell
+-- is down it records a region (scripts/screenrec-key.sh)
+bind({ "SHIFT", "Print" }, exec("$HOME/.config/hypr/scripts/screenrec-key.sh"))
 bind({ mod, "D" }, exec(apps.menu))
 bind({ mod, "T" }, exec("qs ipc call picker toggle")) -- wallpaper + theme picker
 -- bind({ mod, "SHIFT", "V" }, exec("cliphist list | ~/.config/quickshell/bin/qmenu | cliphist decode | wl-copy"))

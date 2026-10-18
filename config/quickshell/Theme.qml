@@ -36,7 +36,6 @@ Singleton {
     readonly property int barRadius: p.bar_radius
     readonly property int barBorder: p.bar_border
     readonly property int rounding: p.rounding
-    readonly property real pickerOpacity: p.picker_opacity
 
     // layout/typography knobs shared by everything in the shell
     readonly property string font: "Paper Mono"
@@ -79,7 +78,6 @@ Singleton {
             property int bar_radius: 0
             property int bar_border: 0
             property int rounding: 10
-            property real picker_opacity: 0.6
         }
     }
 }
