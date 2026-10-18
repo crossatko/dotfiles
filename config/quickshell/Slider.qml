@@ -14,19 +14,11 @@ Item {
 
     readonly property real shown: drag.pressed ? drag.live : value
 
-    Rectangle {
-        id: track
+    Meter {
         anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
-        height: 6
-        radius: Math.min(height / 2, Theme.radius)
-        color: Theme.alpha(Theme.fg, 0.14)
-        Rectangle {
-            width: Math.max(0, Math.min(1, sl.shown)) * parent.width
-            height: parent.height
-            radius: parent.radius
-            color: Theme.accent
-            Behavior on width { enabled: !drag.pressed; NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
-        }
+        value: sl.shown
+        animMs: 90
+        animate: !drag.pressed
     }
     Rectangle {
         // Handle is always square (width == height). Radius = min(size / 2, Theme.radius): a square at

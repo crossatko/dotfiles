@@ -77,18 +77,13 @@ PanelWindow {
                 color: osd.muted ? Theme.muted : Theme.accent
                 text: osd.kind === "brightness" ? "\uf185" : Icons.volumeGlyph(osd.muted, osd.value)
             }
-            Rectangle {
+            Meter {
                 Layout.fillWidth: true
-                height: 6
                 radius: Math.min(height / 2, Theme.inner(Theme.radius, 18))
                 color: Theme.alpha(Theme.fg, 0.15)
-                Rectangle {
-                    width: parent.width * (osd.muted ? 0 : osd.value)
-                    height: parent.height
-                    radius: parent.radius
-                    color: Theme.accent
-                    Behavior on width { NumberAnimation { duration: 80 } }
-                }
+                value: osd.muted ? 0 : osd.value
+                animMs: 80
+                easingType: Easing.Linear
             }
             Label { text: osd.muted ? "muted" : Math.round(osd.value * 100) + "%"; Layout.preferredWidth: 46; horizontalAlignment: Text.AlignRight }
         }

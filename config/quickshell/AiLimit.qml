@@ -30,17 +30,9 @@ ColumnLayout {
             Layout.preferredWidth: 38
         }
     }
-    Rectangle {
+    Meter {
         Layout.fillWidth: true
-        implicitHeight: 6
-        radius: Math.min(3, Theme.radius)
-        color: Theme.alpha(Theme.fg, 0.14)
-        Rectangle {
-            width: Math.max(0, Math.min(1, lim.pct / 100)) * parent.width
-            height: parent.height
-            radius: parent.radius
-            color: Theme.accent
-            Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-        }
+        value: lim.pct / 100
+        animMs: 160
     }
 }

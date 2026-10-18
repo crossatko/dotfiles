@@ -79,15 +79,10 @@ ColumnLayout {
         visible: media.player !== null && media.player.lengthSupported && media.player.length > 0 && media.player.length < 100000
         Layout.fillWidth: true
         spacing: 3
-        Rectangle {
+        Meter {
             Layout.fillWidth: true
-            height: 6; radius: Math.min(height / 2, Theme.radius)     // pill like Slider; square at radius 0
             color: Theme.alpha(Theme.fg, 0.15)
-            Rectangle {
-                width: parent.width * (media.player && media.player.length > 0 ? Math.min(1, media.player.position / media.player.length) : 0)
-                height: parent.height; radius: parent.radius
-                color: Theme.accent
-            }
+            value: media.player && media.player.length > 0 ? media.player.position / media.player.length : 0
             MouseArea {
                 anchors { fill: parent; topMargin: -8; bottomMargin: -8 }
                 enabled: media.player && media.player.canSeek
