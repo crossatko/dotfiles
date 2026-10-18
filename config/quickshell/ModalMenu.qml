@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 
-// Keybind-opened modal menu (screenshot / recording mode pickers): fullscreen dim overlay on the focused monitor
+// Keybind-opened modal menu (screenshot / recording mode pickers): fullscreen transparent overlay on the focused monitor
 // (layer namespace "qs-<kind>", exclusive keyboard), a centred near-opaque card with an icon + title + close
 // header, then the children you add, stacked with 14 px spacing. Registers with Popups (one click-away thing at
 // a time; another one opening, or a click on another monitor, closes it). Esc / click outside / X close.
@@ -38,7 +38,7 @@ PanelWindow {
 
     visible: shown
     anchors { left: true; right: true; top: true; bottom: true }
-    color: Theme.alpha(Theme.bg, 0.5)
+    color: "transparent"                           // no dim backdrop; the window still catches click-outside
     exclusiveZone: -1
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
@@ -60,7 +60,7 @@ PanelWindow {
         width: Math.min(parent.width - 32, win.cardWidth)
         height: body.implicitHeight + 40
         radius: Theme.radius
-        color: Theme.alpha(Theme.bg, 0.85)     // blurred behind it (qs-<kind> layer rule, ignore_alpha 0.6): keep above 0.6
+        color: Theme.alpha(Theme.bg, 0.85)     // blurred behind it (qs-.* layer rule, ignore_alpha 0.1)
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
 

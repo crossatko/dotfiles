@@ -335,7 +335,5 @@ hl.layer_rule({ match = { namespace = "launcher" }, blur = true })
 -- new) is blurred (the pattern must match the whole namespace: `qs-.*`, not `^qs-`) wherever it draws something at least 10% opaque; fully transparent pixels get no blur.
 hl.layer_rule({ match = { namespace = "qs-.*" }, blur = true })
 hl.layer_rule({ match = { namespace = "qs-.*" }, ignore_alpha = 0.1 })
--- Fullscreen dim overlays with a card on top (Settings, ModalMenu kinds screenshot / record / menu): the dim is alpha 0.5
--- and must stay unblurred, the card is >= 0.85, so a threshold of 0.6 blurs only the card's area. A new fullscreen
--- dim overlay needs its namespace added here (and a card alpha above 0.6).
-hl.layer_rule({ match = { namespace = "^qs-(settings|screenshot|record|menu)$" }, ignore_alpha = 0.6 })
+-- Fullscreen overlays with a card (Settings, ModalMenu kinds) are transparent around the card, so the 0.1 rule above
+-- blurs only the card.

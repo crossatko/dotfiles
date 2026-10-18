@@ -26,7 +26,7 @@ PanelWindow {
     property bool shown: false
     visible: shown
     anchors { left: true; right: true; top: true; bottom: true }
-    color: Theme.alpha(Theme.bg, 0.5)
+    color: "transparent"                           // no dim backdrop; the window still catches click-outside
     exclusiveZone: -1
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
@@ -76,7 +76,7 @@ PanelWindow {
         width: Math.min(parent.width - 80, Math.max(920, parent.width * 0.6))   // 920: content area no narrower than before the wider sidebar
         height: Math.min(parent.height - 80, Math.max(600, parent.height * 0.62))
         radius: Theme.radius
-        color: Theme.alpha(Theme.bg, 0.85)     // blurred behind it (qs-settings layer rule, ignore_alpha 0.6: keep this above 0.6 and the dim above below it)
+        color: Theme.alpha(Theme.bg, 0.85)     // blurred behind it (qs-.* layer rule, ignore_alpha 0.1)
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
 

@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
 
-// List picker (replaced tofi): a ModalMenu card (layer "qs-menu", dim scrim, Esc / click outside / X close)
+// List picker (replaced tofi): a ModalMenu card (layer "qs-menu", transparent click-away overlay, Esc / click outside / X close)
 // with a header per mode, a search field, up to `numResults` result rows and a key-hint footer. fzf does the
 // fuzzy matching.
 //   qs ipc call menu drun                  application launcher ("Applications", app icons, launch history)
