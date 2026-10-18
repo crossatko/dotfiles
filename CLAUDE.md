@@ -18,6 +18,7 @@
 - Handoff contents: goal; findings (verified vs assumed); what was tried and ruled out, and why; current state of files/changes; the exact open problem. Opus continues from there, it does not start over.
 
 ## Verification
+- Always visually test UI/visual changes: reproduce the state, take a screenshot (grim), and look at it before reporting. "qmllint clean" or "config reloaded" is not verification of how it looks. If it truly cannot be tested without disturbing the live session, use an isolated instance or ask the user to open the state, and say so.
 - Before telling the user something works, verify it yourself with a check proportional to risk (logs, reload, screenshot, test run, grep). Never relay an agent's claim as fact unchecked.
 - Say explicitly what was not verified.
 
