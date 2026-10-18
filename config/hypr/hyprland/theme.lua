@@ -11,7 +11,7 @@ M.glass = {
 	window_rounding = 0, -- Hyprland windows are square (the quickshell bar elements still use theme.toml `rounding`)
 	window_rounding_power = 2,
 	group_rounding = 0,
-	group_rounding_power = 2,
+	group_rounding_power = 5,
 	gradient_rounding = 0,
 	gradient_rounding_power = 2,
 }
