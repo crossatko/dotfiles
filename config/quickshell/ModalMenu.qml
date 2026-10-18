@@ -57,7 +57,7 @@ PanelWindow {
         width: Math.min(parent.width - 32, win.cardWidth)
         height: body.implicitHeight + 40
         radius: Theme.radius
-        color: Theme.alpha(Theme.bg, 0.98)     // small card over arbitrary content: nearly opaque
+        color: Theme.alpha(Theme.bg, 0.85)     // blurred behind it (qs-<kind> layer rule, ignore_alpha 0.6): keep above 0.6
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
 

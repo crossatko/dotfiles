@@ -331,14 +331,11 @@ hl.layer_rule({ match = { namespace = "launcher" }, blur = true })
 -- (the rounded corners) get no blur, so the blur follows the bar's rounding even
 -- though layer surfaces have no rounding of their own. Keep it below
 -- bar_opacity in ~/.config/theme/theme.toml.
-hl.layer_rule({ match = { namespace = "qs-bar" }, blur = true })
-hl.layer_rule({ match = { namespace = "qs-bar" }, ignore_alpha = 0.1 })
--- notification toasts, popups (calendar / network / bluetooth / media / notification center) and the OSD
-for _, ns in ipairs({ "qs-toast", "qs-popup", "qs-osd" }) do
-	hl.layer_rule({ match = { namespace = ns }, blur = true })
-	hl.layer_rule({ match = { namespace = ns }, ignore_alpha = 0.1 })
-end
--- Settings window: the layer is fullscreen (dim at alpha 0.5) with the card on top. ignore_alpha 0.6 sits between
--- the dim (0.5, stays unblurred) and the card (Settings.qml, 0.85), so only the card's area is blurred.
-hl.layer_rule({ match = { namespace = "qs-settings" }, blur = true })
-hl.layer_rule({ match = { namespace = "qs-settings" }, ignore_alpha = 0.6 })
+-- EVERY Quickshell window (namespace qs-*: bar, toasts, popups, OSD, Settings, screenshot / record menus, anything
+-- new) is blurred (the pattern must match the whole namespace: `qs-.*`, not `^qs-`) wherever it draws something at least 10% opaque; fully transparent pixels get no blur.
+hl.layer_rule({ match = { namespace = "qs-.*" }, blur = true })
+hl.layer_rule({ match = { namespace = "qs-.*" }, ignore_alpha = 0.1 })
+-- Fullscreen dim overlays with a card on top (Settings, ModalMenu kinds screenshot / record): the dim is alpha 0.5
+-- and must stay unblurred, the card is >= 0.85, so a threshold of 0.6 blurs only the card's area. A new fullscreen
+-- dim overlay needs its namespace added here (and a card alpha above 0.6).
+hl.layer_rule({ match = { namespace = "^qs-(settings|screenshot|record)$" }, ignore_alpha = 0.6 })
