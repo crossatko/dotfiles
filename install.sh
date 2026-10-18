@@ -146,6 +146,17 @@ ln -sfn "$CONFIG_DIR/systemd/user/xdg-desktop-portal-gnome.service" "$HOME/.conf
 mkdir -p "$HOME/.local/bin"
 ln -sfn "$CONFIG_DIR/theme/bin/brave" "$HOME/.local/bin/brave"
 
+# Firefox: translucent header (userChrome.css + user.js) in the install-default profile, if one exists
+FF_PROFILE_DIR="$HOME/.config/mozilla/firefox"
+if [ -f "$FF_PROFILE_DIR/profiles.ini" ]; then
+  FF_PROFILE="$(awk -F= '/^\[Install/{i=1} i&&/^Default=/{print $2; exit}' "$FF_PROFILE_DIR/profiles.ini")"
+  if [ -n "$FF_PROFILE" ] && [ -d "$FF_PROFILE_DIR/$FF_PROFILE" ]; then
+    mkdir -p "$FF_PROFILE_DIR/$FF_PROFILE/chrome"
+    ln -sfn "$CONFIG_DIR/firefox/userChrome.css" "$FF_PROFILE_DIR/$FF_PROFILE/chrome/userChrome.css"
+    ln -sfn "$CONFIG_DIR/firefox/user.js" "$FF_PROFILE_DIR/$FF_PROFILE/user.js"
+  fi
+fi
+
 # Generate every app's colors from the wallpaper (see config/theme/README.md)
 python3 -I "$CONFIG_DIR/theme/theme.py" render || true
 

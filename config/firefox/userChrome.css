@@ -1,0 +1,32 @@
+/* Translucent header (tab strip + toolbar) so the Hyprland blur shows through; page stays opaque.
+   Targets Firefox 158 (variables and ids checked in that build's omni.ja: browser.xhtml,
+   browser-colors.css, browser-shared.css, tab.tokens.css). */
+:root {
+  --glass-tint: transparent;                     /* tab strip: no tint, just the blur */
+  --navbar-tint: rgba(255, 255, 255, 0.05);      /* address bar row */
+  --toolbox-background-color: var(--glass-tint) !important;
+  --toolbox-background-color-inactive: var(--glass-tint) !important;
+  --toolbar-background-color: transparent !important;
+  --toolbar-field-background-color: rgba(255, 255, 255, 0.08) !important;
+  --toolbar-field-background-color-focus: rgba(255, 255, 255, 0.14) !important;
+  --tab-background-color-selected: rgba(231, 49, 60, 0.22) !important;
+  --tabpanel-background-color: #08090b !important;
+  /* tabs concentric with the window: Hyprland rounding (Settings > Appearance radius, now 12) minus the gap
+     between the tab and the window edge. Update --window-radius when the radius changes. */
+  --window-radius: 12px;
+  --tab-edge-gap: 6px;            /* measured gap above the tabs (tab margin 4 + strip 2); the left gap is padded to match */
+}
+#navigator-toolbox, #nav-bar, #TabsToolbar, #PersonalToolbar, #toolbar-menubar {
+  appearance: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+#TabsToolbar, #PersonalToolbar, #toolbar-menubar { background: transparent !important; }
+#nav-bar { background: var(--navbar-tint) !important; }
+#navigator-toolbox { background-color: var(--glass-tint) !important; }
+/* content stays opaque */
+#browser, #tabbrowser-tabbox, #tabbrowser-tabpanels, .browserStack, browser {
+  background-color: #08090b !important;
+}
+.tab-background { border-radius: max(0px, calc(var(--window-radius) - var(--tab-edge-gap))) !important; }
+#TabsToolbar { padding-inline-start: 4px !important; }   /* first tab 2 -> 6px from the window edge */
