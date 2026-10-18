@@ -8,6 +8,7 @@ ColumnLayout {
     property string title: ""
     property string sub: ""                        // "" = single line
     property color titleColor: Theme.fg
+    property bool titleBold: false
     default property alias badges: line.data
 
     Layout.fillWidth: true
@@ -21,6 +22,7 @@ ColumnLayout {
         Label {
             text: rt.title
             color: rt.titleColor
+            font.bold: rt.titleBold
             elide: Text.ElideRight
             Layout.preferredWidth: implicitWidth
             Layout.minimumWidth: 24

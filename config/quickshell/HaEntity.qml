@@ -143,12 +143,7 @@ Rectangle {
                 Layout.preferredWidth: 22
                 color: ent.domain === "light" && ent.on ? ent.tint : ent.on ? Theme.accent : Theme.fgDim
             }
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-                Label { text: ent.title; Layout.fillWidth: true; elide: Text.ElideRight }
-                Label { visible: !ent.compact || ent.editing; text: ent.sub(); Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
-            }
+            RowText { title: ent.title; sub: !ent.compact || ent.editing ? ent.sub() : "" }
 
             // hide / unhide
             Btn {

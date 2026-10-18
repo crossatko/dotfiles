@@ -24,12 +24,7 @@ Rectangle {
         anchors { fill: parent; leftMargin: 12; rightMargin: 10 }
         spacing: 10
         Icon { text: tile.icon; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 26; font.pixelSize: 20; color: tile.on ? Theme.accent : Theme.fgDim }
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 0
-            Label { text: tile.title; Layout.fillWidth: true; elide: Text.ElideRight }
-            Label { text: tile.sub; Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
-        }
+        RowText { title: tile.title; sub: tile.sub }
     }
     MouseArea {
         id: area

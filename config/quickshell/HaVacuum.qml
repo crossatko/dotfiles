@@ -190,15 +190,10 @@ Rectangle {
                 Layout.preferredWidth: 22
                 color: vac.cleaning ? Theme.accent : Theme.fgDim
             }
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-                Label { text: vac.title; Layout.fillWidth: true; elide: Text.ElideRight; font.bold: true }
-                Label {
-                    text: vac.unavailable ? "Unavailable" : (vac.area !== "" ? vac.area + " · " : "") + vac.pretty(vac.status)
-                    Layout.fillWidth: true; elide: Text.ElideRight
-                    color: Theme.fgDim; font.pixelSize: Theme.fontCaption
-                }
+            RowText {
+                title: vac.title
+                titleBold: true
+                sub: vac.unavailable ? "Unavailable" : (vac.area !== "" ? vac.area + " · " : "") + vac.pretty(vac.status)
             }
             Row {
                 visible: !vac.editing && vac.battery >= 0
