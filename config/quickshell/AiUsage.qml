@@ -67,6 +67,17 @@ Singleton {
         return ws[0] || null
     }
     readonly property real currentPercent: currentWindow ? currentWindow.percent : -1
+    // the chip's account is blocked: some window is at >= 100 % and has a reset still ahead. blockedUntil = the
+    // LATEST reset among those exhausted windows (when the agent is usable again), epoch s; 0 = not blocked.
+    // Depends on `now`, so it flips back to the percentage by itself once the reset passes (<= 30 s late).
+    readonly property double blockedUntil: {
+        if (!current) return 0
+        const t = now / 1000
+        let r = 0
+        for (const w of current.windows)
+            if (typeof w.percent === "number" && w.percent >= 100 && w.resetsAt && w.resetsAt > t) r = Math.max(r, w.resetsAt)
+        return r
+    }
     readonly property bool currentStale: current !== null && current.stale === true
     readonly property bool anyExpired: profiles.some(p => p.status === "expired")
 

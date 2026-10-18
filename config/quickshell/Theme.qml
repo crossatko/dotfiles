@@ -61,7 +61,20 @@ Singleton {
     readonly property int barRadius: barFloating ? radius : 0
     readonly property int barPad: 6                          // chip inset inside the bar
     readonly property int barReserve: barHeight + barGap     // screen space the bar takes from its edge
+    // bar chip geometry (Chip.qml / BarIcon.qml): every chip is chipHeight tall; an icon-only chip is a chipHeight square
+    // (icon box centred, equal padding on all four sides); a chip with a label has chipPadX left/right; icon <-> label = chipGap
+    readonly property int chipHeight: barHeight - 2 * barPad // 28
+    readonly property int chipPadX: 10
+    readonly property int chipGap: 6
+    readonly property int chipIcon: 16                      // fixed square box every bar icon is centred in (by its ink bounds)
     readonly property int popupGap: barFloating ? Math.max(4, gapOut) : 8     // popup card <-> bar
+    // popup motion (PopupHost.qml), ms: open fade/scale-in, close fade-out, card glide + resize when switching chips,
+    // old content fading out / new content fading in during a switch
+    readonly property int popupOpenMs: 180
+    readonly property int popupCloseMs: 120
+    readonly property int popupMoveMs: 240
+    readonly property int popupFadeOutMs: 70
+    readonly property int popupFadeInMs: 160
     readonly property int edgeGap: barFloating ? gapOut : 12                  // popups/toasts <-> screen edge
 
     // Concentric inner radius: an element inset by `inset` inside one of radius `outer`.

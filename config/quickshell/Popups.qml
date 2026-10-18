@@ -3,14 +3,17 @@ import QtQuick
 import Quickshell
 
 // Which bar popup (notification center, network, bluetooth, calendar, media) is open,
-// on which screen, and how far from the right screen edge it hangs. One at a time.
+// on which screen, and the screen x of the chip it hangs from. One at a time.
 // Also the registry for the other click-away things (launcher, Settings window, tray menus):
 // only one of all of them is open at once, and ClickCatcher closes it on a click on any other monitor.
 Singleton {
     id: root
     property string name: ""
     property string screen: ""
-    property real right: 8
+    // x of the opening chip's centre in SCREEN coordinates (PopupHost centres the card on it, clamped to the margin)
+    property real center: 1e6
+    // set by each Bar: {"DP-5": <Bar>, ...}, so a popup opened without a click (IPC, control-center shortcuts) can find its chip
+    property var barObjs: ({})
     // set by shell.qml: {"DP-5": "bottom", ...}, so a popup knows which edge the bar is on
     property var bars: ({})
 
@@ -27,10 +30,17 @@ Singleton {
     // Settings window (Settings.qml) requests: action "open" | "close" | "toggle", page "" = keep the current one
     signal settingsRequest(string action, string page)
 
-    function toggle(n, scr, r) {
+    // c = chip centre x on that screen; omitted / negative = look the chip up by name (else the right end)
+    function chipCenter(n, scr) {
+        const b = barObjs[scr]
+        const c = b ? b.chipCenter(n) : -1
+        return c >= 0 ? c : 1e6
+    }
+    function toggle(n, scr, c) {
         if (name === n && screen === scr) { close(); return }
         if (name === "") dismiss("host")
-        name = n; screen = scr; right = r
+        center = (c === undefined || c < 0) ? chipCenter(n, scr) : c
+        name = n; screen = scr
     }
     function close() { name = "" }
     function closeAll() { name = ""; dismiss("") }

@@ -27,6 +27,7 @@ ShellRoot {
     Settings { id: settings }
     Menu { id: menu }
     RecordMenu { id: recordMenu }
+    ScreenshotMenu { id: screenshotMenu }
     Toasts { bars: root.bars }
     Osd { id: osd; bars: root.bars }
 
@@ -50,7 +51,7 @@ ShellRoot {
         target: "popup"
         function toggle(name: string): void {
             const m = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
-            Popups.toggle(name, m, Math.max(8, Theme.barGap + Theme.barPad))
+            Popups.toggle(name, m)
         }
         function close(): void { Popups.close() }
     }
@@ -99,6 +100,13 @@ ShellRoot {
         target: "record"
         function menu(): void { recordMenu.toggle() }
         function close(): void { recordMenu.close() }
+    }
+
+    // qs ipc call screenshot menu | close   (CTRL+Print via hypr/scripts/screenshot-key.sh; menu = toggle)
+    IpcHandler {
+        target: "screenshot"
+        function menu(): void { screenshotMenu.toggle() }
+        function close(): void { screenshotMenu.close() }
     }
 
     // qs ipc call menu drun            (SUPER+D)

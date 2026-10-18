@@ -25,6 +25,8 @@ singleton Brightness 1.0 Brightness.qml
 BrightnessSection 1.0 BrightnessSection.qml
 singleton BarConfig 1.0 BarConfig.qml
 BarLabel 1.0 BarLabel.qml
+BarIcon 1.0 BarIcon.qml
+InkMeter 1.0 InkMeter.qml
 TrayMenu 1.0 TrayMenu.qml
 ClickCatcher 1.0 ClickCatcher.qml
 singleton BarWidgets 1.0 BarWidgets.qml
@@ -40,4 +42,6 @@ Settings 1.0 Settings.qml
 SettingsBar 1.0 SettingsBar.qml
 SettingsWallpaper 1.0 SettingsWallpaper.qml
 RecordMenu 1.0 RecordMenu.qml
+ScreenshotMenu 1.0 ScreenshotMenu.qml
 SettingsAppearance 1.0 SettingsAppearance.qml
+TailscaleSection 1.0 TailscaleSection.qml

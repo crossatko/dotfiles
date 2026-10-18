@@ -23,7 +23,7 @@ GridLayout {
     readonly property var netDevs: Networking.devices.values
     readonly property int wiredUp: netDevs.filter(d => d.type === DeviceType.Wired && d.connected).length
 
-    function open(name) { Popups.toggle(name, Popups.screen, Popups.right) }
+    function open(name) { Popups.toggle(name, Popups.screen) }
 
     ColumnLayout {
         id: controlSec

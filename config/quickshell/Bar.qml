@@ -62,11 +62,20 @@ PanelWindow {
     // open a popup hung off `item` (a chip); toggles if it is already the open one
     // true while this bar's popup of that name is showing: the chip that opened it stays highlighted
     function isOpen(name) { return Popups.name === name && Popups.screen === bar.screen.name }
-    // Popups.right is measured from the SCREEN edge: the bar window is inset by Theme.barGap when floating
-    function pop(name, item) {
-        const p = item.mapToItem(null, 0, 0)
-        Popups.toggle(name, bar.screen.name, Math.max(8, Theme.barGap + bar.width - (p.x + item.width)))
+    // Popups.center is the chip's centre x in SCREEN coordinates (this window is inset by Theme.barGap when floating)
+    property var chipItems: ({})
+    function reg(name, item) { chipItems[name] = item }
+    function centerOf(item) { return Theme.barGap + item.mapToItem(null, 0, 0).x + item.width / 2 }
+    // -1 = chip unknown / hidden
+    function chipCenter(name) {
+        const it = chipItems[name]
+        return it && it.visible ? centerOf(it) : -1
     }
+    function pop(name, item) {
+        reg(name, item)
+        Popups.toggle(name, bar.screen.name, centerOf(item))
+    }
+    Component.onCompleted: Popups.barObjs[bar.screen.name] = bar
 
     // the playing MPRIS player wins; a paused one only shows while the Twitch app isn't playing
     readonly property var player: {
@@ -262,10 +271,10 @@ PanelWindow {
 
         Chip {
             id: bellChip               // always shown: it opens the control center, whose gear opens Settings
+            Component.onCompleted: bar.reg("center", bellChip)
             active: bar.isOpen("center")
-            implicitWidth: Notifs.count > 0 ? 50 : 34
             onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("center", bellChip)
-            BarLabel { text: Notifs.dnd ? "\uf1f6" : Notifs.count > 0 ? "\uf8fa" : "\uf0c9"; color: Notifs.dnd ? Theme.muted : Notifs.count > 0 ? Theme.accent : Theme.fg; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarIcon { text: Notifs.dnd ? "\uf1f6" : Notifs.count > 0 ? "\uf8fa" : "\uf0c9"; color: Notifs.dnd ? Theme.muted : Notifs.count > 0 ? Theme.accent : Theme.fg }
             BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: Theme.accent; font.pixelSize: 11 }
         }
     }
@@ -282,9 +291,8 @@ PanelWindow {
                     visible: modelData.id > 0
                     active: modelData.focused
                     dim: !modelData.active && !modelData.focused
-                    implicitWidth: 34
                     onClicked: bar.run("hyprctl dispatch 'hl.dsp.focus({workspace=" + modelData.id + "})'")
-                    BarLabel { text: bar.kana[modelData.id] || modelData.id; color: modelData.focused ? Theme.accent : Theme.fg }
+                    BarIcon { text: String(bar.kana[modelData.id] || modelData.id); family: Theme.font; styleName: ""; pixelSize: Theme.fontSize; color: modelData.focused ? Theme.accent : Theme.fg }
                 }
             }
         }
@@ -297,7 +305,7 @@ PanelWindow {
             property bool show: bar.recording
             onClicked: bar.run("'" + bar.recScript + "' stop")
             Rectangle {
-                implicitWidth: 9; implicitHeight: 9; radius: 4.5
+                implicitWidth: 8; implicitHeight: 8; radius: 4
                 color: Theme.red
                 SequentialAnimation on opacity {
                     running: bar.recording; loops: Animation.Infinite
@@ -306,13 +314,14 @@ PanelWindow {
                 }
             }
             BarLabel { text: bar.recElapsed; color: Theme.red }
-            BarLabel { visible: bar.recording && bar.recState.audio === "1"; text: ""; color: Theme.fgDim; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarIcon { visible: bar.recording && bar.recState.audio === "1"; text: "\uf028"; color: Theme.fgDim }
         }
     }
     Component {
         id: mediaComp
         Chip {
             id: mediaChip
+            Component.onCompleted: bar.reg("media", mediaChip)
             property bool show: bar.player !== null || bar.showTwitch
             active: bar.isOpen("media")
             onClicked: mouse => {
@@ -321,11 +330,10 @@ PanelWindow {
                 } else if (mouse.button === Qt.MiddleButton) bar.player.togglePlaying()
                 else bar.pop("media", mediaChip)
             }
-            BarLabel {
+            BarIcon {
                 text: bar.mediaBrand ? bar.mediaBrand : bar.player ? (bar.player.isPlaying ? "\uf04b" : "\uf04c") : "\uf04c"
                 color: bar.player && !bar.player.isPlaying ? Theme.muted : Theme.accent
-                font.family: bar.mediaBrand ? "Font Awesome 7 Brands" : Theme.iconFont
-                font.styleName: "Regular"; font.pixelSize: Theme.iconSize
+                family: bar.mediaBrand ? "Font Awesome 7 Brands" : Theme.iconFont
             }
             BarLabel {
                 text: bar.player ? bar.player.trackTitle + (bar.player.trackArtist ? "  ·  " + bar.player.trackArtist : "")
@@ -340,15 +348,14 @@ PanelWindow {
         id: caffeineComp
         Chip {
             active: bar.inhibit
-            implicitWidth: 34
             onClicked: bar.inhibit = !bar.inhibit
-            BarLabel { text: bar.inhibit ? "\uf7b6" : "\uf0f4"; color: bar.inhibit ? Theme.accent : Theme.muted; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarIcon { text: bar.inhibit ? "\uf7b6" : "\uf0f4"; color: bar.inhibit ? Theme.accent : Theme.muted }
         }
     }
     Component {
         id: cpuComp
         Chip {
-            BarLabel { text: "\uf2db"; color: Theme.fgDim; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarIcon { text: "\uf2db"; color: Theme.fgDim }
             BarLabel { text: bar.cpu; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
             BarLabel { text: bar.spark(bar.cpuHist, 25, false); color: Theme.accent; Layout.preferredWidth: sparkMetrics.width }
         }
@@ -356,7 +363,7 @@ PanelWindow {
     Component {
         id: memComp
         Chip {
-            BarLabel { text: "\uf538"; color: Theme.fgDim; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarIcon { text: "\uf538"; color: Theme.fgDim }
             BarLabel { text: bar.mem; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
             BarLabel { text: bar.spark(bar.memHist, 10, true); color: Theme.accent2; Layout.preferredWidth: sparkMetrics.width }
         }
@@ -366,10 +373,11 @@ PanelWindow {
         id: haComp
         Chip {
             id: haChip
+            Component.onCompleted: bar.reg("ha", haChip)
             active: bar.isOpen("ha")
             dim: !HomeAssistant.configured || (HomeAssistant.status !== "ok" && HomeAssistant.status !== "loading")
             onClicked: bar.pop("ha", haChip)
-            BarLabel { text: HomeAssistant.lightsOn > 0 ? "\uf672" : "\uf015"; color: HomeAssistant.lightsOn > 0 ? Theme.accent : HomeAssistant.configured && HomeAssistant.status === "ok" ? Theme.fg : Theme.muted; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarIcon { text: HomeAssistant.lightsOn > 0 ? "\uf672" : "\uf015"; color: HomeAssistant.lightsOn > 0 ? Theme.accent : HomeAssistant.configured && HomeAssistant.status === "ok" ? Theme.fg : Theme.muted }
             BarLabel { visible: HomeAssistant.lightsOn > 0; text: HomeAssistant.lightsOn }
         }
     }
@@ -379,17 +387,30 @@ PanelWindow {
         id: aiComp
         Chip {
             id: aiChip
+            Component.onCompleted: bar.reg("ai", aiChip)
             active: bar.isOpen("ai")
             dim: AiUsage.loaded && AiUsage.profiles.length === 0 && AiUsage.others.length === 0
             onClicked: bar.pop("ai", aiChip)
-            BarLabel { text: "\uf890"; color: AiUsage.anyExpired ? Theme.muted : Theme.accent; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
-            BarLabel { visible: AiUsage.currentPercent >= 0; text: Math.round(AiUsage.currentPercent) + "%"; color: AiUsage.currentStale ? Theme.muted : Theme.fg }
+            BarIcon { text: "\uf890"; color: AiUsage.anyExpired ? Theme.muted : Theme.accent }
+            // limit reached: time until the agent is usable again (AiUsage.blockedUntil), fixed width so the
+            // minute countdown does not make the chip jitter; else the percentage
+            BarLabel {
+                id: aiLbl
+                readonly property bool blocked: AiUsage.blockedUntil > 0
+                visible: blocked || AiUsage.currentPercent >= 0
+                text: blocked ? AiUsage.until(AiUsage.blockedUntil) : Math.round(AiUsage.currentPercent) + "%"
+                color: AiUsage.currentStale ? Theme.muted : Theme.fg
+                horizontalAlignment: Text.AlignHCenter
+                Layout.preferredWidth: blocked ? Math.max(implicitWidth, aiTm.width) : implicitWidth
+                TextMetrics { id: aiTm; font: aiLbl.font; text: "23h 59m" }
+            }
         }
     }
     Component {
         id: volumeComp
         Chip {
             id: audioChip
+            Component.onCompleted: bar.reg("audio", audioChip)
             active: bar.isOpen("audio")
             dim: bar.muted
             // click: audio popup (volume, mic, devices) | middle: mute | right: pavucontrol | wheel: volume
@@ -402,7 +423,7 @@ PanelWindow {
                 if (bar.sink && bar.sink.audio)
                     bar.sink.audio.volume = Math.max(0, Math.min(1.0, bar.sink.audio.volume + (dy > 0 ? 0.03 : -0.03)))
             }
-            BarLabel { text: bar.muted ? "\uf6a9" : bar.volume < 0.01 ? "\uf026" : bar.volume < 0.5 ? "\uf027" : "\uf028"; color: bar.muted ? Theme.muted : Theme.accent; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: Theme.iconSize + 4; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarIcon { measure: "\uf028"; text: bar.muted ? "\uf6a9" : bar.volume < 0.01 ? "\uf026" : bar.volume < 0.5 ? "\uf027" : "\uf028"; color: bar.muted ? Theme.muted : Theme.accent }
             BarLabel { text: Math.round(bar.volume * 100) + "%"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
         }
     }
@@ -410,20 +431,22 @@ PanelWindow {
         id: netComp
         Chip {
             id: netChip
+            Component.onCompleted: bar.reg("net", netChip)
             active: bar.isOpen("net")
             dim: !bar.wiredUp && !bar.wifiUp
             onClicked: bar.pop("net", netChip)
-            BarLabel { text: bar.wiredUp ? "\uf796" : bar.wifiUp ? "\uf1eb" : "\uf6ac"; color: bar.wiredUp || bar.wifiUp ? Theme.accent : Theme.muted; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarIcon { text: bar.wiredUp ? "\uf796" : bar.wifiUp ? "\uf1eb" : "\uf6ac"; color: bar.wiredUp || bar.wifiUp ? Theme.accent : Theme.muted }
         }
     }
     Component {
         id: btComp
         Chip {
             id: btChip
+            Component.onCompleted: bar.reg("bt", btChip)
             active: bar.isOpen("bt")
             dim: !bar.btOn
             onClicked: bar.pop("bt", btChip)
-            BarLabel { text: "\uf293"; color: bar.btConnected > 0 ? Theme.accent : bar.btOn ? Theme.fg : Theme.muted; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: Theme.iconSize }
+            BarIcon { text: "\uf293"; color: bar.btConnected > 0 ? Theme.accent : bar.btOn ? Theme.fg : Theme.muted }
             BarLabel { visible: bar.btConnected > 0; text: bar.btConnected }
         }
     }
@@ -431,16 +454,18 @@ PanelWindow {
         id: trayComp
         Chip {
             property bool show: SystemTray.items.values.some(i => !bar.isApplet(i))
+            padX: 6
             Repeater {
                 model: SystemTray.items
                 Item {
                     id: trayItem
                     required property var modelData
                     visible: !bar.isApplet(modelData)
-                    implicitWidth: 18
-                    implicitHeight: 18
+                    implicitWidth: Theme.chipIcon
+                    implicitHeight: Theme.chipIcon
+                    Layout.alignment: Qt.AlignVCenter
                     Rectangle {      // highlight while this item's menu is open (same look as an active chip)
-                        anchors { fill: parent; margins: -4 }
+                        anchors { fill: parent; margins: -3 }
                         radius: Theme.radiusChip
                         visible: menu.visible
                         color: Theme.alpha(Theme.accent, 0.28)
@@ -450,7 +475,7 @@ PanelWindow {
                     Image {
                         anchors.fill: parent
                         source: trayItem.modelData.icon
-                        sourceSize: Qt.size(36, 36)
+                        sourceSize: Qt.size(2 * Theme.chipIcon, 2 * Theme.chipIcon)
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -475,6 +500,7 @@ PanelWindow {
         id: clockComp
         Chip {
             id: clockChip
+            Component.onCompleted: bar.reg("cal", clockChip)
             active: bar.isOpen("cal")
             onClicked: mouse => mouse.button === Qt.RightButton ? bar.run("thunderbird --calendar") : bar.pop("cal", clockChip)
             BarLabel { text: Qt.formatDateTime(clock.date, "yyyy-MM-dd HH:mm") }
