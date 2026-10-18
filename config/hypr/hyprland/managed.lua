@@ -30,6 +30,16 @@
 -- back with hl.get_config (M.baseline). layout_apply() writes them back for keys that this file had
 -- overridden and that are no longer set (Settings > Appearance "Reset" writes {}).
 --
+-- Glass (Settings > Glass, only on the Hyprland fork with decoration:blur:variant = "solid_glass"): a SECOND
+-- state file next to appearance.json, ${XDG_STATE_HOME:-~/.local/state}/quickshell/glass.json (env override
+-- GLASS_FILE), a flat object of numbers written only by Quickshell (GlassTuneCtl.qml):
+--   {"version":1,"refraction":48,"bulb":57,"clarity":0.4,"aberration":0,"tint":0,"depth":2,"edge_curve":1.3,
+--    "light_angle":0,"specular_intensity":0,"specular_power":1,"sheen":0,"saturation":1.35,"frost":0,"darkening":0.8}
+-- Every PRESENT, valid key is applied to decoration.blur.solid_glass.<key> at load, after settings.lua, so
+-- it wins; the solid_glass block in settings.lua is therefore the default for keys Settings never touched.
+-- Values are clamped to the option ranges (tint: AARRGGBB integer). On a Hyprland without the solid_glass
+-- options (stock) nothing is applied and no option is ever touched (M.glass_supported()).
+--
 -- Runtime: Quickshell runs `hyprctl eval "if layout_apply then layout_apply() end"` after saving (and
 -- `hyprctl reload config-only` when smartGaps or smartMonitors changed). A config reload re-runs
 -- everything, so it gives the same result.
@@ -206,6 +216,14 @@ function M.read_small_file(path, max)
 	return text, why
 end
 
+-- Glass options (decoration.blur.solid_glass.*): key -> {min, max}; same ranges as GlassTuneCtl.qml
+M.GLASS_LIMITS = {
+	refraction = { 0, 48 }, bulb = { 4, 256 }, clarity = { 0, 1 }, aberration = { 0, 0.25 },
+	tint = { 0, 0xFFFFFFFF }, depth = { 0, 3 }, edge_curve = { 0.2, 5 }, light_angle = { 0, 360 },
+	specular_intensity = { 0, 3 }, specular_power = { 1, 200 }, sheen = { 0, 1 }, saturation = { 0, 3 },
+	frost = { 0, 16 }, darkening = { 0, 1 },
+}
+
 function M.state_path()
 	local p = os.getenv("APPEARANCE_FILE")
 	if p ~= nil and p ~= "" then
@@ -349,6 +367,74 @@ function M.capture_baseline()
 	end
 	M.baseline = base
 	return base
+end
+
+-- ---------------------------------------------------------------- glass (solid_glass options)
+
+function M.glass_path()
+	local p = os.getenv("GLASS_FILE")
+	if p ~= nil and p ~= "" then
+		return p
+	end
+	return (M.state_path():match("^(.*)/[^/]*$") or ".") .. "/glass.json"
+end
+
+-- Pure: text of glass.json -> {key = number} with ONLY the keys that are set and valid (clamped; tint is
+-- rounded to an integer). Never raises; anything odd (garbage, > 4 KiB, null, strings, NaN) is "not set".
+function M.parse_glass(text)
+	local g = {}
+	if type(text) ~= "string" or #text > M.MAX_BYTES then
+		return g
+	end
+	local body = text:match("^%s*(%b{})%s*$")
+	if body == nil then
+		return g
+	end
+	for key, lim in pairs(M.GLASS_LIMITS) do
+		local tok = last_token(body, key)
+		local v = tok and tok:match("^%-?%d[%d%.eE+%-]*$") and tonumber(tok)
+		if type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge then
+			v = math.max(lim[1], math.min(lim[2], v))
+			if key == "tint" then
+				v = math.tointeger(math.floor(v + 0.5)) or lim[1]
+			end
+			g[key] = v
+		end
+	end
+	return g
+end
+
+function M.read_glass()
+	local ok, g = pcall(function()
+		local text = M.read_small_file(M.glass_path())
+		return text and M.parse_glass(text) or {}
+	end)
+	return ok and type(g) == "table" and g or {}
+end
+
+-- Does this Hyprland have decoration:blur:solid_glass:*? (stock builds do not)
+function M.glass_supported()
+	local ok, v = pcall(hl.get_config, "decoration.blur.solid_glass.refraction")
+	return ok and v ~= nil
+end
+
+-- {key = number} -> writes the keys; nothing at all when the option does not exist.
+-- -> true, or false plus a reason.
+function M.apply_glass(g)
+	g = type(g) == "table" and g or {}
+	if next(g) == nil then
+		return true
+	end
+	if not M.glass_supported() then
+		return false, "no solid_glass options"
+	end
+	local t = {}
+	for key in pairs(M.GLASS_LIMITS) do
+		if type(g[key]) == "number" then
+			t[key] = g[key]
+		end
+	end
+	return pcall(hl.config, { decoration = { blur = { solid_glass = t } } })
 end
 
 -- ---------------------------------------------------------------- apply
@@ -583,10 +669,13 @@ function M.apply_options(s)
 	return ok_all, first_err
 end
 
--- settings -> applies them: the four options (M.apply_options) and the smart rules (M.apply_smart).
--- -> true, or false plus the first error.
+-- settings -> applies them: the four options (M.apply_options), the smart rules (M.apply_smart) and the
+-- glass options from glass.json (M.apply_glass). -> true, or false plus the first error.
 function M.apply(s)
 	local ok_all, first_err = M.apply_options(s)
+	pcall(function()
+		M.apply_glass(M.read_glass())
+	end)
 	local ok, err = pcall(M.apply_smart, s)
 	if not ok and ok_all then
 		ok_all, first_err = false, err
@@ -600,6 +689,9 @@ local initial = M.read()
 
 pcall(M.capture_baseline)
 pcall(M.apply_options, initial)
+pcall(function()
+	M.apply_glass(M.read_glass())
+end)
 
 -- Smart gaps ("lone window fills the screen"): a lone tiled window gets no gaps and no border/rounding.
 -- w[tv1] = exactly one visible tiled window; f[1] = one fullscreen-capable window. The gaps rules only

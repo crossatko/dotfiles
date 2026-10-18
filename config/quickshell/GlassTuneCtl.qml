@@ -2,12 +2,19 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 
-// Engine of the solid_glass live configurator (GlassTune.qml is the panel).
+// Engine of Settings -> Glass (SettingsGlass.qml is the page): the solid_glass options.
 // Applies decoration:blur:solid_glass:* to ONE Hyprland instance with `hyprctl eval 'hl.config{...}'` (keyword
 // is not available in the Lua config), reads the real values back with `getoption`, and copies the result as a
 // Lua snippet.
-//   qs ipc call glasstune toggle | open | close | set <key> <value> | get <key> | reset <key|all> | copy changed|all | dump
+//   qs ipc call glasstune set <key> <value> | get <key> | reset <key|all> | copy changed|all | reload | dump
+//
+// Persistence: the values the user changed are saved (debounced) in glass.json next to appearance.json
+// (${XDG_STATE_HOME:-~/.local/state}/quickshell/glass.json, QS_GLASS_FILE overrides the path). Hyprland reads it
+// at config load in hypr/hyprland/managed.lua, after settings.lua, so it wins over the hand-written
+// solid_glass block (which stays the default for keys never touched here). Only keys that were changed are in the
+// file; "reset" saves the built-in default of that key as a change, it does not remove the key.
 //
 // Instance guard: every hyprctl call gets HYPRLAND_INSTANCE_SIGNATURE explicitly from this process' environment.
 // With `nestedOnly` (the dev copy) it refuses to run unless that signature is set, belongs to a compositor this
@@ -20,10 +27,6 @@ Singleton {
     readonly property string liveSocket: "wayland-1"
     // where the Lua snippet goes: the live session's clipboard on purpose (paste into an editor); "" = own display
     readonly property string copyDisplay: nestedOnly ? "wayland-1" : ""
-    readonly property bool restoreOnStart: nestedOnly      // re-apply the saved values at start (dev only)
-
-    property bool shown: false
-    function toggle() { shown = !shown }
 
     // ---- options (ConfigValues.cpp is the source of truth) ----
     // curve: slider response exponent (>1 gives the low end more room)
@@ -67,12 +70,18 @@ Singleton {
 
     // pending: keys not yet sent
     property var dirty: ({})
-    property string status: ""          // last result line, for the panel
+    // keys changed by the user (value saved in glass.json); all of them are applied by managed.lua at config load
+    property var overrides: ({})
+    property string status: ""          // last result line, for the page
     function set(key, x) {
-        if (keys.indexOf(key) < 0 || isNaN(x)) return false
+        if (!ready || keys.indexOf(key) < 0 || typeof x !== "number" || isNaN(x)) return false
+        const c = clamp(key, x)
         const v = Object.assign({}, values)
-        v[key] = clamp(key, x)
+        v[key] = c
         values = v
+        const o = Object.assign({}, overrides)
+        o[key] = c
+        overrides = o
         dirty[key] = true
         throttle.start()
         saver.restart()
@@ -89,7 +98,7 @@ Singleton {
     property string guard: "checking"
     property string guardError: ""
     readonly property bool ready: guard === "ok"
-    // the running Hyprland has no decoration:blur:solid_glass:* options (stock build): the bar chip hides itself
+    // the running Hyprland has no decoration:blur:solid_glass:* options (stock build)
     property bool unsupported: false
     function fail(msg) { guard = "error"; guardError = msg; status = "" }
     function checkGuard() {
@@ -138,13 +147,11 @@ Singleton {
                 }
                 if (n === 0) {
                     ctl.unsupported = true
-                    ctl.shown = false
                     ctl.fail("this Hyprland has no solid_glass blur (decoration:blur:solid_glass:* missing)")
                     return
                 }
                 ctl.values = v
-                ctl.status = "loaded " + n + " values"
-                ctl.restore()
+                ctl.status = ""
             }
         }
     }
@@ -193,30 +200,47 @@ Singleton {
         environment: (ctl.copyDisplay ? { WAYLAND_DISPLAY: ctl.copyDisplay } : ({}))
     }
 
-    // ---- persistence (dev only: the real config keeps its values in the Lua config) ----
-    readonly property string stateFile: Appearance.dir + "/glasstune.json"
-    Timer { id: saver; interval: 500; onTriggered: if (ctl.restoreOnStart) ctl.persist.setText(JSON.stringify(ctl.values, null, 2)) }
-    property alias persist: store
+    // ---- persistence ----
+    readonly property string stateFile: {
+        const env = Quickshell.env("QS_GLASS_FILE")
+        return env ? String(env) : Appearance.dir + "/glass.json"
+    }
+    Timer { id: saver; interval: 500; onTriggered: ctl.save() }
+    function save() {
+        const o = { version: 1 }
+        for (const k of keys) if (overrides[k] !== undefined) o[k] = overrides[k]
+        const dir = stateFile.substring(0, stateFile.lastIndexOf("/")) || "/"
+        Quickshell.execDetached(["mkdir", "-p", dir])
+        store.setText(JSON.stringify(o) + "\n")
+    }
     FileView { id: store; path: ctl.stateFile; printErrors: false; blockLoading: true }
-    function restore() {
-        if (!restoreOnStart || restored) return
-        restored = true
+    // the saved overrides (what managed.lua applies), read once; the page shows live values from getoption
+    function loadSaved() {
+        const o = {}
         try {
             const p = JSON.parse(store.text())
-            for (const k of keys)
-                if (typeof p[k] === "number" && isChanged2(p[k], k)) set(k, p[k])
+            for (const k of keys) if (typeof p[k] === "number" && isFinite(p[k])) o[k] = clamp(k, p[k])
         } catch (e) {}
+        overrides = o
     }
-    property bool restored: false
-    function isChanged2(x, k) { return Math.abs(x - values[k]) > 1e-6 }
 
-    Component.onCompleted: { Quickshell.execDetached(["mkdir", "-p", Appearance.dir]); checkGuard() }
+    // A config reload (also the one Settings -> Appearance triggers) re-applies glass.json: read the values
+    // back, or, while a change is still pending, send the pending state again so the reload cannot undo it.
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            if (event.name !== "configreloaded" || !ctl.ready) return
+            if (saver.running || throttle.running || applyProc.running) {
+                for (const k of Object.keys(ctl.overrides)) ctl.dirty[k] = true
+                throttle.restart()
+            } else ctl.load()
+        }
+    }
+
+    Component.onCompleted: { loadSaved(); checkGuard() }
 
     IpcHandler {
         target: "glasstune"
-        function toggle(): void { ctl.toggle() }
-        function open(): void { ctl.shown = true }
-        function close(): void { ctl.shown = false }
         function set(key: string, value: string): string { return ctl.set(key, Number(value)) ? "ok" : "bad key/value" }
         function get(key: string): string { return ctl.values[key] === undefined ? "bad key" : ctl.fmt(key, ctl.values[key]) }
         function reset(key: string): string { return ctl.reset(key) ? "ok" : "bad key" }

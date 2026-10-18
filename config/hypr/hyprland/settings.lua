@@ -215,21 +215,24 @@ hl.config({
 			passes = 2,
 			vibrancy = 0.8,
 			popups = true,
-			-- variant = "solid_glass",
-			-- solid_glass = {
-			-- 	refraction = 48.0, -- max lens displacement (px), range 0-48, default 24.0 -- lower = subtler edge bend
-			-- 	bulb = 32.0, -- width of curved edge (px), range 4-256, default 48.0 -- keep well under half the window's smallest dimension or the whole window becomes "edge"
-			-- 	clarity = 0, -- amount of sharp backdrop transmitted through surface, uniformly across the whole edge including the true boundary, range 0-1, default 0.82
-			-- 	aberration = 0.05, -- relative chromatic separation in the lens, range 0-0.25, default 0.025 -- subtle fringe, not a rainbow
-			-- 	tint = "rgba(00000066)", -- light neutral tint, alpha controls optical absorption
-			-- 	depth = 0.5, -- refraction bend strength: 0 = flat glass, no bend; 1 = normal; >1 = bends harder, range 0-3
-			-- 	edge_curve = 0.75, -- shape of the 3d edge curve the bend follows across the bulb width, range 0.2-5 -- 1.0 = linear/default. <1.0 bends earlier, right at the true edge (convex, rounded bead). >1.0 stays flat near the edge and bends later, closer to the interior (beveled look). try 0.5 or 2.0
-			-- 	light_angle = 55, -- degrees, 0 = right, 90 = up -- unused while specular_intensity is 0
-			-- 	specular_intensity = 0, -- brightness of the ENTIRE synthetic light model (fresnel rim, specular glint, sheen, directional edge highlight/shadow), range 0-3 -- 0 = pure refraction of the real backdrop, no invented lighting. Raise this later if you want some glass-catching-light shine back
-			-- 	specular_power = 60, -- sharpness of the glint, range 1-200 -- unused while specular_intensity is 0
-			-- 	sheen = 0.25, -- rim-only glint tracing the edge facing the light, range 0-1 -- unused while specular_intensity is 0
-			-- 	saturation = 1.2, -- vividness of the backdrop color seen through the glass, range 0-3
-			-- },
+			variant = "solid_glass",
+			-- tune live with GlassTune (pen chip in the bar), then "Copy changed" and paste here
+			solid_glass = {
+				refraction = 48, -- max lens displacement (px), 0-48
+				bulb = 57.03, -- width of the curved edge (px), 4-256
+				clarity = 0.395, -- 1 = sharp interior (only `frost` blurs it), 0 = fully frosted, 0-1
+				aberration = 0, -- chromatic split in the lens, 0-0.25
+				tint = 0x00000000, -- AARRGGBB, alpha = absorption
+				depth = 2.031, -- bend multiplier, 0-3
+				edge_curve = 1.304, -- <1 bends right at the edge, >1 later (bevel), 0.2-5
+				light_angle = 0, -- degrees, 0 = right, 90 = up
+				specular_intensity = 0, -- synthetic rim/glint/sheen lighting, 0 = off, 0-3
+				specular_power = 1, -- glint sharpness, 1-200
+				sheen = 0, -- rim glint facing the light, 0-1
+				saturation = 1.355, -- backdrop vividness, 0-3
+				frost = 0, -- interior blur radius (px), 0-16
+				darkening = 0.795, -- 0-1
+			},
 		},
 	},
 })

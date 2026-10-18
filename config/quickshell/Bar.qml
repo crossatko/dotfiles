@@ -279,13 +279,6 @@ PanelWindow {
             }
         }
 
-        Chip {   // solid_glass configurator (GlassTune.qml)
-            visible: !GlassTuneCtl.unsupported
-            active: GlassTuneCtl.shown
-            onClicked: GlassTuneCtl.toggle()
-            BarIcon { text: "\uf0d0"; color: GlassTuneCtl.shown ? Theme.accent : Theme.fg }
-        }
-
         Chip {
             id: bellChip               // always shown: it opens the control center, whose gear opens Settings
             Component.onCompleted: bar.reg("center", bellChip)

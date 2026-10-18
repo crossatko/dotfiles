@@ -7,7 +7,7 @@ import Quickshell.Wayland
 // pages on the left and the selected page (scrollable) on the right. Opened from the control center's gear,
 // or `qs ipc call settings toggle|open|close` / `qs ipc call settings page <id>`; `qs ipc call picker toggle`
 // (SUPER+T) = togglePage("wallpaper").
-// Adding a page: one entry in `pages` (id, title, Font Awesome icon, QML file whose root fills the width).
+// Adding a page: one entry in `allPages` (id, title, Font Awesome icon, QML file whose root fills the width).
 // A page root may declare `readonly property bool wantsFocus: true` (gets the keyboard focus; unhandled keys
 // such as Escape bubble up to the card), `property Flickable flick` (set to the page's scroller) and
 // `property Component headerItem` (shown in the title row, between the title and the close button; it
@@ -15,11 +15,15 @@ import Quickshell.Wayland
 PanelWindow {
     id: win
 
-    readonly property var pages: [
+    // glassOnly pages exist only while the running Hyprland draws the solid_glass blur (Theme.glass)
+    readonly property var allPages: [
         { id: "bar",      title: "Bar",      icon: "\uf0db", source: "SettingsBar.qml" },
         { id: "wallpaper", title: "Wallpaper & theme", icon: "\uf03e", source: "SettingsWallpaper.qml" },
-        { id: "appearance", title: "Appearance", icon: "\uf53f", source: "SettingsAppearance.qml" }
+        { id: "appearance", title: "Appearance", icon: "\uf53f", source: "SettingsAppearance.qml" },
+        { id: "glass", title: "Glass", icon: "\uf0d0", source: "SettingsGlass.qml", glassOnly: true }
     ]
+    readonly property var pages: allPages.filter(p => !p.glassOnly || Theme.glass)
+    readonly property var glassCtl: GlassTuneCtl       // instantiates the controller (and its `glasstune` IPC target) with the shell
     property string page: "bar"
     readonly property var current: pages.find(p => p.id === page) || pages[0]
 

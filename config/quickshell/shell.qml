@@ -24,7 +24,6 @@ ShellRoot {
     }
 
     Settings { id: settings }
-    GlassTune {}
     Menu { id: menu }
     RecordMenu { id: recordMenu }
     ScreenshotMenu { id: screenshotMenu }
