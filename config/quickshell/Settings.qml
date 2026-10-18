@@ -3,8 +3,10 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 
-// Settings window: a centered card on a fullscreen overlay (click outside / Escape closes), a sidebar of
-// pages on the left and the selected page (scrollable) on the right. Opened from the control center's gear,
+// Settings window: a floating toplevel titled "qs-settings" (Hyprland places it: SUPER+LMB drags, the position is
+// remembered, a double-click on the title row re-centres; see hypr/scripts/modal-windows.lua), Escape / the X close it. A sidebar
+// of pages on the left and the selected page (scrollable) on the right. Resizable and tileable (the size it opens at
+// is a default; Hyprland remembers the floating size). Opened from the control center's gear,
 // or `qs ipc call settings toggle|open|close` / `qs ipc call settings page <id>`; `qs ipc call picker toggle`
 // (SUPER+T) = togglePage("wallpaper").
 // Adding a page: one entry in `allPages` (id, title, Font Awesome icon, QML file whose root fills the width).
@@ -12,7 +14,7 @@ import Quickshell.Wayland
 // such as Escape bubble up to the card), `property Flickable flick` (set to the page's scroller) and
 // `property Component headerItem` (shown in the title row, between the title and the close button; it
 // fills that width, is vertically centered on the row's fixed height and doesn't scroll).
-PanelWindow {
+FloatingWindow {
     id: win
 
     // glassOnly pages exist only while the running Hyprland draws the solid_glass blur (Theme.glass)
@@ -28,23 +30,31 @@ PanelWindow {
     readonly property var current: pages.find(p => p.id === page) || pages[0]
 
     property bool shown: false
+    property var scr: Quickshell.screens[0]        // the monitor it was opened for: the card is sized from it
+    title: "qs-settings"
     visible: shown
-    anchors { left: true; right: true; top: true; bottom: true }
-    color: "transparent"                           // no dim backdrop; the window still catches click-outside
-    exclusiveZone: -1
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
-    WlrLayershell.namespace: "qs-settings"
+    color: "transparent"
+    property bool pinSize: false                   // true just after opening: the window re-sizes to the default (Qt keeps the last size, e.g. a tiled one)
+    implicitWidth: Math.min(scr.width - 80, Math.max(920, scr.width * 0.6))   // 920: content area no narrower than before the wider sidebar
+    implicitHeight: Math.min(scr.height - 80, Math.max(600, scr.height * 0.62))
+    // resizable (SUPER+RMB) and tileable (togglefloating): the card fills the window, 760x480 is the smallest
+    minimumSize: pinSize ? Qt.size(implicitWidth, implicitHeight) : Qt.size(760, 480)
+    maximumSize: pinSize ? Qt.size(implicitWidth, implicitHeight) : Qt.size(16384, 16384)
+    Timer { id: unpin; interval: 150; onTriggered: win.pinSize = false }
     BackgroundEffect.blurRegion: Region { regions: glass.instances }
     Glass { id: glass; root: contentItem; active: visible }
 
-    // opens on the monitor of the popup it was asked from (control center gear), else the focused one
+    // sized for the monitor of the popup it was asked from (control center gear), else the focused one; Hyprland
+    // opens it on the focused monitor
     function open(p) {
         if (p === "monitors") p = "bar"           // old page id: bar on/off + edge now live on the Bar page
         if (p && pages.some(x => x.id === p)) page = p
         if (shown) return
         const from = Popups.name !== "" ? Quickshell.screens.find(s => s.name === Popups.screen) : null
-        screen = from || Popups.focusedScreen()
+        scr = from || Popups.focusedScreen()
+        Popups.closeAll()
+        pinSize = true
+        unpin.restart()
         shown = true
     }
     function close() { shown = false }
@@ -58,7 +68,6 @@ PanelWindow {
     }
 
     onShownChanged: if (shown) focusPage()
-    PopupRegistration { kind: "settings"; open: win.shown; screenName: win.screen ? win.screen.name : ""; onDismissed: win.shown = false }
     Connections {
         target: Popups
         function onSettingsRequest(action, p) {
@@ -74,22 +83,17 @@ PanelWindow {
         focus: true
         Keys.onEscapePressed: win.close()
     }
-    MouseArea { anchors.fill: parent; onClicked: win.close() }
 
     Rectangle {
         id: card
         readonly property bool isGlassItem: true
-        anchors.centerIn: parent
-        width: Math.min(parent.width - 80, Math.max(920, parent.width * 0.6))   // 920: content area no narrower than before the wider sidebar
-        height: Math.min(parent.height - 80, Math.max(600, parent.height * 0.62))
+        anchors.fill: parent
         radius: Theme.radius
-        color: Theme.alpha(Theme.bg, Theme.glass ? 0.3 : 0.85)   // glass behind it (Glass.qml); without solid_glass: blurred by the qs-.* layer rule
+        color: Theme.alpha(Theme.bg, Theme.glass ? 0.3 : 0.85)   // glass behind it (Glass.qml); without solid_glass: blurred by the qs-modal window rule
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
 
         Keys.onEscapePressed: win.close()    // keys a focused page leaves unhandled bubble up to here
-
-        MouseArea { anchors.fill: parent }   // clicks on the card don't reach the close-scrim
 
         RowLayout {
             anchors.fill: parent
@@ -150,21 +154,24 @@ PanelWindow {
                 spacing: 14
 
                 // one line, fixed height (= close button), everything centered on it: title | headerItem | close
-                RowLayout {
+                Item {   // double-click on the title row: re-centre at the default size
                     Layout.fillWidth: true
                     Layout.preferredHeight: closeBtn.implicitHeight
-                    Layout.fillHeight: false
-                    spacing: 16
-                    Label { id: titleLabel; text: win.current.title; font.pixelSize: 20; Layout.alignment: Qt.AlignVCenter }
-                    // the page's optional `headerItem` (stays put while the page scrolls); empty = spacer
-                    Loader {
-                        id: headerLoader
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: closeBtn.implicitHeight    // not fillHeight: that would stretch the row
-                        Layout.alignment: Qt.AlignVCenter
-                        sourceComponent: pageLoader.item && pageLoader.item.headerItem ? pageLoader.item.headerItem : null
+                    ModalReset { windowTitle: win.title; anchors.fill: parent }
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: 16
+                        Label { id: titleLabel; text: win.current.title; font.pixelSize: 20; Layout.alignment: Qt.AlignVCenter }
+                        // the page's optional `headerItem` (stays put while the page scrolls); empty = spacer
+                        Loader {
+                            id: headerLoader
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: closeBtn.implicitHeight    // not fillHeight: that would stretch the row
+                            Layout.alignment: Qt.AlignVCenter
+                            sourceComponent: pageLoader.item && pageLoader.item.headerItem ? pageLoader.item.headerItem : null
+                        }
+                        Btn { id: closeBtn; icon: true; text: "\uf00d"; inset: 18; Layout.alignment: Qt.AlignVCenter; onClicked: win.close() }
                     }
-                    Btn { id: closeBtn; icon: true; text: "\uf00d"; inset: 18; Layout.alignment: Qt.AlignVCenter; onClicked: win.close() }
                 }
 
                 Flickable {

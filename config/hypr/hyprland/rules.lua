@@ -79,7 +79,8 @@ end
 -- Twitch player (~/code/crossatko/twitch-qs-mpv): a Quickshell FloatingWindow, so the class is
 -- always org.quickshell. Matched on class ONLY: the title ("Twitch - <channel>") is not yet set when
 -- Hyprland evaluates window rules for a Quickshell window, so title/initial_title matches never fire.
--- (Any other Quickshell FloatingWindow would get this rule too.)
+-- (Any other Quickshell FloatingWindow would get this rule too, except the shell's own modal windows below: their
+-- titles are "qs-<kind>", which the negative title match leaves out.)
 -- Same treatment as the Picture-in-picture rules above (floating, never dimmed, per-host placement);
 -- it keeps the screen awake while focused.
 if is_battlestation then
@@ -93,7 +94,7 @@ if is_battlestation then
 		monitor = monitor2.output,
 		move = "(monitor_w-1588) (monitor_h-933)",
 		size = "1588 893",
-		match = { class = "^(org\\.quickshell)$" },
+		match = { class = "^(org\\.quickshell)$", title = "negative:^qs-.*" },
 	})
 elseif is_workstation then
 	hl.window_rule({
@@ -104,9 +105,22 @@ elseif is_workstation then
 		no_dim = true,
 		rounding = 0,
 		idle_inhibit = "focus",
-		match = { class = "^(org\\.quickshell)$" },
+		match = { class = "^(org\\.quickshell)$", title = "negative:^qs-.*" },
 	})
 end
+-- The shell's own modal windows (ModalWindow.qml / Settings.qml: titles qs-settings, qs-screenshot, qs-record): plain
+-- floating cards. The card draws its own border; the window keeps the global rounding (= the Appearance radius, the
+-- card's radius too), because the glass of a window is cut to the window's own rounded box, not to the card. Placement (centre, remembered position, SUPER+double-click reset) is
+-- scripts/modal-windows.lua; the dragging itself is the normal SUPER+LMB bind.
+hl.window_rule({
+	name = "qs-modal",
+	float = true,
+	center = true,
+	border_size = 0,
+	no_shadow = true,
+	no_dim = true,
+	match = { class = "^(org\\.quickshell)$", title = "^qs-.*" },
+})
 -- Fallback when the embedded chat is unavailable: Brave's popout chat (class brave-www.twitch.tv__popout_<channel>_chat-Default)
 hl.window_rule({
 	name = "twitch-popout-chat",
@@ -116,6 +130,16 @@ hl.window_rule({
 	size = "420 900",
 	move = "(monitor_w-440) 60",
 	match = { class = "^(brave-www\\.twitch\\.tv__popout_.*)$" },
+})
+
+-- Scratchpad terminal (SUPER+R, binds.lua): floating, centred, 60% of the monitor, on special:scratchpad.
+hl.window_rule({
+	name = "scratchpad-terminal",
+	float = true,
+	workspace = "special:scratchpad",
+	size = "(monitor_w*0.6) (monitor_h*0.6)",
+	center = true,
+	match = { class = "^scratchpad$" },
 })
 
 hl.window_rule({

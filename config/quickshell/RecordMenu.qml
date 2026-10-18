@@ -4,21 +4,21 @@ import Quickshell
 import Quickshell.Io
 
 // Screen recording mode picker (SHIFT+Print when nothing records; see hyprland/binds.lua and
-// hypr/scripts/screenrec-key.sh). Fullscreen dim overlay on the focused monitor with a small card:
+// hypr/scripts/screenrec-key.sh). A small floating window (ModalWindow, title qs-record; SUPER+LMB drags it) with:
 // Region / Window / Screen tiles, Frame rate 30/60 and Format MP4/WebM segments, a "Record desktop
 // audio" switch. Keys: 1/2/3 start a mode, arrows / Tab move, Enter/Space activates (cycles a segment row),
-// F toggles the frame rate, M the format, A toggles audio, Escape or a click outside closes.
+// F toggles the frame rate, M the format, A toggles audio, Escape closes.
 //   qs ipc call record menu | close
 // Frame rate, format and audio are saved to $XDG_STATE_HOME/quickshell/screenrec.conf (key=value lines);
 // screenrec.sh reads the same file for options it isn't given (the key's fallback when the shell is down).
 // Choosing a mode hides the window first and starts screenrec.sh only after `launchDelay`, so the popup is
 // unmapped before slurp grabs the pointer and is never in the video. QS_RECORD_SCRIPT overrides the script
 // (isolated tests only).
-ModalMenu {
+ModalWindow {
     id: win
 
     kind: "record"
-    title: "Screen recording"
+    heading: "Screen recording"
     icon: "\uf03d"                    // video
     iconColor: Theme.red
 

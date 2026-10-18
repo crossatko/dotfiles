@@ -288,6 +288,7 @@ hl.animation({ leaf = "fadeLayersOut", enabled = true, speed = 0.5, bezier = "al
 hl.animation({ leaf = "workspaces", enabled = true, speed = 0.5, bezier = "almostLinear", style = "slidefade 5%" })
 hl.animation({ leaf = "workspacesIn", enabled = true, speed = 0.5, bezier = "almostLinear", style = "slidefade 5%" })
 hl.animation({ leaf = "workspacesOut", enabled = true, speed = 0.5, bezier = "almostLinear", style = "slidefade 5%" })
+hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 0.5, bezier = "quick", style = "fade" }) -- scratchpad (SUPER+R)
 hl.animation({ leaf = "zoomFactor", enabled = true, speed = 0.5, bezier = "quick" })
 
 hl.config({

@@ -61,6 +61,20 @@ bind({ mod, "X" }, hl.dsp.layout("togglesplit"))
 bind({ mod, "G" }, hl.dsp.group.toggle())
 bind({ mod, "TAB" }, hl.dsp.group.next())
 
+-- Scratchpad terminal: a kitty with its own class on the special workspace "scratchpad" (rules.lua floats and
+-- sizes it, and sends it there). Started on demand: the first press (or the first after it was closed) spawns it
+-- and its workspace rule shows it; later presses toggle the special workspace.
+local function toggle_scratchpad()
+	for _, w in ipairs(hl.get_windows()) do
+		if w.class == "scratchpad" then
+			hl.dispatch(hl.dsp.workspace.toggle_special("scratchpad"))
+			return
+		end
+	end
+	hl.dispatch(exec(apps.terminal .. " --class scratchpad"))
+end
+bind({ mod, "R" }, toggle_scratchpad)
+
 bind({ mod, "SHIFT", "E" }, show_power_menu)
 bind({ mod, "SHIFT", "S" }, show_sound_output_menu)
 bind({ mod, "SHIFT", "T" }, show_twitch_menu)

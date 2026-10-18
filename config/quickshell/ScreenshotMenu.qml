@@ -3,17 +3,17 @@ import QtQuick.Layouts
 import Quickshell
 
 // Screenshot mode picker (CTRL+Print; see hyprland/binds.lua and hypr/scripts/screenshot-key.sh).
-// Fullscreen dim overlay on the focused monitor with a small card: Region / Window / Screen tiles.
-// Keys: 1/2/3 take a shot, arrows / Tab move, Enter/Space activates, Escape or a click outside closes.
+// A small floating window (ModalWindow, title qs-screenshot) with Region / Window / Screen tiles; SUPER+LMB drags it.
+// Keys: 1/2/3 take a shot, arrows / Tab move, Enter/Space activates, Escape closes.
 //   qs ipc call screenshot menu | close
 // Choosing a mode hides the window first and starts screenshot.sh only after `launchDelay`, so the popup is
 // unmapped before slurp grabs the pointer and is never in the picture. QS_SHOT_SCRIPT overrides the script
 // (isolated tests only).
-ModalMenu {
+ModalWindow {
     id: win
 
     kind: "screenshot"
-    title: "Screenshot"
+    heading: "Screenshot"
     icon: ""                    // camera
 
     readonly property string script: Quickshell.env("QS_SHOT_SCRIPT")
