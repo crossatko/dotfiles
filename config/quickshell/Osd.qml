@@ -3,7 +3,6 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 import Quickshell.Services.Pipewire
 
 // Volume / brightness pill, bottom-center of the focused monitor. Volume is observed from
@@ -32,8 +31,7 @@ PanelWindow {
     mask: Region {}                      // never takes input
 
     function focusScreen() {
-        const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
-        const s = Quickshell.screens.find(x => x.name === name) || Quickshell.screens[0]
+        const s = Popups.focusedScreen()
         if (!shown && s !== target) target = s
     }
     function show(k, v, m) {

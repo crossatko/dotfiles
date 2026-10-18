@@ -3,7 +3,6 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 
 // Screenshot mode picker (CTRL+Print; see hyprland/binds.lua and hypr/scripts/screenshot-key.sh).
 // Fullscreen dim overlay on the focused monitor with a small card: Region / Window / Screen tiles.
@@ -40,13 +39,9 @@ PanelWindow {
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.namespace: "qs-screenshot"
 
-    function focusedScreen() {
-        const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
-        return Quickshell.screens.find(s => s.name === name) || Quickshell.screens[0]
-    }
     function open() {
         if (shown) return
-        screen = focusedScreen()
+        screen = Popups.focusedScreen()
         cur = lastMode
         shown = true
         keys.forceActiveFocus()

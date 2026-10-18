@@ -2,7 +2,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 
 // Replacement for tofi. Same look (full-screen dim, text block at 35% / 30%, 24pt
 // Paper Mono, accent-colored prompt and selection, 8 results, 10px spacing); fzf does
@@ -36,14 +35,9 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
-    function focusedScreen() {
-        const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
-        return Quickshell.screens.find(s => s.name === name) || Quickshell.screens[0]
-    }
-
     function begin() {
         if (shown) close()
-        screen = focusedScreen()
+        screen = Popups.focusedScreen()
         query = ""; input.text = ""
         results = []; sel = 0; first = 0
         replied = false

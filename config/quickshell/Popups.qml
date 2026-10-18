@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 
 // Which bar popup (notification center, network, bluetooth, calendar, media) is open,
 // on which screen, and the screen x of the chip it hangs from. One at a time.
@@ -50,6 +51,12 @@ Singleton {
     function esc() { if (Date.now() - escAt > 400) close() }
     function closeAll() { name = ""; dismiss("") }
     function edgeOf(scr) { return bars[scr] || "bottom" }
+    // the focused monitor (where keybind-opened things appear): its name ("" if unknown) / its screen (else the first)
+    function focusedName() { return Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "" }
+    function focusedScreen() {
+        const n = focusedName()
+        return Quickshell.screens.find(s => s.name === n) || Quickshell.screens[0]
+    }
 
     function opened(kind, scr) {
         name = ""

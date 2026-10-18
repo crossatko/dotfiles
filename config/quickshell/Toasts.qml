@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 
 // Notification toasts, top-right of the focused monitor (below a top bar if that screen has one).
 PanelWindow {
@@ -33,8 +32,7 @@ PanelWindow {
         function onPopupsChanged() {
             const n = Notifs.popups.length
             if (win.lastCount === 0 && n > 0) {
-                const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
-                win.target = Quickshell.screens.find(s => s.name === name) || Quickshell.screens[0]
+                win.target = Popups.focusedScreen()
             }
             win.lastCount = n
         }

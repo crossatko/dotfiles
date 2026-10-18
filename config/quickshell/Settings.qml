@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Hyprland
 
 // Settings window: a centered card on a fullscreen overlay (click outside / Escape closes), a sidebar of
 // pages on the left and the selected page (scrollable) on the right. Opened from the control center's gear,
@@ -33,17 +32,13 @@ PanelWindow {
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     WlrLayershell.namespace: "qs-settings"
 
-    function focusedScreen() {
-        const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
-        return Quickshell.screens.find(s => s.name === name) || Quickshell.screens[0]
-    }
     // opens on the monitor of the popup it was asked from (control center gear), else the focused one
     function open(p) {
         if (p === "monitors") p = "bar"           // old page id: bar on/off + edge now live on the Bar page
         if (p && pages.some(x => x.id === p)) page = p
         if (shown) return
         const from = Popups.name !== "" ? Quickshell.screens.find(s => s.name === Popups.screen) : null
-        screen = from || focusedScreen()
+        screen = from || Popups.focusedScreen()
         shown = true
     }
     function close() { shown = false }

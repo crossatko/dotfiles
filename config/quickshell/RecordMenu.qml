@@ -3,7 +3,6 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Hyprland
 
 // Screen recording mode picker (SHIFT+Print when nothing records; see hyprland/binds.lua and
 // hypr/scripts/screenrec-key.sh). Fullscreen dim overlay on the focused monitor with a small card:
@@ -54,13 +53,9 @@ PanelWindow {
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.namespace: "qs-record"
 
-    function focusedScreen() {
-        const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
-        return Quickshell.screens.find(s => s.name === name) || Quickshell.screens[0]
-    }
     function open() {
         if (shown) return
-        screen = focusedScreen()
+        screen = Popups.focusedScreen()
         cur = lastMode
         shown = true
         keys.forceActiveFocus()

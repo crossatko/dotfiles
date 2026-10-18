@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 
 // Entry point. Colors: ~/.config/theme/theme.toml -> Theme.qml (live).
 ShellRoot {
@@ -50,8 +49,7 @@ ShellRoot {
     IpcHandler {
         target: "popup"
         function toggle(name: string): void {
-            const m = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
-            Popups.toggle(name, m)
+            Popups.toggle(name, Popups.focusedName())
         }
         function close(): void { Popups.close() }
         function esc(): void { Popups.esc() }

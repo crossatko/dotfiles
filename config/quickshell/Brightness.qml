@@ -2,7 +2,6 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Hyprland
 
 // Screen brightness, one backend for the control center sliders and the brightness keys / OSD.
 //   external monitors: DDC/CI via ddcutil (set through ~/.config/hypr/scripts/ddc-set-brightness.sh, which retries)
@@ -42,7 +41,7 @@ Singleton {
 
     // the display the keys act on: the focused monitor if we control it, else the first one
     function focused() {
-        const m = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
+        const m = Popups.focusedName()
         return displays.indexOf(m) >= 0 ? m : (displays.length ? displays[0] : "")
     }
 
@@ -63,7 +62,7 @@ Singleton {
 
     // relative change for the keys; reads first when our value may be stale (something else may have set it)
     function step(delta) {
-        const m = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
+        const m = Popups.focusedName()
         const name = displays.length ? focused() : (workers[m] ? m : Object.keys(workers)[0])
         const w = name ? workers[name] : null
         if (!w) { queuedSteps = queuedSteps.concat([delta]); refresh(); return }
