@@ -4,7 +4,8 @@
 --
 -- The data is NOT in the repo: ${XDG_STATE_HOME:-~/.local/state}/quickshell/appearance.json
 -- (env override APPEARANCE_FILE), written only by Quickshell:
---   {"version":1,"radius":12,"gap":10,"edgeGap":10,"border":2,"barFloating":true,"smartGaps":true}
+--   {"version":1,"radius":12,"gap":10,"edgeGap":10,"border":2,"barFloating":true,"smartGaps":true,
+--    "smartMonitors":{"Dell Inc. DELL U2515H 9X2VY5AK1D5L":false}}
 --
 -- Override semantics: only keys PRESENT (and valid) in that file are applied, on top of the hand-written
 -- config (hyprland.lua loads this file after settings/workspaces/rules, so it wins):
@@ -12,7 +13,13 @@
 --   gap     -> general.gaps_in = round(gap/2), and general.gaps_out = gap unless edgeGap is set   (0-32)
 --   edgeGap -> general.gaps_out           (0-40)
 --   border  -> general.border_size        (0-6)
---   smartGaps (default true) -> the "lone window fills the screen" rules below are enabled/disabled
+--   smartGaps (default true) -> the "lone window fills the screen" rules below are enabled/disabled;
+--     it is the default for every monitor without its own entry in smartMonitors
+--   smartMonitors -> per-monitor smartGaps: {"<monitor key>": bool}. Key = the monitor description as
+--     Hyprland reports it (hl.get_monitors()[i].description = hyprctl monitors "description" =
+--     Quickshell Hyprland.monitorFor(screen).description), or the connector name when the description
+--     is not a valid key. Valid key: 1-96 printable ASCII characters without '"' and '\'. At most 16
+--     entries, values true/false only; anything else makes the whole map "not set".
 --   barFloating only matters for scripts/pip-reserve.lua (the bar reserve, see M.get())
 -- A missing key leaves the hand-written value alone. Values are clamped and rounded; anything odd
 -- (garbage, > 4 KiB, directory, FIFO, NaN, strings) counts as "not set".
@@ -22,8 +29,8 @@
 -- overridden and that are no longer set (Settings > Appearance "Reset" writes {}).
 --
 -- Runtime: Quickshell runs `hyprctl eval "if layout_apply then layout_apply() end"` after saving (and
--- `hyprctl reload config-only` when smartGaps changed). A config reload re-runs everything, so it
--- gives the same result.
+-- `hyprctl reload config-only` when smartGaps or smartMonitors changed). A config reload re-runs
+-- everything, so it gives the same result.
 --
 -- Nothing in here may raise at config load: a Lua error there disables the rest of the config,
 -- keybinds included. hyprland.lua and scripts/pip-reserve.lua also load it under pcall.
@@ -34,6 +41,9 @@ package.loaded[(...) or "hyprland.managed"] = M
 M.BAR_HEIGHT = 40 -- the Quickshell bar (Theme.qml barHeight); scripts/pip-reserve.lua uses it
 M.BAR_GAP_DEFAULT = 0 -- floating bar margin when neither gap nor edgeGap is set (theme.toml [settings] gap)
 M.MAX_BYTES = 4096
+M.SMART_KEY_MAX = 96 -- longest smartMonitors key (bytes); same in Appearance.qml
+M.SMART_MAP_MAX = 16 -- most smartMonitors entries; same in Appearance.qml
+M.SMART_SETS_MAX = 32 -- most per-monitor rule sets registered in one config generation (hot-plug bound)
 
 local LIMITS = { radius = { 0, 32 }, gap = { 0, 32 }, edgeGap = { 0, 40 }, border = { 0, 6 } }
 local BOOLS = { barFloating = true, smartGaps = true }
@@ -74,10 +84,50 @@ local function last_token(text, key)
 	return found
 end
 
+-- smartMonitors key check (also used for the keys this file derives from monitors):
+-- 1..SMART_KEY_MAX bytes of printable ASCII, no '"' and no '\' (so no JSON escapes are ever needed).
+function M.valid_key(k)
+	return type(k) == "string" and #k >= 1 and #k <= M.SMART_KEY_MAX and k:find('[^ -~]') == nil and k:find('["\\]') == nil
+end
+
+-- '{"<key>":true|false, ...}' -> table, or nil when it is empty or anything in it is not valid
+-- (bad key, non-boolean value, nesting, escapes, more than SMART_MAP_MAX distinct keys). A duplicate
+-- key: the last one wins, as in JSON.parse.
+local function parse_map(obj)
+	local inner = type(obj) == "string" and obj:match("^{(.*)}$")
+	if inner == nil or inner:match("^%s*$") then
+		return nil
+	end
+	local out, n, pos = {}, 0, 1
+	while true do
+		local k, v, p = inner:match('^%s*"([^"]*)"%s*:%s*(%a+)%s*()', pos)
+		if k == nil or not M.valid_key(k) or (v ~= "true" and v ~= "false") then
+			return nil
+		end
+		if out[k] == nil then
+			n = n + 1
+			if n > M.SMART_MAP_MAX then
+				return nil
+			end
+		end
+		out[k] = v == "true"
+		local c = inner:sub(p, p)
+		if c == "" then
+			return out
+		end
+		if c ~= "," then
+			return nil
+		end
+		pos = p + 1
+	end
+end
+
 -- Pure: text of appearance.json -> table with ONLY the keys that are set and valid
--- (radius, gap, edgeGap, border: integers; barFloating, smartGaps: booleans). Never raises.
--- No JSON library: the file is tiny and flat, so values are picked with patterns. Text that does not
--- look like one JSON object, or is larger than MAX_BYTES, yields {}.
+-- (radius, gap, edgeGap, border: integers; barFloating, smartGaps: booleans; smartMonitors: map of
+-- booleans, see parse_map). Never raises.
+-- No JSON library: the file is tiny and nearly flat, so values are picked with patterns. Nested objects
+-- are cut out first (replaced by "@<n>"), so a key inside the map never counts as a top-level key.
+-- Text that does not look like one JSON object, or is larger than MAX_BYTES, yields {}.
 function M.parse(text)
 	local s = {}
 	if type(text) ~= "string" or #text > M.MAX_BYTES then
@@ -86,6 +136,16 @@ function M.parse(text)
 	local body = text:match("^%s*(%b{})%s*$")
 	if body == nil then
 		return s
+	end
+	local nested = {}
+	body = "{" .. (body:sub(2, -2):gsub("%b{}", function(obj)
+		nested[#nested + 1] = obj
+		return "@" .. #nested
+	end)) .. "}"
+	local map_tok = last_token(body, "smartMonitors")
+	local map_idx = map_tok and tonumber(map_tok:match("^@(%d+)$"))
+	if map_idx ~= nil then
+		s.smartMonitors = parse_map(nested[map_idx])
 	end
 	for key in pairs(LIMITS) do
 		local tok = last_token(body, key)
@@ -269,13 +329,81 @@ local function set_option(key, value)
 	return pcall(hl.config, { [section] = { [name] = value } })
 end
 
--- Smart-gaps rule handles (HL.WorkspaceRule / HL.WindowRule), toggled at runtime.
-local smart_rules = {}
-M.smart_rules = smart_rules
+-- ---------------------------------------------------------------- smart gaps (per monitor)
 
-function M.set_smart(on)
-	on = on ~= false
-	for _, h in ipairs(smart_rules) do
+-- settings, monitor key -> is "lone window fills the screen" on for that monitor
+-- (its smartMonitors entry, else smartGaps, else true).
+function M.smart_for(s, key)
+	s = type(s) == "table" and s or {}
+	local m = s.smartMonitors
+	if type(m) == "table" and key ~= nil and type(m[key]) == "boolean" then
+		return m[key]
+	end
+	return s.smartGaps ~= false
+end
+
+-- The catch-all rules (every monitor) are on only while no monitor is switched off explicitly, so
+-- they cover monitors without their own rules (connected later, rules not registered yet).
+function M.catch_all_on(s)
+	s = type(s) == "table" and s or {}
+	if s.smartGaps == false then
+		return false
+	end
+	if type(s.smartMonitors) == "table" then
+		for _, v in pairs(s.smartMonitors) do
+			if v == false then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+-- HL.Monitor -> its smartMonitors key: the description, else the connector name; nil if neither is valid.
+function M.monitor_key(mon)
+	local ok, key = pcall(function()
+		if M.valid_key(mon.description) then
+			return mon.description
+		end
+		if M.valid_key(mon.name) then
+			return mon.name
+		end
+		return nil
+	end)
+	return ok and key or nil
+end
+
+-- HL.Monitor (+ every connected monitor) -> the m[...] selector body for its rules:
+-- "desc:<description>" when that selects exactly this monitor, else the connector name.
+-- Hyprland's desc: selector is a PREFIX match that returns the first monitor found, so identical
+-- monitors (same description, e.g. no serial) or a description that is a prefix of another one get
+-- connector-name selectors, as does a description with brackets or edge spaces (selector syntax).
+-- nil when there is no usable selector.
+function M.monitor_selector(mon, monitors)
+	local ok, sel = pcall(function()
+		local desc, name = mon.description, mon.name
+		local use_desc = M.valid_key(desc) and desc:find("[%[%]]") == nil and desc:match("^%S.*%S$") ~= nil
+		if use_desc then
+			for _, o in ipairs(type(monitors) == "table" and monitors or {}) do
+				local od = o.description
+				if o.name ~= name and type(od) == "string" and od:sub(1, #desc) == desc then
+					use_desc = false
+				end
+			end
+		end
+		if use_desc then
+			return "desc:" .. desc
+		end
+		if M.valid_key(name) and name:find("[%[%]%s]") == nil then
+			return name
+		end
+		return nil
+	end)
+	return ok and sel or nil
+end
+
+local function set_handles(handles, on)
+	for _, h in ipairs(handles) do
 		pcall(function()
 			if h:is_enabled() ~= on then
 				h:set_enabled(on)
@@ -284,9 +412,105 @@ function M.set_smart(on)
 	end
 end
 
--- settings -> applies them: set keys are written, keys that were overridden before and are no longer
--- set get their baseline back, everything else is left alone. -> true, or false plus the first error.
-function M.apply(s)
+-- Catch-all rule handles (HL.WorkspaceRule / HL.WindowRule), toggled at runtime.
+local smart_rules = {}
+M.smart_rules = smart_rules
+-- Per-monitor rule sets, in registration order: { id, selector, key, handles = {...} }.
+-- id = selector .. "\n" .. key (a connector-name selector can later belong to another monitor).
+local smart_sets = {}
+M.smart_sets = smart_sets
+local smart_set_by_id = {}
+
+-- Old API: every smart rule (catch-all and per monitor) on or off.
+function M.set_smart(on)
+	on = on ~= false
+	set_handles(smart_rules, on)
+	for _, set in ipairs(smart_sets) do
+		set_handles(set.handles, on)
+	end
+end
+
+local function track(list, fn, spec)
+	local ok, h = pcall(fn, spec)
+	if ok and h ~= nil then
+		list[#list + 1] = h
+	end
+end
+
+local function slug(text)
+	return (text:gsub("[^%w]+", "-"))
+end
+
+-- Registers the four lone-window rules for one monitor: workspace rules m[<sel>]w[tv1] and
+-- m[<sel>]f[1] (gaps 0) and window rules on the same selectors (border 0, rounding 0).
+local function register_set(sel, key, on)
+	local set = { id = sel .. "\n" .. key, selector = sel, key = key, handles = {} }
+	local n = #smart_sets + 1
+	smart_sets[n] = set
+	smart_set_by_id[set.id] = set
+	local wtv1, f1 = "m[" .. sel .. "]w[tv1]", "m[" .. sel .. "]f[1]"
+	track(set.handles, hl.workspace_rule, { workspace = wtv1, gaps_out = 0, gaps_in = 0, enabled = on })
+	track(set.handles, hl.workspace_rule, { workspace = f1, gaps_out = 0, gaps_in = 0, enabled = on })
+	track(set.handles, hl.window_rule, {
+		name = ("no-border-single-wtv1-m%d-%s"):format(n, slug(sel)),
+		enabled = on,
+		match = { float = false, workspace = wtv1 },
+		border_size = 0,
+		rounding = 0,
+	})
+	track(set.handles, hl.window_rule, {
+		name = ("no-border-single-f1-m%d-%s"):format(n, slug(sel)),
+		enabled = on,
+		match = { float = false, workspace = f1 },
+		border_size = 0,
+		rounding = 0,
+	})
+	return set
+end
+
+-- -> the connected monitors as { selector, key } (nil when hl.get_monitors fails)
+local function connected()
+	local ok, mons = pcall(hl.get_monitors)
+	if not ok or type(mons) ~= "table" then
+		return nil
+	end
+	local out = {}
+	for _, mon in ipairs(mons) do
+		local key = M.monitor_key(mon)
+		local sel = key and M.monitor_selector(mon, mons)
+		if sel ~= nil then
+			out[#out + 1] = { selector = sel, key = key }
+		end
+	end
+	return out
+end
+
+-- Registers rule sets for connected monitors that have none yet (enabled per `s`), then sets every
+-- rule's state: catch-all = M.catch_all_on(s); a monitor's set = M.smart_for(s, key) while it is
+-- connected, off once its selector/key pair is gone (a connector name may now be another monitor).
+-- If the monitor list cannot be read, the sets keep their monitors and only follow the settings.
+-- -> number of sets registered now
+function M.apply_smart(s)
+	local mons = connected()
+	local live, added = {}, 0
+	for _, m in ipairs(mons or {}) do
+		local id = m.selector .. "\n" .. m.key
+		live[id] = true
+		if smart_set_by_id[id] == nil and #smart_sets < M.SMART_SETS_MAX then
+			pcall(register_set, m.selector, m.key, M.smart_for(s, m.key))
+			added = added + 1
+		end
+	end
+	set_handles(smart_rules, M.catch_all_on(s))
+	for _, set in ipairs(smart_sets) do
+		set_handles(set.handles, (mons == nil or live[set.id] == true) and M.smart_for(s, set.key))
+	end
+	return added
+end
+
+-- settings -> writes the four options: set keys are written, keys that were overridden before and are
+-- no longer set get their baseline back, everything else is left alone. -> true, or false plus the first error.
+function M.apply_options(s)
 	local t = M.targets(s)
 	local ok_all, first_err = true, nil
 	for _, key in ipairs(OPTION_ORDER) do
@@ -303,7 +527,17 @@ function M.apply(s)
 			end
 		end
 	end
-	M.set_smart(not (type(s) == "table" and s.smartGaps == false))
+	return ok_all, first_err
+end
+
+-- settings -> applies them: the four options (M.apply_options) and the smart rules (M.apply_smart).
+-- -> true, or false plus the first error.
+function M.apply(s)
+	local ok_all, first_err = M.apply_options(s)
+	local ok, err = pcall(M.apply_smart, s)
+	if not ok and ok_all then
+		ok_all, first_err = false, err
+	end
 	return ok_all, first_err
 end
 
@@ -312,37 +546,64 @@ end
 local initial = M.read()
 
 pcall(M.capture_baseline)
-pcall(M.apply, initial)
+pcall(M.apply_options, initial)
 
--- Smart gaps ("lone window fills the screen"), moved here from workspaces.lua / rules.lua: a lone
--- tiled window on ANY monitor gets no gaps and no border/rounding (the committed config limited the
--- gaps rule to the primary monitor). w[tv1] = exactly one visible tiled window; f[1] = one
--- fullscreen-capable window. The gaps rules only matter while gaps are non-zero. Always registered,
--- disabled when smartGaps is false, so layout_apply() can flip them at runtime with set_enabled.
+-- Smart gaps ("lone window fills the screen"): a lone tiled window gets no gaps and no border/rounding.
+-- w[tv1] = exactly one visible tiled window; f[1] = one fullscreen-capable window. The gaps rules only
+-- matter while gaps are non-zero. All rules are always registered and switched with set_enabled, so
+-- layout_apply() can flip them at runtime.
+-- 1. Catch-all (every monitor, the rules from before per-monitor settings): on while M.catch_all_on().
+--    It covers monitors that have no rules of their own yet.
+-- 2. One set per connected monitor, m[desc:<description>] (see M.monitor_selector): on per
+--    M.smart_for(). Monitors that appear later (hot-plug, or not yet there when the config loads at
+--    Hyprland start) get theirs from the monitor.added / hyprland.start events and from layout_apply().
 do
-	local smart_on = initial.smartGaps ~= false
-	local function track(fn, spec)
-		local ok, h = pcall(fn, spec)
-		if ok and h ~= nil then
-			smart_rules[#smart_rules + 1] = h
-		end
-	end
-	track(hl.workspace_rule, { workspace = "w[tv1]", gaps_out = 0, gaps_in = 0, enabled = smart_on })
-	track(hl.workspace_rule, { workspace = "f[1]", gaps_out = 0, gaps_in = 0, enabled = smart_on })
-	track(hl.window_rule, {
+	local smart_on = M.catch_all_on(initial)
+	track(smart_rules, hl.workspace_rule, { workspace = "w[tv1]", gaps_out = 0, gaps_in = 0, enabled = smart_on })
+	track(smart_rules, hl.workspace_rule, { workspace = "f[1]", gaps_out = 0, gaps_in = 0, enabled = smart_on })
+	track(smart_rules, hl.window_rule, {
 		name = "no-border-single-wtv1",
 		enabled = smart_on,
 		match = { float = false, workspace = "w[tv1]" },
 		border_size = 0,
 		rounding = 0,
 	})
-	track(hl.window_rule, {
+	track(smart_rules, hl.window_rule, {
 		name = "no-border-single-f1",
 		enabled = smart_on,
 		match = { float = false, workspace = "f[1]" },
 		border_size = 0,
 		rounding = 0,
 	})
+end
+pcall(M.apply_smart, initial)
+
+-- Monitor hot-plug: register rules for new monitors (re-reads the file). The subscriptions of an
+-- earlier load are removed first, in case a reload keeps the Lua state (no double handlers).
+function M.on_monitors_changed()
+	return pcall(function()
+		M.apply_smart((M.read()))
+	end)
+end
+do
+	local old = rawget(_G, "__managed_smart_subs")
+	if type(old) == "table" then
+		for _, sub in ipairs(old) do
+			pcall(function()
+				sub:remove()
+			end)
+		end
+	end
+	local subs = {}
+	for _, ev in ipairs({ "monitor.added", "monitor.removed", "hyprland.start" }) do
+		local ok, sub = pcall(hl.on, ev, function()
+			M.on_monitors_changed()
+		end)
+		if ok and sub ~= nil then
+			subs[#subs + 1] = sub
+		end
+	end
+	rawset(_G, "__managed_smart_subs", subs)
 end
 
 -- Global entry point for Quickshell: hyprctl eval "if layout_apply then layout_apply() end"

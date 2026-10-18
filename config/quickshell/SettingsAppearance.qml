@@ -1,8 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
+import Quickshell
 
-// Settings -> Appearance: corner radius, window gaps, window border, docked / floating bar and smart gaps.
+// Settings -> Appearance: corner radius, window gaps, window border, docked / floating bar and smart gaps
+// (one switch for all monitors, plus one per monitor when there are several).
 // Writes only through the Appearance singleton (appearance.json overrides, debounced save, then Hyprland is
 // poked); shows the EFFECTIVE values from Theme (override, else the theme default). Everything in the shell
 // and Hyprland follows at once, so the previews below are only a guide.
@@ -27,6 +29,10 @@ Item {
         Appearance.set(key, Math.round(v * max / step) * step)
     }
     readonly property bool anyOverride: Appearance.keys.some(k => Appearance.overridden(k))
+    readonly property bool multiMonitor: Quickshell.screens.length > 1
+    // with one monitor the "all monitors" switch is the only one: it shows that monitor's effective value
+    // (a leftover entry of its own, e.g. from a docked laptop, wins in Hyprland) and clears it when used
+    readonly property string soleKey: !multiMonitor && Quickshell.screens.length === 1 ? Appearance.monitorKey(Quickshell.screens[0]) : ""
 
     readonly property int titleW: 120          // label column, so the sliders line up
     readonly property int noteW: 64            // "(default)" column
@@ -72,14 +78,44 @@ Item {
             Layout.fillWidth: true
             spacing: 10
             Item { Layout.preferredWidth: pg.titleW }
+            // all monitors: sets the default (also for monitors connected later) and clears the rows below
             Toggle {
                 objectName: "toggle-smartGaps"
-                checked: Theme.smartGaps
-                onToggled: want => Appearance.set("smartGaps", want)
+                checked: pg.soleKey !== "" ? Appearance.smartFor(pg.soleKey, Theme.smartGaps) : Theme.smartGaps
+                onToggled: want => Appearance.setSmartAll(want)
             }
             Label { text: "No gaps for a single window"; color: Theme.fgDim; font.pixelSize: 12 }
-            Label { text: "a lone tiled window fills the screen"; color: Theme.muted; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
-            Label { visible: !Appearance.overridden("smartGaps"); text: "(default)"; color: Theme.muted; font.pixelSize: 11 }
+            Label {
+                text: pg.multiMonitor ? "a lone tiled window fills the screen · all monitors" : "a lone tiled window fills the screen"
+                color: Theme.muted; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap
+            }
+            Label {
+                visible: !Appearance.overridden("smartGaps") && !(pg.soleKey !== "" && Appearance.smartOverridden(pg.soleKey))
+                text: "(default)"; color: Theme.muted; font.pixelSize: 11
+            }
+        }
+        // one row per monitor (only with 2+ monitors): its own switch, "(default)" = follows the one above
+        Repeater {
+            model: pg.multiMonitor ? Quickshell.screens : []
+            delegate: RowLayout {
+                id: srow
+                required property var modelData
+                readonly property string key: Appearance.monitorKey(modelData)
+                readonly property bool own: key !== "" && Appearance.smartOverridden(key)
+                Layout.fillWidth: true
+                spacing: 10
+                Item { Layout.preferredWidth: pg.titleW }
+                Toggle {
+                    objectName: "toggle-smart-" + srow.modelData.name
+                    checked: Appearance.smartFor(srow.key, Theme.smartGaps)
+                    enabledLook: srow.key !== ""
+                    onToggled: want => Appearance.setSmartFor(srow.key, want)
+                }
+                Label { text: "\uf390"; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 12; color: Theme.fgDim; Layout.preferredWidth: 16; horizontalAlignment: Text.AlignHCenter }
+                Label { text: srow.modelData.model || srow.modelData.name; color: Theme.fgDim; font.pixelSize: 12; elide: Text.ElideRight; Layout.maximumWidth: 220 }
+                Label { text: srow.modelData.name; color: Theme.muted; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
+                Label { text: srow.own ? "" : "(default)"; color: Theme.muted; font.pixelSize: 11 }
+            }
         }
 
         // ---- bar ----
