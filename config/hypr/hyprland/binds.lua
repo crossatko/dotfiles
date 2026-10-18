@@ -36,6 +36,9 @@ bind("Print", exec(apps.screenshot))
 -- otherwise it opens the Quickshell mode menu (region / window / screen + desktop audio), and if the shell
 -- is down it records a region (scripts/screenrec-key.sh)
 bind({ "SHIFT", "Print" }, exec("$HOME/.config/hypr/scripts/screenrec-key.sh"))
+-- screenshot menu (scripts/screenshot.sh, grim + slurp): region / window / screen, saved + copied
+-- (scripts/screenshot-key.sh; falls back to a region shot if the shell is down). Plain Print stays hyprshot.
+bind({ "CTRL", "Print" }, exec("$HOME/.config/hypr/scripts/screenshot-key.sh"))
 bind({ mod, "D" }, exec(apps.menu))
 bind({ mod, "T" }, exec("qs ipc call picker toggle")) -- wallpaper + theme picker
 -- bind({ mod, "SHIFT", "V" }, exec("cliphist list | ~/.config/quickshell/bin/qmenu | cliphist decode | wl-copy"))

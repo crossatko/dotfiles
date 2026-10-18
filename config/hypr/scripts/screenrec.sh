@@ -333,6 +333,22 @@ if [ "$enc" != cpu ] && [ -n "$geom" ]; then
 	if [ "$gcodec" = av1 ]; then ((w >= AV1_MIN_W && h >= AV1_MIN_H)) || enc=cpu
 	else ((w >= GPU_MIN && h >= GPU_MIN)) || enc=cpu; fi
 fi
+# av1_vaapi (Mesa/VCN) pads the coded frame width up to a multiple of 8 and only sets the AV1 render size
+# to the real width; decoders (dav1d, browsers, mpv) show the padding as a green stripe on the right. So
+# give the GPU AV1 encoder a width that is a multiple of 8 (height is coded as is).
+if [ "$enc" = vaapi ] && [ "$gcodec" = av1 ]; then
+	if [ -z "$geom" ]; then        # whole monitor: only needs a geometry if its width is not aligned
+		mg=$(hyprctl monitors -j | jq -r --arg o "$output" '.[] | select(.name == $o)
+			| (if .transform % 2 == 1 then [.height, .width] else [.width, .height] end) as $s
+			| "\(.x),\(.y) \($s[0] / .scale | floor)x\($s[1] / .scale | floor)"' | head -n1)
+		wh=${mg##* }; w=${wh%x*}
+		[[ $w =~ ^[0-9]+$ ]] && ((w % 8)) && geom=$(geom_even "$mg") && output=""
+	fi
+	if [ -n "$geom" ]; then
+		wh=${geom##* }; w=${wh%x*}
+		geom="${geom%% *} $((w / 8 * 8))x${wh#*x}"
+	fi
+fi
 
 mapfile -t codec < <(enc_args "$enc" "$dev")
 args=(-y -f "$file" -r "$fps")
