@@ -55,3 +55,4 @@ LevelRow 1.0 LevelRow.qml
 KeyBadge 1.0 KeyBadge.qml
 ModeTile 1.0 ModeTile.qml
 ModalMenu 1.0 ModalMenu.qml
+PopupRegistration 1.0 PopupRegistration.qml

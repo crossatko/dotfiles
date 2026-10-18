@@ -51,13 +51,10 @@ PanelWindow {
         else keys.forceActiveFocus()
     }
 
-    onShownChanged: {
-        if (shown) { focusPage(); Popups.opened("settings", screen ? screen.name : "") }
-        else Popups.closed("settings")
-    }
+    onShownChanged: if (shown) focusPage()
+    PopupRegistration { kind: "settings"; open: win.shown; screenName: win.screen ? win.screen.name : ""; onDismissed: win.shown = false }
     Connections {
         target: Popups
-        function onDismiss(except) { if (except !== "settings" && win.shown) win.shown = false }
         function onSettingsRequest(action, p) {
             if (action === "open") win.open(p)
             else if (action === "close") win.close()

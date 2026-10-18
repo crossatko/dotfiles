@@ -19,11 +19,7 @@ PopupWindow {
 
     // one click-away thing at a time; a click on another monitor (ClickCatcher) closes it too
     readonly property string kind: "tray-" + tm.toString()
-    onVisibleChanged: visible ? Popups.opened(kind, host && host.screen ? host.screen.name : "") : Popups.closed(kind)
-    Connections {
-        target: Popups
-        function onDismiss(except) { if (except !== tm.kind && tm.visible) tm.visible = false }
-    }
+    PopupRegistration { kind: tm.kind; open: tm.visible; screenName: tm.host && tm.host.screen ? tm.host.screen.name : ""; onDismissed: tm.visible = false }
 
     anchor.window: host
     anchor.rect.x: anchorX

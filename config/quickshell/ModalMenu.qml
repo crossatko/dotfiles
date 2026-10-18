@@ -41,11 +41,7 @@ PanelWindow {
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.namespace: "qs-" + kind
 
-    onShownChanged: shown ? Popups.opened(kind, screen ? screen.name : "") : Popups.closed(kind)
-    Connections {
-        target: Popups
-        function onDismiss(except) { if (except !== win.kind && win.shown) win.close() }
-    }
+    PopupRegistration { kind: win.kind; open: win.shown; screenName: win.screen ? win.screen.name : ""; onDismissed: win.close() }
 
     Item {
         id: keys
