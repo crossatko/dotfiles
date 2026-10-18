@@ -76,7 +76,7 @@ PanelWindow {
         width: Math.min(parent.width - 80, Math.max(920, parent.width * 0.6))   // 920: content area no narrower than before the wider sidebar
         height: Math.min(parent.height - 80, Math.max(600, parent.height * 0.62))
         radius: Theme.radius
-        color: Theme.alpha(Theme.bg, 0.96)     // a big card of small text: near-opaque, unlike the small popups
+        color: Theme.alpha(Theme.bg, 0.85)     // blurred behind it (qs-settings layer rule, ignore_alpha 0.6: keep this above 0.6 and the dim above below it)
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
 

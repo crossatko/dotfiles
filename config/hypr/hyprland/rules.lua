@@ -323,7 +323,7 @@ hl.window_rule({
 	},
 })
 
-hl.layer_rule({ match = { namespace = "waybar" }, blur = true })
+-- Quickshell Menu.qml (launcher / dmenus; namespace inherited from tofi)
 hl.layer_rule({ match = { namespace = "launcher" }, blur = true })
 -- Quickshell (~/dotfiles/config/quickshell): the bar opts in to the global
 -- decoration:blur:* settings (size/passes/vibrancy/variant all apply as-is).
@@ -338,9 +338,7 @@ for _, ns in ipairs({ "qs-toast", "qs-popup", "qs-osd" }) do
 	hl.layer_rule({ match = { namespace = ns }, blur = true })
 	hl.layer_rule({ match = { namespace = ns }, ignore_alpha = 0.1 })
 end
-hl.layer_rule({ match = { namespace = "swaync-control-center" }, blur = true })
-hl.layer_rule({ match = { namespace = "swaync-control-center" }, ignore_alpha = 0.2 })
-hl.layer_rule({ match = { namespace = "swaync-control-center" }, animation = "slide right" })
-hl.layer_rule({ match = { namespace = "swaync-notification-center" }, blur = true })
-hl.layer_rule({ match = { namespace = "swaync-notification-center" }, ignore_alpha = 0.2 })
-hl.layer_rule({ match = { namespace = "swaync-notification-center" }, animation = "slide right" })
+-- Settings window: the layer is fullscreen (dim at alpha 0.5) with the card on top. ignore_alpha 0.6 sits between
+-- the dim (0.5, stays unblurred) and the card (Settings.qml, 0.85), so only the card's area is blurred.
+hl.layer_rule({ match = { namespace = "qs-settings" }, blur = true })
+hl.layer_rule({ match = { namespace = "qs-settings" }, ignore_alpha = 0.6 })
