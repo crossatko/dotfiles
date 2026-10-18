@@ -53,7 +53,6 @@ Singleton {
         return (typeof v !== "number" || !isFinite(v)) ? dflt : Math.max(lo, Math.min(hi, Math.round(v)))
     }
     readonly property int radius: Appearance.pick("radius", clampInt(p.rounding, 0, 32, 0))     // R, for outer elements
-    readonly property int rounding: radius                  // old name, kept until every component uses radius*
     readonly property int gap: Appearance.pick("gap", clampInt(p.gap, 0, 32, 0))                // window gap G
     readonly property int gapIn: Math.round(gap / 2)        // Hyprland gaps_in (visible gap between windows ~ G)
     readonly property int gapOut: Appearance.pick("edgeGap", gap)                               // Hyprland gaps_out (screen edge)

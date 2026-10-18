@@ -25,8 +25,6 @@ ColumnLayout {
     }
     // entities of a section that pass the per-entity hide filter
     function entsOf(g) { return availableOf(g).filter(id => hp.editing || !HomeAssistant.isHidden(id)) }
-    // entities actually shown (none while the whole section is off)
-    function idsOf(g) { return HomeAssistant.isSectionHidden(g.key) ? [] : entsOf(g) }
     // a hidden section keeps its (dimmed) header in edit mode so it can be switched back on
     function sectionVisible(g) {
         return HomeAssistant.isSectionHidden(g.key) ? hp.editing && availableOf(g).length > 0 : entsOf(g).length > 0
@@ -39,11 +37,6 @@ ColumnLayout {
     }
     readonly property int hiddenCount: HomeAssistant.hidden.filter(id => HomeAssistant.byId[id] !== undefined).length
     readonly property int hiddenSectionCount: HomeAssistant.hiddenSections.filter(k => groups.some(g => g.key === k && availableOf(g).length > 0)).length
-    readonly property int shownCount: {
-        let n = 0
-        for (const g of groups) n += idsOf(g).length
-        return n
-    }
     // sections drawn at all (hidden ones count in edit mode); the list stays up while any is there
     readonly property int sectionCount: groups.filter(g => sectionVisible(g)).length
 
