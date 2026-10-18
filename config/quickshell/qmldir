@@ -50,3 +50,4 @@ Icon 1.0 Icon.qml
 PanelHeader 1.0 PanelHeader.qml
 ListRow 1.0 ListRow.qml
 RowText 1.0 RowText.qml
+Notice 1.0 Notice.qml

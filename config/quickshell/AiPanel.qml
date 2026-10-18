@@ -35,25 +35,15 @@ ColumnLayout {
     }
 
     // empty state
-    Rectangle {
+    Notice {
         visible: AiUsage.loaded && ap.profiles.length === 0
-        Layout.fillWidth: true
-        implicitHeight: emptyCol.implicitHeight + 24
-        radius: Theme.radiusItem
-        color: Theme.alpha(Theme.fg, 0.06)
-        border.width: 1
-        border.color: Theme.alpha(Theme.overlay, 0.6)
-        ColumnLayout {
-            id: emptyCol
-            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 12 }
-            spacing: 4
-            Label { text: "No Claude profiles found"; font.bold: true }
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                text: "Looked for ~/.claude* directories (one per CLAUDE_CONFIG_DIR). Run claude and log in, then refresh."
-                color: Theme.fgDim; font.pixelSize: Theme.fontSmall
-            }
+        spacing: 4
+        Label { text: "No Claude profiles found"; font.bold: true }
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: "Looked for ~/.claude* directories (one per CLAUDE_CONFIG_DIR). Run claude and log in, then refresh."
+            color: Theme.fgDim; font.pixelSize: Theme.fontSmall
         }
     }
 

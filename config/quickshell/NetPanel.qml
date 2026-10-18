@@ -65,29 +65,21 @@ ColumnLayout {
         title: "Network"
     }
 
-    Rectangle {
+    Notice {
         visible: net.confirm !== null
-        Layout.fillWidth: true
-        implicitHeight: confirmRow.implicitHeight + 16
-        radius: Theme.radiusItem
-        color: Theme.alpha(Theme.red, 0.16)
-        border.width: 1
-        border.color: Theme.alpha(Theme.red, 0.7)
-        ColumnLayout {
-            id: confirmRow
-            anchors { fill: parent; margins: 8 }
+        danger: true
+        padX: 8
+        padY: 8
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: net.confirm ? "Disconnect " + net.confirm.label + "? It is your only active connection." : ""
+            font.pixelSize: Theme.fontSmall
+        }
+        RowLayout {
             spacing: 6
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                text: net.confirm ? "Disconnect " + net.confirm.label + "? It is your only active connection." : ""
-                font.pixelSize: Theme.fontSmall
-            }
-            RowLayout {
-                spacing: 6
-                Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Cancel"; onClicked: net.confirm = null }
-                Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Disconnect"; active: true; onClicked: { const c = net.confirm; net.confirm = null; c.run() } }
-            }
+            Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Cancel"; onClicked: net.confirm = null }
+            Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Disconnect"; active: true; onClicked: { const c = net.confirm; net.confirm = null; c.run() } }
         }
     }
 

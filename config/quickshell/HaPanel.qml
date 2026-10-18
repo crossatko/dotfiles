@@ -68,20 +68,13 @@ ColumnLayout {
     }
 
     // setup / error / edit-mode notice
-    Rectangle {
+    Notice {
         id: notice
         readonly property bool setup: HomeAssistant.secretsRead && !HomeAssistant.configured
         readonly property bool bad: HomeAssistant.configured && HomeAssistant.failed
         visible: setup || bad || HomeAssistant.actionError !== "" || hp.editing || (HomeAssistant.status === "loading" && hp.sectionCount === 0)
-        Layout.fillWidth: true
-        implicitHeight: noticeCol.implicitHeight + 20
-        radius: Theme.radiusItem
-        color: bad || HomeAssistant.actionError !== "" ? Theme.alpha(Theme.red, 0.14) : Theme.alpha(Theme.fg, 0.06)
-        border.width: 1
-        border.color: bad || HomeAssistant.actionError !== "" ? Theme.alpha(Theme.red, 0.6) : Theme.alpha(Theme.overlay, 0.6)
-        ColumnLayout {
-        id: noticeCol
-        anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 12 }
+        danger: bad || HomeAssistant.actionError !== ""
+        padY: 10
         spacing: 10
         Label {
             id: noticeText
@@ -118,7 +111,6 @@ ColumnLayout {
             }
             Label { visible: HomeAssistant.lastUpdate > 0; text: "Last update " + Qt.formatTime(new Date(HomeAssistant.lastUpdate), "HH:mm"); color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
             Item { Layout.fillWidth: true }
-        }
         }
     }
 

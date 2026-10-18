@@ -211,42 +211,34 @@ ColumnLayout {
     }
 
     // operator hint: same box as NetPanel's confirm row
-    Rectangle {
+    Notice {
         visible: ts.needOperator
-        Layout.fillWidth: true
-        implicitHeight: opCol.implicitHeight + 16
-        radius: Theme.radiusItem
-        color: Theme.alpha(Theme.red, 0.16)
-        border.width: 1
-        border.color: Theme.alpha(Theme.red, 0.7)
-        ColumnLayout {
-            id: opCol
-            anchors { fill: parent; margins: 8 }
-            spacing: 6
+        danger: true
+        padX: 8
+        padY: 8
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: "Tailscale refused: this user is not its operator. Run once in a terminal:"
+            font.pixelSize: Theme.fontSmall
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 30
+            radius: Theme.inner(Theme.radiusItem, 8)
+            color: Theme.alpha(Theme.bg, 0.6)
             Label {
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                text: "Tailscale refused: this user is not its operator. Run once in a terminal:"
+                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 10 }
+                text: ts.copied === "operator" ? "Copied" : "sudo tailscale set --operator=$USER"
+                color: ts.copied === "operator" ? Theme.accent : Theme.fg
                 font.pixelSize: Theme.fontSmall
+                elide: Text.ElideRight
             }
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 30
-                radius: Theme.inner(Theme.radiusItem, 8)
-                color: Theme.alpha(Theme.bg, 0.6)
-                Label {
-                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 10 }
-                    text: ts.copied === "operator" ? "Copied" : "sudo tailscale set --operator=$USER"
-                    color: ts.copied === "operator" ? Theme.accent : Theme.fg
-                    font.pixelSize: Theme.fontSmall
-                    elide: Text.ElideRight
-                }
-            }
-            RowLayout {
-                spacing: 6
-                Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Dismiss"; onClicked: ts.needOperator = false }
-                Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Copy command"; active: true; onClicked: ts.copy("operator", "sudo tailscale set --operator=$USER") }
-            }
+        }
+        RowLayout {
+            spacing: 6
+            Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Dismiss"; onClicked: ts.needOperator = false }
+            Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Copy command"; active: true; onClicked: ts.copy("operator", "sudo tailscale set --operator=$USER") }
         }
     }
 
