@@ -15,7 +15,6 @@ let
     zellij = "zellij";
     nvim = "nvim";
     tofi = "tofi";
-    waybar = "waybar";
     opencode = "opencode";
     wivrn = "wivrn";
   };
@@ -57,7 +56,6 @@ in
       nautilus
       gvfs
       glib
-      waybar
       tldr
       trezor-suite
       gnome-disk-utility

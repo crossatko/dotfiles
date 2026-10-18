@@ -5,7 +5,7 @@ theme.toml ─┐
 wallpaper ──┼─> theme.py ─> out/palette.{json,lua} + one file per app (templates/)
 overrides ──┘                      │
                                    └─> kitty ghostty alacritty tofi zellij hyprland
-                                       hyprlock hyprtoolkit hyprpaper swaync nvim quickshell
+                                       hyprlock hyprtoolkit hyprpaper nvim quickshell
 ```
 
 | do this | to |
@@ -56,8 +56,7 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 | herdr | managed `[theme]` block injected into `config/herdr/config.toml` | `herdr server reload-config` |
 | hyprland, hyprlock, hyprtoolkit, hyprpaper | `dofile` / `source` / symlink | yes (`hyprctl reload`, hyprpaper restart); hyprlock reads its wallpaper path on each lock |
 | quickshell bar + Settings | watches `out/palette.json` | instant |
-| swaync | `@import` of `out/swaync.css` | yes (`swaync-client -rs`) |
-| notifications | quickshell `Notifs.qml` server + toasts + notification center (replaced swaync) | instant, palette-driven |
+| notifications | quickshell `Notifs.qml` server + toasts + notification center | instant, palette-driven |
 | launcher / menus | quickshell `Menu.qml` (replaced tofi; fzf does the matching) | instant, palette-driven |
 | tofi (fallback only) | symlinked config | read at launch; used only if quickshell is down |
 | Qt / KDE apps (Dolphin, Ark, ...) | KDE platform theme (`QT_QPA_PLATFORMTHEME=kde` in `hyprland/env.lua`) reading `~/.config/kdeglobals`: color scheme `Wall`/`WallB` + accent, fonts, icons, Fusion style | backgrounds, text and icons live; selection highlight on next window |

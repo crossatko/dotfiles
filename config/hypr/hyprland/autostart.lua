@@ -34,7 +34,7 @@ hl.on("hyprland.start", function()
 	hl.exec_cmd("systemctl --user start hypridle")
 	hl.exec_cmd("1password --silent")
 	hl.exec_cmd("quickshell") -- bar + wallpaper picker (config/quickshell)
-	-- notifications are served by quickshell now (config/quickshell/Notifs.qml); swaync is no longer started
+	-- notifications are served by quickshell now (config/quickshell/Notifs.qml)
 	hl.exec_cmd("hyprctl setcursor Oxygen-White 24")
 	-- Kept running only as the NetworkManager secret agent and the bluez pairing agent; their tray
 	-- icons are hidden in the bar, whose network / bluetooth popups do the everyday work.
