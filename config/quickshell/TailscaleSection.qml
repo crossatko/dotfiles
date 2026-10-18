@@ -262,92 +262,55 @@ ColumnLayout {
         spacing: 6
         boundsBehavior: Flickable.StopAtBounds
         model: ts.peers
-        delegate: Rectangle {
+        delegate: ListRow {
             id: card
             required property var modelData
             required property int index
             readonly property var p: modelData
             readonly property bool open: ts.expanded === p.id
+            readonly property string brand: ts.osGlyph(p.os)
             width: list.width
-            height: ts.rowH + (open ? details.implicitHeight + 8 : 0)
-            clip: true
-            radius: Theme.radiusItem
-            color: area.containsMouse ? Theme.alpha(Theme.fg, 0.12) : p.self ? Theme.alpha(Theme.accent, 0.18) : Theme.alpha(Theme.fg, 0.05)
-            border.width: open ? 1 : 0
-            border.color: Theme.alpha(Theme.accent, 0.7)
-            Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+            rowH: ts.rowH
+            icon: brand || "\uf390"
+            iconFamily: brand ? Theme.brandFont : Theme.iconFont
+            iconSize: 16
+            iconColor: p.online ? Theme.accent : Theme.muted
+            selected: p.self
+            outlined: open
+            onClicked: ts.expanded = card.open ? "" : card.p.id
+            // expanded details under the text column
+            expanded: open
+            bodyLeft: 48
             onHeightChanged: if (open) list.positionViewAtIndex(index, ListView.Contain)
 
-            MouseArea {
-                id: area
-                anchors { left: parent.left; right: parent.right; top: parent.top }
-                height: ts.rowH
-                z: -1                       // under the IP label
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: ts.expanded = card.open ? "" : card.p.id
+            RowText {
+                title: card.p.name
+                titleColor: card.p.online ? Theme.fg : Theme.fgDim
+                sub: !card.p.online ? (card.p.lastSeen ? "Last seen " + ts.ago(card.p.lastSeen) : "Offline")
+                    : [card.p.tags.map(t => t.replace(/^tag:/, "")).join(", "), card.p.exitOption && !card.p.exitNode ? "exit node available" : ""].filter(s => s).join(" · ") || card.p.os
+                Label { visible: card.p.self; text: "this device"; color: Theme.accent; font.pixelSize: Theme.fontTiny }
+                Label { visible: card.p.exitNode; text: "exit node"; color: Theme.orange; font.pixelSize: Theme.fontTiny }
+            }
+            // click-to-copy IPv4 (its MouseArea sits above the row's own)
+            Label {
+                id: ipLabel
+                readonly property bool done: ts.copied === card.p.id + "/4"
+                text: done ? "Copied" : card.p.ipv4
+                font.pixelSize: Theme.fontSmall
+                color: done ? Theme.accent : ipArea.containsMouse ? Theme.fg : Theme.fgDim
+                MouseArea { id: ipArea; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ts.copy(card.p.id + "/4", card.p.ipv4) }
+            }
+            Rectangle {
+                Layout.preferredWidth: 8
+                Layout.preferredHeight: 8
+                radius: 4
+                color: card.p.online ? Theme.green : Theme.alpha(Theme.muted, 0.6)
             }
 
-            RowLayout {
-                id: top
-                anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 12; rightMargin: 12 }
-                height: ts.rowH
-                spacing: 14
-                Label {
-                    readonly property string brand: ts.osGlyph(card.p.os)
-                    text: brand || ""
-                    font.family: brand ? Theme.brandFont : Theme.iconFont
-                    font.styleName: "Regular"
-                    horizontalAlignment: Text.AlignHCenter
-                    Layout.preferredWidth: 22
-                    font.pixelSize: 16
-                    color: card.p.online ? Theme.accent : Theme.muted
-                }
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 0
-                    RowLayout {
-                        spacing: 6
-                        Layout.fillWidth: true
-                        Label { text: card.p.name; elide: Text.ElideRight; Layout.preferredWidth: implicitWidth; Layout.minimumWidth: 24; color: card.p.online ? Theme.fg : Theme.fgDim }
-                        Label { visible: card.p.self; text: "this device"; color: Theme.accent; font.pixelSize: Theme.fontTiny }
-                        Label { visible: card.p.exitNode; text: "exit node"; color: Theme.orange; font.pixelSize: Theme.fontTiny }
-                        Item { Layout.fillWidth: true }
-                    }
-                    Label {
-                        text: !card.p.online ? (card.p.lastSeen ? "Last seen " + ts.ago(card.p.lastSeen) : "Offline")
-                            : [card.p.tags.map(t => t.replace(/^tag:/, "")).join(", "), card.p.exitOption && !card.p.exitNode ? "exit node available" : ""].filter(s => s).join(" · ") || card.p.os
-                        color: Theme.fgDim
-                        font.pixelSize: Theme.fontCaption
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-                }
-                // click-to-copy IPv4
-                Label {
-                    id: ipLabel
-                    readonly property bool done: ts.copied === card.p.id + "/4"
-                    text: done ? "Copied" : card.p.ipv4
-                    font.pixelSize: Theme.fontSmall
-                    color: done ? Theme.accent : ipArea.containsMouse ? Theme.fg : Theme.fgDim
-                    MouseArea { id: ipArea; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ts.copy(card.p.id + "/4", card.p.ipv4) }
-                }
-                Rectangle {
-                    Layout.preferredWidth: 8
-                    Layout.preferredHeight: 8
-                    radius: 4
-                    color: card.p.online ? Theme.green : Theme.alpha(Theme.muted, 0.6)
-                }
-            }
-
-            // expanded details
-            ColumnLayout {
+            body: ColumnLayout {
                 id: details
-                anchors { left: parent.left; right: parent.right; top: top.bottom; leftMargin: 48; rightMargin: 12 }
+                Layout.fillWidth: true
                 spacing: 2
-                opacity: card.open ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: 120 } }
-
                 Repeater {
                     model: [
                         { k: "MagicDNS", v: card.p.fqdn, c: "/dns" },

@@ -104,41 +104,28 @@ ColumnLayout {
 
         Repeater {
             model: net.wired
-            Rectangle {
+            ListRow {
                 id: wiredRow
                 required property var modelData
                 readonly property bool canToggle: !!modelData.network || modelData.connected
                 readonly property bool on: modelData.state === ConnectionState.Connected || modelData.state === ConnectionState.Connecting
                 Layout.fillWidth: true
-                implicitHeight: net.rowH
-                radius: Theme.radiusItem
+                rowH: net.rowH
+                icon: "\uf796"
+                iconColor: modelData.connected ? Theme.accent : Theme.muted
+                baseColor: Theme.alpha(Theme.fg, 0.07)
+                interactive: canToggle
                 opacity: canToggle ? 1 : 0.45
-                color: wiredArea.containsMouse && canToggle ? Theme.alpha(Theme.fg, 0.12) : Theme.alpha(Theme.fg, 0.07)
-                MouseArea {
-                    id: wiredArea
-                    anchors.fill: parent
-                    z: -1
-                    hoverEnabled: true
-                    enabled: wiredRow.canToggle
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: net.setWired(wiredRow.modelData, !wiredRow.on)
+                onClicked: net.setWired(wiredRow.modelData, !wiredRow.on)
+                RowText {
+                    title: wiredRow.modelData.name
+                    sub: net.stateText(wiredRow.modelData.state) + (wiredRow.modelData.linkSpeed > 0 ? " · " + wiredRow.modelData.linkSpeed + " Mb/s" : "")
                 }
-                RowLayout {
-                    anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
-                    spacing: 14
-                    Icon { text: "\uf796"; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22; font.pixelSize: 18; color: modelData.connected ? Theme.accent : Theme.muted }
-                    ColumnLayout {
-                        spacing: 0
-                        Label { text: modelData.name }
-                        Label { text: net.stateText(modelData.state) + (modelData.linkSpeed > 0 ? " · " + modelData.linkSpeed + " Mb/s" : ""); color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
-                    }
-                    Item { Layout.fillWidth: true }
-                    RowState {
-                        connected: modelData.state === ConnectionState.Connected
-                        hovered: wiredArea.containsMouse
-                        hintable: wiredRow.canToggle
-                        busy: modelData.state === ConnectionState.Connecting || modelData.state === ConnectionState.Disconnecting
-                    }
+                RowState {
+                    connected: wiredRow.modelData.state === ConnectionState.Connected
+                    hovered: wiredRow.hovered
+                    hintable: wiredRow.canToggle
+                    busy: wiredRow.modelData.state === ConnectionState.Connecting || wiredRow.modelData.state === ConnectionState.Disconnecting
                 }
             }
         }
@@ -180,21 +167,26 @@ ColumnLayout {
             model: net.asking ? net.frozen : net.wifiDev
                 ? net.wifiDev.networks.values.slice().sort((a, b) => (b.connected - a.connected) || (b.signalStrength - a.signalStrength))
                 : []
-            delegate: Rectangle {
+            delegate: ListRow {
                 id: card
                 required property var modelData
                 required property int index
                 readonly property bool asking: net.asking === modelData
                 property bool failed: false
                 width: wifiList.width
-                height: net.rowH + (asking ? form.implicitHeight + 10 : 0)
-                clip: true
-                radius: Theme.radiusItem
-                color: asking ? Theme.alpha(Theme.accent, 0.12)
-                    : area.containsMouse ? Theme.alpha(Theme.fg, 0.12) : modelData.connected ? Theme.alpha(Theme.accent, 0.18) : Theme.alpha(Theme.fg, 0.05)
-                border.width: asking ? 1 : 0
-                border.color: Theme.alpha(Theme.accent, 0.7)
-                Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                rowH: net.rowH
+                icon: net.bars(modelData.signalStrength)
+                iconSize: 16
+                iconColor: modelData.connected ? Theme.accent : Theme.fg
+                selected: modelData.connected
+                outlined: asking
+                color: asking ? Theme.alpha(Theme.accent, 0.12) : stateColor
+                rightClick: true
+                onClicked: mouse => mouse.button === Qt.RightButton && modelData.known ? modelData.forget() : net.setWifi(modelData, !modelData.connected)
+                // the password form below expands inside this card
+                expanded: asking
+                bodyTop: 2
+                bodyGap: 10
 
                 onAskingChanged: if (asking) {
                     failed = false; pw.text = ""
@@ -207,38 +199,18 @@ ColumnLayout {
                     function onConnectionFailed() { if (card.asking || net.lastTried === card.modelData) card.failed = true }
                 }
 
-                RowLayout {
-                    id: top
-                    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 12; rightMargin: 12 }
-                    height: net.rowH
-                    spacing: 14
-                    Icon { text: net.bars(modelData.signalStrength); horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22; font.pixelSize: 16; color: modelData.connected ? Theme.accent : Theme.fg }
-                    Label { text: modelData.name; Layout.fillWidth: true; elide: Text.ElideRight }
-                    Icon { visible: modelData.security !== WifiSecurityType.Open; text: "\uf023"; font.pixelSize: 13; color: Theme.muted }
-                    RowState {
-                        connected: modelData.connected
-                        busy: modelData.stateChanging
-                        hovered: area.containsMouse
-                    }
-                }
-                MouseArea {
-                    id: area
-                    anchors { left: parent.left; right: parent.right; top: parent.top }
-                    height: net.rowH
-                    z: -1
-                    hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    onClicked: mouse => mouse.button === Qt.RightButton && modelData.known ? modelData.forget() : net.setWifi(modelData, !modelData.connected)
+                RowText { title: card.modelData.name }
+                Icon { visible: card.modelData.security !== WifiSecurityType.Open; text: "\uf023"; font.pixelSize: 13; color: Theme.muted }
+                RowState {
+                    connected: card.modelData.connected
+                    busy: card.modelData.stateChanging
+                    hovered: card.hovered
                 }
 
-                // password form, expands inside this card
-                ColumnLayout {
+                body: ColumnLayout {
                     id: form
-                    anchors { left: parent.left; right: parent.right; top: top.bottom; leftMargin: 12; rightMargin: 12; topMargin: 2 }
+                    Layout.fillWidth: true
                     spacing: 6
-                    opacity: card.asking ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: 120 } }
-
                     Rectangle {
                         Layout.fillWidth: true
                         implicitHeight: 34

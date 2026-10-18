@@ -61,34 +61,21 @@ ColumnLayout {
                 .filter(d => d.paired || d.connected || bt.named(d))
                 .sort((a, b) => (b.connected - a.connected) || (b.paired - a.paired) || a.name.localeCompare(b.name))
             : []
-        delegate: Rectangle {
+        delegate: ListRow {
+            id: devRow
             required property var modelData
             width: list.width
-            height: 46
-            radius: Theme.radiusItem
-            color: area.containsMouse ? Theme.alpha(Theme.fg, 0.12) : modelData.connected ? Theme.alpha(Theme.accent, 0.18) : Theme.alpha(Theme.fg, 0.05)
-            RowLayout {
-                anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
-                spacing: 14
-                Icon { text: "\uf293"; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22; font.pixelSize: 18; color: modelData.connected ? Theme.accent : Theme.fg }
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 0
-                    Label { text: modelData.name || modelData.address; Layout.fillWidth: true; elide: Text.ElideRight }
-                    Label { text: bt.sub(modelData); color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
-                }
-                RowState {
-                    connected: modelData.connected
-                    hovered: area.containsMouse
-                    busy: modelData.pairing || modelData.state === BluetoothDeviceState.Connecting || modelData.state === BluetoothDeviceState.Disconnecting
-                }
-            }
-            MouseArea {
-                id: area
-                anchors.fill: parent
-                hoverEnabled: true
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                onClicked: mouse => mouse.button === Qt.RightButton ? modelData.forget() : bt.act(modelData)
+            rowH: 46
+            icon: "\uf293"
+            iconColor: modelData.connected ? Theme.accent : Theme.fg
+            selected: modelData.connected
+            rightClick: true
+            onClicked: mouse => mouse.button === Qt.RightButton ? modelData.forget() : bt.act(modelData)
+            RowText { title: devRow.modelData.name || devRow.modelData.address; sub: bt.sub(devRow.modelData) }
+            RowState {
+                connected: devRow.modelData.connected
+                hovered: devRow.hovered
+                busy: devRow.modelData.pairing || devRow.modelData.state === BluetoothDeviceState.Connecting || devRow.modelData.state === BluetoothDeviceState.Disconnecting
             }
         }
     }
