@@ -26,6 +26,10 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.namespace: "qs-bar"
 
+    // glass shapes: Glass.qml scans the bar for Chips and declares each as its own blur region
+    BackgroundEffect.blurRegion: Region { regions: glass.instances }
+    Glass { id: glass; root: bar.contentItem }
+
     // ---- shared state -------------------------------------------------------
     property string cpu: "0%"
     property string mem: "0%"
@@ -273,6 +277,13 @@ PanelWindow {
                 sourceComponent: bar.widgetComps[modelData] || null
                 visible: item !== null && item.show !== false
             }
+        }
+
+        Chip {   // solid_glass configurator (GlassTune.qml)
+            visible: !GlassTuneCtl.unsupported
+            active: GlassTuneCtl.shown
+            onClicked: GlassTuneCtl.toggle()
+            BarIcon { text: "\uf0d0"; color: GlassTuneCtl.shown ? Theme.accent : Theme.fg }
         }
 
         Chip {

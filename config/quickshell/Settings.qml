@@ -31,6 +31,8 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     WlrLayershell.namespace: "qs-settings"
+    BackgroundEffect.blurRegion: Region { regions: glass.instances }
+    Glass { id: glass; root: contentItem; active: visible }
 
     // opens on the monitor of the popup it was asked from (control center gear), else the focused one
     function open(p) {
@@ -72,11 +74,12 @@ PanelWindow {
 
     Rectangle {
         id: card
+        readonly property bool isGlassItem: true
         anchors.centerIn: parent
         width: Math.min(parent.width - 80, Math.max(920, parent.width * 0.6))   // 920: content area no narrower than before the wider sidebar
         height: Math.min(parent.height - 80, Math.max(600, parent.height * 0.62))
         radius: Theme.radius
-        color: Theme.alpha(Theme.bg, 0.85)     // blurred behind it (qs-.* layer rule, ignore_alpha 0.1)
+        color: Theme.alpha(Theme.bg, Theme.glass ? 0.3 : 0.85)   // glass behind it (Glass.qml); without solid_glass: blurred by the qs-.* layer rule
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
 

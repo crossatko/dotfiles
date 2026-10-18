@@ -59,3 +59,7 @@ PopupRegistration 1.0 PopupRegistration.qml
 Segmented 1.0 Segmented.qml
 SettingRow 1.0 SettingRow.qml
 Meter 1.0 Meter.qml
+Glass 1.0 Glass.qml
+singleton GlassTuneCtl 1.0 GlassTuneCtl.qml
+GlassTuneRow 1.0 GlassTuneRow.qml
+GlassTune 1.0 GlassTune.qml

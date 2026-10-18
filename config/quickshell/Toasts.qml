@@ -23,6 +23,8 @@ PanelWindow {
     exclusiveZone: -1                  // ignore the monitor's reserved area (the pinned-video strip), so it stays in the screen corner
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "qs-toast"
+    BackgroundEffect.blurRegion: Region { regions: glass.instances }
+    Glass { id: glass; root: contentItem; active: visible }
     mask: Region { item: col }      // clicks outside the cards fall through
 
     // follow focus, but only when a new stack starts (0 -> 1), so a toast never jumps monitors
@@ -61,6 +63,7 @@ PanelWindow {
 
         Repeater {
             model: items
+            onItemAdded: glass.refresh()   // the new card has its glass from its first frame
 
             Item {
                 id: slot
@@ -102,16 +105,16 @@ PanelWindow {
                 Component.onCompleted: enter.start()
                 ParallelAnimation {
                     id: enter
-                    NumberAnimation { target: slot; property: "slideX"; to: 0; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 0.7 }
-                    NumberAnimation { target: slot; property: "appear"; to: 1; duration: 260; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: slot; property: "slideX"; to: 0; duration: 200; easing.type: Easing.OutBack; easing.overshoot: 0.7 }
+                    NumberAnimation { target: slot; property: "appear"; to: 1; duration: 200; easing.type: Easing.OutCubic }
                 }
 
                 // exit: slide out to the right, then collapse the gap and leave the model
                 onGoneChanged: if (gone) { enter.stop(); leave.start() }
                 SequentialAnimation {
                     id: leave
-                    NumberAnimation { target: slot; property: "slideX"; to: col.width + 40; duration: 260; easing.type: Easing.InCubic }
-                    NumberAnimation { target: slot; property: "appear"; to: 0; duration: 180; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: slot; property: "slideX"; to: col.width + 40; duration: 200; easing.type: Easing.InCubic }
+                    NumberAnimation { target: slot; property: "appear"; to: 0; duration: 200; easing.type: Easing.OutCubic }
                     ScriptAction { script: items.remove(slot.index) }
                 }
             }

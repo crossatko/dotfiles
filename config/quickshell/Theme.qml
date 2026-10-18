@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 
 // Live view of ~/.config/theme/out/palette.json. theme.py rewrites that file
 // atomically, FileView watches it, so every binding in the shell restyles the
@@ -32,6 +33,31 @@ Singleton {
     readonly property string wallpaper: p.wallpaper
     readonly property var wallpaperDirs: p.wallpaper_dirs
     readonly property real barOpacity: p.bar_opacity
+    // Glass look: on while the running Hyprland draws decoration:blur:variant solid_glass (the blur fork). Anything else
+    // (stock Hyprland without that variant, kawase, blur off, no hyprctl) keeps the original, more opaque fills, which
+    // the qs-.* layer rule blurs as before. Re-checked on every config reload.
+    property bool glass: false
+    property bool glassKnown: false     // false until the first check finished
+    // fill alpha of glass cards (popups, OSD, toasts): low enough for the lens / rim to show; else the original fill
+    readonly property real cardFill: glass ? 0.3 : Math.min(1, barOpacity + 0.3)
+    function checkGlass() { glassProbe.running = true }
+    Process {
+        id: glassProbe
+        command: ["hyprctl", "-j", "--batch", "getoption decoration:blur:enabled ; getoption decoration:blur:variant"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const en = /"decoration:blur:enabled",\s*"(?:bool|int)":\s*(true|1)\b/.test(text)
+                const va = /"decoration:blur:variant",\s*"int":\s*(\d+)/.exec(text)
+                root.glass = en && va !== null && va[1] === "11"      // 11 = solid_glass
+                root.glassKnown = true
+            }
+        }
+        onExited: root.glassKnown = true
+    }
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) { if (event.name === "configreloaded") root.checkGlass() }
+    }
     readonly property int barBorder: p.bar_border
 
     // layout/typography knobs shared by everything in the shell
@@ -74,11 +100,11 @@ Singleton {
     readonly property int popupGap: barFloating ? Math.max(4, gapOut) : 8     // popup card <-> bar
     // popup motion (PopupHost.qml), ms: open fade/scale-in, close fade-out, card glide + resize when switching chips,
     // old content fading out / new content fading in during a switch
-    readonly property int popupOpenMs: 180
-    readonly property int popupCloseMs: 120
-    readonly property int popupMoveMs: 240
+    readonly property int popupOpenMs: 200
+    readonly property int popupCloseMs: 200
+    readonly property int popupMoveMs: 200
     readonly property int popupFadeOutMs: 70
-    readonly property int popupFadeInMs: 160
+    readonly property int popupFadeInMs: 130
     readonly property int edgeGap: barFloating ? gapOut : 12                  // popups/toasts <-> screen edge
 
     // Concentric inner radius: an element inset by `inset` inside one of radius `outer`.
@@ -93,7 +119,7 @@ Singleton {
     function alpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
 
     // first read is synchronous, so shape defaults (bar_floating, rounding, gap) are right on the first frame
-    Component.onCompleted: paletteFile.text()
+    Component.onCompleted: { paletteFile.text(); checkGlass() }
 
     FileView {
         id: paletteFile

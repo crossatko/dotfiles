@@ -64,6 +64,8 @@ PanelWindow {
     exclusiveZone: -1
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "qs-popup"
+    BackgroundEffect.blurRegion: Region { regions: glass.instances }
+    Glass { id: glass; root: contentItem; active: visible }
     WlrLayershell.keyboardFocus: active ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     anchors { left: true; right: true; top: true; bottom: true }
@@ -90,6 +92,7 @@ PanelWindow {
 
     Rectangle {
         id: card
+        readonly property bool isGlassItem: true
         readonly property bool atTop: Popups.edgeOf(host.modelData.name) === "top"
         // bar edge: past the bar (incl. a floating bar's gap) plus popupGap; other sides: `side` from the screen
         // edge (docked keeps the old 8 px, floating lines up with the bar's gapOut)
@@ -116,7 +119,7 @@ PanelWindow {
         Behavior on height { enabled: host.morphing; NumberAnimation { duration: Theme.popupMoveMs; easing.type: Easing.OutCubic } }
 
         radius: Theme.radius
-        color: Theme.alpha(Theme.bg, Math.min(1, Theme.barOpacity + 0.3))
+        color: Theme.alpha(Theme.bg, Theme.cardFill)
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
 

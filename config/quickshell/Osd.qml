@@ -28,6 +28,8 @@ PanelWindow {
     exclusiveZone: -1                  // ignore the monitor's reserved area (the pinned-video strip), so it stays in the screen corner
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "qs-osd"
+    BackgroundEffect.blurRegion: Region { regions: glass.instances }
+    Glass { id: glass; root: contentItem; active: visible }
     mask: Region {}                      // never takes input
 
     function focusScreen() {
@@ -63,9 +65,10 @@ PanelWindow {
     }
 
     Rectangle {
+        readonly property bool isGlassItem: true
         anchors.fill: parent
         radius: Theme.radius
-        color: Theme.alpha(Theme.bg, Math.min(1, Theme.barOpacity + 0.3))
+        color: Theme.alpha(Theme.bg, Theme.cardFill)
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
 

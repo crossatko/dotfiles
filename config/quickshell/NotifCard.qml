@@ -5,6 +5,7 @@ import Quickshell.Services.Notifications
 
 // One notification, used for toasts (toast: true) and in the notification center.
 Rectangle {
+    readonly property bool isGlassItem: toast   // only a toast is a standalone glass card; in the notification center it sits flat on the panel
     id: card
 
     required property var n
@@ -24,7 +25,7 @@ Rectangle {
 
     implicitHeight: content.implicitHeight + 24
     radius: toast ? Theme.radius : Theme.radiusItem      // toast = outer element; center = item inside the popup card
-    color: toast ? Theme.alpha(Theme.bg, Math.min(1, Theme.barOpacity + 0.3)) : Theme.alpha(Theme.surface, 0.85)
+    color: toast ? Theme.alpha(Theme.bg, Theme.cardFill) : Theme.alpha(Theme.surface, 0.85)
     border.width: 1
     border.color: critical ? Theme.alpha(Theme.red, 0.8) : Theme.alpha(Theme.overlay, 0.5)
 
@@ -38,8 +39,8 @@ Rectangle {
     }
     SequentialAnimation {
         id: leaveAnim
-        NumberAnimation { target: card; property: "x"; to: card.width + 40; duration: 240; easing.type: Easing.InCubic }
-        NumberAnimation { target: card; property: "collapse"; to: 0; duration: 160; easing.type: Easing.OutCubic }
+        NumberAnimation { target: card; property: "x"; to: card.width + 40; duration: 200; easing.type: Easing.InCubic }
+        NumberAnimation { target: card; property: "collapse"; to: 0; duration: 200; easing.type: Easing.OutCubic }
         ScriptAction { script: card.n.dismiss() }
     }
 

@@ -17,12 +17,14 @@ Rectangle {
     signal clicked(var mouse)
     signal wheel(int dy)
 
+    readonly property bool isGlassItem: true   // Glass.qml declares this chip as its own glass shape
+
     implicitHeight: Theme.chipHeight
     implicitWidth: Math.max(Theme.chipHeight, iconOnly ? Theme.chipHeight : Math.ceil(row.implicitWidth) + 2 * padX)   // never narrower than tall (min 1:1)
     radius: Theme.radiusChip   // inset barPad inside the bar
     color: active ? Theme.alpha(Theme.accent, 0.28)
          : hover.containsMouse ? Theme.alpha(Theme.fg, 0.10)
-         : Theme.alpha(Theme.bg, 0.35)
+         : Theme.alpha(Theme.bg, Theme.glass ? 0.10 : 0.35)
     border.width: active ? 1 : 0
     border.color: Theme.alpha(Theme.accent, 0.8)
     opacity: dim ? 0.55 : 1

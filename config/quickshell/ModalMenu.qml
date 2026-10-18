@@ -43,6 +43,8 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.namespace: "qs-" + kind
+    BackgroundEffect.blurRegion: Region { regions: glass.instances }
+    Glass { id: glass; root: contentItem; active: visible }
 
     PopupRegistration { kind: win.kind; open: win.shown; screenName: win.screen ? win.screen.name : ""; onDismissed: win.close() }
 
@@ -56,11 +58,12 @@ PanelWindow {
 
     Rectangle {
         id: cardBox
+        readonly property bool isGlassItem: true
         anchors.centerIn: parent
         width: Math.min(parent.width - 32, win.cardWidth)
         height: body.implicitHeight + 40
         radius: Theme.radius
-        color: Theme.alpha(Theme.bg, 0.85)     // blurred behind it (qs-.* layer rule, ignore_alpha 0.1)
+        color: Theme.alpha(Theme.bg, Theme.glass ? 0.3 : 0.85)   // glass behind it (Glass.qml); without solid_glass: blurred by the qs-.* layer rule
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
 
