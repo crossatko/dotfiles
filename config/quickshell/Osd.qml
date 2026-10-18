@@ -77,7 +77,7 @@ PanelWindow {
             Icon {
                 font.pixelSize: 22
                 color: osd.muted ? Theme.muted : Theme.accent
-                text: osd.kind === "brightness" ? "\uf185" : osd.muted ? "\uf6a9" : osd.value < 0.01 ? "\uf026" : osd.value < 0.5 ? "\uf027" : "\uf028"
+                text: osd.kind === "brightness" ? "\uf185" : Icons.volumeGlyph(osd.muted, osd.value)
             }
             Rectangle {
                 Layout.fillWidth: true

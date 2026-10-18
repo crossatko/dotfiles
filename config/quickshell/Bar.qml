@@ -429,7 +429,7 @@ PanelWindow {
                 if (bar.sink && bar.sink.audio)
                     bar.sink.audio.volume = Math.max(0, Math.min(1.0, bar.sink.audio.volume + (dy > 0 ? 0.03 : -0.03)))
             }
-            BarIcon { measure: "\uf028"; text: bar.muted ? "\uf6a9" : bar.volume < 0.01 ? "\uf026" : bar.volume < 0.5 ? "\uf027" : "\uf028"; color: bar.muted ? Theme.muted : Theme.accent }
+            BarIcon { measure: "\uf028"; text: Icons.volumeGlyph(bar.muted, bar.volume); color: bar.muted ? Theme.muted : Theme.accent }
             BarLabel { text: Math.round(bar.volume * 100) + "%"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
         }
     }

@@ -72,7 +72,7 @@ GridLayout {
             }
             Tile {
                 Layout.fillWidth: true
-                icon: !cc.sink || cc.sink.muted ? "\uf6a9" : cc.sink.volume < 0.01 ? "\uf026" : cc.sink.volume < 0.5 ? "\uf027" : "\uf028"
+                icon: Icons.volumeGlyph(!cc.sink || cc.sink.muted, cc.sink ? cc.sink.volume : 0)
                 title: "Sound"
                 sub: cc.sink ? (cc.sink.muted ? "Muted" : Math.round(cc.sink.volume * 100) + "%") : "No output"
                 on: cc.sink !== null && !cc.sink.muted

@@ -21,26 +21,17 @@ ColumnLayout {
 
     Repeater {
         model: Brightness.displays
-        RowLayout {
+        LevelRow {
             id: row
             required property string modelData
             readonly property int pct: Brightness.percentOf(modelData)
-            Layout.fillWidth: true
-            spacing: 10
-            Icon {
-                text: ""
-                horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 24
-                font.pixelSize: 17
-                color: Theme.accent
-            }
-            Label { text: row.modelData; Layout.preferredWidth: Math.ceil(longest.advanceWidth); color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
-            Slider {
-                Layout.fillWidth: true
-                value: row.pct / 100
-                floor: Brightness.minPercent / 100
-                onMoved: v => Brightness.set(row.modelData, v * 100)
-            }
-            Label { text: row.pct + "%"; Layout.preferredWidth: 40; horizontalAlignment: Text.AlignRight; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
+            icon: "\uf185"
+            label: modelData
+            labelWidth: Math.ceil(longest.advanceWidth)
+            value: pct / 100
+            floor: Brightness.minPercent / 100
+            onMoved: v => Brightness.set(row.modelData, v * 100)
+            valueText: pct + "%"
         }
     }
 }
