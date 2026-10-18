@@ -62,7 +62,7 @@ hl.config({
 			gradient_round_only_edges = true,
 			col = {
 				active = theme.active.locked_active,
-				inactive = theme.active.inactive_border,
+				inactive = theme.active.groupbar_inactive,
 				locked_active = theme.active.locked_active,
 				locked_inactive = theme.active.locked_inactive,
 			},

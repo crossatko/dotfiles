@@ -47,33 +47,16 @@ local function rgba(alpha_hex, rgb_hex)
 	return string.format("0x%s%s", alpha_hex, rgb_hex:gsub("^#", ""))
 end
 
--- original grayscale glass profile (reference)
-local gray_stops = {
-	"#050505",
-	"#222222",
-	"#888888",
-	"#bbbbbb",
-	"#888888",
-	"#222222",
-	"#050505",
-}
-
-local alphas = { "aa", "66", "ff", "88", "44", "66", "aa" }
-
--- low tint on dark edges, higher tint on bright highlight band
-local tint_amount = { 0.06, 0.12, 0.28, 0.36, 0.28, 0.12, 0.06 }
-
+-- Active border = the Quickshell accent (palette.lua `accent`, or whichever key M.selected names), solid;
+-- inactive borders are fully transparent.
 local accent = M.colors[M.selected] or M.colors.accent
-local gradient = {}
-for i = 1, #gray_stops do
-	local tinted = mix(gray_stops[i], accent, tint_amount[i])
-	gradient[i] = rgba(alphas[i], tinted)
-end
+local active = rgba("ff", accent)
 
 M.active = {
-	border_gradient = gradient,
-	inactive_border = "0x22000000",
-	locked_active = gradient[1],
+	border_gradient = { active }, -- single stop: solid colour
+	inactive_border = "0x00000000",
+	groupbar_inactive = "0x22000000", -- a transparent groupbar tab would vanish, keep the old faint one
+	locked_active = active,
 	locked_inactive = "0x22111111",
 	shadow = "0x66000000",
 }
