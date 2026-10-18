@@ -9,9 +9,9 @@ M.selected = "accent"
 M.glass = {
 	border_size = 2,
 	window_rounding = 0, -- Hyprland windows are square (the quickshell bar elements still use theme.toml `rounding`)
-	window_rounding_power = 2,
+	window_rounding_power = 3,
 	group_rounding = 0,
-	group_rounding_power = 5,
+	group_rounding_power = 3,
 	gradient_rounding = 0,
 	gradient_rounding_power = 2,
 }
