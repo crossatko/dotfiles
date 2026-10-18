@@ -52,3 +52,6 @@ ListRow 1.0 ListRow.qml
 RowText 1.0 RowText.qml
 Notice 1.0 Notice.qml
 LevelRow 1.0 LevelRow.qml
+KeyBadge 1.0 KeyBadge.qml
+ModeTile 1.0 ModeTile.qml
+ModalMenu 1.0 ModalMenu.qml

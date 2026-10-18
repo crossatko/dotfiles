@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
-import Quickshell.Wayland
 
 // Screen recording mode picker (SHIFT+Print when nothing records; see hyprland/binds.lua and
 // hypr/scripts/screenrec-key.sh). Fullscreen dim overlay on the focused monitor with a small card:
@@ -15,8 +14,13 @@ import Quickshell.Wayland
 // Choosing a mode hides the window first and starts screenrec.sh only after `launchDelay`, so the popup is
 // unmapped before slurp grabs the pointer and is never in the video. QS_RECORD_SCRIPT overrides the script
 // (isolated tests only).
-PanelWindow {
+ModalMenu {
     id: win
+
+    kind: "record"
+    title: "Screen recording"
+    icon: "\uf03d"                    // video
+    iconColor: Theme.red
 
     readonly property string script: Quickshell.env("QS_RECORD_SCRIPT")
         || (Quickshell.env("HOME") + "/.config/hypr/scripts/screenrec.sh")
@@ -34,7 +38,6 @@ PanelWindow {
         { key: "format", title: "Format",     badge: "M", values: ["mp4", "webm"], labels: ["MP4", "WebM"], segW: 52 }
     ]
 
-    property bool shown: false
     property int fps: 60              // saved choices (see prefs below)
     property string format: "mp4"
     property bool audio: false
@@ -42,26 +45,10 @@ PanelWindow {
     property int lastMode: 0          // the menu reopens on the last used mode
     property string pendingMode: ""
     readonly property bool optStacked: card.width < 440   // frame rate / format rows stacked on a narrow card
-    // concentric radii: card = R; tiles / segment rows / audio row sit 20 px inside it; key badges sit 8 px inside a tile
-    readonly property int badgeRadius: Theme.inner(Theme.radiusModal, 8)
+    // concentric radii: card = R; tiles / segment rows / audio row sit 20 px inside it; key badges sit 8 px inside them
 
-    visible: shown
-    anchors { left: true; right: true; top: true; bottom: true }
-    color: Theme.alpha(Theme.bg, 0.5)
-    exclusiveZone: -1
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-    WlrLayershell.namespace: "qs-record"
-
-    function open() {
-        if (shown) return
-        screen = Popups.focusedScreen()
-        cur = lastMode
-        shown = true
-        keys.forceActiveFocus()
-    }
-    function close() { shown = false }
-    function toggle() { shown ? close() : open() }
+    onOpening: cur = lastMode
+    onKeyPressed: ev => { if (win.handleKey(ev.key)) ev.accepted = true }
 
     // close first, start the recorder once the window is gone
     function choose(i) {
@@ -143,168 +130,40 @@ PanelWindow {
         }
     }
 
-    onShownChanged: shown ? Popups.opened("record", screen ? screen.name : "") : Popups.closed("record")
-    Connections {
-        target: Popups
-        function onDismiss(except) { if (except !== "record" && win.shown) win.close() }
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 10
+        Repeater {
+            model: win.modes
+            ModeTile {
+                required property var modelData
+                required property int index
+                icon: modelData.icon
+                title: modelData.title
+                sub: modelData.sub
+                badge: index + 1
+                sel: win.cur === index
+                onHovered: win.cur = index
+                onClicked: win.choose(index)
+            }
+        }
     }
 
-    Item {
-        id: keys
-        anchors.fill: parent
-        focus: true
-        Keys.onPressed: ev => { if (win.handleKey(ev.key)) ev.accepted = true }
-    }
-    MouseArea { anchors.fill: parent; onClicked: win.close() }
-
-    Rectangle {
-        id: card
-        anchors.centerIn: parent
-        width: Math.min(parent.width - 32, 520)
-        height: body.implicitHeight + 40
-        radius: Theme.radius
-        color: Theme.alpha(Theme.bg, 0.98)     // small card over arbitrary content: nearly opaque
-        border.width: 1
-        border.color: Theme.alpha(Theme.overlay, 0.5)
-
-        MouseArea { anchors.fill: parent }   // clicks on the card don't reach the close-scrim
-
-        ColumnLayout {
-            id: body
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 20 }
-            spacing: 14
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 10
-                Icon { text: "\uf03d"; font.pixelSize: 16; color: Theme.red }   // video
-                Label { text: "Screen recording"; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight }
-                Btn { icon: true; text: "\uf00d"; inset: 20; onClicked: win.close() }   // 20 px inside the card
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 10
-                Repeater {
-                    model: win.modes
-                    Rectangle {
-                        id: tile
-                        required property var modelData
-                        required property int index
-                        readonly property bool sel: win.cur === index
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1                 // equal thirds
-                        implicitHeight: 128
-                        radius: Theme.radiusModal
-                        color: sel ? Theme.alpha(Theme.accent, tileArea.pressed ? 0.36 : 0.26) : Theme.alpha(Theme.fg, 0.07)
-                        border.width: 1
-                        border.color: sel ? Theme.alpha(Theme.accent, 0.85) : Theme.alpha(Theme.overlay, 0.45)
-                        Behavior on color { ColorAnimation { duration: 100 } }
-                        Behavior on border.color { ColorAnimation { duration: 100 } }
-
-                        // key hint, top-left
-                        Rectangle {
-                            x: 8; y: 8
-                            width: 20; height: 20
-                            radius: win.badgeRadius
-                            color: tile.sel ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.08)
-                            Label { anchors.centerIn: parent; text: tile.index + 1; font.pixelSize: Theme.fontCaption; color: tile.sel ? Theme.accent : Theme.muted }
-                        }
-
-                        ColumnLayout {
-                            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 8 }
-                            anchors.verticalCenterOffset: 6
-                            spacing: 4
-                            Icon {
-                                text: tile.modelData.icon
-                                font.pixelSize: 32
-                                color: tile.sel ? Theme.accent : Theme.fgDim
-                                Layout.alignment: Qt.AlignHCenter
-                                Layout.bottomMargin: 6
-                            }
-                            Label { text: tile.modelData.title; font.pixelSize: 14; color: tile.sel ? Theme.fg : Theme.fgDim; Layout.alignment: Qt.AlignHCenter }
-                            Label {
-                                text: tile.modelData.sub; font.pixelSize: Theme.fontCaption; color: Theme.muted
-                                Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
-                            }
-                        }
-
-                        MouseArea {
-                            id: tileArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onEntered: win.cur = tile.index
-                            onClicked: win.choose(tile.index)
-                        }
-                    }
-                }
-            }
-
-            // frame rate | format: segment rows side by side (stacked on a narrow card)
-            GridLayout {
-                Layout.fillWidth: true
-                columns: win.optStacked ? 1 : 2
-                columnSpacing: 10
-                rowSpacing: 10
-                Repeater {
-                    model: win.options
-                    Rectangle {
-                        id: opt
-                        required property var modelData
-                        required property int index
-                        readonly property bool sel: win.cur === 3 + index
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        implicitHeight: 44
-                        radius: Theme.radiusModal
-                        color: sel ? Theme.alpha(Theme.accent, 0.14) : Theme.alpha(Theme.fg, 0.05)
-                        border.width: 1
-                        border.color: sel ? Theme.alpha(Theme.accent, 0.7) : "transparent"
-                        Behavior on color { ColorAnimation { duration: 100 } }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onEntered: win.cur = 3 + opt.index
-                        }
-                        RowLayout {
-                            anchors { fill: parent; leftMargin: 12; rightMargin: 8 }
-                            spacing: 8
-                            Label { text: opt.modelData.title; color: opt.sel ? Theme.fg : Theme.fgDim; Layout.fillWidth: true; elide: Text.ElideRight }
-                            Rectangle {
-                                implicitWidth: 20; implicitHeight: 20
-                                radius: win.badgeRadius
-                                color: opt.sel ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.08)
-                                Label { anchors.centerIn: parent; text: opt.modelData.badge; font.pixelSize: Theme.fontCaption; color: opt.sel ? Theme.accent : Theme.muted }
-                            }
-                            Row {
-                                spacing: 2
-                                Repeater {
-                                    model: opt.modelData.values
-                                    Btn {
-                                        required property var modelData
-                                        required property int index
-                                        outerRadius: Theme.radiusModal   // concentric with the row box, like the badges
-                                        inset: 8
-                                        implicitHeight: 26
-                                        implicitWidth: opt.modelData.segW
-                                        text: opt.modelData.labels[index]
-                                        active: win.value(opt.modelData.key) === modelData
-                                        onClicked: { win.cur = 3 + opt.index; win.setOption(opt.modelData.key, modelData) }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // desktop audio switch (whole row is clickable)
+    // frame rate | format: segment rows side by side (stacked on a narrow card)
+    GridLayout {
+        Layout.fillWidth: true
+        columns: win.optStacked ? 1 : 2
+        columnSpacing: 10
+        rowSpacing: 10
+        Repeater {
+            model: win.options
             Rectangle {
-                id: audioRow
-                readonly property bool sel: win.cur === 5
+                id: opt
+                required property var modelData
+                required property int index
+                readonly property bool sel: win.cur === 3 + index
                 Layout.fillWidth: true
+                Layout.preferredWidth: 1
                 implicitHeight: 44
                 radius: Theme.radiusModal
                 color: sel ? Theme.alpha(Theme.accent, 0.14) : Theme.alpha(Theme.fg, 0.05)
@@ -315,39 +174,76 @@ PanelWindow {
                 MouseArea {
                     anchors.fill: parent
                     hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onEntered: win.cur = 5
-                    onClicked: win.setAudio(!win.audio)
+                    onEntered: win.cur = 3 + opt.index
                 }
                 RowLayout {
-                    anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
-                    spacing: 10
-                    Icon {
-                        text: win.audio ? "\uf028" : "\uf6a9"     // volume-high / volume-xmark
-                        font.pixelSize: 15
-                        color: win.audio ? Theme.accent : Theme.fgDim
-                        horizontalAlignment: Text.AlignHCenter
-                        Layout.preferredWidth: 20
+                    anchors { fill: parent; leftMargin: 12; rightMargin: 8 }
+                    spacing: 8
+                    Label { text: opt.modelData.title; color: opt.sel ? Theme.fg : Theme.fgDim; Layout.fillWidth: true; elide: Text.ElideRight }
+                    KeyBadge { text: opt.modelData.badge; sel: opt.sel }
+                    Row {
+                        spacing: 2
+                        Repeater {
+                            model: opt.modelData.values
+                            Btn {
+                                required property var modelData
+                                required property int index
+                                outerRadius: Theme.radiusModal   // concentric with the row box, like the badges
+                                inset: 8
+                                implicitHeight: 26
+                                implicitWidth: opt.modelData.segW
+                                text: opt.modelData.labels[index]
+                                active: win.value(opt.modelData.key) === modelData
+                                onClicked: { win.cur = 3 + opt.index; win.setOption(opt.modelData.key, modelData) }
+                            }
+                        }
                     }
-                    Label { text: "Record desktop audio"; color: win.audio ? Theme.fg : Theme.fgDim; Layout.fillWidth: true; elide: Text.ElideRight }
-                    Rectangle {
-                        implicitWidth: 20; implicitHeight: 20
-                        radius: win.badgeRadius
-                        color: audioRow.sel ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.08)
-                        Label { anchors.centerIn: parent; text: "A"; font.pixelSize: Theme.fontCaption; color: audioRow.sel ? Theme.accent : Theme.muted }
-                    }
-                    Toggle { checked: win.audio; onToggled: v => win.setAudio(v) }
                 }
             }
-
-            Label {
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                text: "1 2 3 start · ←→↑↓ Enter · F fps · M format · A audio · Esc close"
-                color: Theme.muted
-                font.pixelSize: Theme.fontCaption
-            }
         }
+    }
+
+    // desktop audio switch (whole row is clickable)
+    Rectangle {
+        id: audioRow
+        readonly property bool sel: win.cur === 5
+        Layout.fillWidth: true
+        implicitHeight: 44
+        radius: Theme.radiusModal
+        color: sel ? Theme.alpha(Theme.accent, 0.14) : Theme.alpha(Theme.fg, 0.05)
+        border.width: 1
+        border.color: sel ? Theme.alpha(Theme.accent, 0.7) : "transparent"
+        Behavior on color { ColorAnimation { duration: 100 } }
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onEntered: win.cur = 5
+            onClicked: win.setAudio(!win.audio)
+        }
+        RowLayout {
+            anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
+            spacing: 10
+            Icon {
+                text: win.audio ? "\uf028" : "\uf6a9"     // volume-high / volume-xmark
+                font.pixelSize: 15
+                color: win.audio ? Theme.accent : Theme.fgDim
+                horizontalAlignment: Text.AlignHCenter
+                Layout.preferredWidth: 20
+            }
+            Label { text: "Record desktop audio"; color: win.audio ? Theme.fg : Theme.fgDim; Layout.fillWidth: true; elide: Text.ElideRight }
+            KeyBadge { text: "A"; sel: audioRow.sel }
+            Toggle { checked: win.audio; onToggled: v => win.setAudio(v) }
+        }
+    }
+
+    Label {
+        Layout.fillWidth: true
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+        text: "1 2 3 start · ←→↑↓ Enter · F fps · M format · A audio · Esc close"
+        color: Theme.muted
+        font.pixelSize: Theme.fontCaption
     }
 }
