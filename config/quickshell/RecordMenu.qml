@@ -181,22 +181,15 @@ ModalMenu {
                     spacing: 8
                     Label { text: opt.modelData.title; color: opt.sel ? Theme.fg : Theme.fgDim; Layout.fillWidth: true; elide: Text.ElideRight }
                     KeyBadge { text: opt.modelData.badge; sel: opt.sel }
-                    Row {
-                        spacing: 2
-                        Repeater {
-                            model: opt.modelData.values
-                            Btn {
-                                required property var modelData
-                                required property int index
-                                outerRadius: Theme.radiusModal   // concentric with the row box, like the badges
-                                inset: 8
-                                implicitHeight: 26
-                                implicitWidth: opt.modelData.segW
-                                text: opt.modelData.labels[index]
-                                active: win.value(opt.modelData.key) === modelData
-                                onClicked: { win.cur = 3 + opt.index; win.setOption(opt.modelData.key, modelData) }
-                            }
-                        }
+                    Segmented {
+                        values: opt.modelData.values
+                        labels: opt.modelData.labels
+                        current: win.value(opt.modelData.key)
+                        outerRadius: Theme.radiusModal   // concentric with the row box, like the badges
+                        inset: 8
+                        segHeight: 26
+                        segWidth: opt.modelData.segW
+                        onPicked: v => { win.cur = 3 + opt.index; win.setOption(opt.modelData.key, v) }
                     }
                 }
             }

@@ -56,3 +56,5 @@ KeyBadge 1.0 KeyBadge.qml
 ModeTile 1.0 ModeTile.qml
 ModalMenu 1.0 ModalMenu.qml
 PopupRegistration 1.0 PopupRegistration.qml
+Segmented 1.0 Segmented.qml
+SettingRow 1.0 SettingRow.qml

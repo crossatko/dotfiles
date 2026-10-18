@@ -58,10 +58,8 @@ Item {
             model: [{ key: "gap", title: "Window gap", max: 32, step: 2 }]
             delegate: sliderRow
         }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-            Item { Layout.preferredWidth: pg.titleW }
+        SettingRow {
+            titleWidth: pg.titleW
             Toggle {
                 objectName: "toggle-edgeGap"
                 checked: Appearance.overridden("edgeGap")
@@ -74,10 +72,8 @@ Item {
             model: [{ key: "edgeGap", title: "Edge gap", max: 40, step: 1 }]
             delegate: sliderRow
         }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-            Item { Layout.preferredWidth: pg.titleW }
+        SettingRow {
+            titleWidth: pg.titleW
             // all monitors: sets the default (also for monitors connected later) and clears the rows below
             Toggle {
                 objectName: "toggle-smartGaps"
@@ -97,14 +93,12 @@ Item {
         // one row per monitor (only with 2+ monitors): its own switch, "(default)" = follows the one above
         Repeater {
             model: pg.multiMonitor ? Quickshell.screens : []
-            delegate: RowLayout {
+            delegate: SettingRow {
                 id: srow
                 required property var modelData
                 readonly property string key: Appearance.monitorKey(modelData)
                 readonly property bool own: key !== "" && Appearance.smartOverridden(key)
-                Layout.fillWidth: true
-                spacing: 10
-                Item { Layout.preferredWidth: pg.titleW }
+                titleWidth: pg.titleW
                 Toggle {
                     objectName: "toggle-smart-" + srow.modelData.name
                     checked: Appearance.smartFor(srow.key, Theme.smartGaps)
@@ -120,14 +114,18 @@ Item {
 
         // ---- bar ----
         SectionHead { title: "Bar"; Layout.topMargin: 6 }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-            Label { text: "Bar mode"; Layout.preferredWidth: pg.titleW; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
-            RowLayout {
-                spacing: 2
-                Btn { objectName: "btn-docked"; text: "Docked"; inset: 18; implicitHeight: 24; implicitWidth: 78; active: !Theme.barFloating; onClicked: Appearance.set("barFloating", false) }
-                Btn { objectName: "btn-floating"; text: "Floating"; inset: 18; implicitHeight: 24; implicitWidth: 78; active: Theme.barFloating; onClicked: Appearance.set("barFloating", true) }
+        SettingRow {
+            title: "Bar mode"
+            titleWidth: pg.titleW
+            Segmented {
+                values: [false, true]
+                labels: ["Docked", "Floating"]
+                objectNames: ["btn-docked", "btn-floating"]
+                current: Theme.barFloating
+                inset: 18
+                segHeight: 24
+                segWidth: 78
+                onPicked: v => Appearance.set("barFloating", v)
             }
             Label {
                 text: Theme.barFloating ? "edge gap from the screen edges, corner radius" : "flush with the screen edge, square"
@@ -265,15 +263,14 @@ Item {
     // one labelled slider: title | slider | value | "(default)" while the key is not overridden
     Component {
         id: sliderRow
-        RowLayout {
+        SettingRow {
             id: row
             required property var modelData
             readonly property int cur: pg.eff(modelData.key)
             readonly property bool own: Appearance.overridden(modelData.key)
-            Layout.fillWidth: true
+            title: modelData.title
+            titleWidth: pg.titleW
             visible: modelData.key !== "edgeGap" || own
-            spacing: 10
-            Label { text: row.modelData.title; Layout.preferredWidth: pg.titleW; color: Theme.fgDim; font.pixelSize: Theme.fontSmall; elide: Text.ElideRight }
             Slider {
                 objectName: "slider-" + row.modelData.key
                 Layout.fillWidth: true

@@ -260,8 +260,17 @@ Item {
                             Layout.fillWidth: true
                             spacing: 2
                             Label { text: mon.modelData.name + "  ·  " + mon.modelData.width + "×" + mon.modelData.height; Layout.fillWidth: true; Layout.leftMargin: 26; elide: Text.ElideRight; font.pixelSize: Theme.fontCaption; color: Theme.muted }
-                            Btn { text: "Top"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 22; implicitWidth: 58; active: mon.on && mon.edge === "top"; enabledLook: mon.on; onClicked: BarConfig.set(mon.modelData, "edge", "top") }
-                            Btn { text: "Bottom"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 22; implicitWidth: 58; active: mon.on && mon.edge === "bottom"; enabledLook: mon.on; onClicked: BarConfig.set(mon.modelData, "edge", "bottom") }
+                            Segmented {
+                                values: ["top", "bottom"]
+                                labels: ["Top", "Bottom"]
+                                current: mon.on ? mon.edge : ""
+                                enabledLook: mon.on
+                                outerRadius: Theme.radiusPage
+                                inset: 9
+                                segHeight: 22
+                                segWidth: 58
+                                onPicked: v => BarConfig.set(mon.modelData, "edge", v)
+                            }
                         }
                     }
                 }
