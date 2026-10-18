@@ -21,17 +21,11 @@ ColumnLayout {
              + (s.cacheRead > 0 ? " · " + AiUsage.compact(s.cacheRead) + " cached" : "")
     }
 
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 6
-        Label { text: "AI usage"; font.pixelSize: Theme.fontTitle; font.bold: true }
-        Label {
-            Layout.fillWidth: true
-            text: AiUsage.loading && !AiUsage.loaded ? "Loading…" : AiUsage.error !== "" ? AiUsage.error : ""
-            color: AiUsage.error !== "" ? Theme.red : Theme.fgDim
-            font.pixelSize: Theme.fontSmall
-            elide: Text.ElideRight
-        }
+    PanelHeader {
+        title: "AI usage"
+        showStatus: true
+        status: AiUsage.loading && !AiUsage.loaded ? "Loading…" : AiUsage.error !== "" ? AiUsage.error : ""
+        statusColor: AiUsage.error !== "" ? Theme.red : Theme.fgDim
         Btn {
             icon: true
             text: ""

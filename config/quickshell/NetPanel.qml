@@ -60,10 +60,9 @@ ColumnLayout {
         asking = n
     }
 
-    RowLayout {
+    PanelHeader {
         id: header
-        Layout.fillWidth: true
-        Label { text: "Network"; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.fillWidth: true }
+        title: "Network"
     }
 
     Rectangle {

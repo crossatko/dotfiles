@@ -31,9 +31,8 @@ GridLayout {
         Layout.row: cc.barBottom ? 2 : 0
         spacing: 12
 
-        RowLayout {
-            Layout.fillWidth: true
-            Label { text: "Control center"; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.fillWidth: true }
+        PanelHeader {
+            title: "Control center"
             // gear: Settings window (bar layout, monitors); opens on this popup's monitor
             Btn { icon: true; text: "\uf013"; onClicked: Popups.settingsRequest("open", "") }
         }

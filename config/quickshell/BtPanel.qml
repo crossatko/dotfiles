@@ -28,10 +28,8 @@ ColumnLayout {
         else d.pair()
     }
 
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 6
-        Label { text: "Bluetooth"; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.fillWidth: true }
+    PanelHeader {
+        title: "Bluetooth"
         Btn {
             visible: bt.adapter !== null && bt.adapter.enabled
             text: "Scan"

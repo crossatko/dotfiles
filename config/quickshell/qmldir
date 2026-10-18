@@ -47,3 +47,4 @@ SettingsAppearance 1.0 SettingsAppearance.qml
 TailscaleSection 1.0 TailscaleSection.qml
 RowState 1.0 RowState.qml
 Icon 1.0 Icon.qml
+PanelHeader 1.0 PanelHeader.qml

@@ -47,16 +47,11 @@ ColumnLayout {
     // sections drawn at all (hidden ones count in edit mode); the list stays up while any is there
     readonly property int sectionCount: groups.filter(g => sectionVisible(g)).length
 
-    RowLayout {
+    PanelHeader {
         id: header
-        Layout.fillWidth: true
-        spacing: 6
-        Label { text: "Home"; font.pixelSize: Theme.fontTitle; font.bold: true }
-        Label {
-            Layout.fillWidth: true
-            text: HomeAssistant.status === "ok" && HomeAssistant.lightsOn > 0 ? HomeAssistant.lightsOn + (HomeAssistant.lightsOn === 1 ? " light on" : " lights on") : ""
-            color: Theme.fgDim; font.pixelSize: Theme.fontSmall
-        }
+        title: "Home"
+        showStatus: true
+        status: HomeAssistant.status === "ok" && HomeAssistant.lightsOn > 0 ? HomeAssistant.lightsOn + (HomeAssistant.lightsOn === 1 ? " light on" : " lights on") : ""
         Btn {
             visible: HomeAssistant.configured
             icon: true
