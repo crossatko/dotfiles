@@ -1,7 +1,7 @@
 # Global instructions (all projects)
 
 ## Delegate to subagents
-- Use subagents for every substantial task. The main thread plans, delegates, verifies and reports. Do a step inline only when spawning would cost more than the step (one known-file read, one-line edit, a single quick command).
+- Default to spawning a subagent; inlining is the exception. The main thread plans, delegates, verifies and reports. Investigation, multi-step edits, anything touching more than one file or needing more than a couple of tool calls goes to an agent. Do a step inline only when it is really small (one known-file read, one-line edit, a single quick command).
 - Models, start low:
   - **haiku**: mechanical work with exact instructions (lookups, grep/file discovery, renames, formatting). Never for judgment calls or anything touching live system state.
   - **sonnet**: default for everything else, including hard work (architecture, tricky debugging, concurrency/low-level, security-sensitive, large multi-file changes, final review).
