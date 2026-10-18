@@ -136,9 +136,8 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             spacing: 14
-            Label {
+            Icon {
                 text: ent.icon()
-                font.family: Theme.iconFont; font.styleName: "Regular"
                 font.pixelSize: ent.compact ? 15 : 18
                 horizontalAlignment: Text.AlignHCenter
                 Layout.preferredWidth: 22

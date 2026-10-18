@@ -131,11 +131,11 @@ ColumnLayout {
                             visible: (card.p.message || "") !== ""
                             Layout.fillWidth: true
                             spacing: 8
-                            Label {
+                            Icon {
                                 text: ""
                                 visible: ["expired", "paused", "forbidden", "error", "nologin"].indexOf(card.p.status) >= 0
                                 color: ap.statusColor(card.p.status)
-                                font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 12
+                                font.pixelSize: 12
                             }
                             Label {
                                 Layout.fillWidth: true

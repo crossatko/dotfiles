@@ -104,9 +104,8 @@ Rectangle {
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                 }
-                Label {
+                Icon {
                     text: "\uf00d"
-                    font.family: Theme.iconFont; font.styleName: "Regular"
                     color: closeArea.containsMouse ? Theme.accent : Theme.muted
                     font.pixelSize: 13
                     MouseArea { id: closeArea; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true; onClicked: { if (card.toast) { Notifs.dismissPopup(n); Notifs.releaseLater(n) } else card.leave() } }

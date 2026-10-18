@@ -39,9 +39,8 @@ ColumnLayout {
             anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
             spacing: 8
             Label { text: dp.label(dp.current); Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 12 }
-            Label {
+            Icon {
                 text: "\uf078"
-                font.family: Theme.iconFont; font.styleName: "Regular"
                 font.pixelSize: 12
                 color: Theme.fgDim
                 rotation: dp.open ? 180 : 0
@@ -74,7 +73,7 @@ ColumnLayout {
                     RowLayout {
                         anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
                         Label { text: dp.label(modelData); Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 12; color: parent.parent.isCurrent ? Theme.accent : Theme.fg }
-                        Label { visible: parent.parent.isCurrent; text: "\uf00c"; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 12; color: Theme.accent }
+                        Icon { visible: parent.parent.isCurrent; text: "\uf00c"; font.pixelSize: 12; color: Theme.accent }
                     }
                     MouseArea { id: opt; anchors.fill: parent; hoverEnabled: true; onClicked: dp.choose(modelData) }
                 }

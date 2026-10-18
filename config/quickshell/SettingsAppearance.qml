@@ -111,7 +111,7 @@ Item {
                     enabledLook: srow.key !== ""
                     onToggled: want => Appearance.setSmartFor(srow.key, want)
                 }
-                Label { text: "\uf390"; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 12; color: Theme.fgDim; Layout.preferredWidth: 16; horizontalAlignment: Text.AlignHCenter }
+                Icon { text: "\uf390"; font.pixelSize: 12; color: Theme.fgDim; Layout.preferredWidth: 16; horizontalAlignment: Text.AlignHCenter }
                 Label { text: srow.modelData.model || srow.modelData.name; color: Theme.fgDim; font.pixelSize: 12; elide: Text.ElideRight; Layout.maximumWidth: 220 }
                 Label { text: srow.modelData.name; color: Theme.muted; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
                 Label { text: srow.own ? "" : "(default)"; color: Theme.muted; font.pixelSize: 11 }

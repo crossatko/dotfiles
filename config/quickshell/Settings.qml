@@ -132,7 +132,7 @@ PanelWindow {
                                 id: navRow
                                 anchors { fill: parent; leftMargin: 12; rightMargin: 18 }
                                 spacing: 10
-                                Label { text: nav.modelData.icon; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 14; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: nav.sel ? Theme.accent : Theme.fgDim }
+                                Icon { text: nav.modelData.icon; font.pixelSize: 14; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: nav.sel ? Theme.accent : Theme.fgDim }
                                 Label { text: nav.modelData.title; Layout.fillWidth: true; color: nav.sel ? Theme.fg : Theme.fgDim }
                             }
                             MouseArea { id: navArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.page = nav.modelData.id }

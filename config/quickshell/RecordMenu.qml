@@ -182,7 +182,7 @@ PanelWindow {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 10
-                Label { text: "\uf03d"; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 16; color: Theme.red }   // video
+                Icon { text: "\uf03d"; font.pixelSize: 16; color: Theme.red }   // video
                 Label { text: "Screen recording"; font.pixelSize: 17; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight }
                 Btn { icon: true; text: "\uf00d"; inset: 20; onClicked: win.close() }   // 20 px inside the card
             }
@@ -220,9 +220,9 @@ PanelWindow {
                             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 8 }
                             anchors.verticalCenterOffset: 6
                             spacing: 4
-                            Label {
+                            Icon {
                                 text: tile.modelData.icon
-                                font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 32
+                                font.pixelSize: 32
                                 color: tile.sel ? Theme.accent : Theme.fgDim
                                 Layout.alignment: Qt.AlignHCenter
                                 Layout.bottomMargin: 6
@@ -327,9 +327,9 @@ PanelWindow {
                 RowLayout {
                     anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
                     spacing: 10
-                    Label {
+                    Icon {
                         text: win.audio ? "\uf028" : "\uf6a9"     // volume-high / volume-xmark
-                        font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 15
+                        font.pixelSize: 15
                         color: win.audio ? Theme.accent : Theme.fgDim
                         horizontalAlignment: Text.AlignHCenter
                         Layout.preferredWidth: 20

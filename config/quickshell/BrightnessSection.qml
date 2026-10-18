@@ -27,9 +27,8 @@ ColumnLayout {
             readonly property int pct: Brightness.percentOf(modelData)
             Layout.fillWidth: true
             spacing: 10
-            Label {
+            Icon {
                 text: ""
-                font.family: Theme.iconFont; font.styleName: "Regular"
                 horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 24
                 font.pixelSize: 17
                 color: Theme.accent

@@ -63,7 +63,7 @@ PopupWindow {
                 RowLayout {
                     anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                     spacing: 8
-                    Label { text: ""; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 11; color: Theme.fgDim }
+                    Icon { text: ""; font.pixelSize: 11; color: Theme.fgDim }
                     Label { text: "Back"; Layout.fillWidth: true; color: Theme.fgDim }
                 }
                 MouseArea { id: backArea; anchors.fill: parent; hoverEnabled: true; onClicked: tm.stack = tm.stack.slice(0, -1) }
@@ -96,10 +96,10 @@ PopupWindow {
                         anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                         spacing: 8
                         // check / radio marker keeps text aligned when any entry has one
-                        Label {
+                        Icon {
                             visible: row.modelData.buttonType !== QsMenuButtonType.None
                             text: row.modelData.checkState === Qt.Checked ? (row.modelData.buttonType === QsMenuButtonType.RadioButton ? "" : "") : ""
-                            font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 11
+                            font.pixelSize: 11
                             Layout.preferredWidth: 14
                             horizontalAlignment: Text.AlignHCenter
                             color: Theme.accent
@@ -116,7 +116,7 @@ PopupWindow {
                             elide: Text.ElideRight
                             color: row.modelData.enabled ? Theme.fg : Theme.muted
                         }
-                        Label { visible: row.modelData.hasChildren; text: ""; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 11; color: Theme.fgDim }
+                        Icon { visible: row.modelData.hasChildren; text: ""; font.pixelSize: 11; color: Theme.fgDim }
                     }
                     MouseArea {
                         id: rowArea

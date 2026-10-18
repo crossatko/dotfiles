@@ -74,11 +74,10 @@ PanelWindow {
         RowLayout {
             anchors { fill: parent; leftMargin: 18; rightMargin: 18 }
             spacing: 14
-            Label {
+            Icon {
                 font.pixelSize: 22
                 color: osd.muted ? Theme.muted : Theme.accent
                 text: osd.kind === "brightness" ? "\uf185" : osd.muted ? "\uf6a9" : osd.value < 0.01 ? "\uf026" : osd.value < 0.5 ? "\uf027" : "\uf028"
-                font.family: Theme.iconFont; font.styleName: "Regular"
             }
             Rectangle {
                 Layout.fillWidth: true

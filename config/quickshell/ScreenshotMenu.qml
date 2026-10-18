@@ -122,7 +122,7 @@ PanelWindow {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 10
-                Label { text: "\uf030"; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 16; color: Theme.accent }   // camera
+                Icon { text: "\uf030"; font.pixelSize: 16; color: Theme.accent }   // camera
                 Label { text: "Screenshot"; font.pixelSize: 17; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight }
                 Btn { icon: true; text: "\uf00d"; inset: 20; onClicked: win.close() }   // 20 px inside the card
             }
@@ -160,9 +160,9 @@ PanelWindow {
                             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 8 }
                             anchors.verticalCenterOffset: 6
                             spacing: 4
-                            Label {
+                            Icon {
                                 text: tile.modelData.icon
-                                font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 32
+                                font.pixelSize: 32
                                 color: tile.sel ? Theme.accent : Theme.fgDim
                                 Layout.alignment: Qt.AlignHCenter
                                 Layout.bottomMargin: 6

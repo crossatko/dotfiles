@@ -42,7 +42,7 @@ Item {
         width: 26; height: 22
         radius: Theme.inner(Theme.radiusPage, 6)
         color: Theme.alpha(Theme.fg, 0.08)
-        Label { anchors.centerIn: parent; text: parent.glyph; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 12; color: Theme.fgDim }
+        Icon { anchors.centerIn: parent; text: parent.glyph; font.pixelSize: 12; color: Theme.fgDim }
     }
 
     component Mb: Btn {
@@ -88,8 +88,8 @@ Item {
         RowLayout {
             anchors { fill: parent; leftMargin: 8; rightMargin: 6 }
             spacing: 6
-            Label { text: "\uf58e"; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 11; color: Theme.muted }
-            Label { text: chip.w.icon; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: chip.section === "hidden" ? Theme.muted : Theme.accent }
+            Icon { text: "\uf58e"; font.pixelSize: 11; color: Theme.muted }
+            Icon { text: chip.w.icon; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: chip.section === "hidden" ? Theme.muted : Theme.accent }
             Label { text: chip.w.title; Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 12; color: chip.section === "hidden" ? Theme.fgDim : Theme.fg }
             Mb {
                 text: chip.section === "hidden" ? "\uf06e" : "\uf070"
@@ -169,8 +169,8 @@ Item {
                         RowLayout {
                             anchors { fill: parent; leftMargin: 8; rightMargin: 10 }
                             spacing: 6
-                            Label { text: "\uf023"; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 11; color: Theme.muted }
-                            Label { text: "\uf0f3"; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: Theme.fgDim }
+                            Icon { text: "\uf023"; font.pixelSize: 11; color: Theme.muted }
+                            Icon { text: "\uf0f3"; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: Theme.fgDim }
                             Label { text: "Control center"; Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 12; color: Theme.fgDim }
                             Label { text: "fixed"; font.pixelSize: 11; color: Theme.muted }
                         }
@@ -247,7 +247,7 @@ Item {
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
-                            Label { text: "\uf390"; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: mon.picked ? Theme.accent : Theme.fgDim; opacity: mon.on ? 1 : 0.55 }
+                            Icon { text: "\uf390"; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: mon.picked ? Theme.accent : Theme.fgDim; opacity: mon.on ? 1 : 0.55 }
                             Label { text: ed.screenTitle(mon.modelData); Layout.fillWidth: true; elide: Text.ElideRight; font.bold: mon.picked; color: mon.on ? Theme.fg : Theme.fgDim; opacity: mon.on ? 1 : 0.7 }
                             Label { visible: !mon.on; text: "no bar"; font.pixelSize: 11; color: Theme.muted }
                             Toggle {
@@ -361,7 +361,7 @@ Item {
         Row {
             anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 10 }
             spacing: 8
-            Label { text: proxy.icon; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 13; color: Theme.accent }
+            Icon { text: proxy.icon; font.pixelSize: 13; color: Theme.accent }
             Label { text: proxy.text; font.pixelSize: 12 }
         }
     }

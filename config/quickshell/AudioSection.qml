@@ -15,9 +15,8 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         spacing: 10
-        Label {
+        Icon {
             text: !au.sink || au.sink.muted ? "\uf6a9" : au.sink.volume < 0.01 ? "\uf026" : au.sink.volume < 0.5 ? "\uf027" : "\uf028"
-            font.family: Theme.iconFont; font.styleName: "Regular"
             horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 24
             font.pixelSize: 17
             color: au.sink && au.sink.muted ? Theme.muted : Theme.accent
@@ -38,9 +37,8 @@ ColumnLayout {
         Layout.topMargin: 4
         visible: au.source !== null
         spacing: 10
-        Label {
+        Icon {
             text: au.source && au.source.muted ? "\uf131" : "\uf130"
-            font.family: Theme.iconFont; font.styleName: "Regular"
             horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 24
             font.pixelSize: 17
             color: au.source && au.source.muted ? Theme.muted : Theme.accent

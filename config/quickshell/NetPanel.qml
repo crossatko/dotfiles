@@ -127,7 +127,7 @@ ColumnLayout {
                 RowLayout {
                     anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
                     spacing: 14
-                    Label { text: "\uf796"; font.family: Theme.iconFont; font.styleName: "Regular"; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22; font.pixelSize: 18; color: modelData.connected ? Theme.accent : Theme.muted }
+                    Icon { text: "\uf796"; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22; font.pixelSize: 18; color: modelData.connected ? Theme.accent : Theme.muted }
                     ColumnLayout {
                         spacing: 0
                         Label { text: modelData.name }
@@ -213,9 +213,9 @@ ColumnLayout {
                     anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 12; rightMargin: 12 }
                     height: net.rowH
                     spacing: 14
-                    Label { text: net.bars(modelData.signalStrength); font.family: Theme.iconFont; font.styleName: "Regular"; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22; font.pixelSize: 16; color: modelData.connected ? Theme.accent : Theme.fg }
+                    Icon { text: net.bars(modelData.signalStrength); horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22; font.pixelSize: 16; color: modelData.connected ? Theme.accent : Theme.fg }
                     Label { text: modelData.name; Layout.fillWidth: true; elide: Text.ElideRight }
-                    Label { visible: modelData.security !== WifiSecurityType.Open; text: "\uf023"; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 13; color: Theme.muted }
+                    Icon { visible: modelData.security !== WifiSecurityType.Open; text: "\uf023"; font.pixelSize: 13; color: Theme.muted }
                     RowState {
                         connected: modelData.connected
                         busy: modelData.stateChanging
@@ -268,11 +268,10 @@ ColumnLayout {
                                 Keys.onEscapePressed: { Popups.escAt = Date.now(); net.asking = null }
                                 Label { visible: pw.text === ""; anchors.verticalCenter: parent.verticalCenter; text: "Password"; color: Theme.muted; font.pixelSize: 12 }
                             }
-                            Label {
+                            Icon {
                                 id: reveal
                                 property bool shown: false
                                 text: shown ? "\uf06e" : "\uf070"
-                                font.family: Theme.iconFont; font.styleName: "Regular"
                                 color: revealArea.containsMouse ? Theme.fg : Theme.muted
                                 font.pixelSize: 15
                                 MouseArea { id: revealArea; anchors.fill: parent; anchors.margins: -5; hoverEnabled: true; onClicked: reveal.shown = !reveal.shown }

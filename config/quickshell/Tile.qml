@@ -23,7 +23,7 @@ Rectangle {
     RowLayout {
         anchors { fill: parent; leftMargin: 12; rightMargin: 10 }
         spacing: 10
-        Label { text: tile.icon; font.family: Theme.iconFont; font.styleName: "Regular"; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 26; font.pixelSize: 20; color: tile.on ? Theme.accent : Theme.fgDim }
+        Icon { text: tile.icon; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 26; font.pixelSize: 20; color: tile.on ? Theme.accent : Theme.fgDim }
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 0

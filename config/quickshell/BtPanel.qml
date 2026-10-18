@@ -72,7 +72,7 @@ ColumnLayout {
             RowLayout {
                 anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
                 spacing: 14
-                Label { text: "\uf293"; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 18; color: modelData.connected ? Theme.accent : Theme.fg }
+                Icon { text: "\uf293"; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22; font.pixelSize: 18; color: modelData.connected ? Theme.accent : Theme.fg }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 0

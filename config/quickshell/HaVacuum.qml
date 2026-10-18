@@ -82,10 +82,10 @@ Rectangle {
             id: row
             anchors.centerIn: parent
             spacing: 8
-            Label {
+            Icon {
                 visible: ab.icon !== ""
                 text: ab.icon
-                font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 13
+                font.pixelSize: 13
                 color: ab.primary || ab.active ? Theme.accent : Theme.fg
                 anchors.verticalCenter: parent.verticalCenter
             }
@@ -183,9 +183,9 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             spacing: 14
-            Label {
+            Icon {
                 text: ""
-                font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 18
+                font.pixelSize: 18
                 horizontalAlignment: Text.AlignHCenter
                 Layout.preferredWidth: 22
                 color: vac.cleaning ? Theme.accent : Theme.fgDim
@@ -203,16 +203,16 @@ Rectangle {
             Row {
                 visible: !vac.editing && vac.battery >= 0
                 spacing: 6
-                Label {
+                Icon {
                     text: vac.charging ? "" : ""
                     visible: vac.charging
-                    font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 11
+                    font.pixelSize: 11
                     color: Theme.accent
                     anchors.verticalCenter: parent.verticalCenter
                 }
-                Label {
+                Icon {
                     text: vac.batteryIcon(vac.battery)
-                    font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 15
+                    font.pixelSize: 15
                     color: vac.battery < 20 ? Theme.red : Theme.fgDim
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -314,9 +314,9 @@ Rectangle {
                         RowLayout {
                             anchors { fill: parent; leftMargin: 10; rightMargin: 8 }
                             spacing: 8
-                            Label {
+                            Icon {
                                 text: tile.sel ? "" : ""
-                                font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 12
+                                font.pixelSize: 12
                                 color: tile.sel ? Theme.accent : Theme.muted
                             }
                             Label {
