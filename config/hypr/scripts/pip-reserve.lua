@@ -121,7 +121,11 @@ local function smart_gaps_apply(mon)
 				and w.workspace.id == ws.id
 			then
 				if w.floating ~= true and not w.pinned then
-					tiled = tiled + 1
+					-- a group (tabbed windows) is ONE visible tiled window for w[tv1]: count only its current member
+					local g = w.group
+					if g == nil or g.current == nil or g.current.address == w.address then
+						tiled = tiled + 1
+					end
 				end
 				if w.fullscreen == 1 and w.floating ~= true then
 					return true
