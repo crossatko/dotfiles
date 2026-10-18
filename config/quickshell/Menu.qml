@@ -67,7 +67,7 @@ ModalMenu {
             return { title: shown, extra: "", checked: checked, dim: false, glyph: powerIcons[shown] || "", glyphColor: Theme.fgDim, iconPath: "" }
         if (promptKey === "Output")
             return { title: shown, extra: "", checked: checked, dim: false, iconPath: "", glyphColor: Theme.fgDim,
-                     glyph: /head|arctis|buds|airpods|hyperx|wh-1000/i.test(shown) ? "" : "" }   // headphones / speaker
+                     glyph: /navi|\btv\b|hdmi/i.test(shown) ? "" : /head|arctis|buds|airpods|hyperx|wh-1000/i.test(shown) ? "" : "" }   // tv / headphones / speaker
         if (promptKey === "Twitch") {
             // "<Name>: <game> [<viewers>]" or "<Name>: [offline]"
             const m = shown.match(/^([^:]+):\s*(.*)$/)
