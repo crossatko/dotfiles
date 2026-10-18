@@ -43,6 +43,11 @@ Singleton {
         name = n; screen = scr
     }
     function close() { name = "" }
+    // Esc arrives from a Hyprland keybind (hypr/hyprland/binds.lua, `qs ipc call popup esc`) because the popup
+    // surface has no keyboard focus right after opening. A field that handled that same Esc itself (Wi-Fi password)
+    // stamps escAt so the popup stays open.
+    property double escAt: 0
+    function esc() { if (Date.now() - escAt > 400) close() }
     function closeAll() { name = ""; dismiss("") }
     function edgeOf(scr) { return bars[scr] || "bottom" }
 

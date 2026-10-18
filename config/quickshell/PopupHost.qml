@@ -45,7 +45,7 @@ PanelWindow {
             opener.stop(); swap.stop(); morphTimer.stop(); t = 0
         }
     }
-    onActiveChanged: sync()
+    onActiveChanged: { sync(); if (active) keys.forceActiveFocus() }
     Connections {
         target: Popups
         function onNameChanged() { if (host.active) host.sync() }
@@ -67,6 +67,13 @@ PanelWindow {
     WlrLayershell.keyboardFocus: active ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     anchors { left: true; right: true; top: true; bottom: true }
+
+    // Esc closes. A focused field inside a card (Wi-Fi password) handles its own Esc first.
+    Item {
+        id: keys
+        focus: true
+        Keys.onEscapePressed: Popups.close()
+    }
 
     MouseArea { id: scrim; anchors.fill: parent; onClicked: Popups.close() }
 

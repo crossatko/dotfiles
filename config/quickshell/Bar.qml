@@ -203,6 +203,12 @@ PanelWindow {
         border.width: Theme.barBorder
         border.color: Theme.alpha(Theme.overlay, 0.55)
     }
+    // empty bar space (the popup scrim has the bar cut out of its input region): a click closes any open popup
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.AllButtons
+        onPressed: if (Popups.anyOpen) Popups.closeAll()
+    }
 
     // workspaces widget: with a bar on every monitor each bar shows its own monitor's workspaces; with a
     // single bar it shows all of them (it is the only place to switch workspaces on the other monitors).

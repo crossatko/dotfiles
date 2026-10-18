@@ -54,6 +54,7 @@ ShellRoot {
             Popups.toggle(name, m)
         }
         function close(): void { Popups.close() }
+        function esc(): void { Popups.esc() }
     }
 
     // qs ipc call osd brightness   (shows the focused display's brightness)
