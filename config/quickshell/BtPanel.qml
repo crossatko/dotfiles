@@ -79,11 +79,10 @@ ColumnLayout {
                     Label { text: modelData.name || modelData.address; Layout.fillWidth: true; elide: Text.ElideRight }
                     Label { text: bt.sub(modelData); color: Theme.fgDim; font.pixelSize: 11 }
                 }
-                // on = connected. Off disconnects; on connects a paired device or starts pairing a new one.
-                Toggle {
-                    checked: modelData.connected
+                RowState {
+                    connected: modelData.connected
+                    hovered: area.containsMouse
                     busy: modelData.pairing || modelData.state === BluetoothDeviceState.Connecting || modelData.state === BluetoothDeviceState.Disconnecting
-                    onToggled: want => bt.act(modelData)
                 }
             }
             MouseArea {

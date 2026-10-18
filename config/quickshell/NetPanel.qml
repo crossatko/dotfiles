@@ -106,11 +106,24 @@ ColumnLayout {
         Repeater {
             model: net.wired
             Rectangle {
+                id: wiredRow
                 required property var modelData
+                readonly property bool canToggle: !!modelData.network || modelData.connected
+                readonly property bool on: modelData.state === ConnectionState.Connected || modelData.state === ConnectionState.Connecting
                 Layout.fillWidth: true
                 implicitHeight: net.rowH
                 radius: Theme.radiusItem
-                color: Theme.alpha(Theme.fg, 0.07)
+                opacity: canToggle ? 1 : 0.45
+                color: wiredArea.containsMouse && canToggle ? Theme.alpha(Theme.fg, 0.12) : Theme.alpha(Theme.fg, 0.07)
+                MouseArea {
+                    id: wiredArea
+                    anchors.fill: parent
+                    z: -1
+                    hoverEnabled: true
+                    enabled: wiredRow.canToggle
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: net.setWired(wiredRow.modelData, !wiredRow.on)
+                }
                 RowLayout {
                     anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
                     spacing: 14
@@ -121,11 +134,11 @@ ColumnLayout {
                         Label { text: net.stateText(modelData.state) + (modelData.linkSpeed > 0 ? " · " + modelData.linkSpeed + " Mb/s" : ""); color: Theme.fgDim; font.pixelSize: 11 }
                     }
                     Item { Layout.fillWidth: true }
-                    Toggle {
-                        checked: modelData.state === ConnectionState.Connected || modelData.state === ConnectionState.Connecting
+                    RowState {
+                        connected: modelData.state === ConnectionState.Connected
+                        hovered: wiredArea.containsMouse
+                        hintable: wiredRow.canToggle
                         busy: modelData.state === ConnectionState.Connecting || modelData.state === ConnectionState.Disconnecting
-                        enabledLook: !!modelData.network || modelData.connected
-                        onToggled: want => net.setWired(modelData, want)
                     }
                 }
             }
@@ -203,17 +216,17 @@ ColumnLayout {
                     Label { text: net.bars(modelData.signalStrength); font.family: Theme.iconFont; font.styleName: "Regular"; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22; font.pixelSize: 16; color: modelData.connected ? Theme.accent : Theme.fg }
                     Label { text: modelData.name; Layout.fillWidth: true; elide: Text.ElideRight }
                     Label { visible: modelData.security !== WifiSecurityType.Open; text: "\uf023"; font.family: Theme.iconFont; font.styleName: "Regular"; font.pixelSize: 13; color: Theme.muted }
-                    Toggle {
-                        checked: modelData.connected
+                    RowState {
+                        connected: modelData.connected
                         busy: modelData.stateChanging
-                        onToggled: want => net.setWifi(modelData, want)
+                        hovered: area.containsMouse
                     }
                 }
                 MouseArea {
                     id: area
                     anchors { left: parent.left; right: parent.right; top: parent.top }
                     height: net.rowH
-                    z: -1                       // under the toggle
+                    z: -1
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     onClicked: mouse => mouse.button === Qt.RightButton && modelData.known ? modelData.forget() : net.setWifi(modelData, !modelData.connected)
@@ -252,7 +265,7 @@ ColumnLayout {
                                 clip: true
                                 onTextChanged: card.failed = false
                                 onAccepted: net.submit(card.modelData, text)
-                                Keys.onEscapePressed: net.asking = null
+                                Keys.onEscapePressed: { Popups.escAt = Date.now(); net.asking = null }
                                 Label { visible: pw.text === ""; anchors.verticalCenter: parent.verticalCenter; text: "Password"; color: Theme.muted; font.pixelSize: 12 }
                             }
                             Label {
