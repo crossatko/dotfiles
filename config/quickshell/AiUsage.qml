@@ -42,8 +42,31 @@ Singleton {
         c.sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0))
         return c.find(p => p.stale !== true) || c[0] || null
     }
-    readonly property real currentPercent: current
-        ? Math.max(...current.windows.filter(w => typeof w.percent === "number").map(w => w.percent)) : -1
+    // length of a limit window in minutes, from what bin/ai-usage gives: key (five_hour / seven_day*), detail
+    // ("5-hour window", Codex "5h window" / "7d window") or title (Session / Daily / Weekly / Monthly); 0 = unknown
+    function windowMinutes(w) {
+        const key = String(w.key || ""), detail = String(w.detail || ""), title = String(w.title || "").toLowerCase()
+        if (key === "five_hour") return 300
+        if (key.startsWith("seven_day")) return 10080
+        let m = detail.match(/(\d+)\s*-?\s*(h|hour)\b/i)
+        if (m) return Number(m[1]) * 60
+        m = detail.match(/(\d+)\s*-?\s*(d|day)\b/i)
+        if (m) return Number(m[1]) * 1440
+        return title === "session" ? 300 : title === "daily" ? 1440 : title === "weekly" ? 10080
+            : title === "monthly" ? 43200 : 0
+    }
+    // the chip's window: the account's short limit (Claude: the 5-hour session; others: the shortest window, e.g.
+    // a daily one). Shortest known length first, unknown lengths after the known ones, ties by the earlier reset.
+    // An account with only weekly windows shows its weekly one.
+    readonly property var currentWindow: {
+        if (!current) return null
+        const ws = current.windows.filter(w => typeof w.percent === "number")
+        const len = w => windowMinutes(w) || 1e9
+        const rst = w => w.resetsAt || 1e12
+        ws.sort((a, b) => len(a) - len(b) || rst(a) - rst(b))
+        return ws[0] || null
+    }
+    readonly property real currentPercent: currentWindow ? currentWindow.percent : -1
     readonly property bool currentStale: current !== null && current.stale === true
     readonly property bool anyExpired: profiles.some(p => p.status === "expired")
 
