@@ -323,7 +323,7 @@ hl.window_rule({
 	},
 })
 
--- Quickshell Menu.qml (launcher / dmenus; namespace inherited from tofi)
+-- tofi (fixed layer namespace "launcher"): only qmenu's fallback when quickshell is down (Menu.qml is qs-menu)
 hl.layer_rule({ match = { namespace = "launcher" }, blur = true })
 -- Quickshell (~/dotfiles/config/quickshell): the bar opts in to the global
 -- decoration:blur:* settings (size/passes/vibrancy/variant all apply as-is).
@@ -335,7 +335,7 @@ hl.layer_rule({ match = { namespace = "launcher" }, blur = true })
 -- new) is blurred (the pattern must match the whole namespace: `qs-.*`, not `^qs-`) wherever it draws something at least 10% opaque; fully transparent pixels get no blur.
 hl.layer_rule({ match = { namespace = "qs-.*" }, blur = true })
 hl.layer_rule({ match = { namespace = "qs-.*" }, ignore_alpha = 0.1 })
--- Fullscreen dim overlays with a card on top (Settings, ModalMenu kinds screenshot / record): the dim is alpha 0.5
+-- Fullscreen dim overlays with a card on top (Settings, ModalMenu kinds screenshot / record / menu): the dim is alpha 0.5
 -- and must stay unblurred, the card is >= 0.85, so a threshold of 0.6 blurs only the card's area. A new fullscreen
 -- dim overlay needs its namespace added here (and a card alpha above 0.6).
-hl.layer_rule({ match = { namespace = "^qs-(settings|screenshot|record)$" }, ignore_alpha = 0.6 })
+hl.layer_rule({ match = { namespace = "^qs-(settings|screenshot|record|menu)$" }, ignore_alpha = 0.6 })

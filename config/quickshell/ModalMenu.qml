@@ -15,6 +15,8 @@ PanelWindow {
     property string title: ""
     property string icon: ""
     property color iconColor: Theme.accent
+    property string iconFamily: Theme.iconFont    // Theme.brandFont for a brand logo
+    property Item focusItem: null                  // gets keyboard focus on open (e.g. a search field); null = onKeyPressed
     property int cardWidth: 520
     property bool shown: false
     readonly property alias card: cardBox
@@ -28,7 +30,8 @@ PanelWindow {
         screen = Popups.focusedScreen()
         opening()
         shown = true
-        keys.forceActiveFocus()
+        const f = win.focusItem || keys
+        f.forceActiveFocus()
     }
     function close() { shown = false }
     function toggle() { shown ? close() : open() }
@@ -71,7 +74,7 @@ PanelWindow {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 10
-                Icon { text: win.icon; font.pixelSize: 16; color: win.iconColor }
+                Icon { text: win.icon; font.family: win.iconFamily; font.pixelSize: 16; color: win.iconColor }
                 Label { text: win.title; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight }
                 Btn { icon: true; text: ""; inset: 20; onClicked: win.close() }   // 20 px inside the card
             }
