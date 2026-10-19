@@ -208,34 +208,52 @@ hl.config({
 -- ~/code/hyprland-blur-test build, patched locally -- not upstream) aimed at an
 -- Apple-style "liquid glass" look, with depth/edge_curve/light_angle/specular_*/
 -- sheen/saturation on top of acrylic's original refraction/bulb/clarity/aberration/tint.
-hl.config({
-	decoration = {
-		blur = {
-			size = 4,
-			passes = 2,
-			vibrancy = 0.8,
-			popups = true,
-			variant = "solid_glass",
-			-- tune live with GlassTune (pen chip in the bar), then "Copy changed" and paste here
-			solid_glass = {
-				refraction = 48, -- max lens displacement (px), 0-48
-				bulb = 57.03, -- width of the curved edge (px), 4-256
-				clarity = 0.395, -- 1 = sharp interior (only `frost` blurs it), 0 = fully frosted, 0-1
-				aberration = 0, -- chromatic split in the lens, 0-0.25
-				tint = 0x00000000, -- AARRGGBB, alpha = absorption
-				depth = 2.031, -- bend multiplier, 0-3
-				edge_curve = 1.304, -- <1 bends right at the edge, >1 later (bevel), 0.2-5
-				light_angle = 0, -- degrees, 0 = right, 90 = up
-				specular_intensity = 0, -- synthetic rim/glint/sheen lighting, 0 = off, 0-3
-				specular_power = 1, -- glint sharpness, 1-200
-				sheen = 0, -- rim glint facing the light, 0-1
-				saturation = 1.355, -- backdrop vividness, 0-3
-				frost = 0, -- interior blur radius (px), 0-16
-				darkening = 0.795, -- 0-1
+local host = require("hyprland.host")
+
+-- Glass needs the patched Hyprland fork (only on the battlestation); everywhere else: plain blur.
+if host.is_battlestation then
+	hl.config({
+		decoration = {
+			blur = {
+				size = 4,
+				passes = 2,
+				vibrancy = 0.8,
+				popups = true,
+				variant = "solid_glass",
+				-- tune live with GlassTune (pen chip in the bar), then "Copy changed" and paste here
+				solid_glass = {
+					refraction = 48, -- max lens displacement (px), 0-48
+					bulb = 57.03, -- width of the curved edge (px), 4-256
+					clarity = 0.395, -- 1 = sharp interior (only `frost` blurs it), 0 = fully frosted, 0-1
+					aberration = 0, -- chromatic split in the lens, 0-0.25
+					tint = 0x00000000, -- AARRGGBB, alpha = absorption
+					depth = 2.031, -- bend multiplier, 0-3
+					edge_curve = 1.304, -- <1 bends right at the edge, >1 later (bevel), 0.2-5
+					light_angle = 0, -- degrees, 0 = right, 90 = up
+					specular_intensity = 0, -- synthetic rim/glint/sheen lighting, 0 = off, 0-3
+					specular_power = 1, -- glint sharpness, 1-200
+					sheen = 0, -- rim glint facing the light, 0-1
+					saturation = 1.355, -- backdrop vividness, 0-3
+					frost = 0, -- interior blur radius (px), 0-16
+					darkening = 0.795, -- 0-1
+				},
 			},
 		},
-	},
-})
+	})
+else
+	hl.config({
+		decoration = {
+			blur = {
+				enabled = true,
+				size = 4,
+				passes = 2,
+				xray = true,
+				new_optimizations = true,
+				vibrancy = 0.1696,
+			},
+		},
+	})
+end
 
 -- hl.config({ decoration = { blur = { variant = "aurora" } } })
 -- hl.config({

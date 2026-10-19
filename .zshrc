@@ -294,3 +294,5 @@ case ":$PATH:" in
   *) export PATH="$PATH":'/home/kreejzak/.photon/bin' ;;
 esac
 # <<< Photon CLI <<<
+export ANDROID_HOME=/opt/android-sdk
+export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
