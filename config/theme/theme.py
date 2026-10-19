@@ -241,6 +241,10 @@ def render_all(pal, cfg):
     OUT.mkdir(exist_ok=True)
     wp = str(Path(os.path.expanduser(cfg["wallpaper"])))
     extra = {"wallpaper": wp, "home": str(HOME), **{k: v for k, v in cfg.get("vars", {}).items()}}
+    # a host without the TV wallpaper (it is not in the repo) falls back to the main one instead of a black output
+    tv = os.path.expanduser(extra.get("tv_wallpaper", ""))
+    if not tv or not os.path.exists(tv):
+        extra["tv_wallpaper"] = wp
     for tpl in sorted((ROOT / "templates").iterdir()):
         dest = OUT / tpl.name
         write_atomic(dest, render(tpl.read_text(), pal, extra))

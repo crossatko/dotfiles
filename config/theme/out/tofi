@@ -11,8 +11,8 @@ num-results = 8
 font = "Paper Mono"
 font-size = 24
 
-background-color = #141214aa
-text-color = #cdc1c4
-prompt-color = #cf5988
-input-color = #cdc1c4
-selection-color = #cf5988
+background-color = #08090baa
+text-color = #d5b9bb
+prompt-color = #e7313c
+input-color = #d5b9bb
+selection-color = #e7313c
