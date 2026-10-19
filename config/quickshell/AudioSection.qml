@@ -23,6 +23,7 @@ ColumnLayout {
         valueText: au.sink ? Math.round(au.sink.volume * 100) + "%" : "–"
     }
     DevicePicker { Layout.fillWidth: true; isSink: true }
+    BtProfilePicker { Layout.fillWidth: true }
 
     LevelRow {
         Layout.topMargin: 4
