@@ -8,7 +8,9 @@
   - **opus**: escalation only (see below). Exception: the main thread may start on opus for anything that can break the user's live system.
 - Don't set agent effort levels unless the user asks.
 - The brief is the agent's only context. Include: goal and why; exact files/paths; constraints; what is known and ruled out (don't make it re-derive facts); how to verify; output format; when to stop or escalate.
-- Parallel agents get disjoint scopes; no speculative fan-out. Continue a relevant existing agent with SendMessage instead of spawning a fresh one.
+- Prefer parallel agents: when pieces of work are independent and won't touch the same files, spawn them together (one message, multiple Agent calls) instead of serializing. Each brief states its own files and the other agents' scopes, which it must not touch; for shared files (e.g. notes) re-read right before writing and edit only its own entry. No speculative fan-out: spawn only for real independent work.
+- A new user request while an agent is running: if its scope is disjoint, spawn a new agent for it; don't queue it onto the running one.
+- If scopes might overlap (same file, same component), serialize, or continue the relevant existing agent with SendMessage. Also use SendMessage for follow-ups in the same scope or that need its prior context, instead of spawning a fresh one.
 - Ask for short reports: findings and outcome first, verified vs assumed marked, no file dumps or code recaps. Long artifacts (logs, diffs, analyses) go to scratchpad files; return paths plus a summary.
 - Agents read only what they need (grep, offset/limit reads, not whole large files), batch independent tool calls, and don't poll or re-run expensive commands to re-check.
 
@@ -18,7 +20,7 @@
 - Handoff contents: goal; findings (verified vs assumed); what was tried and ruled out, and why; current state of files/changes; the exact open problem. Opus continues from there, it does not start over.
 
 ## Verification
-- Always visually test UI/visual changes: reproduce the state, take a screenshot (grim), and look at it before reporting. "qmllint clean" or "config reloaded" is not verification of how it looks. If it truly cannot be tested without disturbing the live session, use an isolated instance or ask the user to open the state, and say so.
+- Always visually test UI/visual changes: reproduce the state, take a screenshot (grim; see Safety: screenshot rules), and look at it before reporting. "qmllint clean" or "config reloaded" is not verification of how it looks. If it truly cannot be tested without disturbing the live session, use an isolated instance or ask the user to open the state, and say so.
 - Before telling the user something works, verify it yourself with a check proportional to risk (logs, reload, screenshot, test run, grep). Never relay an agent's claim as fact unchecked.
 - Say explicitly what was not verified.
 
@@ -28,6 +30,11 @@
 - Kill processes by exact PID, not by name, when other instances of the same program may be running.
 - Don't put licensed assets (e.g. Font Awesome Pro) into public repos.
 - Kill crashed game or app processes proactively. They hold the wine prefix and block the next test.
+- Screenshot rules:
+  - Never screenshot the whole screen, not for testing, not for comparing.
+  - Capture only the relevant window, better only the relevant part of it, on the correct layer/surface, so no overlapping app gets captured by mistake. E.g. `grim -g "x,y WxH"` with geometry from `hyprctl clients -j` / `hyprctl layers -j`.
+  - Translucent elements (blur/glass/transparency) that need a backdrop: put a generated solid-colour or checkerboard backdrop (a throwaway isolated window) behind the layer and capture that, never the real content behind it.
+  - Never screenshot the user's real content (their windows, files, messages, browser, etc.).
 
 ## Document changes for future agents
 After making changes in any project, record them so the next agent can continue without re-researching:
