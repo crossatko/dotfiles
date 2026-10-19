@@ -17,8 +17,14 @@ local VERTICAL_WIDTH = 866
 local HORIZONTAL_OFFSET = { x = 0, y = 1245 }
 local HORIZONTAL_SIZE = { w = 1200, h = 675 }
 
+-- The Twitch player (twitch-qs-mpv, a Quickshell FloatingWindow, class org.quickshell) has no title when it
+-- opens, only the later window.title event carries "Twitch - <channel>"; it is treated like PiP/mpv then.
+local function is_twitch(window)
+	return window.class == "org.quickshell" and type(window.title) == "string" and window.title:find("^Twitch %- ") ~= nil
+end
+
 local function is_pip_or_mpv(window)
-	return window.title == "Picture in picture" or window.initial_class == "mpv"
+	return window.title == "Picture in picture" or window.initial_class == "mpv" or is_twitch(window)
 end
 
 local function compute_target(window)
@@ -168,6 +174,35 @@ local function sync_reserved_areas()
 	sync_monitor2_reserved_area()
 end
 
+-- Hyprland drags a pinned window's workspace (and then monitor) ownership along when a workspace
+-- on the OTHER monitor is activated (see switch-workspace.lua, which only guards the focused case):
+-- the box then jumps to the primary monitor on a later switch. Heal like pip-reserve.lua does:
+-- unpin, move to the target monitor's active workspace, exact geometry, pin last.
+local healing = false
+local function heal_pinned()
+	if healing then
+		return
+	end
+	for _, w in ipairs(hl.get_windows()) do
+		if is_pip_or_mpv(w) and w.pinned and w.monitor ~= nil then
+			local target = compute_target(w)
+			local mon = target and hl.get_monitor(target.output)
+			if mon ~= nil and mon.active_workspace ~= nil then
+				local ws_mon = w.workspace ~= nil and w.workspace.monitor ~= nil and w.workspace.monitor.name or nil
+				if w.monitor.name ~= mon.name or (ws_mon ~= nil and ws_mon ~= mon.name) then
+					healing = true
+					local selector = "address:" .. w.address
+					hl.dispatch(hl.dsp.window.pin({ window = selector, action = false }))
+					hl.dispatch(hl.dsp.window.move({ window = selector, workspace = mon.active_workspace.id, silent = true }))
+					reposition(w, target)
+					hl.dispatch(hl.dsp.window.pin({ window = selector, action = true }))
+					healing = false
+				end
+			end
+		end
+	end
+end
+
 hl.on("window.open", function(window)
 	if is_pip_or_mpv(window) then
 		place(window)
@@ -175,14 +210,34 @@ hl.on("window.open", function(window)
 	sync_reserved_areas()
 end)
 
+-- Twitch player: place it once, when its title first shows up (see is_twitch). Later title changes
+-- (the user may have moved/unpinned it) are left alone.
+local twitch_placed = {}
+hl.on("window.title", function(window)
+	if window == nil or not is_twitch(window) or twitch_placed[window.address] then
+		return
+	end
+	twitch_placed[window.address] = true
+	place(window)
+	sync_reserved_areas()
+end)
+
 -- window.close doesn't fire for every way a window can disappear - confirmed
 -- live: killing a pinned window left its monitor's reservation stuck on
 -- until a manual reload. Cover the other teardown events too.
-hl.on("window.close", sync_reserved_areas)
+hl.on("window.close", function(window)
+	if window ~= nil then
+		twitch_placed[window.address] = nil
+	end
+	sync_reserved_areas()
+end)
 hl.on("window.kill", sync_reserved_areas)
 hl.on("window.destroy", sync_reserved_areas)
 hl.on("window.pin", sync_reserved_areas)
 hl.on("window.move_to_workspace", sync_reserved_areas)
-hl.on("workspace.active", sync_reserved_areas)
+hl.on("workspace.active", function()
+	heal_pinned()
+	sync_reserved_areas()
+end)
 
 sync_reserved_areas()
