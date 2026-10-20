@@ -1,0 +1,3 @@
+# Battlestation only (Corne with VIA firmware). uaccess on the Corne hidraw node so VIA (WebHID) can talk to it.
+# Install: sudo cp hosts/CrossBattlestation/etc/udev/rules.d/62-corne-via.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=hidraw
+KERNEL=="hidraw*", ATTRS{idVendor}=="4653", ATTRS{idProduct}=="0001", TAG+="uaccess"
