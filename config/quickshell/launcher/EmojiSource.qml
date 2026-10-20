@@ -10,6 +10,8 @@ QtObject {
     id: src
 
     readonly property var items: []               // nothing in the normal list
+    readonly property string modeTitle: "Emoji"   // launcher header in prefix mode
+    readonly property string modeGlyph: "\uf118"
     property var table: []                        // ranker items {id, name, keywords, char}
 
     function exclusive(q) { return q.startsWith(":") }

@@ -13,6 +13,7 @@ PanelWindow {
 
     property string kind: ""                       // Popups kind and the layer namespace suffix
     property string title: ""
+    property string titleSub: ""                   // small dim text after the title (optional)
     property string icon: ""
     property color iconColor: Theme.accent
     property string iconFamily: Theme.iconFont    // Theme.brandFont for a brand logo
@@ -88,6 +89,7 @@ PanelWindow {
                 spacing: 10
                 Icon { text: win.icon; font.family: win.iconFamily; font.pixelSize: 16; color: win.iconColor }
                 Label { text: win.title; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight }
+                Label { visible: win.titleSub !== ""; text: win.titleSub; font.pixelSize: Theme.fontCaption; color: Theme.fgDim; elide: Text.ElideRight }
                 Btn { icon: true; text: ""; inset: 20; onClicked: win.close() }   // 20 px inside the card
             }
         }

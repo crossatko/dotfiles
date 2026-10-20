@@ -8,8 +8,10 @@ import Quickshell.Io
 // Section rows are `transient` + `private` (never in usage.json / history.json). Mirrors the old menus:
 //   sound-output / sound-input: (pactl list, current first and ticked,
 //     select = set default + move all streams)
-//     (twitch-qs-follows lines, select = twitch-qs-mpv watch/login). Twitch tokens are handled inside the
-//     twitch-qs-* scripts only; this file never sees them.
+//     (twitch-qs-follows lines, select = watch/login). Tools are probed once when the section opens; channels
+//     are watched with twitch-qs-mpv, else `mpv https://www.twitch.tv/<login>`, else xdg-open of that URL. Without
+//     twitch-qs-follows the section shows "Open Twitch in browser" plus a "Watch <typed login>" row (extra()).
+//     Twitch tokens are handled inside the twitch-qs-* scripts only; this file never sees them.
 //   screenshot / record: the former standalone menus. Rows start hypr/scripts/screenshot.sh <mode> /
 //     screenrec.sh <mode> --fps N --format F --audio|--no-audio. The launcher closes first (Launcher.runItem sets
 //     shown=false before run()), and the script starts after a short sleep so the layer is unmapped before slurp /
@@ -23,13 +25,13 @@ QtObject {
     signal updated()
 
     readonly property var sections: ({
-        "sound-output": { title: "Sound output", glyph: "", sub: "Choose the default audio output",
+        "sound-output": { title: "Sound output", header: "Audio output", glyph: "", sub: "Choose the default audio output",
                           aliases: ["speaker", "speakers", "headphones"], words: ["audio", "sink", "output", "volume"] },
-        "sound-input":  { title: "Sound input", glyph: "", sub: "Choose the default microphone",
+        "sound-input":  { title: "Sound input", header: "Audio input", glyph: "", sub: "Choose the default microphone",
                           aliases: ["mic", "microphone"], words: ["audio", "source", "input"] },
         "power":        { title: "Power", glyph: "", sub: "Sleep, shut down, restart, log out, switch session",
                           aliases: ["shutdown", "reboot", "logout", "suspend"], words: ["poweroff", "restart", "log out", "sleep", "exit", "session"] },
-        "twitch":       { title: "Twitch", glyph: "", sub: "Followed channels",
+        "twitch":       { title: "Twitch", header: "Streams", glyph: "", sub: "Followed channels",
                           aliases: ["stream", "streams"], words: ["live", "channels", "watch"] },
         "screenshot":   { title: "Screenshot", glyph: "\uf030", sub: "Region, window or screen",
                           aliases: ["print", "grab", "snip", "capture"], words: ["screen", "region", "window", "monitor", "image"] },
@@ -43,6 +45,9 @@ QtObject {
     }))
 
     function title(name) { return sections[name] ? sections[name].title : "" }
+    // launcher header while inside the section (defaults to the title) and its icon (the root row glyph)
+    function header(name) { const s = sections[name]; return s ? (s.header || s.title) : "" }
+    function glyph(name) { return sections[name] ? sections[name].glyph : "" }
 
     // ---- state ---------------------------------------------------------------------------------------------
     property var outRows: []
@@ -54,12 +59,19 @@ QtObject {
     property var twitchRows: []
     property bool twitchLoading: false
     property string twitchError: ""
+    property string twAppPath: ""                   // twitch-qs-mpv (empty = not installed)
+    property string twFollowsPath: ""               // twitch-qs-follows (empty = not installed)
+    property bool twMpv: false                      // mpv on PATH
+    property bool twProbed: false
 
     function enter(name) {
         if (name === "record") { Quickshell.execDetached(["mkdir", "-p", src.prefsDir]); prefs.reload(); recording = false; statusProc.running = false; statusProc.running = true }
         if (name === "sound-output") { outRows = []; outError = ""; outLoading = true; outProc.running = false; outProc.running = true }
         else if (name === "sound-input") { inRows = []; inError = ""; inLoading = true; inProc.running = false; inProc.running = true }
-        else if (name === "twitch") { twitchRows = []; twitchError = ""; twitchLoading = true; twitchProc.running = false; twitchProc.running = true }
+        else if (name === "twitch") {
+            twitchRows = []; twitchError = ""; twitchLoading = true; twProbed = false
+            twitchProc.running = false; twitchProbe.running = false; twitchProbe.running = true
+        }
     }
 
     function info(id, name, sub, glyph) {
@@ -75,9 +87,22 @@ QtObject {
         if (name === "twitch") {
             if (twitchLoading) return [info("loading", "Loading followed channels...", "", "")]
             if (twitchError !== "") return [info("error", "Could not load Twitch", twitchError, "")]
+            if (twFollowsPath === "") return [twitchWeb]
             return twitchRows
         }
         return []
+    }
+
+    // rows that stay above the ranked list while filtering (typed channel when there is no follows list)
+    function extra(name, q) {
+        if (name !== "twitch" || twitchLoading || twFollowsPath !== "" || !/^[A-Za-z0-9_]{1,25}$/.test(q)) return []
+        const login = q.toLowerCase()
+        return [{ id: "sec:twitch:typed", name: "Watch " + login, subtitle: "Open the channel with " + twitchPlayerLabel(), kind: "twitch", source: "",
+                  glyph: "\uf1e8", transient: true, private: true, login: login }]
+    }
+    // small dim text next to the section header
+    function headerSub(name) {
+        return name === "twitch" && twProbed ? "Player: " + twitchPlayerLabel() : ""
     }
 
     function audioRows(loading, error, list, empty) {
@@ -169,6 +194,11 @@ QtObject {
     // ---- twitch (twitch-qs-follows lines: "Name: game [viewers]<TAB>login") -----------------------------------------
     readonly property string twitchDir: Quickshell.env("LAUNCHER_TWITCH_DIR") || (Quickshell.env("HOME") + "/code/crossatko/twitch-qs-mpv/bin")
 
+    function twitchPlayerLabel() { return twAppPath !== "" ? "twitch-qs-mpv" : twMpv ? "mpv" : "browser" }
+    readonly property var twitchWeb: ({ id: "sec:twitch:web", name: "Open Twitch in browser", subtitle: "Following list, in your default browser",
+                                        kind: "twitch-web", source: "", glyph: "\uf0ac", keywords: ["twitch", "browser", "following", "streams"],
+                                        transient: true, private: true, url: "https://www.twitch.tv/directory/following" })
+
     function parseTwitch(text) {
         const out = []
         for (const line of text.split("\n")) {
@@ -176,6 +206,10 @@ QtObject {
             if (t < 0) continue
             const label = line.slice(0, t), login = line.slice(t + 1).trim()
             if (login === "__none__") { out.push(info("none", label, "Check the network and try again", "")); continue }
+            if (login === "__login__" && twAppPath === "") {
+                out.push(info("login", "Log in to Twitch", "Needs twitch-qs-mpv, which is not installed", "\uf071"))
+                continue
+            }
             if (login === "__login__") {
                 out.push({ id: "sec:twitch:login", name: "Log in to Twitch", subtitle: label, kind: "twitch-login", source: "",
                            glyph: "", transient: true, private: true })
@@ -191,8 +225,28 @@ QtObject {
         return out
     }
 
+    // which tools exist (once per section open): prefers the files in $twitchDir, else PATH
+    property var twitchProbe: Process {
+        command: ["sh", "-c",
+            "for t in twitch-qs-mpv twitch-qs-follows; do p=; if [ -x \"$1/$t\" ]; then p=\"$1/$t\"; else p=$(command -v \"$t\"); fi; printf '%s=%s\\n' \"$t\" \"$p\"; done; " +
+            "printf 'mpv=%s\\n' \"$(command -v mpv)\"", "sh", src.twitchDir]
+        stdout: StdioCollector { id: tpOut }
+        onExited: code => {
+            let app = "", fol = "", mpv = ""
+            for (const l of tpOut.text.split("\n")) {
+                const i = l.indexOf("=")
+                if (i < 0) continue
+                const k = l.slice(0, i), v = l.slice(i + 1).trim()
+                if (k === "twitch-qs-mpv") app = v; else if (k === "twitch-qs-follows") fol = v; else if (k === "mpv") mpv = v
+            }
+            src.twAppPath = app; src.twFollowsPath = fol; src.twMpv = mpv !== ""; src.twProbed = true
+            if (fol !== "") twitchProc.running = true
+            else { src.twitchLoading = false; src.updated() }
+        }
+    }
+
     property var twitchProc: Process {
-        command: [src.twitchDir + "/twitch-qs-follows"]
+        command: [src.twFollowsPath]
         stdout: StdioCollector { id: twOut }
         stderr: StdioCollector { id: twErr }
         onExited: code => {
@@ -284,6 +338,21 @@ QtObject {
         }
     }
 
+    // channel -> twitch-qs-mpv watch, else mpv on the channel URL, else the URL in the default browser.
+    // The login is validated again here and only ever passed as an argv element / positional parameter.
+    function watchTwitch(login) {
+        if (!/^[A-Za-z0-9_]{1,25}$/.test(login)) return
+        const url = "https://www.twitch.tv/" + login.toLowerCase()
+        if (twAppPath !== "") Quickshell.execDetached(["env", "TWITCH_QS_FONT=Paper Mono", twAppPath, "watch", login])
+        else if (twMpv)       // a quick non-zero exit (offline channel, yt-dlp missing) becomes a notification
+            Quickshell.execDetached(["sh", "-c",
+                "s=$(date +%s); mpv \"$1\"; rc=$?; " +
+                "if [ \"$rc\" -ne 0 ] && [ $(( $(date +%s) - s )) -lt 15 ]; then m=\"mpv exited with $rc\"; " +
+                "command -v yt-dlp >/dev/null 2>&1 || m=\"$m (yt-dlp is not installed)\"; " +
+                "notify-send -a Launcher Twitch \"$m\"; fi", "sh", url])
+        else Quickshell.execDetached(["xdg-open", url])
+    }
+
     // ---- run -------------------------------------------------------------------------------------------------
     function run(item) {
         if (item.kind === "sound-out" || item.kind === "sound-in") {
@@ -305,12 +374,10 @@ QtObject {
         if (item.kind === "rec-stop") { Quickshell.execDetached([recScript, "stop"]); return true }
         if (item.kind === "rec-opt") { setOption(item.opt); return true }
         if (item.kind === "power") { Quickshell.execDetached(["sh", "-c", item.command]); return true }
-        if (item.kind === "twitch") {
-            Quickshell.execDetached(["env", "TWITCH_QS_FONT=Paper Mono", src.twitchDir + "/twitch-qs-mpv", "watch", item.login])
-            return true
-        }
-        if (item.kind === "twitch-login") {
-            Quickshell.execDetached(["env", "TWITCH_QS_FONT=Paper Mono", src.twitchDir + "/twitch-qs-mpv", "login"])
+        if (item.kind === "twitch") { watchTwitch(item.login); return true }
+        if (item.kind === "twitch-web") { Quickshell.execDetached(["xdg-open", item.url]); return true }
+        if (item.kind === "twitch-login" && twAppPath !== "") {
+            Quickshell.execDetached(["env", "TWITCH_QS_FONT=Paper Mono", src.twAppPath, "login"])
             return true
         }
         return false

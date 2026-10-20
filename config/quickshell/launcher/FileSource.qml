@@ -12,6 +12,8 @@ QtObject {
     signal updated()
 
     readonly property var items: []
+    readonly property string modeTitle: "Files"   // launcher header in prefix mode
+    readonly property string modeGlyph: "\uf07b"
     readonly property string home: Quickshell.env("HOME")
     property string wanted: ""
     property string running_q: ""

@@ -24,8 +24,19 @@ ModalMenu {
     fixedScreen: Quickshell.screens.find(s => s.x === 0 && s.y === 0) || Quickshell.screens[0]
     respectReserved: true
     focusItem: input
-    title: actionsOpen && current ? current.name : "Launcher"
-    icon: ""                                  // rocket
+    // header follows the context: action panel (item name), argument prompt (item name), section, prefix mode, else "Launcher"
+    readonly property var modeSource: section === "" && !argItem && query.trim() !== ""
+        ? (sourceList.find(s => s.exclusive && s.exclusive(query.trim(), query)) || null) : null
+    readonly property string rocket: "\uf135"
+    title: actionsOpen && current ? current.name
+        : argItem ? argItem.name
+        : section !== "" ? secSrc.header(section)
+        : modeSource ? modeSource.modeTitle : "Launcher"
+    titleSub: actionsOpen || argItem ? "" : section !== "" ? secSrc.headerSub(section) : ""
+    icon: actionsOpen ? rocket
+        : argItem ? (argItem.glyph || rocket)
+        : section !== "" ? (secSrc.glyph(section) || rocket)
+        : modeSource ? modeSource.modeGlyph : rocket
 
     property string query: ""
     property var results: []
@@ -41,6 +52,7 @@ ModalMenu {
     property string argQuery: ""                    // the search text before the argument prompt
 
     property string section: ""                     // "" = main list; else the open sub-menu (SectionsSource: sound-output, sound-input, power, twitch, screenshot, record)
+    property bool sectionDirect: false              // section opened by IPC / keybind (openSection), not from the main list: Esc closes instead of going back
     property string confirmId: ""                   // section item waiting for a second Enter (destructive power actions)
 
     readonly property int numResults: 8
@@ -79,7 +91,7 @@ ModalMenu {
         const q = query.trim()
         if (section !== "") {                           // inside a section: only its rows, filtered with the ranker (no usage)
             let rows = secSrc.rows(section)
-            if (q !== "") rows = Ranker.rank(rows, q, {}, Date.now(), { limit: 50 }).map(r => r.item)
+            if (q !== "") rows = secSrc.extra(section, q).concat(Ranker.rank(rows, q, {}, Date.now(), { limit: 50 }).map(r => r.item))
             const prevId = keep && results[sel] ? results[sel].id : ""
             const hadStop = results.some(r => r.kind === "rec-stop")
             results = rows.map(it => it.id === confirmId
@@ -119,6 +131,7 @@ ModalMenu {
     onOpening: {
         actionsOpen = false; histPos = -1; argItem = null; confirmId = ""
         section = presetSection
+        sectionDirect = section !== ""
         if (section !== "") secSrc.enter(section)
         presetSection = ""
         query = preset; input.text = preset; preset = ""
@@ -129,7 +142,7 @@ ModalMenu {
     property string presetSection: ""
     function enterSection(name) {
         if (!secSrc.title(name)) return
-        section = name; confirmId = ""; actionsOpen = false; histPos = -1
+        section = name; sectionDirect = false; confirmId = ""; actionsOpen = false; histPos = -1
         secSrc.enter(name)
         input.text = ""
         refresh()
@@ -139,7 +152,7 @@ ModalMenu {
         if (!secSrc.title(name)) return
         if (shown) {
             if (argItem || actionsOpen) return
-            if (section === name) close(); else enterSection(name)
+            if (section === name) close(); else { enterSection(name); sectionDirect = true }
             return
         }
         presetSection = name
@@ -148,9 +161,21 @@ ModalMenu {
     // Esc / Ctrl+C: one level back (section -> main list), at the root close
     function back() {
         if (section === "") { close(); return }
-        section = ""; confirmId = ""; histPos = -1
+        section = ""; sectionDirect = false; confirmId = ""; histPos = -1
         input.text = ""
         refresh()
+    }
+    // Key handlers shared by the search field's Keys.onPressed.
+    // Esc / Ctrl+C: a section entered from the main list goes one level back, a section opened directly (keybind / IPC) closes
+    function keyEscape() {
+        if (section !== "" && !sectionDirect) back(); else close()
+    }
+    // Left = back out of a section, but only when it would not move the text caret (empty filter, or caret at 0 without selection)
+    function keyLeft() {
+        if (section === "" || actionsOpen || argItem) return false
+        if (input.text !== "" && (input.cursorPosition !== 0 || input.selectionStart !== input.selectionEnd)) return false
+        back()
+        return true
     }
 
     // open with the search field prefilled (qs ipc call launcher query "v "); on an open launcher just sets the text
@@ -317,16 +342,6 @@ ModalMenu {
             anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
             spacing: 10
             Icon { text: ""; font.pixelSize: 14; color: Theme.muted; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22 }   // magnifying-glass
-            Rectangle {                                 // breadcrumb chip while inside a section
-                visible: lc.section !== ""
-                implicitWidth: chipText.implicitWidth + 16
-                implicitHeight: 24
-                radius: Theme.radiusItem
-                color: Theme.alpha(Theme.accent, 0.22)
-                border.width: 1
-                border.color: Theme.alpha(Theme.accent, 0.6)
-                Label { id: chipText; anchors.centerIn: parent; text: secSrc.title(lc.section); color: Theme.accent; font.pixelSize: Theme.fontCaption }
-            }
             TextInput {
                 id: input
                 Layout.fillWidth: true
@@ -372,7 +387,8 @@ ModalMenu {
                         else ev.accepted = false
                         return
                     }
-                    if (k === Qt.Key_Escape || (ctrl && k === Qt.Key_C)) lc.back()
+                    if (k === Qt.Key_Escape || (ctrl && k === Qt.Key_C)) lc.keyEscape()
+                    else if (k === Qt.Key_Left && !ctrl && !(ev.modifiers & Qt.ShiftModifier) && lc.keyLeft()) {}
                     else if (k === Qt.Key_Backspace && !ctrl && lc.section !== "" && text === "") lc.back()
                     else if (k === Qt.Key_Return || k === Qt.Key_Enter) lc.runIndex(lc.sel)
                     else if (ctrl && k === Qt.Key_K) lc.openActions()
@@ -505,7 +521,7 @@ ModalMenu {
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
         text: lc.actionsOpen ? "↑↓ select · Enter do · Esc back"
-            : lc.section !== "" ? "↑↓ select · Enter run · Backspace / Esc back"
+            : lc.section !== "" ? "↑↓ select · Enter run · ← / Backspace back · Esc " + (lc.sectionDirect ? "close" : "back")
             : "↑↓ select · Enter run · Ctrl+1-9 quick run · Ctrl+K actions · Esc close"
         color: Theme.muted
         font.pixelSize: Theme.fontCaption
