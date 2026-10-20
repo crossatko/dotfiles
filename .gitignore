@@ -31,3 +31,7 @@ config/wivrn/cookie
 config/wivrn/known_keys.json
 config/theme/out/*.tmp
 __pycache__/
+
+# claude-tabs zellij plugin: standalone package (~/code/crossatko/zellij-wc3cz-claude); its setup.sh
+# creates the host-local link config/zellij/plugins/claude-tabs -> the checkout
+config/zellij/plugins/

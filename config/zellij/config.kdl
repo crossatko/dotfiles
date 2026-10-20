@@ -255,6 +255,34 @@ plugins {
     status-bar location="zellij:status-bar"
     strider location="zellij:strider"
     tab-bar location="zellij:tab-bar"
+    // Tab bar replacement that puts a Claude icon before tabs running Claude Code, dings when an agent
+    // finishes. Standalone package (own repo), checked out at ~/code/crossatko/zellij-wc3cz-claude; its
+    // setup.sh links plugins/claude-tabs here to that checkout (host-local, git-ignored) and adds the
+    // Claude Code hooks. Docs: README.md in the package.
+    // To go back to the stock bar: set default_layout "compact" below (and use compact-bar in layouts/nvim.kdl).
+    claude-tabs location="file:~/.config/zellij/plugins/claude-tabs/claude-tabs.wasm" {
+        // package_dir: the package checkout, where the plugin finds play-phrase.sh / claude-agents.sh / sounds
+        //   (default ~/.config/zellij/plugins/claude-tabs, the link setup.sh creates)
+        // package_dir "~/code/crossatko/zellij-wc3cz-claude"
+        // ding_command: default plays <package_dir>/sounds/ding.wav with the autodetected player (afplay, pw-play, paplay, ffplay, aplay)
+        // sounds_dir: per-race voice lines <dir>/<race>/*.flac (also wav/mp3/m4a/aif/ogg per player); default (unset) =
+        //   <package_dir>/sounds/wc3; folders starting with `_` (sounds/wc3/_excluded) are ignored; no clips at all = ding_command
+        // sounds_dir "~/Music/my-clips"
+        // player "pw-play"   (default: autodetect)   races "human orc"   (default: folders of sounds_dir + all icon races)
+        ding_when_focused false
+        // ding_when_os_unfocused (default true): the active tab also dings/blinks when its terminal window was not OS-focused at the finish
+        auto_switch false
+        title_fallback true
+        // race_dim: brightness kept by the INACTIVE race tabs (0.1-1.0, default 0.4; lower = darker); the active tab is the bright accent
+        race_dim "0.2"
+        // race_font: "auto" (default) = colour WC3 icon font codepoints on Linux, plain symbols elsewhere (macOS CoreText has no CBDT bitmap fonts); "true"/"false" force it
+        race_font "auto"
+        // subagent_count "false" hides the number of running subagents next to the icon
+        subagent_count "true"
+        // ding_with_subagents "true" = ding on every Stop (old); default: no ding while subagents run, ding subagent_grace_s (8) after the last one stops unless the main agent continues; markers older than subagent_stale_s (900, also env ZELLIJ_CLAUDE_STALE_S for the hook) are ignored
+        // working_hold_s "20": any hook event newer than the last state change keeps the working look this long
+        // spinner "false" = static ✳ while working; spin_ms "160" = animation step
+    }
     welcome-screen location="zellij:session-manager" {
         welcome_screen true
     }
@@ -295,7 +323,7 @@ theme "wall"
 // The name of the default layout to load on startup
 // Default: "default"
 // 
-default_layout "compact"
+default_layout "claude"
  
 // The folder in which Zellij will look for layouts
 // (Requires restart)

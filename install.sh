@@ -36,7 +36,7 @@ PACKAGES=(
   gnome-themes-extra qt5-wayland qt6-wayland dconf
 
   # Terminal & Shell
-  zellij fzf wl-clipboard kitty zsh starship fastfetch bash-completion zsh-completions
+  zellij rust rust-wasm fzf wl-clipboard kitty zsh starship fastfetch bash-completion zsh-completions
   zsh-autosuggestions zsh-syntax-highlighting
 
   # Hyprland Ecosystem
@@ -126,6 +126,17 @@ for app in "${CONFIG_APPS[@]}"; do
   echo "  Symlinking $app..."
   ln -s "$SOURCE" "$TARGET"
 done
+
+# Zellij claude-tabs plugin (tab bar with a Claude icon / ding / agent counts): standalone package, its own
+# repo, checked out at ~/code/crossatko/zellij-wc3cz-claude (override: CLAUDE_TABS_DIR). Its setup.sh links
+# ~/.config/zellij/plugins/claude-tabs to the checkout, installs the WC3 icon font, pre-grants the plugin
+# permissions and adds the Claude Code hooks. Without the checkout zellij needs default_layout "compact".
+CLAUDE_TABS_DIR=${CLAUDE_TABS_DIR:-$HOME/code/crossatko/zellij-wc3cz-claude}
+if [ -f "$CLAUDE_TABS_DIR/setup.sh" ]; then
+  sh "$CLAUDE_TABS_DIR/setup.sh" || echo "  claude-tabs setup failed (use default_layout 'compact' as a fallback)"
+else
+  echo "  claude-tabs package not found at $CLAUDE_TABS_DIR: clone it and run its setup.sh, or set default_layout 'compact' in config/zellij/config.kdl"
+fi
 
 # Nautilus right-click scripts (Scripts -> Send via LocalSend)
 mkdir -p "$HOME/.local/share/nautilus/scripts"
@@ -298,6 +309,8 @@ update-desktop-database ~/.local/share/applications 2>/dev/null || true
 # Clean up package cache to free up space
 echo "Cleaning up yay cache..."
 yay -Sc --noconfirm
+# The WC3 icon font (pairs with the symbol_map line in kitty.conf) is installed to ~/.local/share/fonts by
+# the claude-tabs setup.sh call above.
 fc-cache -fv
 
 echo "Installation complete!"
