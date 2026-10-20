@@ -11,7 +11,7 @@
 #
 #   01:23:40.633779  logind: suspend requested
 #   01:23:40.634852  NetworkManager: state is now DISABLED (ASLEEP)
-#   01:23:40.635650  RTM_DELROUTE: default route via 192.168.0.1 deleted
+#   01:23:40.635650  RTM_DELROUTE: default route via 192.0.2.1 deleted
 #   01:23:40.677     a PrepareForSleep handler starts here -- network long gone
 #
 # Delay inhibitors run concurrently with no ordering between them, and

@@ -17,7 +17,7 @@
 #   01:23:40.633779  logind: suspend requested from client PID ... ('dbus-send')
 #   01:23:40.634510  NetworkManager: sleep: sleep requested
 #   01:23:40.634852  NetworkManager: state is now DISABLED (ASLEEP)
-#   01:23:40.635650  RTM_DELROUTE: default route via 192.168.0.1 deleted
+#   01:23:40.635650  RTM_DELROUTE: default route via 192.0.2.1 deleted
 #   01:23:40.677     tv-sleep.sh starts  <-- 42ms after the route is gone
 #
 # adb then just times out (exactly 3s, one `timeout 3`), the TV stays awake, and

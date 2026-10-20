@@ -29,6 +29,7 @@
 - Never print, log or commit secrets or tokens. Keep them in git-ignored files. Pass them in headers or env, not argv.
 - Kill processes by exact PID, not by name, when other instances of the same program may be running.
 - Don't put licensed assets (e.g. Font Awesome Pro) into public repos.
+- Public repos (and this file, which is one): never write real setup details into files, notes, tests, comments, commit messages or screenshots. That means real server/host names, tailnet names, URLs, IP/MAC addresses, accounts, emails, serials, tokens. Use placeholders (`jellyfin.example`, `192.0.2.10`, `user@example.com`) and keep real values in files outside the repo. You may tell the user real values in chat, but not write them to the repo.
 - Kill crashed game or app processes proactively. They hold the wine prefix and block the next test.
 - Screenshot rules:
   - Never screenshot the whole screen, not for testing, not for comparing.
@@ -44,7 +45,7 @@ After making changes in any project, record them so the next agent can continue 
   - **Findings**: root causes, how things actually work, and what was verified and how.
   - **Caveats**: known limitations, things ruled out or tried that failed, unverified assumptions, follow-ups.
   - **How to resume**: current state, next steps, and how to build, run or test.
-- Notes are read in every future session, so keep them short and factual: update entries in place, remove stale or wrong ones, no contradictions, no secrets.
+- Notes are read in every future session, so keep them short and factual: update entries in place, remove stale or wrong ones, no contradictions, no secrets, no real setup details (see Safety).
 
 ## No attribution
 - Never attribute Claude or AI in commit messages, PR descriptions, or code. That means no `Co-Authored-By: Claude` trailers, no "Generated with Claude Code" lines, and no code comments or headers mentioning Claude or AI authorship.

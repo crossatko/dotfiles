@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Privacy guard for this PUBLIC repo: blocks commits whose added lines contain real setup details
+# (tailnet names, private/Tailscale IPs, emails, tokens, URL credentials) or any entry of the private
+# deny-list ${XDG_CONFIG_HOME:-~/.config}/dotfiles-private/denylist (ERE per line, case-insensitive, # comments).
+# Prints file:line + rule name, never the matched text. Lines containing "privacy-ok" are skipped. Enabled
+# by `git config core.hooksPath .githooks` (install.sh). Bypass (user decision only): git commit --no-verify.
+set -euo pipefail
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+S=$tmp/stream C=$tmp/content M=$tmp/meta H=$tmp/hits
+
+# file<TAB>line<TAB>text for every added line of the staged diff, minus privacy-ok lines
+git -c core.quotePath=false diff --cached -U0 --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ \
+	--diff-filter=ACMR |
+	awk '
+		/^diff --git / { hunk = 0; file = ""; next }
+		!hunk && /^\+\+\+ / { file = substr($0, 5); sub(/^b\//, "", file); next }
+		/^@@ / { hunk = 1; split($3, a, ","); n = substr(a[1], 2) + 0; next }
+		hunk && /^\+/ { if (file != "" && index($0, "privacy-ok") == 0) printf "%s\t%d\t%s\n", file, n, substr($0, 2); n++; next }
+		hunk && /^ / { n++ }
+	' >"$S"
+[ -s "$S" ] || exit 0
+cut -f3- "$S" >"$C"
+cut -f1,2 "$S" >"$M"
+: >"$H"
+
+hit() { # $1 = rule name, stdin = 1-based indices into $S
+	while read -r i; do printf '%s\t%s\n' "$(sed -n "${i}p" "$M" | tr '\t' ':')" "$1"; done >>"$H"
+}
+rule() { # $1 = name, $2 = ERE, $3 = extra grep flags
+	grep -n ${3:-} -E -e "$2" "$C" | cut -d: -f1 | sort -un | hit "$1" || true
+}
+
+oct='[0-9]{1,3}'
+rule tailscale-magicdns '\.ts\.net\b' -i
+rule tailscale-cgnat-ip "(^|[^0-9.])100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.$oct\.$oct([^0-9]|$)"
+rule private-ip "(^|[^0-9.])(10\.$oct\.$oct\.$oct|172\.(1[6-9]|2[0-9]|3[01])\.$oct\.$oct|192\.168\.$oct\.$oct)([^0-9]|$)"
+rule bearer-token '\bbearer[[:space:]]+[A-Za-z0-9._~+/=-]{20,}' -i
+rule url-credentials '[A-Za-z][A-Za-z0-9+.-]*://[^/[:space:]:@]+:[^/[:space:]@]+@'
+
+# emails, except noreply / git@ / RFC 2606 example domains / systemd unit instances
+grep -noE '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}' "$C" |
+	grep -viE ':(no-?reply|git)@|@(.*\.)?(example(\.(com|org|net))?|test|invalid|localhost)$|noreply\.github\.com$|\.(service|socket|target|timer|mount|path|slice|scope|d)$' |
+	cut -d: -f1 | sort -un | hit email || true
+
+# token / secret / key / password assignments with a long value that mixes letters and digits
+grep -noiE '(token|secret|passw(or)?d|api_?key|[a-z_]*key)[A-Za-z0-9_]*["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9+/_.=-]{20,}' "$C" |
+	while IFS= read -r m; do
+		v=${m#*:} v=${v#*[:=]} v=${v//[\"\' ]/}
+		[[ $v =~ [0-9] && $v =~ [A-Za-z] ]] && echo "${m%%:*}"
+	done | sort -un | hit secret-assignment || true
+
+# private deny-list (lives outside the repo; never printed)
+deny="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles-private/denylist"
+if [ -r "$deny" ]; then
+	n=0
+	while IFS= read -r entry || [ -n "$entry" ]; do
+		n=$((n + 1))
+		entry=${entry%$'\r'}
+		[[ -z ${entry//[[:space:]]/} || $entry =~ ^[[:space:]]*# ]] && continue
+		rule "private-denylist line $n" "$entry" -i
+	done <"$deny"
+fi
+
+[ -s "$H" ] || exit 0
+echo "pre-commit: blocked, staged lines look like real setup details (this repo is PUBLIC):" >&2
+sort -t: -k1,1 -k2,2n "$H" | sed 's/^/  /; s/\t/  rule: /' >&2
+cat >&2 <<'EOF'
+Fix: replace real values with placeholders (example-host, jellyfin.example, 192.0.2.10,
+user@example.com, <token>) and keep the real ones outside the repo or in git-ignored files.
+A deliberate, harmless match: add "privacy-ok" to that line. Bypass the whole check
+(git commit --no-verify) only if the user explicitly decides to.
+EOF
+exit 1
