@@ -8,7 +8,7 @@ import Quickshell.Io
 // Section rows are `transient` + `private` (never in usage.json / history.json). Mirrors the old menus:
 //   sound-output / sound-input: (pactl list, current first and ticked,
 //     select = set default + move all streams)
-//     (twitch-qs-follows lines, select = watch/login). Tools are probed once when the section opens; channels
+//     (twitch-qs-follows --json, text-line parser as fallback; select = watch/login). Tools are probed once when the section opens; channels
 //     are watched with twitch-qs-mpv, else `mpv https://www.twitch.tv/<login>`, else xdg-open of that URL. Without
 //     twitch-qs-follows the section shows "Open Twitch in browser" plus a "Watch <typed login>" row (extra()).
 //     Twitch tokens are handled inside the twitch-qs-* scripts only; this file never sees them.
@@ -70,7 +70,7 @@ QtObject {
         else if (name === "sound-input") { inRows = []; inError = ""; inLoading = true; inProc.running = false; inProc.running = true }
         else if (name === "twitch") {
             twitchRows = []; twitchError = ""; twitchLoading = true; twProbed = false
-            twitchProc.running = false; twitchProbe.running = false; twitchProbe.running = true
+            twitchProc.running = false; twitchTextProc.running = false; twitchProbe.running = false; twitchProbe.running = true
         }
     }
 
@@ -191,7 +191,7 @@ QtObject {
               "echo kde > ~/.local/state/next-session && hyprshutdown -t 'Switching to KDE...'", true)
     ]
 
-    // ---- twitch (twitch-qs-follows lines: "Name: game [viewers]<TAB>login") -----------------------------------------
+    // ---- twitch (twitch-qs-follows --json) -----------------------------------------
     readonly property string twitchDir: Quickshell.env("LAUNCHER_TWITCH_DIR") || (Quickshell.env("HOME") + "/code/crossatko/twitch-qs-mpv/bin")
 
     function twitchPlayerLabel() { return twAppPath !== "" ? "twitch-qs-mpv" : twMpv ? "mpv" : "browser" }
@@ -199,28 +199,54 @@ QtObject {
                                         kind: "twitch-web", source: "", glyph: "\uf0ac", keywords: ["twitch", "browser", "following", "streams"],
                                         transient: true, private: true, url: "https://www.twitch.tv/directory/following" })
 
+    // twitch-qs-follows --json: [{kind: live|offline|favorite|login|none, login, name, game, viewers, stale}]
+    function viewersText(n) {
+        return n >= 10000 ? Math.floor(n / 1000) + "k" : n >= 1000 ? (Math.floor(n / 100) / 10) + "k" : String(n)
+    }
+    function twitchSpecial(kind, label) {
+        if (kind === "none") return info("none", label, "Check the network and try again", "")
+        if (twAppPath === "") return info("login", "Log in to Twitch", "Needs twitch-qs-mpv, which is not installed", "\uf071")
+        return { id: "sec:twitch:login", name: "Log in to Twitch", subtitle: label, kind: "twitch-login", source: "",
+                 glyph: "", transient: true, private: true }
+    }
+    function twitchRow(login, name, sub, live) {
+        return { id: "sec:twitch:" + login, name: name, subtitle: sub, kind: "twitch", source: live ? "Live" : "",
+                 glyph: "", iconColor: live ? "red" : "muted", transient: true, private: true, login: login }
+    }
+    // returns the rows, or null when the text is not a JSON array (an older twitch-qs-follows)
+    function parseTwitchJson(text) {
+        let arr
+        try { arr = JSON.parse(text) } catch (e) { return null }
+        if (!Array.isArray(arr)) return null
+        const out = []
+        for (const e of arr) {
+            if (!e || typeof e !== "object") continue
+            const kind = e.kind, name = String(e.name || e.login || "")
+            if (kind === "login" || kind === "none") { out.push(twitchSpecial(kind, name)); continue }
+            const login = String(e.login || "")
+            if (!/^[A-Za-z0-9_]{2,25}$/.test(login)) continue
+            const stale = e.stale ? "stale" : ""
+            const parts = []
+            if (kind === "live") {
+                if (e.game) parts.push(String(e.game))
+                if (typeof e.viewers === "number") parts.push(viewersText(e.viewers))
+            } else parts.push(kind === "favorite" ? "favorite" : "offline")
+            if (stale) parts.push(stale)
+            out.push(twitchRow(login, name || login, parts.join("  \u00b7  "), kind === "live"))
+        }
+        return out
+    }
+    // old text format "Name: game [viewers]<TAB>login" (fallback for a twitch-qs-follows without --json)
     function parseTwitch(text) {
         const out = []
         for (const line of text.split("\n")) {
             const t = line.indexOf("\t")
             if (t < 0) continue
             const label = line.slice(0, t), login = line.slice(t + 1).trim()
-            if (login === "__none__") { out.push(info("none", label, "Check the network and try again", "")); continue }
-            if (login === "__login__" && twAppPath === "") {
-                out.push(info("login", "Log in to Twitch", "Needs twitch-qs-mpv, which is not installed", "\uf071"))
-                continue
-            }
-            if (login === "__login__") {
-                out.push({ id: "sec:twitch:login", name: "Log in to Twitch", subtitle: label, kind: "twitch-login", source: "",
-                           glyph: "", transient: true, private: true })
-                continue
-            }
+            if (login === "__none__" || login === "__login__") { out.push(twitchSpecial(login === "__none__" ? "none" : "login", label)); continue }
             if (!/^[A-Za-z0-9_]{2,25}$/.test(login)) continue
             const c = label.indexOf(": ")
-            const name = c > 0 ? label.slice(0, c) : label, rest = c > 0 ? label.slice(c + 2) : ""
-            const offline = /\[offline\]/.test(rest)
-            out.push({ id: "sec:twitch:" + login, name: name, subtitle: rest, kind: "twitch", source: offline ? "" : "Live",
-                       glyph: "", iconColor: offline ? "muted" : "red", transient: true, private: true, login: login })
+            out.push(twitchRow(login, c > 0 ? label.slice(0, c) : label, c > 0 ? label.slice(c + 2) : "", !/\[(offline|favorite)\]/.test(label)))
         }
         return out
     }
@@ -245,18 +271,30 @@ QtObject {
         }
     }
 
+    function twitchDone(rows, err, code) {
+        twitchLoading = false
+        if (code !== 0) twitchError = failText(err, code)
+        else if (rows.length === 0) twitchError = "No followed channels returned"
+        else twitchRows = rows
+        updated()
+    }
+
+    // `twitch-qs-follows --json`; an install without it (usage error or non-JSON output) is re-run once in text mode
     property var twitchProc: Process {
-        command: [src.twFollowsPath]
+        command: [src.twFollowsPath, "--json"]
         stdout: StdioCollector { id: twOut }
         stderr: StdioCollector { id: twErr }
         onExited: code => {
-            src.twitchLoading = false
-            const rows = code === 0 ? src.parseTwitch(twOut.text) : []
-            if (code !== 0) src.twitchError = src.failText(twErr.text, code)
-            else if (rows.length === 0) src.twitchError = "No followed channels returned"
-            else src.twitchRows = rows
-            src.updated()
+            const rows = code === 0 ? src.parseTwitchJson(twOut.text) : null
+            if (rows === null) src.twitchTextProc.running = true
+            else src.twitchDone(rows, twErr.text, code)
         }
+    }
+    property var twitchTextProc: Process {
+        command: [src.twFollowsPath]
+        stdout: StdioCollector { id: twTextOut }
+        stderr: StdioCollector { id: twTextErr }
+        onExited: code => src.twitchDone(code === 0 ? src.parseTwitch(twTextOut.text) : [], twTextErr.text, code)
     }
 
     // ---- screenshot / record (the former standalone menus) -------------------------------------------
