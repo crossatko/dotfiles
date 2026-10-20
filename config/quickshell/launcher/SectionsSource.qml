@@ -12,6 +12,10 @@ import Quickshell.Io
 //     are watched with twitch-qs-mpv, else `mpv https://www.twitch.tv/<login>`, else xdg-open of that URL. Without
 //     twitch-qs-follows the section shows "Open Twitch in browser" plus a "Watch <typed login>" row (extra()).
 //     Twitch tokens are handled inside the twitch-qs-* scripts only; this file never sees them.
+//     Channel rows carry the item action "Past broadcasts" (action()): it pushes a nested level inside the twitch section
+//     (vodLogin != ""; Launcher.back() leaves it): `twitch-qs-mpv vods <login> --json` -> VOD rows, Enter plays with
+//     `twitch-qs-mpv vod <id>`, else mpv / xdg-open on https://www.twitch.tv/videos/<id>. Without the app the action opens
+//     https://www.twitch.tv/<login>/videos in the browser.
 //   screenshot / record: the former standalone menus. Rows start hypr/scripts/screenshot.sh <mode> /
 //     screenrec.sh <mode> --fps N --format F --audio|--no-audio. The launcher closes first (Launcher.runItem sets
 //     shown=false before run()), and the script starts after a short sleep so the layer is unmapped before slurp /
@@ -46,8 +50,8 @@ QtObject {
 
     function title(name) { return sections[name] ? sections[name].title : "" }
     // launcher header while inside the section (defaults to the title) and its icon (the root row glyph)
-    function header(name) { const s = sections[name]; return s ? (s.header || s.title) : "" }
-    function glyph(name) { return sections[name] ? sections[name].glyph : "" }
+    function header(name) { const s = sections[name]; return name === "twitch" && vodActive ? "Past broadcasts" : s ? (s.header || s.title) : "" }
+    function glyph(name) { return name === "twitch" && vodActive ? "\uf144" : sections[name] ? sections[name].glyph : "" }
 
     // ---- state ---------------------------------------------------------------------------------------------
     property var outRows: []
@@ -63,13 +67,25 @@ QtObject {
     property string twFollowsPath: ""               // twitch-qs-follows (empty = not installed)
     property bool twMpv: false                      // mpv on PATH
     property bool twProbed: false
+    property bool twVods: false                     // the installed app has the `vods` command (bin/twitch-qs-vods next to twitch-qs-mpv)
+    property string vodLogin: ""                    // non-empty = the nested "Past broadcasts" level of the twitch section is open
+    property string vodName: ""
+    property var vodRows: []
+    property bool vodLoading: false
+    property string vodError: ""
+    property bool vodOld: false                     // twitch-qs-mpv too old for the `vods` command (or it failed with exit 1 / could not start)
+    property int vodCode: 0                         // exit code of the failed `vods` run
+    property string vodOldNote: ""
+    property bool vodRestart: false
+    readonly property bool vodActive: vodLogin !== ""
 
     function enter(name) {
         if (name === "record") { Quickshell.execDetached(["mkdir", "-p", src.prefsDir]); prefs.reload(); recording = false; statusProc.running = false; statusProc.running = true }
         if (name === "sound-output") { outRows = []; outError = ""; outLoading = true; outProc.running = false; outProc.running = true }
         else if (name === "sound-input") { inRows = []; inError = ""; inLoading = true; inProc.running = false; inProc.running = true }
         else if (name === "twitch") {
-            twitchRows = []; twitchError = ""; twitchLoading = true; twProbed = false
+            leaveVods()
+            twitchRows = []; twitchError = ""; twitchLoading = true; twProbed = false; twVods = false
             twitchProc.running = false; twitchTextProc.running = false; twitchProbe.running = false; twitchProbe.running = true
         }
     }
@@ -85,6 +101,7 @@ QtObject {
         if (name === "screenshot") return shotRows
         if (name === "record") return recordRows()
         if (name === "twitch") {
+            if (vodActive) return vodList()
             if (twitchLoading) return [info("loading", "Loading followed channels...", "", "")]
             if (twitchError !== "") return [info("error", "Could not load Twitch", twitchError, "")]
             if (twFollowsPath === "") return [twitchWeb]
@@ -95,13 +112,14 @@ QtObject {
 
     // rows that stay above the ranked list while filtering (typed channel when there is no follows list)
     function extra(name, q) {
-        if (name !== "twitch" || twitchLoading || twFollowsPath !== "" || !/^[A-Za-z0-9_]{1,25}$/.test(q)) return []
+        if (name !== "twitch" || vodActive || twitchLoading || twFollowsPath !== "" || !/^[A-Za-z0-9_]{1,25}$/.test(q)) return []
         const login = q.toLowerCase()
         return [{ id: "sec:twitch:typed", name: "Watch " + login, subtitle: "Open the channel with " + twitchPlayerLabel(), kind: "twitch", source: "",
                   glyph: "\uf1e8", transient: true, private: true, login: login }]
     }
     // small dim text next to the section header
     function headerSub(name) {
+        if (name === "twitch" && vodActive) return vodName
         return name === "twitch" && twProbed ? "Player: " + twitchPlayerLabel() : ""
     }
 
@@ -142,6 +160,12 @@ QtObject {
     function failText(err, code) {
         const l = (err || "").trim().split("\n")[0]
         return l !== "" ? l : "exit code " + code
+    }
+    // like failText, with a fallback per twitch-qs-mpv exit code; long token-like strings are masked, line capped
+    function vodFailText(err, code) {
+        let l = (err || "").trim().split("\n")[0].replace(/[A-Za-z0-9_\-]{30,}/g, "***").slice(0, 160)
+        if (l === "") l = code === 2 ? "Not logged in (run twitch-qs-mpv login)" : code === 3 ? "Network or API error" : code === 4 ? "Unknown channel" : "exit code " + code
+        return l
     }
 
     property var outProc: Process {
@@ -206,12 +230,16 @@ QtObject {
     function twitchSpecial(kind, label) {
         if (kind === "none") return info("none", label, "Check the network and try again", "")
         if (twAppPath === "") return info("login", "Log in to Twitch", "Needs twitch-qs-mpv, which is not installed", "\uf071")
+        return loginRow(label)
+    }
+    function loginRow(label) {
         return { id: "sec:twitch:login", name: "Log in to Twitch", subtitle: label, kind: "twitch-login", source: "",
                  glyph: "", transient: true, private: true }
     }
     function twitchRow(login, name, sub, live) {
         return { id: "sec:twitch:" + login, name: name, subtitle: sub, kind: "twitch", source: live ? "Live" : "",
-                 glyph: "", iconColor: live ? "red" : "muted", transient: true, private: true, login: login }
+                 glyph: "", iconColor: live ? "red" : "muted", transient: true, private: true, login: login,
+                 actions: [{ id: "twitch-vods", label: twAppPath !== "" ? "Past broadcasts" : "Past broadcasts (browser)", glyph: "\uf144" }] }
     }
     // returns the rows, or null when the text is not a JSON array (an older twitch-qs-follows)
     function parseTwitchJson(text) {
@@ -254,18 +282,19 @@ QtObject {
     // which tools exist (once per section open): prefers the files in $twitchDir, else PATH
     property var twitchProbe: Process {
         command: ["sh", "-c",
-            "for t in twitch-qs-mpv twitch-qs-follows; do p=; if [ -x \"$1/$t\" ]; then p=\"$1/$t\"; else p=$(command -v \"$t\"); fi; printf '%s=%s\\n' \"$t\" \"$p\"; done; " +
+            "for t in twitch-qs-mpv twitch-qs-follows; do p=; if [ -x \"$1/$t\" ]; then p=\"$1/$t\"; else p=$(command -v \"$t\"); fi; printf '%s=%s\\n' \"$t\" \"$p\"; " +
+            "if [ \"$t\" = twitch-qs-mpv ] && [ -n \"$p\" ]; then d=$(dirname \"$(readlink -f \"$p\")\"); [ -x \"$d/twitch-qs-vods\" ] && echo vods=1; fi; done; " +
             "printf 'mpv=%s\\n' \"$(command -v mpv)\"", "sh", src.twitchDir]
         stdout: StdioCollector { id: tpOut }
         onExited: code => {
-            let app = "", fol = "", mpv = ""
+            let app = "", fol = "", mpv = "", vods = false
             for (const l of tpOut.text.split("\n")) {
                 const i = l.indexOf("=")
                 if (i < 0) continue
                 const k = l.slice(0, i), v = l.slice(i + 1).trim()
-                if (k === "twitch-qs-mpv") app = v; else if (k === "twitch-qs-follows") fol = v; else if (k === "mpv") mpv = v
+                if (k === "twitch-qs-mpv") app = v; else if (k === "twitch-qs-follows") fol = v; else if (k === "mpv") mpv = v; else if (k === "vods") vods = v === "1"
             }
-            src.twAppPath = app; src.twFollowsPath = fol; src.twMpv = mpv !== ""; src.twProbed = true
+            src.twAppPath = app; src.twFollowsPath = fol; src.twMpv = mpv !== ""; src.twVods = vods; src.twProbed = true
             if (fol !== "") twitchProc.running = true
             else { src.twitchLoading = false; src.updated() }
         }
@@ -295,6 +324,93 @@ QtObject {
         stdout: StdioCollector { id: twTextOut }
         stderr: StdioCollector { id: twTextErr }
         onExited: code => src.twitchDone(code === 0 ? src.parseTwitch(twTextOut.text) : [], twTextErr.text, code)
+    }
+
+    // ---- twitch: past broadcasts (twitch-qs-mpv vods <login> --json) ---------------------------------------------
+    // [{id, title, game, duration, duration_s, created_at, views, url}], newest first
+    readonly property var monthNames: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    function countText(n) {
+        return n >= 1000000 ? (Math.floor(n / 100000) / 10) + "M" : n >= 10000 ? Math.floor(n / 1000) + "k" : n >= 1000 ? (Math.floor(n / 100) / 10) + "k" : String(n)
+    }
+    function durationText(e) {
+        if (typeof e.duration === "string" && e.duration !== "") return e.duration
+        const s = Number(e.duration_s)
+        if (!(s >= 0)) return ""
+        const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60)
+        return h > 0 ? h + "h" + (m < 10 ? "0" : "") + m + "m" : m > 0 ? m + "m" : Math.floor(s) + "s"
+    }
+    function dateText(iso, now) {
+        const d = new Date(iso)
+        if (isNaN(d.getTime())) return ""
+        const day = x => Math.floor(new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime() / 86400000 + 0.5)
+        const n = now || new Date(), diff = day(n) - day(d)
+        if (diff === 0) return "today"
+        if (diff === 1) return "yesterday"
+        if (diff > 1 && diff < 7) return diff + " days ago"
+        return d.getDate() + " " + monthNames[d.getMonth()] + (d.getFullYear() !== n.getFullYear() ? " " + d.getFullYear() : "")
+    }
+    // returns the rows, or null when the text is not a JSON array
+    function parseVods(text) {
+        let arr
+        try { arr = JSON.parse(text) } catch (e) { return null }
+        if (!Array.isArray(arr)) return null
+        const out = []
+        for (const e of arr) {
+            if (!e || typeof e !== "object") continue
+            const id = String(e.id === undefined ? "" : e.id)
+            if (!/^[0-9]{1,15}$/.test(id)) continue
+            const game = e.game ? String(e.game) : ""
+            const parts = []
+            if (game) parts.push(game)
+            const dur = durationText(e); if (dur) parts.push(dur)
+            const date = e.created_at ? dateText(String(e.created_at)) : ""; if (date) parts.push(date)
+            if (typeof e.views === "number") parts.push(countText(e.views) + (e.views === 1 ? " view" : " views"))
+            out.push({ id: "sec:twitch:vod:" + id, name: String(e.title || "Untitled broadcast"), subtitle: parts.join("  \u00b7  "), kind: "twitch-vod", source: "",
+                       glyph: "\uf144", keywords: game ? [game] : [], transient: true, private: true, vodId: id })
+        }
+        return out
+    }
+    function videosUrl(login) { return "https://www.twitch.tv/" + login.toLowerCase() + "/videos" }
+    function vodList() {
+        if (vodLoading) return [info("vod-loading", "Loading...", "", "")]
+        if (vodOld) return [info("vod-old", "Update twitch-qs-mpv for past broadcasts", vodOldNote !== "" ? vodOldNote : "This version has no `vods` command", "\uf071"),
+                            { id: "sec:twitch:vod-web", name: "Open past broadcasts in browser", subtitle: vodName, kind: "twitch-web", source: "", glyph: "\uf0ac",
+                              transient: true, private: true, url: videosUrl(vodLogin) }]
+        if (vodError !== "") {
+            if (vodCode === 2) return [info("vod-error", "Not logged in", vodError, "\uf071"), loginRow("Run twitch-qs-mpv login")]
+            return [info("vod-error", vodCode === 3 ? "Could not reach Twitch" : vodCode === 4 ? "Unknown channel" : "Could not load past broadcasts", vodError, "\uf071")]
+        }
+        if (vodRows.length === 0) return [info("vod-empty", "No past broadcasts", vodName, "")]
+        return vodRows
+    }
+    function enterVods(login, name) {
+        vodLogin = login; vodName = name || login; vodRows = []; vodError = ""; vodOld = false; vodOldNote = ""; vodCode = 0; vodLoading = true
+        if (!twVods) { vodLoading = false; vodOld = true; return }          // no bin/twitch-qs-vods next to the app: too old
+        if (vodProc.running) { vodRestart = true; vodProc.running = false } else vodProc.running = true
+    }
+    function leaveVods() {
+        vodLogin = ""; vodRows = []; vodError = ""; vodOld = false; vodOldNote = ""; vodCode = 0; vodLoading = false; vodRestart = false
+        vodProc.running = false
+    }
+    // Support is decided by the probe (twVods), never by sniffing output: an old app answers an unknown command with its usage text and
+    // exit 2, the same code as "not logged in". After that the real exit codes are used: 2 not logged in, 3 network / API, 4 unknown
+    // login, 1 (usage error / missing program) or anything else (could not start, killed) = update note + browser row.
+    property var vodProc: Process {
+        command: [src.twAppPath, "vods", src.vodLogin, "--json"]
+        stdout: StdioCollector { id: vodOut }
+        stderr: StdioCollector { id: vodErr }
+        onExited: code => {
+            if (src.vodRestart) { src.vodRestart = false; vodProc.running = true; return }
+            if (!src.vodActive) return
+            src.vodLoading = false
+            if (code === 0) {
+                const rows = src.parseVods(vodOut.text)
+                if (rows === null) src.vodError = "Unexpected output from twitch-qs-mpv"
+                else src.vodRows = rows
+            } else if (code === 2 || code === 3 || code === 4) { src.vodCode = code; src.vodError = src.vodFailText(vodErr.text, code) }
+            else { src.vodOld = true; src.vodOldNote = src.vodFailText(vodErr.text, code) }
+            src.updated()
+        }
     }
 
     // ---- screenshot / record (the former standalone menus) -------------------------------------------
@@ -382,13 +498,32 @@ QtObject {
         if (!/^[A-Za-z0-9_]{1,25}$/.test(login)) return
         const url = "https://www.twitch.tv/" + login.toLowerCase()
         if (twAppPath !== "") Quickshell.execDetached(["env", "TWITCH_QS_FONT=Paper Mono", twAppPath, "watch", login])
-        else if (twMpv)       // a quick non-zero exit (offline channel, yt-dlp missing) becomes a notification
-            Quickshell.execDetached(["sh", "-c",
-                "s=$(date +%s); mpv \"$1\"; rc=$?; " +
-                "if [ \"$rc\" -ne 0 ] && [ $(( $(date +%s) - s )) -lt 15 ]; then m=\"mpv exited with $rc\"; " +
-                "command -v yt-dlp >/dev/null 2>&1 || m=\"$m (yt-dlp is not installed)\"; " +
-                "notify-send -a Launcher Twitch \"$m\"; fi", "sh", url])
+        else if (twMpv) mpvToast(url)
         else Quickshell.execDetached(["xdg-open", url])
+    }
+    // a quick non-zero exit (offline channel, yt-dlp missing) becomes a notification
+    function mpvToast(url) {
+        Quickshell.execDetached(["sh", "-c",
+            "s=$(date +%s); mpv \"$1\"; rc=$?; " +
+            "if [ \"$rc\" -ne 0 ] && [ $(( $(date +%s) - s )) -lt 15 ]; then m=\"mpv exited with $rc\"; " +
+            "command -v yt-dlp >/dev/null 2>&1 || m=\"$m (yt-dlp is not installed)\"; " +
+            "notify-send -a Launcher Twitch \"$m\"; fi", "sh", url])
+    }
+    // past broadcast -> twitch-qs-mpv vod <id>, else mpv on the video URL, else the URL in the browser (id validated, argv only)
+    function playVod(id) {
+        if (!/^[0-9]{1,15}$/.test(id)) return
+        const url = "https://www.twitch.tv/videos/" + id
+        if (twAppPath !== "") Quickshell.execDetached(["env", "TWITCH_QS_FONT=Paper Mono", twAppPath, "vod", id])
+        else if (twMpv) mpvToast(url)
+        else Quickshell.execDetached(["xdg-open", url])
+    }
+
+    // item actions (Launcher.doAction): returns true = done and close, "enter" = a nested level was pushed, false = not ours
+    function action(id, item) {
+        if (id !== "twitch-vods" || item.kind !== "twitch" || !/^[A-Za-z0-9_]{1,25}$/.test(item.login || "")) return false
+        if (twAppPath === "") { Quickshell.execDetached(["xdg-open", videosUrl(item.login)]); return true }
+        enterVods(item.login, item.name)
+        return "enter"
     }
 
     // ---- run -------------------------------------------------------------------------------------------------
@@ -413,6 +548,7 @@ QtObject {
         if (item.kind === "rec-opt") { setOption(item.opt); return true }
         if (item.kind === "power") { Quickshell.execDetached(["sh", "-c", item.command]); return true }
         if (item.kind === "twitch") { watchTwitch(item.login); return true }
+        if (item.kind === "twitch-vod") { playVod(item.vodId); return true }
         if (item.kind === "twitch-web") { Quickshell.execDetached(["xdg-open", item.url]); return true }
         if (item.kind === "twitch-login" && twAppPath !== "") {
             Quickshell.execDetached(["env", "TWITCH_QS_FONT=Paper Mono", src.twAppPath, "login"])

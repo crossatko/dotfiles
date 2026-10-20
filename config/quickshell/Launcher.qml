@@ -161,6 +161,16 @@ ModalMenu {
     // Esc / Ctrl+C: one level back (section -> main list), at the root close
     function back() {
         if (section === "") { close(); return }
+        if (section === "twitch" && secSrc.vodActive) {  // nested "Past broadcasts" level -> the channel list, channel stays selected
+            const id = "sec:twitch:" + secSrc.vodLogin
+            secSrc.leaveVods()
+            confirmId = ""; histPos = -1
+            input.text = ""
+            refresh()
+            const i = results.findIndex(r => r.id === id)
+            if (i > 0) { sel = i; first = Math.max(0, i - numResults + 1) }
+            return
+        }
         section = ""; sectionDirect = false; confirmId = ""; histPos = -1
         input.text = ""
         refresh()
@@ -170,13 +180,34 @@ ModalMenu {
     function keyEscape() {
         if (section !== "" && !sectionDirect) back(); else close()
     }
-    // Left = back out of a section, but only when it would not move the text caret (empty filter, or caret at 0 without selection)
+    // Left = one level back: action panel -> list, nested level -> its parent list, section -> main list. Outside the panel only when
+    // it would not move the text caret (empty filter, or caret at 0 without selection)
     function keyLeft() {
-        if (section === "" || actionsOpen || argItem) return false
+        if (argItem) return false
+        if (actionsOpen) { actionsOpen = false; return true }
+        if (section === "") return false
         if (input.text !== "" && (input.cursorPosition !== 0 || input.selectionStart !== input.selectionEnd)) return false
         back()
         return true
     }
+    // Right = into the selected item's options, only when it would not move the text caret (empty filter, or caret at the end without
+    // selection): a Twitch channel goes straight to its past broadcasts, any other item with actions opens the action panel (Ctrl+K)
+    function keyRight() {
+        if (actionsOpen || argItem || !current || actions.length < 2) return false
+        if (input.text !== "" && (input.cursorPosition !== input.text.length || input.selectionStart !== input.selectionEnd)) return false
+        if (current.actions && current.actions.some(a => a.id === "twitch-vods")) doAction("twitch-vods")
+        else openActions()
+        return true
+    }
+    // Backspace on an empty filter inside a section goes back like Left
+    function keyBackspace() {
+        if (section === "" || actionsOpen || argItem || input.text !== "") return false
+        back()
+        return true
+    }
+    // footer hint for Right ("" = the selected row has no options)
+    readonly property string rightHint: actionsOpen || argItem || !current || actions.length < 2 ? ""
+        : current.actions && current.actions.some(a => a.id === "twitch-vods") ? "→ broadcasts" : "→ options"
 
     // open with the search field prefilled (qs ipc call launcher query "v "); on an open launcher just sets the text
     property string preset: ""
@@ -269,6 +300,12 @@ ModalMenu {
                 if (s.action) {
                     const r = s.action(id, it)
                     if (r === "keep") { actionsOpen = false; refresh(true); return }   // stays open (e.g. clipboard delete)
+                    if (r === "enter") {                // pushed a nested level (Twitch past broadcasts): fresh list, empty filter
+                        actionsOpen = false; confirmId = ""; histPos = -1
+                        input.text = ""
+                        refresh()
+                        return
+                    }
                     if (r) { shown = false; return }
                 }
         }
@@ -380,7 +417,8 @@ ModalMenu {
                     }
                     if (lc.actionsOpen) {
                         const n = lc.actions.length
-                        if (k === Qt.Key_Escape || (ctrl && k === Qt.Key_K) || k === Qt.Key_Left) lc.actionsOpen = false
+                        if (k === Qt.Key_Escape || (ctrl && k === Qt.Key_K)) lc.actionsOpen = false
+                        else if (k === Qt.Key_Left) lc.keyLeft()
                         else if (k === Qt.Key_Return || k === Qt.Key_Enter) lc.doAction(lc.actions[lc.asel].id)
                         else if (k === Qt.Key_Down || k === Qt.Key_Tab || (ctrl && (k === Qt.Key_N || k === Qt.Key_J))) lc.asel = Math.min(n - 1, lc.asel + 1)
                         else if (k === Qt.Key_Up || k === Qt.Key_Backtab || (ctrl && k === Qt.Key_P)) lc.asel = Math.max(0, lc.asel - 1)
@@ -389,7 +427,8 @@ ModalMenu {
                     }
                     if (k === Qt.Key_Escape || (ctrl && k === Qt.Key_C)) lc.keyEscape()
                     else if (k === Qt.Key_Left && !ctrl && !(ev.modifiers & Qt.ShiftModifier) && lc.keyLeft()) {}
-                    else if (k === Qt.Key_Backspace && !ctrl && lc.section !== "" && text === "") lc.back()
+                    else if (k === Qt.Key_Right && !ctrl && !(ev.modifiers & Qt.ShiftModifier) && lc.keyRight()) {}
+                    else if (k === Qt.Key_Backspace && !ctrl && lc.keyBackspace()) {}
                     else if (k === Qt.Key_Return || k === Qt.Key_Enter) lc.runIndex(lc.sel)
                     else if (ctrl && k === Qt.Key_K) lc.openActions()
                     else if (ctrl && k >= Qt.Key_1 && k <= Qt.Key_9) lc.runIndex(lc.first + (k - Qt.Key_1))
@@ -520,9 +559,9 @@ ModalMenu {
         Layout.fillWidth: true
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
-        text: lc.actionsOpen ? "↑↓ select · Enter do · Esc back"
-            : lc.section !== "" ? "↑↓ select · Enter run · ← / Backspace back · Esc " + (lc.sectionDirect ? "close" : "back")
-            : "↑↓ select · Enter run · Ctrl+1-9 quick run · Ctrl+K actions · Esc close"
+        text: lc.actionsOpen ? "↑↓ select · Enter do · ← / Esc back"
+            : lc.section !== "" ? "↑↓ select · Enter run · " + (lc.rightHint ? lc.rightHint + " · " : "") + "← / Backspace back · Esc " + (lc.sectionDirect ? "close" : "back")
+            : "↑↓ select · Enter run · " + (lc.rightHint ? lc.rightHint + " · " : "") + "Ctrl+1-9 quick run · Esc close"
         color: Theme.muted
         font.pixelSize: Theme.fontCaption
     }
