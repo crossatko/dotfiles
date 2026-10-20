@@ -1,0 +1,470 @@
+#!/usr/bin/env python3
+"""Jellyfin helper for the Quickshell launcher (see ../README.md).
+
+Data commands print JSON to stdout; errors print one line to stderr (never a token).
+Exit codes: 0 ok, 1 usage/missing program, 2 not configured / not logged in / token rejected,
+3 network or server error, 4 not found.
+Test hooks: JELLYFIN_QS_CONFIG_DIR, JELLYFIN_QS_STATE_DIR, JELLYFIN_QS_MPV (binary),
+JELLYFIN_QS_MPV_ARGS (extra mpv args).
+"""
+import argparse, getpass, http.client, json, os, random, shlex, socket, subprocess, sys
+import time, urllib.parse, uuid
+
+CONNECT_TIMEOUT = 3
+TOTAL_TIMEOUT = 10
+CFG_DIR = os.environ.get("JELLYFIN_QS_CONFIG_DIR") or os.path.expanduser("~/.config/jellyfin-qs")
+STATE_DIR = os.environ.get("JELLYFIN_QS_STATE_DIR") or os.path.join(
+    os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "jellyfin-qs")
+CONFIG_FILE = os.path.join(CFG_DIR, "config.json")
+TOKEN_FILE = os.path.join(STATE_DIR, "token.json")
+DEVICE_FILE = os.path.join(STATE_DIR, "device.json")
+FIELDS = "ChildCount,ProductionYear,PremiereDate"
+SEARCH_TYPES = "Movie,Series,Episode,MusicArtist,MusicAlbum,Audio,Playlist"
+BROWSABLE = {"Series", "Season", "MusicArtist", "MusicAlbum", "Playlist", "BoxSet", "CollectionFolder",
+             "Folder", "UserView", "PlaylistsFolder"}
+PLAYABLE = {"Movie", "Episode", "Video", "MusicVideo", "Audio", "AudioBook", "Series", "Season",
+            "MusicAlbum", "MusicArtist", "Playlist", "BoxSet"}
+AUDIO_TYPES = {"Audio", "AudioBook", "MusicAlbum", "MusicArtist"}
+FOLDER_TYPES = {"CollectionFolder", "Folder", "UserView", "BoxSet", "PlaylistsFolder"}
+
+
+class Err(Exception):
+    def __init__(self, code, msg):
+        super().__init__(msg)
+        self.code, self.msg = code, msg
+
+
+# ---------- files ----------
+def read_json(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def write_private(path, data, text=None):
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(text if text is not None else json.dumps(data))
+    os.replace(tmp, path)
+
+
+def device_id():
+    d = read_json(DEVICE_FILE)
+    if d and d.get("device_id"):
+        return d["device_id"]
+    did = str(uuid.uuid4())
+    write_private(DEVICE_FILE, {"device_id": did})
+    return did
+
+
+def auth_header(token=None):
+    h = 'MediaBrowser Client="jellyfin-qs", Device="%s", DeviceId="%s", Version="1.0"' % (
+        socket.gethostname().replace('"', ""), device_id())
+    return h + (', Token="%s"' % token if token else "")
+
+
+def load_session():
+    tok = read_json(TOKEN_FILE)
+    cfg = read_json(CONFIG_FILE) or {}
+    server = (cfg.get("server") or "").rstrip("/")
+    if not server:
+        raise Err(2, "not configured (run: jellyfin-qs login)")
+    if not tok or not tok.get("token") or not tok.get("user_id"):
+        raise Err(2, "not logged in (run: jellyfin-qs login)")
+    return server, tok
+
+
+# ---------- http ----------
+def request(server, method, path, query=None, body=None, token=None):
+    u = urllib.parse.urlsplit(server)
+    if u.scheme not in ("http", "https") or not u.hostname:
+        raise Err(2, "invalid server URL in config")
+    cls = http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection
+    qs = urllib.parse.urlencode(query or {})
+    full = (u.path.rstrip("/") + path) + ("?" + qs if qs else "")
+    headers = {"Authorization": auth_header(token), "Accept": "application/json"}
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode()
+        headers["Content-Type"] = "application/json"
+    conn = cls(u.hostname, u.port, timeout=CONNECT_TIMEOUT)
+    try:
+        conn.connect()
+        conn.sock.settimeout(TOTAL_TIMEOUT)
+        conn.request(method, full, body=data, headers=headers)
+        r = conn.getresponse()
+        raw = r.read()
+    except (socket.gaierror, ConnectionRefusedError, socket.timeout, TimeoutError, OSError):
+        raise Err(3, "server unreachable (is Tailscale connected?)")
+    except http.client.HTTPException:
+        raise Err(3, "server error (bad response)")
+    finally:
+        conn.close()
+    if r.status == 401:
+        raise Err(2, "token rejected (run: jellyfin-qs login)")
+    if r.status == 404:
+        raise Err(4, "not found")
+    if r.status >= 400:
+        raise Err(3, "server error (HTTP %d)" % r.status)
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except ValueError:
+        raise Err(3, "server error (bad JSON)")
+
+
+class Api:
+    def __init__(self):
+        self.server, tok = load_session()
+        self.token, self.uid = tok["token"], tok["user_id"]
+
+    def get(self, path, **q):
+        q = {k: v for k, v in q.items() if v is not None}
+        return request(self.server, "GET", path, q, token=self.token)
+
+    def get_fb(self, paths, **q):
+        """Try several (new, legacy) paths; fall back on 404 only."""
+        for i, p in enumerate(paths):
+            try:
+                return self.get(p, **q)
+            except Err as e:
+                if e.code != 4 or i == len(paths) - 1:
+                    raise
+
+    def items(self, **q):
+        q.setdefault("userId", self.uid)
+        q.setdefault("Fields", FIELDS)
+        q.setdefault("EnableUserData", "true")
+        return (self.get("/Items", **q) or {}).get("Items", [])
+
+    def one(self, iid):
+        r = self.items(Ids=iid)
+        if not r:
+            raise Err(4, "item not found")
+        return r[0]
+
+    def children(self, raw):
+        t, iid = raw.get("Type"), raw["Id"]
+        if t == "MusicArtist":
+            r = self.items(AlbumArtistIds=iid, IncludeItemTypes="MusicAlbum", Recursive="true")
+        elif t == "Playlist":
+            return (self.get("/Playlists/%s/Items" % iid, userId=self.uid, Fields=FIELDS) or {}).get("Items", [])
+        elif t == "Series":
+            r = (self.get("/Shows/%s/Seasons" % iid, userId=self.uid, Fields=FIELDS) or {}).get("Items", [])
+        else:
+            r = self.items(ParentId=iid, SortBy="SortName")
+        return sort_items(r)
+
+
+def sort_items(r):
+    def key(x):
+        t = x.get("Type")
+        if t in ("Episode", "Season", "Audio"):
+            pi = x.get("ParentIndexNumber") if t != "Season" else x.get("IndexNumber")
+            if t == "Season":
+                return (pi == 0, pi or 0, 0, "")
+            return (pi == 0 and t == "Episode", pi or 0, x.get("IndexNumber") or 0, x.get("Name") or "")
+        if t == "MusicAlbum":
+            return (False, x.get("ProductionYear") or 9999, 0, (x.get("Name") or "").lower())
+        return (False, 0, 0, (x.get("SortName") or x.get("Name") or "").lower())
+    return sorted(r, key=key)
+
+
+# ---------- item formatting ----------
+def fmt(raw):
+    t = raw.get("Type") or ""
+    ud = raw.get("UserData") or {}
+    year = raw.get("ProductionYear")
+    rt = raw.get("RunTimeTicks")
+    pos = ud.get("PlaybackPositionTicks") or 0
+    artist = (raw.get("Artists") or [None])[0] or raw.get("AlbumArtist")
+    series = raw.get("SeriesName")
+    sub, parent = "", None
+    if t == "Episode":
+        pi, i = raw.get("ParentIndexNumber"), raw.get("IndexNumber")
+        code = "S%02dE%02d" % (pi, i) if pi is not None and i is not None else ""
+        sub = " · ".join(x for x in (code, series) if x)
+        parent = series
+    elif t in ("Movie", "Video", "MusicVideo"):
+        sub = str(year) if year else ""
+    elif t in ("Audio", "AudioBook"):
+        parent = raw.get("Album")
+        sub = " · ".join(x for x in (artist, parent) if x)
+    elif t == "MusicAlbum":
+        parent = raw.get("AlbumArtist")
+        sub = " · ".join(x for x in (parent, str(year) if year else "") if x)
+    elif t == "Series":
+        n = raw.get("ChildCount")
+        sub = ("%d season%s" % (n, "" if n == 1 else "s")) if n else (str(year) if year else "")
+    elif t == "Season":
+        parent = series
+        sub = series or ""
+    elif t == "Playlist":
+        n = raw.get("ChildCount")
+        sub = ("%d items" % n) if n else ""
+    if t in FOLDER_TYPES:
+        kind = "folder"
+    elif t == "Playlist":
+        kind = "audio" if raw.get("MediaType") == "Audio" else "video"
+    elif t in AUDIO_TYPES:
+        kind = "audio"
+    else:
+        kind = "video"
+    pct = ud.get("PlayedPercentage")
+    if pct is None and rt and pos:
+        pct = pos * 100.0 / rt
+    return {
+        "id": raw.get("Id"), "name": raw.get("Name") or "", "type": t, "kind": kind, "subtitle": sub,
+        "year": year, "runtime_s": int(rt // 10000000) if rt else None,
+        "played": bool(ud.get("Played")), "resume_s": int(pos // 10000000) if pos else None,
+        "progress_pct": round(pct, 1) if pct else None, "parent_name": parent,
+        "browsable": t in BROWSABLE, "playable": t in PLAYABLE,
+    }
+
+
+def out(obj):
+    json.dump(obj, sys.stdout, ensure_ascii=False)
+    sys.stdout.write("\n")
+
+
+# ---------- commands ----------
+def cmd_login(a):
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        raise Err(1, "login needs an interactive terminal")
+    cfg = read_json(CONFIG_FILE) or {}
+    default = cfg.get("server") or ""
+    server = input("Server URL%s: " % (" [%s]" % default if default else "")).strip() or default
+    if "://" not in server and server:
+        server = "http://" + server
+    server = server.rstrip("/")
+    user = input("Username: ").strip()
+    pw = getpass.getpass("Password: ")
+    if not server or not user:
+        raise Err(1, "server and username are required")
+    r = request(server, "POST", "/Users/AuthenticateByName", body={"Username": user, "Pw": pw})
+    del pw
+    tok = (r or {}).get("AccessToken")
+    uid = ((r or {}).get("User") or {}).get("Id")
+    if not tok or not uid:
+        raise Err(3, "server error (unexpected login reply)")
+    write_private(CONFIG_FILE, {"server": server})
+    write_private(TOKEN_FILE, {"token": tok, "user_id": uid, "device_id": device_id(),
+                               "user": ((r or {}).get("User") or {}).get("Name") or user})
+    print("Logged in as %s" % user)
+
+
+def cmd_logout(a):
+    tok, cfg = read_json(TOKEN_FILE), read_json(CONFIG_FILE) or {}
+    if tok and tok.get("token") and cfg.get("server"):
+        try:
+            request(cfg["server"].rstrip("/"), "POST", "/Sessions/Logout", token=tok["token"])
+        except Err:
+            pass
+    try:
+        os.remove(TOKEN_FILE)
+    except OSError:
+        pass
+
+
+def cmd_status(a):
+    cfg, tok = read_json(CONFIG_FILE) or {}, read_json(TOKEN_FILE)
+    server = (cfg.get("server") or "").rstrip("/")
+    st = {"logged_in": False, "server": server, "user": None, "state": "none"}
+    code = 2
+    if server and tok and tok.get("token"):
+        try:
+            me = request(server, "GET", "/Users/Me", token=tok["token"])
+            st.update(logged_in=True, user=(me or {}).get("Name") or tok.get("user"), state="ok")
+            code = 0
+        except Err as e:
+            if e.code == 2:
+                st.update(state="rejected", user=tok.get("user"))
+            else:
+                st.update(state="unreachable", user=tok.get("user"))
+                code = 3
+    if a.json:
+        out(st)
+    else:
+        print("%s %s %s" % (st["state"], st["server"], st["user"] or ""))
+    return code
+
+
+def cmd_list(a, fn):
+    out([fmt(x) for x in fn(Api())])
+
+
+def cmd_libraries(a):
+    api = Api()
+    r = api.get_fb(["/UserViews", "/Users/%s/Views" % api.uid], userId=api.uid) or {}
+    res = []
+    for x in r.get("Items", []):
+        d = fmt(x)
+        d["collection_type"] = x.get("CollectionType")
+        res.append(d)
+    out(res)
+
+
+def cmd_children(a):
+    api = Api()
+    out([fmt(x) for x in api.children(api.one(a.id))])
+
+
+def leaves(api, raw, depth=0):
+    t = raw.get("Type")
+    if t in ("Movie", "Episode", "Video", "MusicVideo", "Audio", "AudioBook"):
+        return [raw]
+    if depth > 3 or t not in BROWSABLE:
+        return []
+    res = []
+    for c in api.children(raw):
+        res += leaves(api, c, depth + 1)
+    return res
+
+
+def title_of(x):
+    t, n = x.get("Type"), x.get("Name") or ""
+    if t == "Episode":
+        pi, i = x.get("ParentIndexNumber"), x.get("IndexNumber")
+        code = " S%02dE%02d" % (pi, i) if pi is not None and i is not None else ""
+        n = "%s%s - %s" % (x.get("SeriesName") or "", code, n)
+    elif t in ("Audio", "AudioBook"):
+        a = (x.get("Artists") or [None])[0] or x.get("AlbumArtist")
+        n = "%s - %s" % (a, n) if a else n
+    return " ".join(n.split())
+
+
+def cleanup_stale(d):
+    now = time.time()
+    try:
+        for n in os.listdir(d):
+            p = os.path.join(d, n)
+            if now - os.lstat(p).st_mtime > 86400:
+                os.remove(p)
+    except OSError:
+        pass
+
+
+def cmd_play(a):
+    api = Api()
+    raw = api.one(a.id)
+    t = raw.get("Type")
+    if t not in PLAYABLE:
+        raise Err(4, "item is not playable")
+    queue = leaves(api, raw)
+    if not queue:
+        raise Err(4, "nothing to play")
+    if t in ("Series", "Season"):
+        for i, x in enumerate(queue):
+            ud = x.get("UserData") or {}
+            if not ud.get("Played"):
+                queue = queue[i:]
+                break
+    if a.shuffle and len(queue) > 1:
+        random.shuffle(queue)
+    audio = all(x.get("Type") in ("Audio", "AudioBook") for x in queue)
+    mpv = os.environ.get("JELLYFIN_QS_MPV") or "mpv"
+    if not os.environ.get("JELLYFIN_QS_MPV") and not any(
+            os.access(os.path.join(p, "mpv"), os.X_OK) for p in os.environ.get("PATH", "").split(os.pathsep)):
+        raise Err(1, "mpv is not installed")
+    rt = os.environ.get("XDG_RUNTIME_DIR")
+    d = os.path.join(rt if rt and os.path.isdir(rt) else STATE_DIR, "jellyfin-qs")
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    cleanup_stale(d)
+    sid = uuid.uuid4().hex[:8]
+    pre = os.path.join(d, sid)
+    write_private(pre + ".conf", None, "http-header-fields='Authorization: MediaBrowser Token=\"%s\"'\n" % api.token)
+    write_private(pre + ".curl", None, 'header = "Authorization: %s"\n' % auth_header(api.token).replace('"', '\\"'))
+    write_private(pre + ".server", None, api.server + "\n")
+
+    def url(x):
+        k = "Audio" if x.get("Type") in ("Audio", "AudioBook") else "Videos"
+        return "%s/%s/%s/stream?static=true" % (api.server, k, x["Id"])
+
+    name = raw.get("Name") or "Jellyfin"
+    args = [mpv, "--include=" + pre + ".conf", "--script=" + os.path.join(
+            os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "mpv", "jellyfin-report.lua"),
+            "--input-ipc-server=" + pre + ".sock", "--title=Jellyfin - " + name.replace("$", "$$"),
+            "--force-seekable=yes", "--idle=no"]
+    opts = ["jellyfin-qs-session=" + pre]
+    resume = (queue[0].get("UserData") or {}).get("PlaybackPositionTicks", 0) // 10000000
+    if a.resume and resume > 0:
+        if len(queue) == 1:
+            args.append("--start=%d" % resume)
+        else:
+            opts.append("jellyfin-qs-start=%d" % resume)
+    args.append("--script-opts=" + ",".join(opts))
+    if audio:
+        args += ["--no-video", "--force-window=no", "--audio-display=no"]
+    if len(queue) == 1:
+        args += ["--force-media-title=" + title_of(queue[0]), "--", url(queue[0])]
+    else:
+        lines = ["#EXTM3U"]
+        for x in queue:
+            rt_s = int((x.get("RunTimeTicks") or 0) // 10000000) or -1
+            lines += ["#EXTINF:%d,%s" % (rt_s, title_of(x)), url(x)]
+        write_private(pre + ".m3u", None, "\n".join(lines) + "\n")
+        args += ["--", pre + ".m3u"]
+    args[1:1] = shlex.split(os.environ.get("JELLYFIN_QS_MPV_ARGS", ""))
+    try:
+        subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        raise Err(1, "cannot start mpv")
+
+
+def main():
+    p = argparse.ArgumentParser(prog="jellyfin-qs")
+    s = p.add_subparsers(dest="cmd", required=True)
+    s.add_parser("login").set_defaults(fn=cmd_login)
+    s.add_parser("logout").set_defaults(fn=cmd_logout)
+    x = s.add_parser("status")
+    x.add_argument("--json", action="store_true")
+    x.set_defaults(fn=cmd_status)
+    lim = lambda q, n: q.add_argument("--limit", type=int, default=n)
+    x = s.add_parser("resume"); lim(x, 30)
+    x.set_defaults(fn=lambda a: cmd_list(a, lambda api: api.get_fb(
+        ["/UserItems/Resume", "/Users/%s/Items/Resume" % api.uid], userId=api.uid, Limit=a.limit,
+        MediaTypes="Video,Audio", Fields=FIELDS, EnableUserData="true")["Items"]))
+    x = s.add_parser("nextup"); lim(x, 30)
+    x.set_defaults(fn=lambda a: cmd_list(a, lambda api: api.get(
+        "/Shows/NextUp", userId=api.uid, Limit=a.limit, Fields=FIELDS, EnableUserData="true")["Items"]))
+    x = s.add_parser("latest"); lim(x, 30)
+    x.add_argument("--library")
+    x.set_defaults(fn=lambda a: cmd_list(a, lambda api: api.get(
+        "/Items/Latest", userId=api.uid, Limit=a.limit, ParentId=a.library, Fields=FIELDS,
+        EnableUserData="true")))
+    s.add_parser("libraries").set_defaults(fn=cmd_libraries)
+    x = s.add_parser("search")
+    x.add_argument("query")
+    lim(x, 30)
+    x.add_argument("--types", default=SEARCH_TYPES)
+    x.set_defaults(fn=lambda a: cmd_list(a, lambda api: api.items(
+        searchTerm=a.query, Recursive="true", Limit=a.limit, IncludeItemTypes=a.types)))
+    x = s.add_parser("children"); x.add_argument("id"); x.set_defaults(fn=cmd_children)
+    x = s.add_parser("item"); x.add_argument("id")
+    x.set_defaults(fn=lambda a: out(fmt(Api().one(a.id))))
+    s.add_parser("playlists").set_defaults(fn=lambda a: cmd_list(a, lambda api: api.items(
+        IncludeItemTypes="Playlist", Recursive="true")))
+    x = s.add_parser("play"); x.add_argument("id")
+    x.add_argument("--resume", action="store_true"); x.add_argument("--shuffle", action="store_true")
+    x.set_defaults(fn=cmd_play)
+    try:
+        a = p.parse_args()
+    except SystemExit as e:
+        sys.exit(1 if e.code else 0)
+    try:
+        sys.exit(a.fn(a) or 0)
+    except Err as e:
+        print("jellyfin-qs: " + e.msg, file=sys.stderr)
+        sys.exit(e.code)
+    except (KeyboardInterrupt, EOFError):
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -13,6 +13,9 @@ sudo sed -i '/^\[multilib\]/,/^#Include/s/^#Include/Include/' /etc/pacman.conf
 echo "Syncing repositories and installing prerequisites..."
 sudo pacman -Sy --needed --noconfirm base-devel git
 
+# The repo is public: enable the privacy pre-commit hook (.githooks/pre-commit) for this clone
+git -C "$DOTFILES_DIR" config core.hooksPath .githooks
+
 echo "Setting up yay..."
 if ! command -v yay &>/dev/null; then
   echo "Installing yay from AUR..."
@@ -159,6 +162,8 @@ ln -sfn "$CONFIG_DIR/systemd/user/xdg-desktop-portal-gnome.service" "$HOME/.conf
 # Launcher shim: applies the wallpaper theme to Brave's profile just before it starts
 mkdir -p "$HOME/.local/bin"
 ln -sfn "$CONFIG_DIR/theme/bin/brave" "$HOME/.local/bin/brave"
+# Jellyfin helper for the launcher (config: ~/.config/jellyfin-qs, login: jellyfin-qs login)
+ln -sfn "$CONFIG_DIR/launcher/jellyfin/bin/jellyfin-qs" "$HOME/.local/bin/jellyfin-qs"
 
 # Firefox: translucent header (userChrome.css + user.js) in the install-default profile, if one exists
 FF_PROFILE_DIR="$HOME/.config/mozilla/firefox"

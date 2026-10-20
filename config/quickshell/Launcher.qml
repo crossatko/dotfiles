@@ -70,8 +70,9 @@ ModalMenu {
     EmojiSource { id: emojiSrc }
     FileSource { id: fileSrc; onUpdated: lc.refreshKeep() }
     ClipboardSource { id: clipSrc; active: lc.shown; onUpdated: lc.refreshKeep() }
-    SectionsSource { id: secSrc; onUpdated: lc.refreshKeep() }
-    readonly property var sourceList: [appsSrc, winSrc, cmdSrc, secSrc, scriptSrc, calcSrc, emojiSrc, fileSrc, clipSrc, webSrc]
+    JellyfinSource { id: jfSrc; onUpdated: lc.refreshKeep() }
+    SectionsSource { id: secSrc; jf: jfSrc; onUpdated: lc.refreshKeep() }
+    readonly property var sourceList: [appsSrc, winSrc, cmdSrc, secSrc, jfSrc, scriptSrc, calcSrc, emojiSrc, fileSrc, clipSrc, webSrc]
 
     readonly property var allItems: {
         const out = []
@@ -90,8 +91,8 @@ ModalMenu {
     function refresh(keep) {
         const q = query.trim()
         if (section !== "") {                           // inside a section: only its rows, filtered with the ranker (no usage)
-            let rows = secSrc.rows(section)
-            if (q !== "") rows = secSrc.extra(section, q).concat(Ranker.rank(rows, q, {}, Date.now(), { limit: 50 }).map(r => r.item))
+            let rows = section === "jellyfin" ? jfSrc.listFor(q) : secSrc.rows(section)   // jellyfin: nested level / server search, no usage ranking
+            if (q !== "" && section !== "jellyfin") rows = secSrc.extra(section, q).concat(Ranker.rank(rows, q, {}, Date.now(), { limit: 50 }).map(r => r.item))
             const prevId = keep && results[sel] ? results[sel].id : ""
             const hadStop = results.some(r => r.kind === "rec-stop")
             results = rows.map(it => it.id === confirmId
@@ -126,10 +127,11 @@ ModalMenu {
     function refreshKeep() { if (shown && !argItem) refresh(true) }
 
     function clearConfirm() { if (confirmId !== "") { confirmId = ""; if (shown) refresh(true) } }
-    onQueryChanged: { confirmId = ""; if (shown && !argItem) refresh() }
+    onQueryChanged: { confirmId = ""; jfSrc.track(query, section); if (shown && !argItem) refresh() }
     onSelChanged: clearConfirm()
     onOpening: {
         actionsOpen = false; histPos = -1; argItem = null; confirmId = ""
+        jfSrc.reset()
         section = presetSection
         sectionDirect = section !== ""
         if (section !== "") secSrc.enter(section)
@@ -161,6 +163,7 @@ ModalMenu {
     // Esc / Ctrl+C: one level back (section -> main list), at the root close
     function back() {
         if (section === "") { close(); return }
+        if (section === "jellyfin" && jfSrc.depth > 0) { backJellyfin(); return }
         if (section === "twitch" && secSrc.vodActive) {  // nested "Past broadcasts" level -> the channel list, channel stays selected
             const id = "sec:twitch:" + secSrc.vodLogin
             secSrc.leaveVods()
@@ -172,6 +175,24 @@ ModalMenu {
             return
         }
         section = ""; sectionDirect = false; confirmId = ""; histPos = -1
+        input.text = ""
+        refresh()
+    }
+    // Jellyfin nested level -> its parent (filter text and selected row restored); leaving the last level of a "jf " prefix search returns to it
+    function backJellyfin() {
+        const r = jfSrc.pop()
+        confirmId = ""; histPos = -1
+        if (jfSrc.depth === 0 && jfSrc.fromPrefix) { section = ""; sectionDirect = false }
+        input.text = r.text
+        input.cursorPosition = input.text.length
+        refresh()
+        const i = results.findIndex(x => x.id === r.selId)
+        if (i > 0) { sel = i; first = Math.max(0, i - numResults + 1) }
+    }
+    // after an action pushed a nested level (Twitch past broadcasts, Jellyfin browse): fresh list, empty filter
+    function afterEnter() {
+        if (section === "" && jfSrc.depth > 0) { section = "jellyfin"; sectionDirect = false }   // browsing from the "jf " prefix mode
+        actionsOpen = false; confirmId = ""; histPos = -1
         input.text = ""
         refresh()
     }
@@ -193,9 +214,12 @@ ModalMenu {
     // Right = into the selected item's options, only when it would not move the text caret (empty filter, or caret at the end without
     // selection): a Twitch channel goes straight to its past broadcasts, any other item with actions opens the action panel (Ctrl+K)
     function keyRight() {
-        if (actionsOpen || argItem || !current || actions.length < 2) return false
+        if (actionsOpen || argItem || !current) return false
+        const jfBrowse = jfSrc.rightHintFor(current)
+        if (!jfBrowse && actions.length < 2) return false
         if (input.text !== "" && (input.cursorPosition !== input.text.length || input.selectionStart !== input.selectionEnd)) return false
         if (current.actions && current.actions.some(a => a.id === "twitch-vods")) doAction("twitch-vods")
+        else if (jfBrowse) doAction("jf-browse")
         else openActions()
         return true
     }
@@ -206,8 +230,8 @@ ModalMenu {
         return true
     }
     // footer hint for Right ("" = the selected row has no options)
-    readonly property string rightHint: actionsOpen || argItem || !current || actions.length < 2 ? ""
-        : current.actions && current.actions.some(a => a.id === "twitch-vods") ? "→ broadcasts" : "→ options"
+    readonly property string rightHint: actionsOpen || argItem || !current || (actions.length < 2 && !jfSrc.rightHintFor(current)) ? ""
+        : current.actions && current.actions.some(a => a.id === "twitch-vods") ? "→ broadcasts" : jfSrc.rightHintFor(current) ? "→ browse" : "→ options"
 
     // open with the search field prefilled (qs ipc call launcher query "v "); on an open launcher just sets the text
     property string preset: ""
@@ -233,6 +257,11 @@ ModalMenu {
             usage = Frecency.record(usage, item.id, query.trim().toLowerCase(), Date.now())
             saveUsage.restart()
             enterSection(item.section)
+            return
+        }
+        if (item.kind === "jf-nav" || item.kind === "jf-retry") {   // Jellyfin: open a nested level / reload (not recorded, launcher stays open)
+            const r = jfSrc.action(item.kind === "jf-nav" ? "jf-browse" : "jf-retry", item)
+            if (r === "enter") afterEnter(); else refresh(true)
             return
         }
         if (item.kind === "rec-opt") {                   // recording options: toggle, save, stay open
@@ -272,7 +301,7 @@ ModalMenu {
         const it = current
         if (!it) return []
         const u = usage[it.id] || {}
-        const a = [{ id: "run", label: "Run", glyph: "" }]
+        const a = [{ id: "run", label: it.runLabel || "Run", glyph: "" }]
         if (it.kind !== "web" && !it.transient) {
             a.push({ id: "pin", label: u.pinned ? "Unpin" : "Pin", glyph: "" })       // thumbtack
             a.push({ id: "hide", label: "Hide", glyph: "" })                        // eye-slash
@@ -300,12 +329,7 @@ ModalMenu {
                 if (s.action) {
                     const r = s.action(id, it)
                     if (r === "keep") { actionsOpen = false; refresh(true); return }   // stays open (e.g. clipboard delete)
-                    if (r === "enter") {                // pushed a nested level (Twitch past broadcasts): fresh list, empty filter
-                        actionsOpen = false; confirmId = ""; histPos = -1
-                        input.text = ""
-                        refresh()
-                        return
-                    }
+                    if (r === "enter") { afterEnter(); return }   // pushed a nested level (Twitch past broadcasts, Jellyfin browse)
                     if (r) { shown = false; return }
                 }
         }

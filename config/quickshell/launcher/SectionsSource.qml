@@ -28,6 +28,8 @@ QtObject {
 
     signal updated()
 
+    property var jf: null                           // JellyfinSource (set by Launcher): the "jellyfin" section delegates header / glyph / enter to it
+
     readonly property var sections: ({
         "sound-output": { title: "Sound output", header: "Audio output", glyph: "", sub: "Choose the default audio output",
                           aliases: ["speaker", "speakers", "headphones"], words: ["audio", "sink", "output", "volume"] },
@@ -37,6 +39,8 @@ QtObject {
                           aliases: ["shutdown", "reboot", "logout", "suspend"], words: ["poweroff", "restart", "log out", "sleep", "exit", "session"] },
         "twitch":       { title: "Twitch", header: "Streams", glyph: "", sub: "Followed channels",
                           aliases: ["stream", "streams"], words: ["live", "channels", "watch"] },
+        "jellyfin":     { title: "Jellyfin", glyph: "\uf008", sub: "Movies, shows and music",
+                          aliases: ["jf", "movies", "shows", "tv", "music", "media", "video", "films"], words: ["jellyfin", "series", "episodes", "albums", "watch", "listen"] },
         "screenshot":   { title: "Screenshot", glyph: "\uf030", sub: "Region, window or screen",
                           aliases: ["print", "grab", "snip", "capture"], words: ["screen", "region", "window", "monitor", "image"] },
         "record":       { title: "Record", glyph: "\uf03d", sub: "Screen recording: region, window or screen",
@@ -50,8 +54,8 @@ QtObject {
 
     function title(name) { return sections[name] ? sections[name].title : "" }
     // launcher header while inside the section (defaults to the title) and its icon (the root row glyph)
-    function header(name) { const s = sections[name]; return name === "twitch" && vodActive ? "Past broadcasts" : s ? (s.header || s.title) : "" }
-    function glyph(name) { return name === "twitch" && vodActive ? "\uf144" : sections[name] ? sections[name].glyph : "" }
+    function header(name) { const s = sections[name]; if (name === "jellyfin" && jf) return jf.header(); return name === "twitch" && vodActive ? "Past broadcasts" : s ? (s.header || s.title) : "" }
+    function glyph(name) { if (name === "jellyfin" && jf) return jf.glyph(); return name === "twitch" && vodActive ? "\uf144" : sections[name] ? sections[name].glyph : "" }
 
     // ---- state ---------------------------------------------------------------------------------------------
     property var outRows: []
@@ -80,6 +84,7 @@ QtObject {
     readonly property bool vodActive: vodLogin !== ""
 
     function enter(name) {
+        if (name === "jellyfin" && jf) jf.enter()
         if (name === "record") { Quickshell.execDetached(["mkdir", "-p", src.prefsDir]); prefs.reload(); recording = false; statusProc.running = false; statusProc.running = true }
         if (name === "sound-output") { outRows = []; outError = ""; outLoading = true; outProc.running = false; outProc.running = true }
         else if (name === "sound-input") { inRows = []; inError = ""; inLoading = true; inProc.running = false; inProc.running = true }
@@ -119,6 +124,7 @@ QtObject {
     }
     // small dim text next to the section header
     function headerSub(name) {
+        if (name === "jellyfin") return jf ? jf.headerSub() : ""
         if (name === "twitch" && vodActive) return vodName
         return name === "twitch" && twProbed ? "Player: " + twitchPlayerLabel() : ""
     }
