@@ -8,7 +8,7 @@ import "js/Ranker.js" as Ranker
 // exit 0 ok, 2 not configured / token rejected, 3 network / server error, 4 not found, 127 helper not installed.
 // Two entry points, both owned by this file:
 //   - the "jellyfin" section (root row in SectionsSource, which delegates header / glyph / enter to `jf`): menu rows
-//     (Continue watching, Next up, Recently added, Libraries, Playlists), live search while typing, nested levels
+//     (one row per library, then Continue watching, Next up, Recently added, Playlists), live search while typing, nested levels
 //     (`children <id>`: library -> items, series -> seasons -> episodes, artist -> albums -> tracks, playlist -> items);
 //   - the exclusive prefix mode "jf <text>" in the main list (search only; Right browses via the same nested levels).
 // All rows are transient + private (never in usage.json / history.json). Every request is an async Process with a token;
@@ -39,6 +39,14 @@ QtObject {
     property var searchRows: []
     property int searchCode: 0
     property string searchErr: ""
+
+    // libraries (top level rows): fetched once per open launcher session (reset() clears them; enter() and the "jf " prefix refetch)
+    property string libState: "idle"                // idle | loading | ok | error
+    property var libRows: []
+    property int libCode: 0
+    property string libErr: ""
+    property int libTok: 0
+    property var libProc: null
 
     property int statusTok: 0
     property int searchTok: 0
@@ -161,13 +169,34 @@ QtObject {
         return out.concat(rest)
     }
 
-    readonly property var menuRows: [
+    readonly property var fixedRows: [
         menuRow("resume", "Continue watching", "Resume where you left off", "", ["resume"]),
         menuRow("nextup", "Next up", "The next unwatched episodes", "", ["nextup"]),
         menuRow("latest", "Recently added", "New movies, shows and music", "", ["latest"]),
-        menuRow("libraries", "Libraries", "Browse by library", "", ["libraries"]),
         menuRow("playlists", "Playlists", "Your playlists", "", ["playlists"])
     ]
+    readonly property var collectionLabels: ({ tvshows: "TV shows", movies: "Movies", music: "Music", playlists: "Playlists" })
+    // top level: one row per library (the playlists view has its own fixed row), then the fixed rows
+    function parseLibraries(text) {
+        let arr
+        try { arr = JSON.parse(text) } catch (e) { return null }
+        if (!Array.isArray(arr)) return null
+        const out = []
+        for (const it of arr) {
+            if (!it || typeof it !== "object" || it.collection_type === "playlists") continue
+            const row = itemRow(it, false)
+            if (!row) continue
+            const ct = String(it.collection_type || "")
+            row.subtitle = collectionLabels[ct] || ct
+            out.push(row)
+        }
+        return out
+    }
+    function menuRows() {
+        if (libState === "loading") return [info("loading", "Loading...", "", "")].concat(fixedRows)
+        if (libState === "error") return errRows(libCode, libErr).concat(fixedRows)
+        return libRows.concat(fixedRows)
+    }
     function menuRow(id, name, sub, glyph, args) {
         return { id: "sec:jf:menu:" + id, name: name, subtitle: sub, kind: "jf-nav", source: "", glyph: glyph, transient: true, private: true,
                  jfMenu: true, jfArgs: args }
@@ -198,7 +227,7 @@ QtObject {
             return q === "" ? lv.rows : Ranker.rank(lv.rows, q, {}, Date.now(), { limit: 50 }).map(r => r.item)
         }
         if (statusCode > 0) return errRows(statusCode, statusErr)
-        if (q === "") return menuRows
+        if (q === "") return menuRows()
         return searchList()
     }
 
@@ -211,7 +240,7 @@ QtObject {
     function dynamic(q, raw) {
         const t = prefixText(raw)
         if (t === null) return []
-        if (t === "") return [info("hint", "Search Jellyfin", "Type a title, artist or album", "")].concat(menuRows)
+        if (t === "") return [info("hint", "Search Jellyfin", "Type a title, artist or album", "")].concat(menuRows())
         return searchList()
     }
 
@@ -238,6 +267,7 @@ QtObject {
         if (statusProc === p) statusProc = null
         if (searchProc === p) searchProc = null
         if (levelProc === p) levelProc = null
+        if (libProc === p) libProc = null
         p.destroy(50)
         if (k === "play") { if (code !== 0) toast(code, err); return }
         if (k === "status") {
@@ -251,6 +281,12 @@ QtObject {
             if (code === 0 && rows === null) { searchState = "error"; searchCode = 1; searchErr = "Unexpected output from jellyfin-qs" }
             else if (code === 0) { searchState = "ok"; searchRows = rows }
             else { searchState = "error"; searchCode = code; searchErr = err }
+        } else if (k === "libs") {
+            if (tok !== libTok) return
+            const rows = code === 0 ? parseLibraries(out) : null
+            if (code === 0 && rows === null) { libState = "error"; libCode = 1; libErr = "Unexpected output from jellyfin-qs" }
+            else if (code === 0) { libState = "ok"; libRows = rows }
+            else { libState = "error"; libCode = code; libErr = err }
         } else if (k === "level") {
             if (tok !== levelTok || depth === 0) return
             const rows = code === 0 ? parseItems(out, false) : null
@@ -271,8 +307,9 @@ QtObject {
 
     // ---- lifecycle ----------------------------------------------------------------------------------------------------
     function reset() {
-        kill(searchProc); kill(levelProc); kill(statusProc)
-        searchTok++; levelTok++; statusTok++
+        kill(searchProc); kill(levelProc); kill(statusProc); kill(libProc)
+        searchTok++; levelTok++; statusTok++; libTok++
+        libState = "idle"; libRows = []
         debounce.stop()
         stack = []; fromPrefix = false
         searchKey = ""; searchState = "idle"; searchRows = []
@@ -282,9 +319,16 @@ QtObject {
         statusCode = -1; statusErr = ""; user = ""
         statusProc = spawn("status", ++statusTok, ["status", "--json"])
     }
+    function fetchLibs() {
+        kill(libProc)
+        libState = "loading"; libRows = []; libCode = 0; libErr = ""
+        libProc = spawn("libs", ++libTok, ["libraries"])
+    }
     function enter() {          // section opened
         reset()
+        lastRaw = ""; lastSection = "jellyfin"   // a direct open (IPC / keybind) changes no query, so track() has not seen the section yet
         checkStatus()
+        fetchLibs()
     }
 
     // ---- search (called from Launcher.onQueryChanged) ------------------------------------------------------------------
@@ -298,6 +342,7 @@ QtObject {
         let t = null
         if (section === "jellyfin" && depth === 0) t = raw.trim()
         else if (section === "") { t = prefixText(raw); if (t === null && depth > 0) { kill(levelProc); levelTok++; stack = []; fromPrefix = false } }
+        if (t !== null && section === "" && libState === "idle") fetchLibs()   // "jf " prefix mode lists the libraries too
         if (t === null) { cancelSearch(section === "jellyfin"); return }
         t = t.replace(/^-+/, "")
         if (t === "") { cancelSearch(false); return }
@@ -336,7 +381,8 @@ QtObject {
     }
     function retry() {
         if (depth > 0) refetchTop()
-        else if (statusCode > 0) checkStatus()
+        else if (statusCode > 0) { checkStatus(); fetchLibs() }
+        else if (libState === "error") fetchLibs()
         else { searchState = "idle"; searchKey = ""; track(lastRaw, lastSection) }
     }
 
