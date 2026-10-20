@@ -45,7 +45,7 @@ PanelWindow {
             opener.stop(); swap.stop(); morphTimer.stop(); t = 0
         }
     }
-    onActiveChanged: { sync(); if (active) keys.forceActiveFocus() }
+    onActiveChanged: { if (!active) armed = false; sync(); if (active) keys.forceActiveFocus() }
     Connections {
         target: Popups
         function onNameChanged() { if (host.active) host.sync() }
@@ -66,7 +66,13 @@ PanelWindow {
     WlrLayershell.namespace: "qs-popup"
     BackgroundEffect.blurRegion: Region { regions: glass.instances }
     Glass { id: glass; root: contentItem; active: visible }
-    WlrLayershell.keyboardFocus: active ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // OnDemand keyboard focus (Wi-Fi password field) only once the popup has been open for a moment. If the surface
+    // maps already asking for keyboard focus, Hyprland pulls the pointer off the bar (wl_pointer.leave) and the
+    // popup never gets it; with the mouse at rest the next click on the same chip then went nowhere (it needed a
+    // 1 px move to close the popup). Flipping to OnDemand after the map keeps the pointer on the bar.
+    property bool armed: false
+    Timer { id: armTimer; interval: 150; running: host.active; onTriggered: host.armed = true }
+    WlrLayershell.keyboardFocus: armed ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     anchors { left: true; right: true; top: true; bottom: true }
 
