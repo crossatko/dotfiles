@@ -13,7 +13,7 @@ import "launcher/js/Frecency.js" as Frecency
 // Items come from sources (launcher/*Source.qml): each has `items` (static array), optionally dynamic(query) and
 // run(item). To add a source: declare it below, add it to `sourceList`. Ranking and frecency: launcher/js/.
 // State: ~/.local/state/launcher/usage.json (usage map), history.json (last 20 queries);
-// optional ~/.config/launcher/config.json = { "aliases": { "<item id>": ["alias", ...] } }.
+// optional ~/.config/launcher/config.json = { "aliases": { "<item id>": ["alias", ...] }, "screen": "<model substring>" }.
 ModalMenu {
     id: lc
 
@@ -21,7 +21,14 @@ ModalMenu {
     cardWidth: 640
     // always the main display (Hyprland's monitors.primary = monitor1 sits at 0,0 on the workstation / VM hosts), and
     // inside its usable area (bar reserve + monitor reserved_area), so the card centres there
-    fixedScreen: Quickshell.screens.find(s => s.x === 0 && s.y === 0) || Quickshell.screens[0]
+    // host override: config.json { "screen": "<text>" } = case-insensitive substring of a screen's model or name (e.g. its
+    // model "MPG271QX", not the connector, which can change); no match / unset = the screen at 0,0
+    property string screenMatch: ""
+    fixedScreen: {
+        const m = screenMatch.toLowerCase()
+        const byMatch = m === "" ? null : Quickshell.screens.find(s => (s.model || "").toLowerCase().includes(m) || (s.name || "").toLowerCase() === m)
+        return byMatch || Quickshell.screens.find(s => s.x === 0 && s.y === 0) || Quickshell.screens[0]
+    }
     respectReserved: true
     focusItem: input
     // header follows the context: action panel (item name), argument prompt (item name), section, prefix mode, else "Launcher"
@@ -393,6 +400,7 @@ ModalMenu {
             try {
                 const c = JSON.parse(text())
                 if (c && c.aliases && typeof c.aliases === "object") lc.aliases = c.aliases
+                if (c && typeof c.screen === "string") lc.screenMatch = c.screen
             } catch (e) {}
         }
     }
