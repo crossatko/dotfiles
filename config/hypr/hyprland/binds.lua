@@ -6,6 +6,7 @@ local show_sound_output_menu = require("scripts.sound-output-menu").show_sound_o
 local show_twitch_menu = require("scripts.twitch-menu").show_twitch_menu
 local focus_direction = require("scripts.focus-direction")
 local switch_workspace = require("scripts.switch-workspace")
+local side_pin = require("scripts.side-pin")
 
 local mod = "SUPER"
 local alt = "ALT"
@@ -22,14 +23,8 @@ local bind = function(keys, action, opts)
 	hl.bind(key_str, action, opts)
 end
 
-local myPin = function()
-	hl.dispatch(hl.dsp.window.float({ action = true }))
-	hl.dispatch(hl.dsp.window.pin({ action = true }))
-	hl.dispatch(hl.dsp.window.resize({ x = 866, y = 1416 }))
-	hl.dispatch(hl.dsp.window.move({ x = 2560, y = 12 }))
-end
-
-bind({ mod, "SHIFT", "P" }, myPin)
+-- pin into the right strip; flush + square while a lone tiled window has no gaps (scripts/side-pin.lua)
+bind({ mod, "SHIFT", "P" }, side_pin.pin)
 
 bind("Print", exec(apps.screenshot))
 -- screen recording (scripts/screenrec.sh, wf-recorder + slurp): one key. While recording it stops;

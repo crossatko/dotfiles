@@ -23,9 +23,32 @@ local function is_twitch(window)
 	return window.class == "org.quickshell" and type(window.title) == "string" and window.title:find("^Twitch %- ") ~= nil
 end
 
-local function is_pip_or_mpv(window)
-	return window.title == "Picture in picture" or window.initial_class == "mpv" or is_twitch(window)
+-- tuifin's mpv (--wayland-app-id=tuifin-mpv, so initial_class is NOT "mpv"). rules.lua sends it fullscreen to the
+-- media workspace 11 (the TV's); that is right while the TV is connected. Without the TV it is handled like any mpv:
+-- unfullscreen, float, placed + pinned by place().
+local function is_tuifin(window)
+	return window.initial_class == "tuifin-mpv" or window.class == "tuifin-mpv"
 end
+
+local function tv_connected()
+	return hl.get_monitor(monitors.tv.output) ~= nil
+end
+
+local function is_pip_or_mpv(window)
+	return window.title == "Picture in picture"
+		or window.initial_class == "mpv"
+		or is_twitch(window)
+		or (is_tuifin(window) and not tv_connected())
+end
+
+-- Same rule as side-pin.lua (shared smart_applies: "No gaps for a single window" applies on the monitor, i.e. at most
+-- one visible tiled window there): flush against the edges of the reserved area with rounding 0; otherwise the box
+-- keeps the usual margins (12 top/bottom, 14 right for the vertical strip; 12 left/bottom for the bottom box) and
+-- default rounding. `closing` = address of a window that is going away (not counted).
+local side_pin = require("scripts.side-pin")
+local MARGIN = 12
+local MARGIN_RIGHT = 14
+local closing_addr = nil
 
 local function compute_target(window)
 	local size = window.size
@@ -39,19 +62,32 @@ local function compute_target(window)
 			return nil
 		end
 		local w, h = VERTICAL_WIDTH, mon.height
-		return { output = monitor1.output, x = mon.x + mon.width - w, y = mon.y, w = w, h = h }
+		if side_pin.smart_applies(mon, closing_addr) then
+			return { output = monitor1.output, x = mon.x + mon.width - w, y = mon.y, w = w, h = h, flush = true }
+		end
+		return {
+			output = monitor1.output,
+			x = mon.x + mon.width - w - MARGIN_RIGHT,
+			y = mon.y + MARGIN,
+			w = w,
+			h = h - 2 * MARGIN,
+			flush = false,
+		}
 	end
 
 	local mon = hl.get_monitor(monitor2.output)
 	if mon == nil then
 		return nil
 	end
+	local flush = side_pin.smart_applies(mon, closing_addr)
+	local m = flush and 0 or MARGIN
 	return {
 		output = monitor2.output,
-		x = mon.x + HORIZONTAL_OFFSET.x,
+		x = mon.x + HORIZONTAL_OFFSET.x + m,
 		y = mon.y + HORIZONTAL_OFFSET.y,
 		w = HORIZONTAL_SIZE.w,
-		h = HORIZONTAL_SIZE.h,
+		h = HORIZONTAL_SIZE.h - m,
+		flush = flush,
 	}
 end
 
@@ -63,6 +99,7 @@ local function reposition(window, target)
 	local selector = "address:" .. window.address
 	hl.dispatch(hl.dsp.window.resize({ x = target.w, y = target.h, window = selector }))
 	hl.dispatch(hl.dsp.window.move({ x = target.x, y = target.y, window = selector }))
+	hl.dispatch(hl.dsp.window.set_prop({ prop = "rounding", value = target.flush and "0" or "unset", window = selector }))
 end
 
 local function place(window)
@@ -72,6 +109,21 @@ local function place(window)
 	end
 
 	local selector = "address:" .. window.address
+
+	-- tuifin-mpv arrives fullscreen + tiled from its static rule: drop that first (state-aware, both dispatchers toggle)
+	if is_tuifin(window) then
+		for _, w in ipairs(hl.get_windows()) do
+			if w.address == window.address then
+				if w.fullscreen ~= nil and w.fullscreen ~= 0 and w.fullscreen ~= false then
+					hl.dispatch(hl.dsp.window.fullscreen({ action = "toggle", window = selector }))
+				end
+				if not w.floating then
+					hl.dispatch(hl.dsp.window.float({ action = "toggle", window = selector }))
+				end
+				break
+			end
+		end
+	end
 
 	-- Moving pixels alone (movewindowpixel across monitor bounds) does NOT
 	-- reassign which monitor/workspace Hyprland thinks owns the window - it
@@ -89,8 +141,20 @@ local function place(window)
 	reposition(window, target)
 
 	-- Pin last: pinning latches the window's monitor/workspace ownership to
-	-- wherever it is at that moment.
-	hl.dispatch(hl.dsp.window.pin({ window = selector, action = true }))
+	-- wherever it is at that moment. `pin` with action = true TOGGLES (verified live on 0.56.2: a second
+	-- pin(true) on a pinned window unpins it), so only pin a window that is not pinned yet. A Twitch window
+	-- whose title is already set at open is placed by window.open AND by its first window.title; the second
+	-- call used to unpin it.
+	local pinned = false
+	for _, w in ipairs(hl.get_windows()) do
+		if w.address == window.address then
+			pinned = w.pinned
+			break
+		end
+	end
+	if not pinned then
+		hl.dispatch(hl.dsp.window.pin({ window = selector, action = true }))
+	end
 end
 
 -- Reserve screen space on each monitor so tiled windows never spawn/stretch
@@ -203,11 +267,43 @@ local function heal_pinned()
 	end
 end
 
+-- Re-fit pinned boxes whenever the tiled-window count (flush vs margins) can have changed. Only moves a box
+-- whose geometry differs, so it does not feed back into its own events. Skips side-pin windows (own fit).
+local refitting = false
+local function refit_boxes(exclude)
+	if refitting or healing then
+		return
+	end
+	refitting = true
+	closing_addr = exclude
+	pcall(function()
+		for _, w in ipairs(hl.get_windows()) do
+			if is_pip_or_mpv(w) and w.pinned and w.address ~= exclude and not side_pin.tagged(w) then
+				local t = compute_target(w)
+				if t ~= nil and w.size ~= nil and w.at ~= nil then
+					local cur = w.monitor ~= nil and w.monitor.name or nil
+					local mon = hl.get_monitor(t.output)
+					if mon ~= nil and cur == mon.name and (w.size.x ~= t.w or w.size.y ~= t.h or w.at.x ~= t.x or w.at.y ~= t.y) then
+						reposition(w, t)
+					end
+				end
+			end
+		end
+	end)
+	closing_addr = nil
+	refitting = false
+end
+
+local function sync_and_fit(exclude)
+	sync_reserved_areas()
+	refit_boxes(exclude)
+end
+
 hl.on("window.open", function(window)
 	if is_pip_or_mpv(window) then
 		place(window)
 	end
-	sync_reserved_areas()
+	sync_and_fit()
 end)
 
 -- Twitch player: place it once, when its title first shows up (see is_twitch). Later title changes
@@ -219,7 +315,7 @@ hl.on("window.title", function(window)
 	end
 	twitch_placed[window.address] = true
 	place(window)
-	sync_reserved_areas()
+	sync_and_fit()
 end)
 
 -- window.close doesn't fire for every way a window can disappear - confirmed
@@ -229,15 +325,20 @@ hl.on("window.close", function(window)
 	if window ~= nil then
 		twitch_placed[window.address] = nil
 	end
-	sync_reserved_areas()
+	sync_and_fit(window ~= nil and window.address or nil)
 end)
-hl.on("window.kill", sync_reserved_areas)
-hl.on("window.destroy", sync_reserved_areas)
-hl.on("window.pin", sync_reserved_areas)
-hl.on("window.move_to_workspace", sync_reserved_areas)
+hl.on("window.kill", function(window)
+	sync_and_fit(window ~= nil and window.address or nil)
+end)
+hl.on("window.destroy", function(window)
+	sync_and_fit(window ~= nil and window.address or nil)
+end)
+hl.on("window.pin", function() sync_and_fit() end)
+hl.on("window.move_to_workspace", function() sync_and_fit() end)
+hl.on("window.fullscreen", function() sync_and_fit() end)
 hl.on("workspace.active", function()
 	heal_pinned()
-	sync_reserved_areas()
+	sync_and_fit()
 end)
 
-sync_reserved_areas()
+sync_and_fit()

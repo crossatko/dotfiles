@@ -247,7 +247,6 @@ else
 				enabled = true,
 				size = 4,
 				passes = 2,
-				xray = true,
 				new_optimizations = true,
 				vibrancy = 0.1696,
 			},
