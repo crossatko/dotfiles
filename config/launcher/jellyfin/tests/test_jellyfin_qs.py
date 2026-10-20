@@ -130,6 +130,46 @@ class Cli(Base):
             self.assertIn('Token="%s"' % fj.TOKEN, r["auth"])
             self.assertNotIn("api_key", str(r["query"]))
 
+    def test_library_scoped(self):
+        self.login_files()
+        self.assertEqual([x["collection_type"] for x in self.data("libraries")], ["movies", "tvshows", "music", "movies"])
+        # per-library lists
+        self.assertEqual([x["id"] for x in self.data("resume", "--library", "v1")], ["m1"])
+        self.assertEqual(self.data("resume", "--library", "v2"), [])
+        self.assertEqual([x["id"] for x in self.data("nextup", "--library", "v2")], ["e2"])
+        self.assertEqual(self.data("nextup", "--library", "v1"), [])
+        self.assertEqual({x["type"] for x in self.data("latest", "--library", "v4", "--limit", "5")}, {"Movie"})
+        self.assertEqual([x["id"] for x in self.data("search", "show", "--parent", "v2", "--types", "Series")], ["s1", "s2"])
+        self.assertEqual(self.data("search", "show", "--parent", "v1", "--types", "Series"), [])
+        q = [r["query"] for r in self.srv.log if r["path"] == "/Items" and "searchTerm" in r["query"]]
+        self.assertEqual(q[0].get("ParentId"), "v2")
+
+    def test_children_paged(self):
+        self.login_files()
+        # library titles: tv -> Series by SortName (the leading article is ignored), music -> album artists
+        d = self.data("children", "v2", "--types", "auto", "--sort", "name", "--paged")
+        self.assertEqual(([x["id"] for x in d["items"]], d["total"], d["start"]), (["s2", "s1"], 2, 0))
+        self.assertEqual([x["id"] for x in self.data("children", "v3", "--types", "auto")], ["a1"])
+        self.assertEqual([x["id"] for x in self.data("children", "v3", "--types", "MusicAlbum", "--sort", "name")],
+                         ["al1", "al2"])
+        self.assertEqual([x["id"] for x in self.data("children", "v1", "--types", "auto")], ["m2", "m1"])
+        # paging through a big library
+        d = self.data("children", "v4", "--types", "auto", "--sort", "name", "--paged", "--limit", "100")
+        self.assertEqual((len(d["items"]), d["total"], d["items"][0]["id"], d["items"][-1]["id"]), (100, 250, "b000", "b099"))
+        d = self.data("children", "v4", "--types", "auto", "--sort", "name", "--paged", "--start", "200", "--limit", "100")
+        self.assertEqual((len(d["items"]), d["total"], d["start"], d["items"][-1]["id"]), (50, 250, 200, "b249"))
+        d = self.data("children", "v4", "--sort", "added", "--limit", "3")
+        self.assertEqual([x["id"] for x in d], ["b249", "b248", "b247"])
+        self.assertEqual(self.data("children", "v4", "--sort", "year", "--limit", "1")[0]["year"], 1999)
+        last = [r["query"] for r in self.srv.log if r["path"] == "/Items"][-1]
+        self.assertEqual((last["SortBy"], last["SortOrder"], last["Limit"]), ("ProductionYear,SortName", "Descending,Ascending", "1"))
+        # containers with their own order ignore --sort but page client-side
+        d = self.data("children", "se1", "--paged", "--start", "1", "--limit", "5")
+        self.assertEqual(([x["id"] for x in d["items"]], d["total"], d["start"]), (["e2"], 2, 1))
+        self.assertEqual([x["id"] for x in self.data("children", "s1", "--sort", "name")], ["se1", "se2"])
+        self.assertEqual(self.run_cli("children", "v4", "--sort", "bogus").returncode, 1)
+        self.assertEqual(self.run_cli("children", "nope", "--paged").returncode, 4)
+
 
 class Play(Base):
     def shim(self):

@@ -95,18 +95,25 @@ ModalMenu {
             if (q !== "" && section !== "jellyfin") rows = secSrc.extra(section, q).concat(Ranker.rank(rows, q, {}, Date.now(), { limit: 50 }).map(r => r.item))
             const prevId = keep && results[sel] ? results[sel].id : ""
             const hadStop = results.some(r => r.kind === "rec-stop")
+            // a status block (Loading / error / Try again rows) that gets replaced hands the selection to the row now at its first position,
+            // e.g. Try again -> Loading... -> the first loaded row, instead of whatever row slid under the old index
+            const isStatus = r => r && (r.kind === "info" || r.kind === "jf-retry")
+            let statusAt = sel
+            while (isStatus(results[sel]) && statusAt > 0 && isStatus(results[statusAt - 1])) statusAt--
+            const fromStatus = isStatus(results[sel])
             results = rows.map(it => it.id === confirmId
                 ? Object.assign({}, it, { name: "Confirm: " + it.name, subtitle: "Press Enter again to confirm", glyph: "\uf071", iconColor: "red" })
                 : it)
             let i = 0
             if (keep) {                                 // same row stays selected (rows can shift: Stop recording appears once the status is known)
                 i = results.findIndex(r => r.id === prevId)
-                if (i < 0) i = Math.min(sel, results.length - 1)
+                if (i < 0) i = Math.min(fromStatus ? statusAt : sel, results.length - 1)
                 if (!hadStop && q === "" && results.some(r => r.kind === "rec-stop")) i = 0
             } else if (q === "") i = secSrc.startSel(section)   // sections reopen on the last used capture mode
             sel = Math.max(0, i)
             first = keep ? Math.min(first, sel) : 0
             if (sel >= first + numResults) first = sel - numResults + 1
+            if (section === "jellyfin") jfSrc.nearEnd(sel, results.length)   // a page that just loaded may leave the selection near the end
             return
         }
         let list, top = [], tail = []
@@ -128,7 +135,7 @@ ModalMenu {
 
     function clearConfirm() { if (confirmId !== "") { confirmId = ""; if (shown) refresh(true) } }
     onQueryChanged: { confirmId = ""; jfSrc.track(query, section); if (shown && !argItem) refresh() }
-    onSelChanged: clearConfirm()
+    onSelChanged: { clearConfirm(); if (section === "jellyfin") jfSrc.nearEnd(sel, results.length) }   // Jellyfin: next page of a long library
     onOpening: {
         actionsOpen = false; histPos = -1; argItem = null; confirmId = ""
         jfSrc.reset()

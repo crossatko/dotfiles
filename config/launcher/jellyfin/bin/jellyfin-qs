@@ -26,6 +26,15 @@ PLAYABLE = {"Movie", "Episode", "Video", "MusicVideo", "Audio", "AudioBook", "Se
             "MusicAlbum", "MusicArtist", "Playlist", "BoxSet"}
 AUDIO_TYPES = {"Audio", "AudioBook", "MusicAlbum", "MusicArtist"}
 FOLDER_TYPES = {"CollectionFolder", "Folder", "UserView", "BoxSet", "PlaylistsFolder"}
+# children --sort: SortBy, SortOrder
+SORTS = {"name": ("SortName", "Ascending"), "added": ("DateCreated,SortName", "Descending,Ascending"),
+         "year": ("ProductionYear,SortName", "Descending,Ascending")}
+# children <library> --types auto: what a library lists (the titles, like Jellyfin's own library pages);
+# a collection type not listed here (homevideos, mixed, folders, ...) lists its direct children
+AUTO_TYPES = {"movies": "Movie,BoxSet", "tvshows": "Series", "music": "MusicArtist", "musicvideos": "MusicVideo",
+              "boxsets": "BoxSet", "playlists": "Playlist"}
+# the parts of a type list that live outside the library tree and need their own endpoint
+ARTISTS = "MusicArtist"
 
 
 class Err(Exception):
@@ -159,6 +168,26 @@ class Api:
         else:
             r = self.items(ParentId=iid, SortBy="SortName")
         return sort_items(r)
+
+    def listing(self, raw, sort, types, start, limit):
+        """Server-sorted, paged listing of a library / folder: (items, total)."""
+        q = {"userId": self.uid, "Fields": FIELDS, "EnableUserData": "true", "ParentId": raw["Id"]}
+        q["SortBy"], q["SortOrder"] = SORTS[sort or "name"]
+        if start:
+            q["StartIndex"] = start
+        if limit is not None:
+            q["Limit"] = limit
+        if types == "auto":
+            types = AUTO_TYPES.get(raw.get("CollectionType") or "")
+        if types == ARTISTS:
+            r = self.get_fb(["/Artists/AlbumArtists", "/Artists"], **q) or {}
+        elif types:
+            r = self.get("/Items", Recursive="true", IncludeItemTypes=types, **q) or {}
+        else:
+            r = self.get("/Items", **q) or {}
+        items = r.get("Items", [])
+        total = r.get("TotalRecordCount")
+        return items, total if isinstance(total, int) else (start or 0) + len(items)
 
 
 def sort_items(r):
@@ -309,9 +338,22 @@ def cmd_libraries(a):
     out(res)
 
 
+# containers with their own endpoint and order (seasons, albums by year, playlist order): never server-paged
+OWN_ORDER = {"Series", "Season", "MusicArtist", "MusicAlbum", "Playlist"}
+
+
 def cmd_children(a):
     api = Api()
-    out([fmt(x) for x in api.children(api.one(a.id))])
+    raw = api.one(a.id)
+    start, limit = max(0, a.start or 0), a.limit
+    if raw.get("Type") not in OWN_ORDER and (a.sort or a.types or a.start is not None or limit is not None):
+        items, total = api.listing(raw, a.sort, a.types, start, limit)
+    else:
+        items = api.children(raw)
+        total = len(items)
+        items = items[start:] if limit is None else items[start:start + max(0, limit)]
+    res = [fmt(x) for x in items]
+    out({"items": res, "total": total, "start": start} if a.paged else res)
 
 
 def leaves(api, raw, depth=0):
@@ -427,12 +469,15 @@ def main():
     x.set_defaults(fn=cmd_status)
     lim = lambda q, n: q.add_argument("--limit", type=int, default=n)
     x = s.add_parser("resume"); lim(x, 30)
+    x.add_argument("--library")
     x.set_defaults(fn=lambda a: cmd_list(a, lambda api: api.get_fb(
         ["/UserItems/Resume", "/Users/%s/Items/Resume" % api.uid], userId=api.uid, Limit=a.limit,
-        MediaTypes="Video,Audio", Fields=FIELDS, EnableUserData="true")["Items"]))
+        ParentId=a.library, MediaTypes="Video,Audio", Fields=FIELDS, EnableUserData="true")["Items"]))
     x = s.add_parser("nextup"); lim(x, 30)
+    x.add_argument("--library")
     x.set_defaults(fn=lambda a: cmd_list(a, lambda api: api.get(
-        "/Shows/NextUp", userId=api.uid, Limit=a.limit, Fields=FIELDS, EnableUserData="true")["Items"]))
+        "/Shows/NextUp", userId=api.uid, Limit=a.limit, ParentId=a.library, Fields=FIELDS,
+        EnableUserData="true")["Items"]))
     x = s.add_parser("latest"); lim(x, 30)
     x.add_argument("--library")
     x.set_defaults(fn=lambda a: cmd_list(a, lambda api: api.get(
@@ -443,9 +488,16 @@ def main():
     x.add_argument("query")
     lim(x, 30)
     x.add_argument("--types", default=SEARCH_TYPES)
+    x.add_argument("--parent")
     x.set_defaults(fn=lambda a: cmd_list(a, lambda api: api.items(
-        searchTerm=a.query, Recursive="true", Limit=a.limit, IncludeItemTypes=a.types)))
-    x = s.add_parser("children"); x.add_argument("id"); x.set_defaults(fn=cmd_children)
+        searchTerm=a.query, Recursive="true", Limit=a.limit, IncludeItemTypes=a.types, ParentId=a.parent)))
+    x = s.add_parser("children"); x.add_argument("id")
+    x.add_argument("--sort", choices=sorted(SORTS))
+    x.add_argument("--types", help="comma list of item types, or 'auto' (what the library lists)")
+    x.add_argument("--start", type=int)
+    x.add_argument("--limit", type=int)
+    x.add_argument("--paged", action="store_true", help='print {"items": [...], "total": N, "start": N}')
+    x.set_defaults(fn=cmd_children)
     x = s.add_parser("item"); x.add_argument("id")
     x.set_defaults(fn=lambda a: out(fmt(Api().one(a.id))))
     s.add_parser("playlists").set_defaults(fn=lambda a: cmd_list(a, lambda api: api.items(

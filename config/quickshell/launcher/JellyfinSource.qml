@@ -7,9 +7,13 @@ import "js/Ranker.js" as Ranker
 // ~/.local/bin). QML never sees tokens: data commands print a JSON array on stdout, one line on stderr on error;
 // exit 0 ok, 2 not configured / token rejected, 3 network / server error, 4 not found, 127 helper not installed.
 // Two entry points, both owned by this file:
-//   - the "jellyfin" section (root row in SectionsSource, which delegates header / glyph / enter to `jf`): menu rows
-//     (one row per library, then Continue watching, Next up, Recently added, Playlists), live search while typing, nested levels
-//     (`children <id>`: library -> items, series -> seasons -> episodes, artist -> albums -> tracks, playlist -> items);
+//   - the "jellyfin" section (root row in SectionsSource, which delegates header / glyph / enter to `jf`): one row per library,
+//     then Playlists; live search over everything while typing; nested levels. A library level starts with its scoped rows
+//     (Continue watching / Next up / Recently added, Albums for music; each a nested list of that library only), followed by all
+//     titles of the library by SortName (`children <lib> --types auto`: Series, Movies + BoxSets, album artists), paged
+//     (pageSize per request, the next page loads when the selection nears the end). Filtering inside a library is local when the
+//     whole list is loaded, else a server search scoped to the library (`search --parent`). Below that: series -> seasons ->
+//     episodes, artist -> albums -> tracks, playlist / folder -> items (`children <id>`);
 //   - the exclusive prefix mode "jf <text>" in the main list (search only; Right browses via the same nested levels).
 // All rows are transient + private (never in usage.json / history.json). Every request is an async Process with a token;
 // a newer request kills the older one and stale exits are ignored. Search is debounced (250 ms), one request per query,
@@ -24,7 +28,9 @@ QtObject {
     readonly property string modeGlyph: ""
 
     // ---- state -----------------------------------------------------------------------------------------------------
-    property var stack: []                          // nested levels: {title, sub, glyph, args, query, selId, state, rows, code, err}
+    property var stack: []                          // nested levels: {title, sub, glyph, args, query, selId, state, rows, code, err,
+                                                    //  head (rows above the list), paged, total, more (idle|loading|error), lib {id, ct}}
+    readonly property int pageSize: 200
     readonly property int depth: stack.length
     property bool fromPrefix: false                 // the nested levels were entered from the "jf " prefix mode (leaving the last one returns there)
     property string lastRaw: ""                     // raw filter text / section of the last track() (for push + retry)
@@ -35,6 +41,7 @@ QtObject {
     property string user: ""
 
     property string searchKey: ""
+    property string searchScope: ""                 // library id of a scoped search ("" = everything)
     property string searchState: "idle"             // idle | loading | ok | error
     property var searchRows: []
     property int searchCode: 0
@@ -169,13 +176,37 @@ QtObject {
         return out.concat(rest)
     }
 
+    // continue watching / next up / recently added live inside each library (libHead); only the playlists stay global
     readonly property var fixedRows: [
-        menuRow("resume", "Continue watching", "Resume where you left off", "", ["resume"]),
-        menuRow("nextup", "Next up", "The next unwatched episodes", "", ["nextup"]),
-        menuRow("latest", "Recently added", "New movies, shows and music", "", ["latest"]),
         menuRow("playlists", "Playlists", "Your playlists", "", ["playlists"])
     ]
     readonly property var collectionLabels: ({ tvshows: "TV shows", movies: "Movies", music: "Music", playlists: "Playlists" })
+    // ---- library level ---------------------------------------------------------------------------------------------
+    readonly property var countNouns: ({ tvshows: "shows", movies: "titles", music: "artists" })
+    // what a scoped search inside a partly loaded library looks for
+    readonly property var scopeTypes: ({ tvshows: "Series,Episode", movies: "Movie,BoxSet", music: "MusicArtist,MusicAlbum,Audio" })
+    function pagedArgs(id, extra) { return ["children", id].concat(extra || [], ["--sort", "name", "--paged", "--limit", String(pageSize)]) }
+    // the rows at the top of a library: lists scoped to it (each a nested level titled with the library name)
+    function libHead(id, name, ct, glyph) {
+        const r = []
+        const add = (key, label, sub, g, args) => {
+            const row = menuRow("lib:" + id + ":" + key, label, sub, g, args)
+            row.jfLevel = { title: name, sub: label, glyph: glyph, lib: { id: id, ct: ct } }
+            r.push(row)
+        }
+        if (ct !== "music") add("resume", "Continue watching", "Resume where you left off", "\uf04b", ["resume", "--library", id])
+        if (ct !== "music" && ct !== "movies") add("nextup", "Next up", "The next unwatched episodes", "\uf051", ["nextup", "--library", id])
+        add("latest", "Recently added", "Newest first", "\uf017", ["latest", "--library", id])
+        if (ct === "music") add("albums", "Albums", "All albums by title", "\uf025", pagedArgs(id, ["--types", "MusicAlbum"]))
+        return r
+    }
+    function isLibrary(item) { return item.jfType === "CollectionFolder" || item.jfType === "UserView" }
+    function pushLibrary(item) {
+        const ct = item.jfCt || ""
+        pushLevel(item.name, collectionLabels[ct] || ct, item.glyph, pagedArgs(item.jfId, ["--types", "auto"]), item.id,
+                  { head: libHead(item.jfId, item.name, ct, item.glyph), lib: { id: item.jfId, ct: ct } })
+    }
+
     // top level: one row per library (the playlists view has its own fixed row), then the fixed rows
     function parseLibraries(text) {
         let arr
@@ -188,6 +219,7 @@ QtObject {
             if (!row) continue
             const ct = String(it.collection_type || "")
             row.subtitle = collectionLabels[ct] || ct
+            row.jfCt = ct
             out.push(row)
         }
         return out
@@ -205,11 +237,18 @@ QtObject {
     // ---- what the launcher shows ------------------------------------------------------------------------------------
     function header() { return depth > 0 ? stack[depth - 1].title : "Jellyfin" }
     function headerSub() {
-        if (depth > 0) return stack[depth - 1].sub
+        if (depth > 0) {                                // library level: "TV shows · 12 shows" once the count is known
+            const lv = stack[depth - 1]
+            if (!lv.lib || lv.head.length === 0 || lv.total < 0) return lv.sub
+            return (lv.sub ? lv.sub + "  ·  " : "") + lv.total + " " + (countNouns[lv.lib.ct] || "items")
+        }
         return statusCode === 0 ? user : ""
     }
     function glyph() { return depth > 0 ? stack[depth - 1].glyph : "" }
     function rightHintFor(it) { return it && (it.kind === "jf-nav" || (it.actions && it.actions.some(a => a.id === "jf-browse"))) }
+
+    function rank(rows, q, n) { return Ranker.rank(rows, q, {}, Date.now(), { limit: n }).map(r => r.item) }
+    function partial(lv) { return lv.paged && lv.rows.length < lv.total }
 
     function searchList() {
         if (searchState === "loading") return [info("searching", "Searching Jellyfin...", "", "")]
@@ -220,11 +259,20 @@ QtObject {
     // section view: nested level (local filter), else menu / error rows when the filter is empty, else the server search
     function listFor(q) {
         if (depth > 0) {
-            const lv = stack[depth - 1]
-            if (lv.state === "loading") return [info("loading", "Loading...", "", "")]
-            if (lv.state === "error") return errRows(lv.code, lv.err)
-            if (lv.rows.length === 0) return [info("empty", "Nothing here", "", "")]
-            return q === "" ? lv.rows : Ranker.rank(lv.rows, q, {}, Date.now(), { limit: 50 }).map(r => r.item)
+            const lv = stack[depth - 1], head = lv.head
+            if (q !== "") {
+                if (lv.state === "ok" && partial(lv))            // not all loaded: matching scoped rows + the server search in this library
+                    return rank(head, q, 50).concat(searchList())
+                return rank(head.concat(lv.rows), q, 300)
+            }
+            if (lv.state === "loading") return head.concat([info("loading", "Loading...", "", "")])
+            if (lv.state === "error") return head.concat(errRows(lv.code, lv.err))
+            if (lv.rows.length === 0) return head.concat([info("empty", head.length ? "No titles in this library" : "Nothing here", "", "")])
+            if (!partial(lv)) return head.concat(lv.rows)
+            const left = lv.total - lv.rows.length
+            const tail = lv.more === "error" ? errRows(lv.code, lv.err)
+                : [info("more:" + lv.rows.length, lv.more === "loading" ? "Loading more..." : left + " more", "Keep scrolling to load them", "")]
+            return head.concat(lv.rows, tail)
         }
         if (statusCode > 0) return errRows(statusCode, statusErr)
         if (q === "") return menuRows()
@@ -287,14 +335,35 @@ QtObject {
             if (code === 0 && rows === null) { libState = "error"; libCode = 1; libErr = "Unexpected output from jellyfin-qs" }
             else if (code === 0) { libState = "ok"; libRows = rows }
             else { libState = "error"; libCode = code; libErr = err }
-        } else if (k === "level") {
+        } else if (k === "level" || k === "page") {
             if (tok !== levelTok || depth === 0) return
-            const rows = code === 0 ? parseItems(out, false) : null
-            if (code === 0 && rows === null) setTop({ state: "error", code: 1, err: "Unexpected output from jellyfin-qs" })
-            else if (code === 0) setTop({ state: "ok", rows: rows })
+            const top = stack[depth - 1]
+            const pg = code === 0 && top.paged ? parsePage(out) : null
+            const rows = code !== 0 ? null : top.paged ? (pg ? pg.rows : null) : parseItems(out, false)
+            const bad = code === 0 && rows === null
+            if (k === "page") {
+                if (bad || code !== 0) setTop({ more: "error", code: bad ? 1 : code, err: bad ? "Unexpected output from jellyfin-qs" : err })
+                else {
+                    const seen = {}
+                    for (const r of top.rows) seen[r.id] = true
+                    const add = rows.filter(r => !seen[r.id])
+                    // a page that adds nothing ends the list (the server count changed meanwhile)
+                    setTop({ more: "idle", rows: top.rows.concat(add), total: add.length ? Math.max(pg.total, top.rows.length + add.length) : top.rows.length })
+                }
+            } else if (bad) setTop({ state: "error", code: 1, err: "Unexpected output from jellyfin-qs" })
+            else if (code === 0) setTop({ state: "ok", rows: rows, total: top.paged ? Math.max(pg.total, rows.length) : rows.length, more: "idle" })
             else setTop({ state: "error", code: code, err: err })
+            if (lastSection === "jellyfin" && lastRaw.trim() !== "") track(lastRaw, lastSection)   // a filter typed while it loaded
         }
         updated()
+    }
+    // `children --paged` output {"items": [...], "total": N, "start": N} -> {rows, total}; null when it is not that
+    function parsePage(text) {
+        let o
+        try { o = JSON.parse(text) } catch (e) { return null }
+        if (!o || typeof o !== "object" || !Array.isArray(o.items)) return null
+        const rows = parseItems(JSON.stringify(o.items), false)
+        return rows === null ? null : { rows: rows, total: Number(o.total) || 0 }
     }
     function setTop(o) { stack = stack.slice(0, -1).concat([Object.assign({}, stack[stack.length - 1], o)]) }
 
@@ -312,7 +381,7 @@ QtObject {
         libState = "idle"; libRows = []
         debounce.stop()
         stack = []; fromPrefix = false
-        searchKey = ""; searchState = "idle"; searchRows = []
+        searchKey = ""; searchScope = ""; searchState = "idle"; searchRows = []
     }
     function checkStatus() {
         kill(statusProc)
@@ -334,37 +403,65 @@ QtObject {
     // ---- search (called from Launcher.onQueryChanged) ------------------------------------------------------------------
     function cancelSearch(keepResult) {
         debounce.stop()
-        if (searchState === "loading") { kill(searchProc); searchTok++; searchState = "idle"; searchKey = "" }
-        else if (!keepResult) { searchState = "idle"; searchKey = "" }
+        if (searchState === "loading") { kill(searchProc); searchTok++; searchState = "idle"; searchKey = ""; searchScope = "" }
+        else if (!keepResult) { searchState = "idle"; searchKey = ""; searchScope = "" }
     }
     function track(raw, section) {
         lastRaw = raw; lastSection = section
-        let t = null
+        let t = null, scope = ""
         if (section === "jellyfin" && depth === 0) t = raw.trim()
+        else if (section === "jellyfin") {                  // inside a library whose list is only partly loaded: search the server there
+            const lv = stack[depth - 1]
+            if (lv.lib && lv.head.length > 0 && lv.state === "ok" && partial(lv)) { t = raw.trim(); scope = lv.lib.id }
+        }
         else if (section === "") { t = prefixText(raw); if (t === null && depth > 0) { kill(levelProc); levelTok++; stack = []; fromPrefix = false } }
         if (t !== null && section === "" && libState === "idle") fetchLibs()   // "jf " prefix mode lists the libraries too
         if (t === null) { cancelSearch(section === "jellyfin"); return }
         t = t.replace(/^-+/, "")
         if (t === "") { cancelSearch(false); return }
-        if (t === searchKey && searchState !== "idle") return
+        if (t === searchKey && scope === searchScope && searchState !== "idle") return
         kill(searchProc); searchTok++
-        searchKey = t; searchState = "loading"
+        searchKey = t; searchScope = scope; searchState = "loading"
         debounce.restart()
     }
     property Timer debounce: Timer {
         interval: 250
         onTriggered: {
             if (src.searchState !== "loading") return
-            src.searchProc = src.spawn("search", src.searchTok, ["search", src.searchKey, "--limit", "40"])
+            const args = ["search", src.searchKey, "--limit", "40"]
+            if (src.searchScope !== "") {
+                const lv = src.stack.find(l => l.lib && l.lib.id === src.searchScope)
+                args.push("--parent", src.searchScope)
+                if (lv && src.scopeTypes[lv.lib.ct]) args.push("--types", src.scopeTypes[lv.lib.ct])
+            }
+            src.searchProc = src.spawn("search", src.searchTok, args)
         }
     }
 
     // ---- nested levels ------------------------------------------------------------------------------------------------
-    function pushLevel(title, sub, glyph, args, selId) {
+    // extra: {head, lib} for a library level; a level whose args have --paged loads page by page (nearEnd -> loadMore)
+    function pushLevel(title, sub, glyph, args, selId, extra) {
         if (depth === 0) fromPrefix = lastSection === ""
         kill(levelProc)
-        stack = stack.concat([{ title: title, sub: sub, glyph: glyph, args: args, query: lastRaw, selId: selId, state: "loading", rows: [], code: 0, err: "" }])
+        const parent = depth > 0 ? stack[depth - 1] : null
+        stack = stack.concat([{ title: title, sub: sub, glyph: glyph, args: args, query: lastRaw, selId: selId, state: "loading", rows: [], code: 0, err: "",
+                                head: extra && extra.head ? extra.head : [], lib: extra && extra.lib ? extra.lib : parent ? parent.lib : null,
+                                paged: args.indexOf("--paged") >= 0, total: -1, more: "idle" }])
         levelProc = spawn("level", ++levelTok, args)
+    }
+    // Launcher.onSelChanged: load the next page once the selection is within 40 rows of the end of an unfiltered paged list
+    function nearEnd(sel, count) {
+        if (depth === 0) return
+        const lv = stack[depth - 1]
+        if (lv.state !== "ok" || lv.more !== "idle" || !partial(lv) || lastRaw.trim() !== "" || sel < count - 40) return
+        loadMore()
+    }
+    function loadMore() {
+        const lv = stack[depth - 1]
+        kill(levelProc)
+        setTop({ more: "loading", code: 0, err: "" })
+        levelProc = spawn("page", ++levelTok, lv.args.concat(["--start", String(lv.rows.length)]))
+        Qt.callLater(src.updated)                       // nearEnd runs inside Launcher.refresh / onSelChanged
     }
     // one level back: returns the filter text and the selected row id to restore in the parent view
     function pop() {
@@ -376,11 +473,12 @@ QtObject {
     function refetchTop() {
         if (depth === 0) return
         kill(levelProc)
-        setTop({ state: "loading", code: 0, err: "" })
+        setTop({ state: "loading", code: 0, err: "", rows: [], total: -1, more: "idle" })
         levelProc = spawn("level", ++levelTok, stack[depth - 1].args)
     }
     function retry() {
-        if (depth > 0) refetchTop()
+        if (depth > 0 && stack[depth - 1].more === "error") loadMore()
+        else if (depth > 0) refetchTop()
         else if (statusCode > 0) { checkStatus(); fetchLibs() }
         else if (libState === "error") fetchLibs()
         else { searchState = "idle"; searchKey = ""; track(lastRaw, lastSection) }
@@ -395,12 +493,19 @@ QtObject {
         if (id === "jf-retry") { retry(); return "keep" }
         if (!item || !/^jf/.test(item.kind || "")) return false
         if (id === "jf-browse") {
-            if (item.jfMenu) pushLevel(item.name, "", item.glyph, item.jfArgs, item.id)
+            if (item.jfMenu && item.jfLevel) pushLevel(item.jfLevel.title, item.jfLevel.sub, item.jfLevel.glyph, item.jfArgs, item.id, { lib: item.jfLevel.lib })
+            else if (item.jfMenu) pushLevel(item.name, "", item.glyph, item.jfArgs, item.id)
+            else if (item.jfBrowsable && validId(item.jfId) && isLibrary(item)) pushLibrary(item)
+            else if (item.jfBrowsable && validId(item.jfId) && (item.jfType === "Folder" || item.jfType === "BoxSet"))
+                pushLevel(item.name, typeLabel(item.jfType), item.glyph, pagedArgs(item.jfId), item.id)
             else if (item.jfBrowsable && validId(item.jfId)) pushLevel(item.name, typeLabel(item.jfType), item.glyph, ["children", item.jfId], item.id)
             else return false
             return "enter"
         }
-        if (id === "jf-latest" && validId(item.jfId)) { pushLevel(item.name, "Recently added", "", ["latest", "--library", item.jfId], item.id); return "enter" }
+        if (id === "jf-latest" && validId(item.jfId)) {
+            pushLevel(item.name, "Recently added", item.glyph, ["latest", "--library", item.jfId], item.id, { lib: { id: item.jfId, ct: item.jfCt || "" } })
+            return "enter"
+        }
         if (!validId(item.jfId)) return false
         if (id === "jf-play-start") { play([item.jfId]); return true }
         if (id === "jf-shuffle") { play([item.jfId, "--shuffle"]); return true }
