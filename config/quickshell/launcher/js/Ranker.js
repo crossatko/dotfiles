@@ -125,11 +125,15 @@ function rank(items, query, usage, now, opts) {
             if (m <= 0 && !learned) continue;
             score = m + (learned ? LEARNED_BOOST : 0) + Math.min(FREC_CAP, frec / 5);
         }
-        rows.push({ item: it, score: score });
+        rows.push({ item: it, score: score, idx: i });
     }
+    // Ties: section rows first (a same-named app, e.g. "Jellyfin", must not hide the menu row), then by name, then input
+    // order (QML's sort is not guaranteed stable, so the tie-break has to be total).
     rows.sort(function (a, b) {
         if (b.score !== a.score) return b.score - a.score;
-        return byName(a.item, b.item);
+        var sa = a.item.kind === "section" ? 0 : 1, sb = b.item.kind === "section" ? 0 : 1;
+        if (sa !== sb) return sa - sb;
+        return byName(a.item, b.item) || a.idx - b.idx;
     });
     return rows.slice(0, limit);
 }

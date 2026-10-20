@@ -76,3 +76,12 @@ test("rank does not mutate inputs", () => {
     assert.strictEqual(JSON.stringify(items), a);
     assert.strictEqual(JSON.stringify(u), b);
 });
+
+test("section row wins an exact tie with a same-named app, for every prefix of the name", () => {
+    const sec = { id: "sec:jf", name: "Jellyfin", subtitle: "Movies", keywords: ["jellyfin"], aliases: ["jf"], kind: "section" };
+    const app = { id: "app:jf", name: "Jellyfin", subtitle: "", keywords: ["Desktop client"], kind: "app" };
+    for (const q of ["jell", "jelly", "jellyf", "jellyfin"]) {
+        assert.strictEqual(R.rank([app, sec], q, {}, NOW)[0].item.id, "sec:jf", q);
+        assert.strictEqual(R.rank([sec, app], q, {}, NOW)[0].item.id, "sec:jf", q);
+    }
+});
