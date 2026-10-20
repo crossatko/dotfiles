@@ -40,7 +40,7 @@ PACKAGES=(
   zsh-autosuggestions zsh-syntax-highlighting libqalculate
 
   # Hyprland Ecosystem
-  quickshell imagemagick hyprland hyprpaper hypridle hyprlock hyprpolkitagent hyprshot wf-recorder slurp tofi
+  quickshell imagemagick hyprland hyprpaper hypridle hyprlock hyprpolkitagent hyprshot wf-recorder slurp
   xdg-desktop-portal-hyprland xdg-desktop-portal-gtk xdg-desktop-portal-gnome
   bibata-cursor-theme
 
@@ -111,7 +111,7 @@ echo "QT_QPA_PLATFORMTHEME=gtk3" | sudo tee -a /etc/environment # Forces Qt to u
 echo "Symlinking config files..."
 mkdir -p "$HOME/.config"
 
-CONFIG_APPS=("hypr" "nvim" "kitty" "zellij" "tofi" "theme" "quickshell" "opencode" "wivrn")
+CONFIG_APPS=("hypr" "nvim" "kitty" "zellij" "theme" "quickshell" "opencode" "wivrn")
 
 for app in "${CONFIG_APPS[@]}"; do
   TARGET="$HOME/.config/$app"
@@ -144,8 +144,6 @@ for s in "$CONFIG_DIR"/nautilus/scripts/*; do
   ln -sfn "$s" "$HOME/.local/share/nautilus/scripts/$(basename "$s")"
 done
 
-# qmenu: dmenu-style picker rendered by quickshell (power / sound-output menus, clipboard)
-ln -sfn "$CONFIG_DIR/quickshell/bin/qmenu" "$HOME/.local/bin/qmenu"
 
 # Launcher script commands (executable scripts with "# @launcher.*" headers, see config/quickshell/launcher/ScriptSource.qml).
 # Only the commands dir is linked: ~/.config/launcher also holds the user's config.json.
@@ -307,7 +305,7 @@ EOF
 create_brave_webapp "Figma" "https://www.figma.com"
 create_brave_webapp "Linear" "https://linear.app"
 
-# Update desktop database so the new web apps (and anything else) appear in your launcher (Tofi)
+# Update desktop database so the new web apps (and anything else) appear in your launcher
 echo "Updating desktop database..."
 update-desktop-database ~/.local/share/applications 2>/dev/null || true
 

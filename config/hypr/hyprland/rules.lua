@@ -347,8 +347,6 @@ hl.window_rule({
 	},
 })
 
--- tofi (fixed layer namespace "launcher"): only qmenu's fallback when quickshell is down (Menu.qml is qs-menu)
-hl.layer_rule({ match = { namespace = "launcher" }, blur = true })
 -- Quickshell (~/dotfiles/config/quickshell): the bar opts in to the global
 -- decoration:blur:* settings (size/passes/vibrancy/variant all apply as-is).
 -- ignore_alpha keeps the blur inside the drawn shape: fully transparent pixels

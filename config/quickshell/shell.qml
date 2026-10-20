@@ -24,7 +24,6 @@ ShellRoot {
     }
 
     Settings { id: settings }
-    Menu { id: menu }
     Launcher { id: launcher }
     Toasts { bars: root.bars }
     Osd { id: osd; bars: root.bars }
@@ -109,16 +108,7 @@ ShellRoot {
         function close(): void { if (launcher.shown && launcher.section === "screenshot") launcher.close() }
     }
 
-    // qs ipc call menu drun            (SUPER+D)
-    // ... | qmenu --prompt-text 'X: '  (power / sound-output menus; see bin/qmenu)
-    IpcHandler {
-        target: "menu"
-        function drun(): void { menu.openDrun() }
-        function dmenu(prompt: string, dir: string): void { menu.openDmenu(prompt, dir) }
-        function close(): void { menu.close() }   // cancels the open menu (dmenu callers get exit 1)
-    }
-
-    // qs ipc call launcher toggle | show | hide | query <text> | section <name>   (Raycast-style launcher, Launcher.qml; SUPER+D still opens Menu)
+    // qs ipc call launcher toggle | show | hide | query <text> | section <name>   (Raycast-style launcher, Launcher.qml)
     IpcHandler {
         target: "launcher"
         function toggle(): void { launcher.toggle() }

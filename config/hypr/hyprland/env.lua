@@ -16,7 +16,7 @@ hl.env("XDG_SESSION_TYPE", "wayland")
 hl.env("XDG_SESSION_DESKTOP", "Hyprland")
 
 -- ~/.local/bin first. Hyprland's own PATH lacks it, so anything spawned from a keybind or
--- the quickshell launcher would skip user shims (brave -> theme shim, qmenu). Guarded so
+-- the quickshell launcher would skip user shims (brave -> theme shim). Guarded so
 -- config reloads don't keep prepending it.
 do
 	local bin = os.getenv("HOME") .. "/.local/bin"

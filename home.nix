@@ -14,7 +14,6 @@ let
     hypr = "hypr";
     zellij = "zellij";
     nvim = "nvim";
-    tofi = "tofi";
     opencode = "opencode";
     wivrn = "wivrn";
   };

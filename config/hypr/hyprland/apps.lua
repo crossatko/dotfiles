@@ -1,5 +1,5 @@
 return {
-	menu = "qs ipc call launcher toggle", -- quickshell launcher (config/quickshell/Launcher.qml); old one: "qs ipc call menu drun" (Menu.qml)
+	menu = "qs ipc call launcher toggle", -- quickshell launcher (config/quickshell/Launcher.qml)
 	terminal = "kitty",
 	browser = "brave",
 	whatsapp = "brave --app='https://web.whatsapp.com'",

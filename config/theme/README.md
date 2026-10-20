@@ -4,7 +4,7 @@
 theme.toml ─┐
 wallpaper ──┼─> theme.py ─> out/palette.{json,lua} + one file per app (templates/)
 overrides ──┘                      │
-                                   └─> kitty ghostty alacritty tofi zellij hyprland
+                                   └─> kitty ghostty alacritty zellij hyprland
                                        hyprlock hyprtoolkit hyprpaper nvim quickshell
 ```
 
@@ -57,8 +57,7 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 | hyprland, hyprlock, hyprtoolkit, hyprpaper | `dofile` / `source` / symlink | yes (`hyprctl reload`, hyprpaper restart); hyprlock reads its wallpaper path on each lock |
 | quickshell bar + Settings | watches `out/palette.json` | instant |
 | notifications | quickshell `Notifs.qml` server + toasts + notification center | instant, palette-driven |
-| launcher / menus | quickshell `Menu.qml` (replaced tofi; fzf does the matching) | instant, palette-driven |
-| tofi (fallback only) | symlinked config | read at launch; used only if quickshell is down |
+| launcher / menus | quickshell `Launcher.qml` | instant, palette-driven |
 | Qt / KDE apps (Dolphin, Ark, ...) | KDE platform theme (`QT_QPA_PLATFORMTHEME=kde` in `hyprland/env.lua`) reading `~/.config/kdeglobals`: color scheme `Wall`/`WallB` + accent, fonts, icons, Fusion style | backgrounds, text and icons live; selection highlight on next window |
 | GTK 3 apps, Brave dialogs | named theme `Wall` (`~/.local/share/themes/Wall`): GTK's dark stylesheet re-colored by `recolor_gtk_css`; Brave gets `GTK_THEME=Wall:dark` from its shim | GTK 3 apps reload on theme change; Brave on restart |
 | GTK 4 / libadwaita apps, nautilus | `~/.config/gtk-{3,4}.0/gtk.css` -> `out/gtk.css` | **after the app restarts** (see below) |
@@ -87,13 +86,9 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 * Not themed: Discord, web page contents.
 * `out/` is committed on purpose so a fresh clone works before the first `apply`.
 
-## Menus (tofi replacement)
-`SUPER+D` = `qs ipc call menu drun`: full-screen launcher laid out like the old tofi config,
-fuzzy matching by `fzf --filter`, ranking = your tofi launch history + new launches
-(`~/.cache/qmenu/drun-history`). Other menus pipe into `qmenu --prompt-text 'X: '`
-(`config/quickshell/bin/qmenu`, a drop-in for `tofi --prompt-text`): prints the chosen line,
-exit 1 on cancel, falls back to tofi if quickshell isn't running. `~/.local/bin` is put on
-Hyprland's PATH in `hyprland/env.lua` so shims like `brave` and `qmenu` resolve everywhere.
+## Launcher
+`SUPER+D` = `qs ipc call launcher toggle` (Raycast-style launcher, `config/quickshell/Launcher.qml`).
+`~/.local/bin` is put on Hyprland's PATH in `hyprland/env.lua` so shims like `brave` resolve everywhere.
 
 ## Bar popups, notifications, OSD (quickshell)
 * **Notifications** (`Notifs.qml`, `Toasts.qml`, `NotifCard.qml`): toasts top-right of the focused monitor,

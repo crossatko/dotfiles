@@ -3,7 +3,6 @@ singleton Appearance 1.0 Appearance.qml
 Chip 1.0 Chip.qml
 Label 1.0 Label.qml
 Bar 1.0 Bar.qml
-Menu 1.0 Menu.qml
 singleton Popups 1.0 Popups.qml
 singleton Notifs 1.0 Notifs.qml
 NotifCard 1.0 NotifCard.qml
