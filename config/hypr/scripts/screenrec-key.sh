@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SHIFT+Print (hyprland/binds.lua): stop a running recording, otherwise open the Quickshell recording menu
-# (RecordMenu.qml, `qs ipc call record menu`, toggles). If the shell can't take the call (not running, or
+# (launcher section "record", `qs ipc call record menu`, toggles). If the shell can't take the call (not running, or
 # the record target is missing after a failed reload), fall back to a region recording so the key never
 # does nothing. The recorder itself is screenrec.sh; this only decides what the key does.
 # Test overrides: SCREENREC_KEY_RECORDER (recorder script), SCREENREC_KEY_QS (qs binary).

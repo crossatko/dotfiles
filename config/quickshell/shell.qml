@@ -25,6 +25,7 @@ ShellRoot {
 
     Settings { id: settings }
     Menu { id: menu }
+    Launcher { id: launcher }
     RecordMenu { id: recordMenu }
     ScreenshotMenu { id: screenshotMenu }
     Toasts { bars: root.bars }
@@ -95,17 +96,19 @@ ShellRoot {
     }
 
     // qs ipc call record menu | close   (SHIFT+Print via hypr/scripts/screenrec-key.sh; menu = toggle)
+    // Alias for `launcher section record` (the recording menu is a launcher section now).
     IpcHandler {
         target: "record"
-        function menu(): void { recordMenu.toggle() }
-        function close(): void { recordMenu.close() }
+        function menu(): void { launcher.openSection("record") }
+        function close(): void { if (launcher.shown && launcher.section === "record") launcher.close() }
     }
 
     // qs ipc call screenshot menu | close   (CTRL+Print via hypr/scripts/screenshot-key.sh; menu = toggle)
+    // Alias for `launcher section screenshot`.
     IpcHandler {
         target: "screenshot"
-        function menu(): void { screenshotMenu.toggle() }
-        function close(): void { screenshotMenu.close() }
+        function menu(): void { launcher.openSection("screenshot") }
+        function close(): void { if (launcher.shown && launcher.section === "screenshot") launcher.close() }
     }
 
     // qs ipc call menu drun            (SUPER+D)
@@ -115,5 +118,15 @@ ShellRoot {
         function drun(): void { menu.openDrun() }
         function dmenu(prompt: string, dir: string): void { menu.openDmenu(prompt, dir) }
         function close(): void { menu.close() }   // cancels the open menu (dmenu callers get exit 1)
+    }
+
+    // qs ipc call launcher toggle | show | hide | query <text> | section <name>   (Raycast-style launcher, Launcher.qml; SUPER+D still opens Menu)
+    IpcHandler {
+        target: "launcher"
+        function toggle(): void { launcher.toggle() }
+        function show(): void { launcher.open() }
+        function hide(): void { launcher.close() }
+        function query(q: string): void { launcher.openWith(q) }   // open prefilled, e.g. "v " = clipboard history
+        function section(name: string): void { launcher.openSection(name) }   // open inside a section: sound-output | sound-input | power | twitch | screenshot | record
     }
 }

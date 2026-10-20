@@ -38,6 +38,10 @@ hl.on("hyprland.start", function()
 	hl.exec_cmd("hyprctl setcursor Oxygen-White 24")
 	-- Kept running only as the NetworkManager secret agent and the bluez pairing agent; their tray
 	-- icons are hidden in the bar, whose network / bluetooth popups do the everyday work.
+	-- Clipboard history for the Quickshell launcher (launcher/ClipboardSource.qml; `v ` / `clip ` prefix).
+	-- One watcher per kind; cliphist keeps its own db (~/.cache/cliphist/db), capped at 500 entries.
+	hl.exec_cmd("wl-paste --type text --watch cliphist -max-items 500 store")
+	hl.exec_cmd("wl-paste --type image --watch cliphist -max-items 500 store")
 	hl.exec_cmd("nm-applet --indicator &")
 	hl.exec_cmd("blueman-applet &")
 

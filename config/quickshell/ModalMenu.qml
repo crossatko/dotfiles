@@ -19,6 +19,8 @@ PanelWindow {
     property Item focusItem: null                  // gets keyboard focus on open (e.g. a search field); null = onKeyPressed
     property int cardWidth: 520
     property bool shown: false
+    property var fixedScreen: null                 // opt-in: always open on this screen instead of the focused one
+    property bool respectReserved: false           // opt-in: lay out in the usable area (bar strip, monitor reserved_area) instead of the full monitor
     readonly property alias card: cardBox
     default property alias content: body.data
 
@@ -27,19 +29,26 @@ PanelWindow {
 
     function open() {
         if (shown) return
-        screen = Popups.focusedScreen()
+        screen = fixedScreen || Popups.focusedScreen()
         opening()
         shown = true
         const f = win.focusItem || keys
         f.forceActiveFocus()
     }
     function close() { shown = false }
-    function toggle() { shown ? close() : open() }
+    function toggle() {
+        if (shown && fixedScreen && screen !== fixedScreen) {   // open on another screen: move it instead of closing
+            screen = fixedScreen
+            Qt.callLater(() => (win.focusItem || keys).forceActiveFocus())
+            return
+        }
+        shown ? close() : open()
+    }
 
     visible: shown
     anchors { left: true; right: true; top: true; bottom: true }
     color: "transparent"                           // no dim backdrop; the window still catches click-outside
-    exclusiveZone: -1
+    exclusiveZone: respectReserved ? 0 : -1        // 0 = Normal: the compositor lays the surface out inside the other surfaces' zones and the reserved area
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.namespace: "qs-" + kind

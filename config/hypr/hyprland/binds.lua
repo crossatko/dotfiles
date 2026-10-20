@@ -1,9 +1,6 @@
 local apps = require("hyprland.apps")
 local workspaces = require("hyprland.workspaces")
 local leave_computer = require("scripts.leave-computer").leave_computer
-local show_power_menu = require("scripts.power-menu").show_power_menu
-local show_sound_output_menu = require("scripts.sound-output-menu").show_sound_output_menu
-local show_twitch_menu = require("scripts.twitch-menu").show_twitch_menu
 local focus_direction = require("scripts.focus-direction")
 local switch_workspace = require("scripts.switch-workspace")
 local side_pin = require("scripts.side-pin")
@@ -36,7 +33,7 @@ bind({ "SHIFT", "Print" }, exec("$HOME/.config/hypr/scripts/screenrec-key.sh"))
 bind({ "CTRL", "Print" }, exec("$HOME/.config/hypr/scripts/screenshot-key.sh"))
 bind({ mod, "D" }, exec(apps.menu))
 bind({ mod, "T" }, exec("qs ipc call picker toggle")) -- wallpaper + theme picker
--- bind({ mod, "SHIFT", "V" }, exec("cliphist list | ~/.config/quickshell/bin/qmenu | cliphist decode | wl-copy"))
+bind({ mod, "SHIFT", "V" }, exec("qs ipc call launcher query 'v '")) -- clipboard history (launcher, prefilled "v ")
 bind({ mod, "Return" }, exec(apps.terminal))
 bind({ mod, "B" }, exec(apps.browser))
 bind({ mod, "E" }, exec(apps.filemanager))
@@ -70,9 +67,10 @@ local function toggle_scratchpad()
 end
 bind({ mod, "R" }, toggle_scratchpad)
 
-bind({ mod, "SHIFT", "E" }, show_power_menu)
-bind({ mod, "SHIFT", "S" }, show_sound_output_menu)
-bind({ mod, "SHIFT", "T" }, show_twitch_menu)
+bind({ mod, "SHIFT", "E" }, exec("qs ipc call launcher section power"))
+bind({ mod, "SHIFT", "S" }, exec("qs ipc call launcher section sound-output"))
+bind({ mod, "SHIFT", "M" }, exec("qs ipc call launcher section sound-input"))
+bind({ mod, "SHIFT", "T" }, exec("qs ipc call launcher section twitch"))
 
 local directions = {
 	h = "left",

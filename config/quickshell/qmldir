@@ -65,3 +65,4 @@ SettingRow 1.0 SettingRow.qml
 Meter 1.0 Meter.qml
 Glass 1.0 Glass.qml
 singleton GlassTuneCtl 1.0 GlassTuneCtl.qml
+Launcher 1.0 Launcher.qml

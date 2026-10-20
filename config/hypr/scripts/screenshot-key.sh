@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CTRL+Print (hyprland/binds.lua): open the Quickshell screenshot menu (ScreenshotMenu.qml,
+# CTRL+Print (hyprland/binds.lua): open the Quickshell screenshot menu (launcher section "screenshot",
 # `qs ipc call screenshot menu`, toggles). If the shell can't take the call (not running, or the target is
 # missing after a failed reload), fall back to a region screenshot so the key never does nothing.
 # Test overrides: SHOT_KEY_SCRIPT (screenshot script), SHOT_KEY_QS (qs binary).

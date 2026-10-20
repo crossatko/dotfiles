@@ -36,8 +36,8 @@ PACKAGES=(
   gnome-themes-extra qt5-wayland qt6-wayland dconf
 
   # Terminal & Shell
-  zellij rust rust-wasm fzf wl-clipboard kitty zsh starship fastfetch bash-completion zsh-completions
-  zsh-autosuggestions zsh-syntax-highlighting
+  zellij rust rust-wasm fzf wl-clipboard cliphist kitty zsh starship fastfetch bash-completion zsh-completions
+  zsh-autosuggestions zsh-syntax-highlighting libqalculate
 
   # Hyprland Ecosystem
   quickshell imagemagick hyprland hyprpaper hypridle hyprlock hyprpolkitagent hyprshot wf-recorder slurp tofi
@@ -146,6 +146,11 @@ done
 
 # qmenu: dmenu-style picker rendered by quickshell (power / sound-output menus, clipboard)
 ln -sfn "$CONFIG_DIR/quickshell/bin/qmenu" "$HOME/.local/bin/qmenu"
+
+# Launcher script commands (executable scripts with "# @launcher.*" headers, see config/quickshell/launcher/ScriptSource.qml).
+# Only the commands dir is linked: ~/.config/launcher also holds the user's config.json.
+mkdir -p "$HOME/.config/launcher"
+ln -sfn "$CONFIG_DIR/launcher/commands" "$HOME/.config/launcher/commands"
 
 # Portal routing (screen sharing pinned to hyprland, file dialogs -> Nautilus chooser) and the GNOME portal
 # unit override: Hyprland never activates graphical-session.target, which the packaged unit requires

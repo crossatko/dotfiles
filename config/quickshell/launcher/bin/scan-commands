@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Prints the header metadata of the launcher script commands in a directory (default ~/.config/launcher/commands).
+# Output, one record per line: "@<TAB><filename>" starts a script, then "<key><TAB><value>" for each
+# "# @launcher.<key> <value>" (or "// @launcher.<key> <value>") line within the first 30 lines.
+# Only regular, executable, non-hidden files are listed; names with tab/newline characters are skipped.
+dir=${1:-$HOME/.config/launcher/commands}
+[ -d "$dir" ] || exit 0
+cd "$dir" || exit 0
+files=()
+for f in *; do
+  [ -f "$f" ] && [ -x "$f" ] || continue
+  case $f in *$'\t'*|*$'\n'*) continue ;; esac
+  files+=("./$f")
+done
+[ ${#files[@]} -gt 0 ] || exit 0
+awk '
+FNR == 1 { f = FILENAME; sub(/^\.\//, "", f); print "@\t" f }
+FNR <= 30 && $0 ~ /^[ \t]*(#|\/\/)[ \t]*@launcher\.[a-z]+/ {
+  s = $0; sub(/^[ \t]*(#|\/\/)[ \t]*@launcher\./, "", s)
+  k = s; sub(/[^a-z].*$/, "", k)
+  v = substr(s, length(k) + 1); sub(/^[ \t]+/, "", v); sub(/[ \t\r]+$/, "", v)
+  print k "\t" v
+}' "${files[@]}" 2>/dev/null
