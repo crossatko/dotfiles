@@ -42,8 +42,6 @@ AiPanel 1.0 AiPanel.qml
 Settings 1.0 Settings.qml
 SettingsBar 1.0 SettingsBar.qml
 SettingsWallpaper 1.0 SettingsWallpaper.qml
-RecordMenu 1.0 RecordMenu.qml
-ScreenshotMenu 1.0 ScreenshotMenu.qml
 SettingsAppearance 1.0 SettingsAppearance.qml
 SettingsGlass 1.0 SettingsGlass.qml
 TailscaleSection 1.0 TailscaleSection.qml
@@ -55,9 +53,7 @@ RowText 1.0 RowText.qml
 Notice 1.0 Notice.qml
 LevelRow 1.0 LevelRow.qml
 KeyBadge 1.0 KeyBadge.qml
-ModeTile 1.0 ModeTile.qml
 ModalMenu 1.0 ModalMenu.qml
-ModalWindow 1.0 ModalWindow.qml
 ModalReset 1.0 ModalReset.qml
 PopupRegistration 1.0 PopupRegistration.qml
 Segmented 1.0 Segmented.qml

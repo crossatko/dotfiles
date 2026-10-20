@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Screenshot (grim + slurp). CTRL+Print (hyprland/binds.lua -> screenshot-key.sh) and the Quickshell
-# screenshot menu (ScreenshotMenu.qml) call it. Plain Print is separate (hyprshot, clipboard only).
+# launcher screenshot section call it. Plain Print is separate (hyprshot, clipboard only).
 #
 #   screenshot.sh region   drag a rectangle with slurp
 #   screenshot.sh window   click a window (boxes of the windows on the visible workspaces)

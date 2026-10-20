@@ -6,11 +6,11 @@ import Quickshell.Io
 // `items` = the root rows (kind "section"); Launcher.enterSection(name) calls enter(name) (starts loading) and
 // then asks rows(name) for the list. Async sections emit updated() when their data arrives.
 // Section rows are `transient` + `private` (never in usage.json / history.json). Mirrors the old menus:
-//   sound-output / sound-input: hypr/scripts/sound-{output,input}-menu.lua (pactl list, current first and ticked,
-//     select = set default + move all streams); power: hypr/scripts/power-menu.lua; twitch: hypr/scripts/twitch-menu.lua
+//   sound-output / sound-input: (pactl list, current first and ticked,
+//     select = set default + move all streams)
 //     (twitch-qs-follows lines, select = twitch-qs-mpv watch/login). Twitch tokens are handled inside the
 //     twitch-qs-* scripts only; this file never sees them.
-//   screenshot / record: the old ScreenshotMenu.qml / RecordMenu.qml. Rows start hypr/scripts/screenshot.sh <mode> /
+//   screenshot / record: the former standalone menus. Rows start hypr/scripts/screenshot.sh <mode> /
 //     screenrec.sh <mode> --fps N --format F --audio|--no-audio. The launcher closes first (Launcher.runItem sets
 //     shown=false before run()), and the script starts after a short sleep so the layer is unmapped before slurp /
 //     the recorder; record also has a "Stop recording" row while one runs (screenrec.sh status) and option rows
@@ -150,7 +150,7 @@ QtObject {
         }
     }
 
-    // ---- power (same commands as scripts/power-menu.lua) -----------------------------------------------------
+    // ---- power -----------------------------------------------------
     function power(id, name, sub, glyph, command, confirm) {
         return { id: "sec:power:" + id, name: name, subtitle: sub, kind: "power", source: "", glyph: glyph,
                  transient: true, private: true, confirm: confirm, command: command }
@@ -205,7 +205,7 @@ QtObject {
         }
     }
 
-    // ---- screenshot / record (the old ScreenshotMenu.qml / RecordMenu.qml) -------------------------------------------
+    // ---- screenshot / record (the former standalone menus) -------------------------------------------
     readonly property string shotScript: Quickshell.env("QS_SHOT_SCRIPT") || (Quickshell.env("HOME") + "/.config/hypr/scripts/screenshot.sh")
     readonly property string recScript: Quickshell.env("QS_RECORD_SCRIPT") || (Quickshell.env("HOME") + "/.config/hypr/scripts/screenrec.sh")
     readonly property string prefsDir: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/quickshell"

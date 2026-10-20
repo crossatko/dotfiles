@@ -26,8 +26,6 @@ ShellRoot {
     Settings { id: settings }
     Menu { id: menu }
     Launcher { id: launcher }
-    RecordMenu { id: recordMenu }
-    ScreenshotMenu { id: screenshotMenu }
     Toasts { bars: root.bars }
     Osd { id: osd; bars: root.bars }
 

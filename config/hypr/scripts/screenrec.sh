@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Screen recording toggle (wf-recorder + slurp). SHIFT+Print (hyprland/binds.lua -> screenrec-key.sh), the
-# Quickshell recording menu (RecordMenu.qml) and the bar's recording chip call it.
+# launcher record section and the bar's recording chip call it.
 #
 #   screenrec.sh region [opts]   pick a region with slurp and record it
 #   screenrec.sh window [opts]   click a window (boxes of the windows on the visible workspaces)

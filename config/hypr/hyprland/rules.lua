@@ -108,7 +108,7 @@ elseif is_workstation then
 		match = { class = "^(org\\.quickshell)$", title = "negative:^qs-.*" },
 	})
 end
--- The shell's own modal windows (ModalWindow.qml / Settings.qml: titles qs-settings, qs-screenshot, qs-record): plain
+-- The shell's own modal windows (Settings.qml: title qs-settings): plain
 -- floating cards. The card draws its own border; the window keeps the global rounding (= the Appearance radius, the
 -- card's radius too), because the glass of a window is cut to the window's own rounded box, not to the card. Placement (centre, remembered position, SUPER+double-click reset) is
 -- scripts/modal-windows.lua; the dragging itself is the normal SUPER+LMB bind.
@@ -355,7 +355,7 @@ hl.layer_rule({ match = { namespace = "launcher" }, blur = true })
 -- (the rounded corners) get no blur, so the blur follows the bar's rounding even
 -- though layer surfaces have no rounding of their own. Keep it below
 -- bar_opacity in ~/.config/theme/theme.toml.
--- EVERY Quickshell window (namespace qs-*: bar, toasts, popups, OSD, Settings, screenshot / record menus, anything
+-- EVERY Quickshell window (namespace qs-*: bar, toasts, popups, OSD, Settings, the launcher, anything
 -- new) is blurred (the pattern must match the whole namespace: `qs-.*`, not `^qs-`) wherever it draws something at least 10% opaque; fully transparent pixels get no blur.
 hl.layer_rule({ match = { namespace = "qs-.*" }, blur = true })
 hl.layer_rule({ match = { namespace = "qs-.*" }, ignore_alpha = 0.1 })

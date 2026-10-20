@@ -146,7 +146,7 @@ Hyprland's PATH in `hyprland/env.lua` so shims like `brave` and `qmenu` resolve 
 `SUPER+SHIFT+T` opens a menu of the Twitch channels you follow (live first); picking one opens a Quickshell
 window with the stream in an embedded mpv and Twitch's own chat beside it. The app lives in its own project,
 `~/code/crossatko/twitch-qs-mpv` (see its README/AGENTS.md); this repo only holds the glue:
-`hypr/scripts/twitch-menu.lua` (menu launcher, absolute paths because Hyprland's PATH differs),
+the launcher's twitch section (`config/quickshell/launcher/SectionsSource.qml`),
 the bind in `hypr/hyprland/binds.lua`, and the `twitch-player` / `twitch-popout-chat` window rules in
 `hypr/hyprland/rules.lua` (class `org.quickshell`, title `^Twitch - `). The player reads this theme's
 `out/palette.json` live, so it recolours with the wallpaper like the bar does. `qs ipc call menu close`

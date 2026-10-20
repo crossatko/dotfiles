@@ -1,5 +1,5 @@
 -- Placement of the shell's modal windows (Quickshell FloatingWindow, class org.quickshell, title "qs-<kind>":
--- qs-settings, qs-screenshot, qs-record; the floating/rounding/shadow rule is "qs-modal" in hyprland/rules.lua).
+-- qs-settings; the floating/rounding/shadow rule is "qs-modal" in hyprland/rules.lua).
 -- They are ordinary floating windows, so SUPER+LMB (hyprland/binds.lua) drags them. This script adds:
 --   * the position each kind was last left at, remembered when the window closes and re-applied when it opens
 --     (also across Quickshell / Hyprland restarts: $XDG_STATE_HOME/quickshell/modal-windows, one "title<TAB>dx<TAB>dy"

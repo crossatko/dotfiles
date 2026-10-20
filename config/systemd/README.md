@@ -29,7 +29,7 @@ The 32-bit layer is not optional — 32-bit games need their own WSI layer.
 Related, outside this directory:
 - `config/hypr/scripts/gamescope-wrapper/gamescope` — PATH-shadow wrapper,
   the only way to add flags to the session (see below).
-- `config/hypr/scripts/session-supervisor.sh`, `power-menu.lua` — switching.
+- `config/hypr/scripts/session-supervisor.sh` — switching.
 - `config/hypr/scripts/tv-*.sh`, `steam-tv-dim.lua` — TV wake/sleep/audio.
 
 ## The landmine: WAYLAND_DISPLAY must be UNSET, not set

@@ -1,6 +1,6 @@
 #!/bin/bash
 # The Hyprland session's suspend entry point: tidies the TV up first, and only
-# then asks logind to suspend. Wired to power-menu.lua's "sleep" action.
+# then asks logind to suspend. Wired to the launcher power section's "sleep" row.
 #
 # The ordering is the entire point and is not stylistic. Anything reacting to
 # logind's PrepareForSleep broadcast is already too late to talk to the TV:
