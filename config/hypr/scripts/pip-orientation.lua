@@ -174,11 +174,16 @@ local function count_tiled_on_visible_workspace(output)
 		return 0
 	end
 
+	-- A group is ONE tiled node: count only its current (visible) member, like side-pin's smart_applies.
+	-- Counting every member made a lone 2-tab group read as 2 windows and dropped the right strip.
 	local workspace_id = mon.active_workspace.id
 	local count = 0
 	for _, w in ipairs(hl.get_windows()) do
 		if not w.floating and w.workspace ~= nil and w.workspace.id == workspace_id then
-			count = count + 1
+			local g = w.group
+			if g == nil or g.current == nil or g.current.address == w.address then
+				count = count + 1
+			end
 		end
 	end
 	return count
@@ -336,6 +341,10 @@ end)
 hl.on("window.pin", function() sync_and_fit() end)
 hl.on("window.move_to_workspace", function() sync_and_fit() end)
 hl.on("window.fullscreen", function() sync_and_fit() end)
+-- Grouping has no event of its own (group.toggle, group:add, move into / out of a group); Hyprland
+-- re-evaluates the window rules on each such change, so window.update_rules is the hook. It also fires on
+-- focus and other changes: set_reserved and refit_boxes are no-ops when nothing changed.
+hl.on("window.update_rules", function() sync_and_fit() end)
 hl.on("workspace.active", function()
 	heal_pinned()
 	sync_and_fit()
