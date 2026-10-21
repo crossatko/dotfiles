@@ -78,6 +78,9 @@ mkdir -p "$OUT_DIR"
 file=$OUT_DIR/shot-$(date +%F_%H-%M-%S).png
 if [ -n "$output" ]; then grim -o "$output" "$file"; else grim -g "$geom" "$file"; fi || { notify critical "Screenshot failed" "grim returned an error"; exit 1; }
 [ -s "$file" ] || { rm -f "$file"; notify critical "Screenshot failed" "empty file"; exit 1; }
+# release the lock before wl-copy (stays running as the clipboard owner) and notify-send -w inherit fd 9,
+# otherwise every later press hits the held lock and exits silently
+exec 9>&-
 
 if [ "${SHOT_CLIP:-1}" != 0 ] && command -v wl-copy >/dev/null; then
 	wl-copy --type image/png <"$file"
