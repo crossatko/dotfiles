@@ -1,0 +1,468 @@
+#!/usr/bin/env -S python3 -I
+"""url-router: default handler for http(s) links that opens a link in its Brave web app window.
+
+Installed as ~/.local/bin/url-router, registered by ~/.local/share/applications/url-router.desktop
+(Exec=<absolute path> %u) as the default for x-scheme-handler/http and x-scheme-handler/https, so links opened
+by native apps (xdg-open, the xdg-desktop-portal OpenURI call Flatpak apps use, Electron shell.openExternal)
+land here.
+
+Every argument is a URL (there are no flags, so a URL can never be read as an option). For each one:
+  * an http(s) URL whose host matches an installed web app (XDG_DATA_HOME/applications/webapp_*.desktop with
+    an Exec that runs a Brave / Chromium binary with --app=<start url>) is opened with that entry's own command
+    line and --app=<link>, i.e. as a new app window of that site (same browser, same profile flags);
+  * anything else (no match, other scheme, unparsable, opted out) goes to the fallback browser, `brave -- <url>`
+    by default (the ~/.local/bin/brave shim via PATH), exactly what the old brave-browser.desktop default did.
+Never calls xdg-open (no loops); never passes a URL through a shell (argv exec only).
+
+Matching (conservative): the link must have no user:password@ part, and its host (lowercase, IDNA / punycode,
+trailing dot and one leading "www." removed) must equal the web app start URL's host normalised the same way,
+or be one of the aliases configured for that app. Ports must be equal (default ports count as equal, so
+http vs https on default ports matches; https://host:8443 does not match https://host). A start URL with a path
+(e.g. /web) only takes links at or below that path. Several matches: the longest start path wins, then the
+entry file name.
+
+Config: ${XDG_CONFIG_HOME:-~/.config}/url-router/config (optional; see config.example in the repo):
+  fallback = <command>            command for links that are not routed (default: brave --); argv, no shell
+  disable  = <slug> [<slug> ...]  web apps (webapp_<slug>.desktop) that never get links
+  alias    = <slug> <host> [...]  extra hosts for a web app; "*.example.com" = any sub-domain of example.com
+  dry_run  = - | <file>           print (or append to <file>) the argv as JSON instead of running it
+  group    = <slug> [...] | *     under Hyprland: when a window of that web app is already open, focus the most
+                                  recently focused one, make it a group if it is not one, and open the link's new
+                                  window into that group (auto_group; else joined with the Lua group:add after it
+                                  appears, waiting at most 5 s). Default: off for every app. The router forks first,
+                                  so the caller never waits.
+Environment: URL_ROUTER_FALLBACK (overrides fallback), URL_ROUTER_DRY_RUN (overrides dry_run).
+Exit: 0 launched / printed, 1 nothing to do or launch failed.
+"""
+import glob
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import urllib.parse
+
+BROWSERS = re.compile(r"^(brave|brave-browser(-\w+)?|brave-bin|chromium|chromium-browser|google-chrome(-\w+)?|chrome)$")
+DEFAULT_PORTS = {"http": 80, "https": 443}
+# commands that would hand the URL back to the default handler (= this script)
+LOOPERS = {"xdg-open", "gio", "url-router", "kde-open", "kde-open5", "exo-open", "gnome-open", "flatpak-xdg-open",
+           "sensible-browser", "x-www-browser", "www-browser", "xdg-settings"}
+FIELD_CODE = re.compile(r"%[fFuUdDnNickvm]")
+
+
+def log(msg):
+    print("url-router: " + msg, file=sys.stderr)
+
+
+# ---- URL handling --------------------------------------------------------------------------------------------------
+def norm_host(host):
+    """lowercase ASCII (punycode) host without trailing dot and without one leading 'www.'; None if invalid"""
+    if not host:
+        return None
+    host = host.strip().rstrip(".").lower()
+    if not host or any(c in host for c in "/\\@ \t\r\n%"):
+        return None
+    try:
+        host = host.encode("idna").decode("ascii").lower()
+    except (UnicodeError, ValueError):
+        if not re.fullmatch(r"[a-z0-9.-]+", host):     # idna codec rejects some valid ASCII labels (e.g. "_")
+            return None
+    if host.startswith("www."):
+        host = host[4:]
+    return host or None
+
+
+def parse(url):
+    """(scheme, host, port, path, has_userinfo) of an http(s) URL, or None"""
+    if not isinstance(url, str) or any(ord(c) < 0x21 for c in url.strip()):
+        return None
+    try:
+        u = urllib.parse.urlsplit(url.strip())
+        scheme = u.scheme.lower()
+        if scheme not in DEFAULT_PORTS or not u.netloc:
+            return None
+        port = u.port
+    except ValueError:
+        return None
+    if port == DEFAULT_PORTS[scheme]:
+        port = None                                    # default port: http and https compare equal
+    if port is not None and not 0 < port < 65536:
+        return None
+    host = norm_host(u.hostname)
+    if not host:
+        return None
+    return scheme, host, port, u.path or "/", ("@" in u.netloc)
+
+
+def path_ok(start_path, path):
+    start = start_path.rstrip("/")
+    return not start or path == start or path.startswith(start + "/")
+
+
+# ---- desktop entries -----------------------------------------------------------------------------------------------
+def unescape_value(v):
+    # Desktop Entry value escapes: \s \n \t \r \\  (applied before Exec quoting rules)
+    return re.sub(r"\\([sntr\\])", lambda m: {"s": " ", "n": "\n", "t": "\t", "r": "\r", "\\": "\\"}[m.group(1)], v)
+
+
+def split_exec(line):
+    """Exec value -> argv per the Desktop Entry spec (double quotes with \\" \\` \\$ \\\\ escapes, %% = %,
+    field codes dropped). None if malformed."""
+    args, cur, inq, have, i = [], [], False, False, 0
+    while i < len(line):
+        c = line[i]
+        if inq:
+            if c == "\\" and i + 1 < len(line) and line[i + 1] in '"`$\\':
+                cur.append(line[i + 1])
+                i += 1
+            elif c == '"':
+                inq = False
+            else:
+                cur.append(c)
+        elif c == '"':
+            inq, have = True, True
+        elif c in " \t":
+            if have or cur:
+                args.append("".join(cur))
+            cur, have = [], False
+        else:
+            cur.append(c)
+        i += 1
+    if inq:
+        return None
+    if have or cur:
+        args.append("".join(cur))
+    out = []
+    for a in args:
+        if FIELD_CODE.fullmatch(a):
+            continue
+        out.append(a.replace("%%", "%"))
+    return out
+
+
+def read_entry(path):
+    """{'exec': argv, 'hidden': bool} from the [Desktop Entry] group"""
+    group, keys = None, {}
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for raw in f:
+                line = raw.rstrip("\r\n")
+                if line.startswith("["):
+                    group = line.strip()
+                elif group == "[Desktop Entry]" and "=" in line and not line.lstrip().startswith("#"):
+                    k, v = line.split("=", 1)
+                    keys.setdefault(k.strip(), v.strip())
+    except OSError:
+        return None
+    if "Exec" not in keys:
+        return None
+    argv = split_exec(unescape_value(keys["Exec"]))
+    return {"exec": argv, "hidden": keys.get("Hidden", "").lower() == "true"}
+
+
+def webapps(data_home):
+    """installed Brave/Chromium web apps: [{'slug', 'file', 'argv', 'app_index', 'start'}]"""
+    apps = []
+    for path in sorted(glob.glob(os.path.join(data_home, "applications", "webapp_*.desktop"))):
+        e = read_entry(path)
+        if not e or e["hidden"] or not e["exec"]:
+            continue
+        argv = e["exec"]
+        if not BROWSERS.match(os.path.basename(argv[0])):
+            continue
+        idx = next((i for i, a in enumerate(argv) if a.startswith("--app=")), None)
+        if idx is None:
+            continue
+        start = parse(argv[idx][len("--app="):])
+        if not start or start[4]:
+            continue
+        slug = os.path.basename(path)[len("webapp_"):-len(".desktop")]
+        apps.append({"slug": slug, "file": path, "argv": argv, "app_index": idx, "start": start})
+    return apps
+
+
+# ---- config --------------------------------------------------------------------------------------------------------
+def load_config(config_home):
+    cfg = {"fallback": None, "disable": set(), "alias": {}, "dry_run": None, "group": set()}
+    path = os.path.join(config_home, "url-router", "config")
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return cfg
+    for n, line in enumerate(lines, 1):
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = (s.strip() for s in line.split("=", 1))
+        k = k.lower()
+        if k == "fallback":
+            cfg["fallback"] = v
+        elif k == "disable":
+            cfg["disable"].update(v.split())
+        elif k == "alias":
+            parts = v.split()
+            if len(parts) >= 2:
+                cfg["alias"].setdefault(parts[0], []).extend(p.lower() for p in parts[1:])
+        elif k == "dry_run":
+            cfg["dry_run"] = v
+        elif k == "group":
+            cfg["group"].update(v.split())
+        else:
+            log("config line %d: unknown key %r ignored" % (n, k))
+    return cfg
+
+
+def alias_match(alias, host):
+    if alias.startswith("*."):
+        base = norm_host(alias[2:])
+        return bool(base) and (host == base or host.endswith("." + base))
+    return norm_host(alias) == host
+
+
+# ---- routing -------------------------------------------------------------------------------------------------------
+def host_ok(app, host, cfg):
+    """normalised host belongs to this web app (start URL host or a configured alias)"""
+    return host == app["start"][1] or any(alias_match(x, host) for x in cfg["alias"].get(app["slug"], []))
+
+
+def match(url, apps, cfg):
+    """the web app a link belongs to, or None"""
+    p = parse(url)
+    if not p or p[4]:                      # not http(s), invalid, or user:pass@ (never routed)
+        return None
+    scheme, host, port, path, _ = p
+    best = None
+    for a in apps:
+        if a["slug"] in cfg["disable"]:
+            continue
+        s_scheme, s_host, s_port, s_path, _ = a["start"]
+        if not host_ok(a, host, cfg) or port != s_port or not path_ok(s_path, path):
+            continue
+        key = (len(s_path.rstrip("/")),)
+        if best is None or key > best[0]:
+            best = (key, a)
+    return best[1] if best else None
+
+
+def fallback_argv(cfg):
+    spec = os.environ.get("URL_ROUTER_FALLBACK") or cfg["fallback"]
+    argv = None
+    if spec:
+        try:
+            argv = shlex.split(spec)
+        except ValueError:
+            argv = None
+        if not argv or os.path.basename(argv[0]) in LOOPERS:
+            log("fallback %r refused (empty, or it would call the default handler again); using brave" % spec)
+            argv = None
+    return argv or ["brave", "--"]
+
+
+def plan(url, apps, cfg):
+    a = match(url, apps, cfg)
+    if a:
+        argv = list(a["argv"])
+        argv[a["app_index"]] = "--app=" + url.strip()
+        return a["slug"], argv
+    argv = fallback_argv(cfg)
+    if "--" not in argv[1:] and url.startswith("-"):  # a leading "-" must never become a flag
+        argv = argv + ["--"]
+    return None, argv + [url]
+
+
+# ---- Hyprland grouping (opt-in: group = <slug>... | *) ---------------------------------------------------------------
+# Chromium app window class: <browser>-<host>__<path with / -> _>-<profile dir>; only the host part is compared.
+APP_CLASS = re.compile(r"^(?:brave|chrome|chromium)-([^_/]+)__")
+GROUP_WAIT = 5.0          # seconds to wait for the new window before giving up (then nothing more is done)
+
+
+def group_enabled(slug, cfg):
+    return bool(slug) and ("*" in cfg["group"] or slug in cfg["group"])
+
+
+def window_host(cls):
+    m = APP_CLASS.match((cls or "").lower())
+    return norm_host(m.group(1)) if m else None
+
+
+def app_windows(clients, app, cfg):
+    """mapped, visible-or-not windows of this web app (class or initialClass), most recently focused first"""
+    out = []
+    for c in clients if isinstance(clients, list) else []:
+        if not isinstance(c, dict) or c.get("mapped") is False or not c.get("address"):
+            continue
+        hosts = {window_host(c.get("class")), window_host(c.get("initialClass"))} - {None}
+        if any(host_ok(app, h, cfg) for h in hosts):
+            out.append(c)
+    return sorted(out, key=lambda c: c.get("focusHistoryID", 1 << 30) if isinstance(c.get("focusHistoryID"), int)
+                  and c.get("focusHistoryID") >= 0 else 1 << 30)
+
+
+class Hypr:
+    """thin hyprctl wrapper; every call is argv, never a shell; only the fields we need are kept"""
+    FIELDS = ("address", "class", "initialClass", "workspace", "grouped", "monitor", "focusHistoryID", "mapped",
+              "floating", "fullscreen")
+
+    def __init__(self):
+        self.ok = bool(os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")) and bool(shutil.which("hyprctl"))
+
+    def _run(self, *args):
+        try:
+            r = subprocess.run(["hyprctl", *args], capture_output=True, text=True, timeout=3)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return r.stdout if r.returncode == 0 else None
+
+    def clients(self):
+        out = self._run("-j", "clients")
+        try:
+            data = json.loads(out) if out else None
+        except ValueError:
+            return None
+        if not isinstance(data, list):
+            return None
+        return [{k: c.get(k) for k in self.FIELDS} for c in data if isinstance(c, dict)]
+
+    def active(self):
+        out = self._run("-j", "activewindow")
+        try:
+            return (json.loads(out) or {}).get("address") if out else None
+        except (ValueError, AttributeError):
+            return None
+
+    def dispatch(self, lua):
+        return self._run("dispatch", lua) is not None
+
+
+ADDR = re.compile(r"^0x[0-9a-f]+$")
+
+
+def lua_focus(addr):
+    return 'hl.dsp.focus({window="address:%s"})' % addr
+
+
+def lua_group_add(target, new):
+    # join new into target's group unless it already is in a group or target's group is locked / denied
+    return ('(function() local t = hl.get_window("address:%s") local w = hl.get_window("address:%s") '
+            'if t and w and t.group and not w.group and not t.group.locked and not t.group.denied then '
+            't.group:add(w) end return hl.dsp.focus({window="address:%s"}) end)()' % (target, new, new))
+
+
+def group_launch(argv, app, cfg, hypr, sleep=None, clock=None):
+    """focus the newest window of the app, make it a group if needed, launch argv and make sure the new window
+    joins that group. Returns a short status string (for logs / tests). Never raises."""
+    import time
+    sleep = sleep or time.sleep
+    clock = clock or time.monotonic
+    target, focused = None, False
+    try:
+        clients = hypr.clients() if hypr.ok else None
+        wins = app_windows(clients, app, cfg) if clients is not None else []
+        target = next((w for w in wins if ADDR.match(str(w.get("address")))), None)
+        if target:
+            addr = target["address"]
+            before = {c.get("address") for c in clients}
+            hypr.dispatch(lua_focus(addr))
+            for _ in range(4):             # a cross-monitor / special-workspace focus can take a moment
+                if hypr.active() == addr:
+                    focused = True
+                    break
+                sleep(0.1)
+                hypr.dispatch(lua_focus(addr))
+            if focused and not target.get("grouped"):
+                hypr.dispatch("hl.dsp.group.toggle()")
+    finally:
+        launch(argv)                       # the link is always opened, whatever happened above
+    if not target:
+        return "no-window"
+    if not focused:
+        return "not-focused"
+    end = clock() + GROUP_WAIT
+    while clock() < end:
+        sleep(0.1)
+        now = hypr.clients() or []
+        new = [c for c in app_windows(now, app, cfg) if c.get("address") not in before
+               and ADDR.match(str(c.get("address")))]
+        if not new:
+            continue
+        n = new[0]
+        tgt = next((c for c in now if c.get("address") == addr), None)
+        group = (tgt or {}).get("grouped") or []
+        if n["address"] in group:
+            return "joined"
+        if tgt and group:
+            hypr.dispatch(lua_group_add(addr, n["address"]))
+            return "added"
+        return "target-gone"
+    return "timeout"
+
+
+def launch(argv):
+    subprocess.Popen(argv, start_new_session=True, stdin=subprocess.DEVNULL)
+
+
+def detach():
+    """fork so the caller (xdg-open, the portal, Discord) is never held; True in the child"""
+    try:
+        if os.fork() > 0:
+            return False
+    except OSError:
+        return True                        # cannot fork: do it in the foreground
+    os.setsid()
+    return True
+
+
+def main(args):
+    home = os.path.expanduser("~")
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.join(home, ".local", "share")
+    config_home = os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config")
+    if os.environ.get("URL_ROUTER_ACTIVE"):
+        log("re-entered from its own fallback; refusing to loop")
+        return 1
+    urls = [a for a in args if a.strip()]
+    if not urls:
+        log("no URL given")
+        return 1
+    cfg = load_config(config_home)
+    apps = webapps(data_home)
+    dry = os.environ.get("URL_ROUTER_DRY_RUN") or cfg["dry_run"]
+    os.environ["URL_ROUTER_ACTIVE"] = "1"
+    plans = [plan(u, apps, cfg) for u in urls]
+    if dry:
+        out = "".join(json.dumps({"app": s, "argv": v, "group": group_enabled(s, cfg)}) + "\n" for s, v in plans)
+        if dry in ("-", "1"):
+            sys.stdout.write(out)
+        else:
+            with open(dry, "a", encoding="utf-8") as f:
+                f.write(out)
+        return 0
+    by_slug = {a["slug"]: a for a in apps}
+    hypr = None
+    rc = 0
+    for i, (slug, argv) in enumerate(plans):
+        log(("web app %s" % slug) if slug else "fallback browser")
+        try:
+            if group_enabled(slug, cfg):
+                hypr = hypr or Hypr()
+                if hypr.ok:
+                    if detach():
+                        try:
+                            log("group %s: %s" % (slug, group_launch(argv, by_slug[slug], cfg, hypr)))
+                        except Exception as e:          # never leave the link unopened because of grouping
+                            log("group %s failed (%s)" % (slug, type(e).__name__))
+                        os._exit(0)
+                    continue
+            if i == len(plans) - 1:
+                os.execvp(argv[0], argv)
+            subprocess.Popen(argv, start_new_session=True)
+        except OSError as e:
+            log("cannot run %s: %s" % (argv[0], e.strerror))
+            rc = 1
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

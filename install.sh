@@ -162,6 +162,15 @@ ln -sfn "$CONFIG_DIR/systemd/user/xdg-desktop-portal-gnome.service" "$HOME/.conf
 # Launcher shim: applies the wallpaper theme to Brave's profile just before it starts
 mkdir -p "$HOME/.local/bin"
 ln -sfn "$CONFIG_DIR/theme/bin/brave" "$HOME/.local/bin/brave"
+# Link router (config/url-router): http(s) links opened by native apps (xdg-open, the portal, Electron) go to the
+# matching Brave web app window, everything else to Brave as before. Roll back with:
+#   xdg-mime default brave-browser.desktop x-scheme-handler/http x-scheme-handler/https
+# Exec stays unquoted: xdg-open's own desktop-file parser does not strip quotes (so no spaces in $HOME).
+ln -sfn "$CONFIG_DIR/url-router/bin/url-router" "$HOME/.local/bin/url-router"
+mkdir -p "$HOME/.local/share/applications"
+sed "s|@ROUTER@|$HOME/.local/bin/url-router|" "$CONFIG_DIR/url-router/url-router.desktop.in" \
+  >"$HOME/.local/share/applications/url-router.desktop"
+xdg-mime default url-router.desktop x-scheme-handler/http x-scheme-handler/https
 # Jellyfin helper for the launcher (config: ~/.config/jellyfin-qs, login: jellyfin-qs login)
 ln -sfn "$CONFIG_DIR/launcher/jellyfin/bin/jellyfin-qs" "$HOME/.local/bin/jellyfin-qs"
 

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Web App Link Router
+Comment=Opens http(s) links in the matching Brave web app window, everything else in Brave
+Exec=@ROUTER@ %u
+Icon=brave-browser
+Terminal=false
+NoDisplay=true
+MimeType=x-scheme-handler/http;x-scheme-handler/https;
+Categories=Network;WebBrowser;

@@ -1,0 +1,22 @@
+# url-router config: copy to ~/.config/url-router/config (optional; the router works without it).
+# One "key = value" per line, # comments. Slug = the part of webapp_<slug>.desktop.
+
+# Command for links that are not routed to a web app (argv, split like a shell would, never run
+# through a shell; xdg-open and friends are refused because they would loop back here).
+# Default: brave --   (the ~/.local/bin/brave shim via PATH; the URL is appended)
+#fallback = brave --
+
+# Web apps that never receive links (they still open normally from the launcher).
+#disable = design tracker
+
+# Extra hosts for a web app (the start URL's host, with or without "www.", always matches).
+# "*.webapp.example" = webapp.example and any sub-domain of it.
+#alias = tracker app.webapp.example *.webapp.example
+
+# Print the decision as JSON ("-" = stdout) or append it to a file instead of launching anything.
+#dry_run = -
+
+# Hyprland only: when a window of the web app is already open, the link's new window opens as a tab of it
+# (the most recently focused one is focused, made a group if it is not one, and the new window joins it).
+# "*" = every web app. Default: off.
+#group = design
