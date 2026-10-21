@@ -2,8 +2,8 @@
 # Overrides for the generated Kvantum theme "Wall" (~/.config/Kvantum/Wall): theme.py takes Kvantum's KvFlat
 # (kvconfig + SVG, recoloured to the palette) and puts these keys on top. Glass: Kvantum makes Qt windows
 # translucent (WA_TranslucentBackground) and Hyprland draws the glass behind them (tint / darkening from
-# Settings > Glass); Kvantum's own blur is off. Window background = the shell's card fill (theme.toml
-# gtk_glass_* like GTK: reduce_window_opacity = 100 - card fill), menus = gtk_glass_popover.
+# Settings > Glass); Kvantum's own blur is off. Window background = the base fill (theme.toml gtk_glass_fill,
+# gtk_glass_* like GTK: reduce_window_opacity = 100 - base fill), menus = gtk_glass_popover.
 # Colours with alpha are Qt's #AARRGGBB.
 [%General]
 translucent_windows=true

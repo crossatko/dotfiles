@@ -263,8 +263,14 @@ def gtk_glass_alphas(s, glass=None):
     clamp = lambda x: min(1.0, max(0.0, float(x)))
     if glass is None:
         glass = hypr_solid_glass()
-    # Theme.qml cardFill: 0.3 on the glass, else bar_opacity + 0.3 (keep in sync)
-    card = 0.3 if glass else min(1.0, float(s.get("bar_opacity", 0.55)) + 0.3)
+    # Base fill (window / chrome). solid_glass host: the shell card fill (Theme.qml cardFill 0.3), the compositor glass
+    # does the tint / darkening. Plain blur (stock Hyprland): the shell's card fill there is bar_opacity + 0.3 = 0.85,
+    # which plus the offsets made Nautilus' file view fully opaque (0.85 + 0.15) and the rest near-opaque, so plain
+    # blur uses the bar's own alpha (bar_opacity: the bar sits on the same blur). theme.toml gtk_glass_fill overrides.
+    if "gtk_glass_fill" in s:
+        card = clamp(s["gtk_glass_fill"])
+    else:
+        card = 0.3 if glass else clamp(s.get("bar_opacity", 0.55))
     eff = {k: clamp(card + float(s.get(f"gtk_glass_{k}", d))) for k, d in GTK_GLASS_DEFAULTS.items()}
     on = bool(s.get("gtk_glass", True))
     if not on:
@@ -275,6 +281,10 @@ def gtk_glass_alphas(s, glass=None):
          "view": layer(eff["view"]), "popover": eff["popover"], "dialog": eff["dialog"]}
     out = {f"gtk_a_{k}": f"{v:.3f}" for k, v in a.items()}
     out["gtk_eff_header"] = f"{eff['header']:.3f}"   # single layer (Brave's frame in Wall-Glass)
+    # Brave's tab strip (Wall-Glass headerbar): the effective header alpha; theme.toml brave_glass_alpha overrides.
+    out["brave_frame_alpha"] = out["gtk_eff_header"]
+    if on and "brave_glass_alpha" in s:
+        out["brave_frame_alpha"] = f"{clamp(s['brave_glass_alpha']):.3f}"
     # Kvantum (templates/kvantum.kvconfig): background opacity reductions in %, layer alphas as Qt #AA hex
     out["kv_window_reduce"] = str(round((1 - a["window"]) * 100))
     out["kv_menu_reduce"] = str(round((1 - a["popover"]) * 100))
@@ -716,6 +726,11 @@ def apply_brave(cfg, pal):
             # accent (omnibox focus ring, toggles, links in its own UI) from the seed colour while the toolbar /
             # tab colours keep coming from GTK; "" leaves the seed prefs alone.
             want = {"system_theme": 1}
+            # The tab strip is only translucent with Chromium's own (client-side) frame: "Use system title bar and
+            # borders" (browser.custom_chrome_frame = false) makes the whole window an opaque surface and the strip
+            # shows the headerbar colour solid (measured: rgb = bg, alpha dropped). Force the custom frame.
+            frame_ok = d.setdefault("browser", {}).get("custom_chrome_frame") is True
+            d["browser"]["custom_chrome_frame"] = True
             gseed = s.get("brave_gtk_seed", "")
             th = d.setdefault("browser", {}).setdefault("theme", {})
             new_th = dict(th)
@@ -724,7 +739,7 @@ def apply_brave(cfg, pal):
                 gv -= 1 << 32 if gv >= 1 << 31 else 0
                 new_th.update({"user_color2": gv, "color_variant2": s.get("brave_gtk_variant", 3),
                                "color_scheme2": 2, "follows_system_colors": False})
-            if ext_theme.get("system_theme") == 1 and new_th == th:
+            if frame_ok and ext_theme.get("system_theme") == 1 and new_th == th:
                 done = True
                 continue
             ext_theme.update(want)

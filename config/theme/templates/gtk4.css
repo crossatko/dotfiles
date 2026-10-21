@@ -2,7 +2,8 @@
 /* GTK4 / libadwaita user CSS (~/.config/gtk-4.0/gtk.css -> out/host/gtk4.css, per host): the shared palette from
    out/gtk.css, then translucent backgrounds over the compositor's glass. The glass behind a GTK window gets the
    SAME tint / darkening / saturation as the shell's cards (Settings > Glass, applied by the compositor, live), so
-   nothing here repeats them: the window base is the shell's card fill (bg at Theme.cardFill, 0.3 on the glass)
+   nothing here repeats them: the window base is the base fill (0.3 = the shell card on the glass,
+   bar_opacity over plain blur, theme.toml gtk_glass_fill)
    and theme.toml gtk_glass_* add per-part offsets; theme.py turns them into per-layer alphas because libadwaita
    stacks panes, views and bars on the window background (layer = 1 - (1 - effective) / (1 - chrome)).
    gtk_glass = false renders every alpha as 1 (opaque, stock look). GTK3 stays opaque (out/gtk.css). */

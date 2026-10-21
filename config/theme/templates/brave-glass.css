@@ -3,11 +3,13 @@
    in GTK mode (theme.toml brave_mode = "gtk", the bin/brave shim exports GTK_THEME=Wall-Glass:dark). Chromium paints
    its tab strip / frame with the header bar background INCLUDING alpha and Hyprland puts the window glass behind it
    (tint / darkening from Settings > Glass). Focused AND :backdrop: Wall's more specific :backdrop rule would
-   otherwise make the frame opaque whenever Brave is unfocused. Alpha = the shell's card fill + gtk_glass_header.
+   otherwise make the frame opaque whenever Brave is unfocused. Alpha = brave_frame_alpha (base fill + gtk_glass_header,
+   theme.toml brave_glass_alpha overrides). Needs Chromium's own frame (theme.py sets browser.custom_chrome_frame):
+   with the system title bar the window surface is opaque and this colour shows solid.
    The toolbar / omnibox row stays opaque (Chromium forces it). */
 headerbar, headerbar:backdrop, .titlebar, .titlebar:backdrop {
   background-image: none;
-  background-color: rgba({{bg.rgb}}, {{gtk_eff_header}});
+  background-color: rgba({{bg.rgb}}, {{brave_frame_alpha}});
 }
 
 /* Brave GTK-mode colour mapping (measured 2026-10-21 with distinct test colours per node, Brave 155):
