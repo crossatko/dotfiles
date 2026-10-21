@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
 # Focus the window that belongs to a notification's app (Hyprland). Usage:
-#   focus-app <desktop-entry> <app-name> [startup-wm-class]
+#   focus-app <desktop-entry> <app-name> [startup-wm-class] [origin]
+# origin = the web origin of a Chromium/Brave notification (x-kde-origin-name hint, host or URL). Chromium
+# sends the SAME desktop-entry (brave-browser) for every site and installed web app, so without this a
+# webapp notification focuses the main browser window. An app window (class brave-<host>__<path>-<Profile>,
+# also chrome-/chromium-) of that origin outranks everything else; none open -> the old scoring applies.
 # Scores every window against the hints (class equality > app name in class > app name in title >
 # desktop entry in class), prefers a window of the app that is already focused/visible, and focuses
 # it by address. Focusing a window inside a Hyprland group makes it the group's active tab and brings
 # the group's workspace/monitor to the front, so grouped messaging apps (Discord, WhatsApp, Signal)
 # work the same as ungrouped ones. Prints the focused address, exits 1 when nothing matched.
 set -uo pipefail
-entry=${1:-}; app=${2:-}; wmclass=${3:-}
+entry=${1:-}; app=${2:-}; wmclass=${3:-}; origin=${4:-}
 norm() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/\.desktop$//; s/[[:space:]]\{1,\}/ /g'; }
 entry=$(norm "$entry"); app=$(norm "$app"); wmclass=$(norm "$wmclass")
-[ -n "$entry$app$wmclass" ] || exit 1
+# origin -> bare lowercase host (strip scheme, path, port)
+origin=$(norm "$origin" | sed -E 's#^[a-z+.-]+://##; s#[/?\#].*$##; s#:[0-9]+$##')
+[ -n "$entry$app$wmclass$origin" ] || exit 1
 
-addr=$(hyprctl clients -j | jq -r --arg e "$entry" --arg a "$app" --arg w "$wmclass" '
+addr=$(hyprctl clients -j | jq -r --arg e "$entry" --arg a "$app" --arg w "$wmclass" --arg o "$origin" '
   def lc: ascii_downcase;
   def has($hay; $n): ($n | length) >= 3 and ($hay | lc | contains($n));
   [ .[] | select(.mapped != false)
@@ -20,7 +26,8 @@ addr=$(hyprctl clients -j | jq -r --arg e "$entry" --arg a "$app" --arg w "$wmcl
     | ($c.class | lc) as $cl | ($c.initialClass | lc) as $ic | ($c.title | lc) as $t
     | { address: .address, focus: (.focusHistoryID // 99),
         score: (
-            (if $w != "" and ($cl == $w or $ic == $w) then 10 else 0 end)
+            (if ($o | length) >= 3 and ($cl | test("^(brave|chrome|chromium)-" + ($o | gsub("[.]"; "[.]")) + "__")) then 20 else 0 end)
+          + (if $w != "" and ($cl == $w or $ic == $w) then 10 else 0 end)
           + (if $e != "" and ($cl == $e or $ic == $e) then 9 else 0 end)
           + (if has($cl; $a) or has($ic; $a) then 8 else 0 end)
           + (if has($t; $a) then 4 else 0 end)

@@ -68,9 +68,12 @@ Rectangle {
     function activate() {
         if (defaultAction) defaultAction.invoke()
         const de = n.desktopEntry ? DesktopEntries.byId(n.desktopEntry) : null
-        console.log("notification click: desktopEntry=[" + n.desktopEntry + "] appName=[" + n.appName + "] startupClass=[" + (de ? de.startupClass : "") + "]")
+        // Chromium/Brave: every site and web app sends desktop-entry "brave-browser"; the only per-site identity
+        // is the x-kde-origin-name hint (the origin), which focus-app matches to the app window's class.
+        const origin = n.hints && n.hints["x-kde-origin-name"] ? String(n.hints["x-kde-origin-name"]) : ""
+        console.log("notification click: desktopEntry=[" + n.desktopEntry + "] appName=[" + n.appName + "] startupClass=[" + (de ? de.startupClass : "") + "] origin=[" + origin + "]")
         Quickshell.execDetached([Quickshell.shellDir + "/bin/focus-app", n.desktopEntry || "", n.appName || "",
-            de && de.startupClass ? de.startupClass : ""])
+            de && de.startupClass ? de.startupClass : "", origin])
         card.dismiss()
     }
     TapHandler { onTapped: card.activate() }
