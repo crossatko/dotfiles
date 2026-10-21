@@ -35,3 +35,5 @@ __pycache__/
 # claude-tabs zellij plugin: standalone package (~/code/crossatko/zellij-wc3cz-claude); its setup.sh
 # creates the host-local link config/zellij/plugins/claude-tabs -> the checkout
 config/zellij/plugins/
+# per-host theme outputs (alphas depend on the running compositor; theme.py render writes them)
+config/theme/out/host/

@@ -36,7 +36,9 @@ overrides ──┘                      │
   `{{key.rgb}}` (`r, g, b`), `{{key.argb}}` (`0xffRRGGBB`), or `{{font}}`/`{{wallpaper}}`.
   It renders to `out/<same name>`; point the app at it (include/import/symlink).
   Palette keys: `theme.py show`.
-* `out/` is committed on purpose so a fresh clone works before the first `apply`.
+* `out/` is committed on purpose so a fresh clone works before the first `apply`, except `out/host/` (git-ignored):
+  `gtk3.css`, `gtk4.css`, `kvantum.kvconfig`, `brave-glass.css` depend on the running compositor (card fill 0.3 on the
+  solid_glass fork, `bar_opacity + 0.3` elsewhere), so each host renders its own; only `theme.py` links them.
 
 ## How the extractor picks colors
 Background/foreground come from the darkest third / lightest quarter of the image,
@@ -60,7 +62,7 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 | launcher / menus | quickshell `Launcher.qml` | instant, palette-driven |
 | Qt / KDE apps (Dolphin, Ark, ...) | KDE platform theme (`QT_QPA_PLATFORMTHEME=kde` in `hyprland/env.lua`) reading `~/.config/kdeglobals`: color scheme `Wall`/`WallB` + accent, fonts, icons (`Wall-Adwaita-Qt`), widget style (`qt_style`: Kvantum `Wall`) | backgrounds, text and icons live; selection highlight on next window |
 | GTK 3 apps, Brave dialogs | named theme `Wall` (`~/.local/share/themes/Wall`): GTK's dark stylesheet re-colored by `recolor_gtk_css`; Brave gets `GTK_THEME=Wall:dark` from its shim | GTK 3 apps reload on theme change; Brave on restart |
-| GTK 4 / libadwaita apps, nautilus | `~/.config/gtk-4.0/gtk.css` -> `out/gtk4.css` (= `out/gtk.css` + translucent backgrounds and a compositor blur request, `gtk_glass*` in theme.toml); `gtk-3.0` -> `out/gtk3.css` (= `out/gtk.css` + the same glass for client-side-decorated GTK3 windows only; Firefox / Thunderbird and SSD windows stay opaque) | **after the app restarts** (see below) |
+| GTK 4 / libadwaita apps, nautilus | `~/.config/gtk-4.0/gtk.css` -> `out/host/gtk4.css` (= `out/gtk.css` + translucent backgrounds and a compositor blur request, `gtk_glass*` in theme.toml); `gtk-3.0` -> `out/host/gtk3.css` (= `out/gtk.css` + the same glass for client-side-decorated GTK3 windows only; Firefox / Thunderbird and SSD windows stay opaque) | **after the app restarts** (see below) |
 | Adwaita icons | generated hue-rotated copy `Wall-Adwaita` (see below) | new windows / apps that reload icons |
 | Brave | seed-color theme written into its Preferences by the `~/.local/bin/brave` launcher shim | at next start (Brave rewrites Preferences on exit, so it can't be edited while running) |
 
@@ -84,7 +86,9 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 * **Blur**: the quickshell bar opts in to Hyprland's own blur via the `qs-bar` layer rule in
   `hypr/hyprland/rules.lua`; tune with `bar_opacity`.
 * Not themed: Discord, web page contents.
-* `out/` is committed on purpose so a fresh clone works before the first `apply`.
+* `out/` is committed on purpose so a fresh clone works before the first `apply`, except `out/host/` (git-ignored):
+  `gtk3.css`, `gtk4.css`, `kvantum.kvconfig`, `brave-glass.css` depend on the running compositor (card fill 0.3 on the
+  solid_glass fork, `bar_opacity + 0.3` elsewhere), so each host renders its own; only `theme.py` links them.
 
 ## Launcher
 `SUPER+D` = `qs ipc call launcher toggle` (Raycast-style launcher, `config/quickshell/Launcher.qml`).
@@ -150,7 +154,7 @@ cancels an open dmenu overlay (added for testing it without keystrokes).
 ## Brave glass tab strip (`brave_mode = "gtk"`)
 
 Brave in GTK mode takes its frame colours from the GTK theme named by `GTK_THEME`. The shim (`bin/brave`) exports
-`GTK_THEME=Wall-Glass:dark`: `~/.local/share/themes/Wall-Glass` = `Wall` + `out/brave-glass.css` (header bars,
+`GTK_THEME=Wall-Glass:dark`: `~/.local/share/themes/Wall-Glass` = `Wall` + `out/host/brave-glass.css` (header bars,
 focused and `:backdrop`, at the shell card fill + `gtk_glass_header`). Chromium keeps that alpha for the tab strip,
 so the compositor glass shows through; the toolbar / omnibox row stays opaque. `theme.py brave` (run by the shim
 while Brave is closed) sets `extensions.theme.system_theme = 1` in GTK mode. `brave_mode = "seed"` restores the
@@ -168,7 +172,7 @@ style (libadwaita is the design reference): radii, Btn fills, accent checks / sl
 
 ### libadwaita design match (Qt + GTK3)
 
-libadwaita (with `out/gtk4.css`) is the design source; Qt (Kvantum) and GTK3 copy its measured metrics:
+libadwaita (with `out/host/gtk4.css`) is the design source; Qt (Kvantum) and GTK3 copy its measured metrics:
 34 px buttons / entries / combos / spin boxes (9 px corners, fg 10 % fill, hover 15 %, pressed 30 %, bold labels),
 flat 34 x 34 header / tool buttons (hover 7 %), 46-47 px header bar / toolbar, 36-38 px sidebar rows with 6 px
 corners and fg 10 % selection, 20 px check boxes / radios (fg 15 % ring -> accent with accent_fg mark), 4 px scale
