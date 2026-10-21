@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
+import QtQuick.Effects
 import "launcher"
 import "launcher/js/Ranker.js" as Ranker
 import "launcher/js/Frecency.js" as Frecency
@@ -570,7 +571,8 @@ ModalMenu {
                     width: parent.width
                     rowH: lc.rowH
                     radius: Theme.radiusModal
-                    icon: iconPath === "" ? (modelData.glyph || "") : ""
+                    readonly property string avatar: modelData.avatar || ""      // local image (twitch profile picture), drawn in the icon slot
+                    icon: iconPath === "" && avatar === "" ? (modelData.glyph || "") : ""
                     iconSize: 16
                     iconColor: modelData.iconColor === "red" ? Theme.red : sel ? Theme.accent : modelData.iconColor === "muted" ? Theme.muted : Theme.fgDim
                     outlined: sel
@@ -584,6 +586,36 @@ ModalMenu {
                         implicitSize: 24
                         Layout.preferredWidth: 22
                         Layout.preferredHeight: 22
+                    }
+                    Item {
+                        visible: row.avatar !== ""
+                        Layout.preferredWidth: 22
+                        Layout.preferredHeight: 22
+                        Image {
+                            id: avatarImg
+                            anchors.fill: parent
+                            source: row.avatar !== "" ? "file://" + row.avatar : ""
+                            sourceSize: Qt.size(44, 44)
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            visible: false
+                        }
+                        MultiEffect {
+                            anchors.fill: parent
+                            source: avatarImg
+                            visible: avatarImg.status === Image.Ready
+                            saturation: row.modelData.avatarLive ? 0 : -1
+                            opacity: row.modelData.avatarLive ? 1 : 0.6
+                            maskEnabled: true
+                            maskSource: avatarMask
+                        }
+                        Rectangle {
+                            id: avatarMask
+                            anchors.fill: parent
+                            radius: Math.min(width / 2, Theme.radiusItem)
+                            layer.enabled: true
+                            visible: false
+                        }
                     }
                     RowText { title: row.modelData.name; sub: row.modelData.subtitle || "" }
                     Label {

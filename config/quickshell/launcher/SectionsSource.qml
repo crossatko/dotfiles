@@ -242,7 +242,8 @@ QtObject {
                                         kind: "twitch-web", source: "", glyph: "\uf0ac", keywords: ["twitch", "browser", "following", "streams"],
                                         transient: true, private: true, url: "https://www.twitch.tv/directory/following" })
 
-    // twitch-qs-follows --json: [{kind: live|offline|favorite|login|none, login, name, game, viewers, stale}]
+    // twitch-qs-follows --json: [{kind: live|offline|favorite|login|none, login, name, game, viewers, stale, avatar}]
+    // avatar = local image path or null; the launcher draws it in the row icon slot (grayscale unless live)
     function viewersText(n) {
         return n >= 10000 ? Math.floor(n / 1000) + "k" : n >= 1000 ? (Math.floor(n / 100) / 10) + "k" : String(n)
     }
@@ -255,8 +256,9 @@ QtObject {
         return { id: "sec:twitch:login", name: "Log in to Twitch", subtitle: label, kind: "twitch-login", source: "",
                  glyph: "", transient: true, private: true }
     }
-    function twitchRow(login, name, sub, live) {
+    function twitchRow(login, name, sub, live, avatar) {
         return { id: "sec:twitch:" + login, name: name, subtitle: sub, kind: "twitch", source: live ? "Live" : "",
+                 avatar: avatar || "", avatarLive: live,    // local profile picture path ("" = generic glyph); full colour only while live
                  glyph: "", iconColor: live ? "red" : "muted", transient: true, private: true, login: login,
                  actions: [{ id: "twitch-vods", label: twAppPath !== "" ? "Past broadcasts" : "Past broadcasts (browser)", glyph: "\uf144" }] }
     }
@@ -279,7 +281,7 @@ QtObject {
                 if (typeof e.viewers === "number") parts.push(viewersText(e.viewers))
             } else parts.push(kind === "favorite" ? "favorite" : "offline")
             if (stale) parts.push(stale)
-            out.push(twitchRow(login, name || login, parts.join("  \u00b7  "), kind === "live"))
+            out.push(twitchRow(login, name || login, parts.join("  \u00b7  "), kind === "live", typeof e.avatar === "string" && e.avatar.startsWith("/") ? e.avatar : ""))
         }
         return out
     }
