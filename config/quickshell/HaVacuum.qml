@@ -72,9 +72,9 @@ Rectangle {
         implicitWidth: row.implicitWidth + 24
         radius: Theme.inner(Theme.radiusItem, 12)    // inside the card's 12 px padding
         opacity: enabledLook ? 1 : 0.5
-        color: primary ? (abArea.containsMouse ? Theme.alpha(Theme.accent, 0.42) : Theme.alpha(Theme.accent, 0.3))
+        color: primary ? (abGlow.hovered ? Theme.alpha(Theme.accent, 0.42) : Theme.alpha(Theme.accent, 0.3))
              : active ? Theme.alpha(Theme.accent, 0.3)
-             : abArea.containsMouse ? Theme.alpha(Theme.fg, 0.14) : Theme.alpha(Theme.fg, 0.07)
+             : abGlow.hovered ? Theme.alpha(Theme.fg, 0.14) : Theme.alpha(Theme.fg, 0.07)
         border.width: primary || active ? 1 : 0
         border.color: Theme.alpha(Theme.accent, 0.8)
         Behavior on color { ColorAnimation { duration: 100 } }
@@ -98,6 +98,7 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
+        HoverGlow { id: abGlow; area: abArea; radius: ab.radius }
         MouseArea {
             id: abArea
             anchors.fill: parent
@@ -137,7 +138,7 @@ Rectangle {
                     bottomLeftRadius: index === 0 ? endR : 0
                     topRightRadius: index === seg.options.length - 1 ? endR : 0
                     bottomRightRadius: index === seg.options.length - 1 ? endR : 0
-                    color: on ? Theme.alpha(Theme.accent, 0.3) : cellArea.containsMouse ? Theme.alpha(Theme.fg, 0.12) : Theme.alpha(Theme.fg, 0.04)
+                    color: on ? Theme.alpha(Theme.accent, 0.3) : cellGlow.hovered ? Theme.alpha(Theme.fg, 0.12) : Theme.alpha(Theme.fg, 0.04)
                     Behavior on color { ColorAnimation { duration: 100 } }
                     Rectangle {                      // hairline between cells
                         visible: cell.index > 0
@@ -161,6 +162,12 @@ Rectangle {
                         text: seg.labels[cell.index] !== undefined ? seg.labels[cell.index] : String(cell.modelData)
                         font.pixelSize: Theme.fontCaption
                         color: cell.on ? Theme.accent : Theme.fg
+                    }
+                    HoverGlow {
+                        id: cellGlow
+                        area: cellArea
+                        topLeftRadius: cell.topLeftRadius; bottomLeftRadius: cell.bottomLeftRadius
+                        topRightRadius: cell.topRightRadius; bottomRightRadius: cell.bottomRightRadius
                     }
                     MouseArea {
                         id: cellArea
@@ -302,7 +309,7 @@ Rectangle {
                         Layout.preferredWidth: 1                    // equal columns
                         implicitHeight: 34
                         radius: Theme.inner(Theme.radiusItem, 12)    // inside the card's 12 px padding
-                        color: sel ? Theme.alpha(Theme.accent, 0.3) : tileArea.containsMouse ? Theme.alpha(Theme.fg, 0.14) : Theme.alpha(Theme.fg, 0.07)
+                        color: sel ? Theme.alpha(Theme.accent, 0.3) : roomGlow.hovered ? Theme.alpha(Theme.fg, 0.14) : Theme.alpha(Theme.fg, 0.07)
                         border.width: sel ? 1 : 0
                         border.color: Theme.alpha(Theme.accent, 0.8)
                         Behavior on color { ColorAnimation { duration: 100 } }
@@ -322,6 +329,7 @@ Rectangle {
                                 color: tile.sel ? Theme.accent : Theme.fg
                             }
                         }
+                        HoverGlow { id: roomGlow; area: tileArea; radius: tile.radius }
                         MouseArea {
                             id: tileArea
                             anchors.fill: parent

@@ -33,7 +33,10 @@ hl.on("hyprland.start", function()
 	-- fail to reach a compositor, and Restart=on-failure would loop it.
 	hl.exec_cmd("systemctl --user start hypridle")
 	hl.exec_cmd("1password --silent")
-	hl.exec_cmd("quickshell") -- bar + wallpaper picker (config/quickshell)
+	-- QSG_USE_SIMPLE_ANIMATION_DRIVER: Qt's default vsync-driven animation clock runs QML animations ~1.4x too fast on the
+	-- 360 Hz monitor (measured 2026-10-20: 800 ms linear fade took ~580 ms; with this, ~780 ms; 60 Hz was right
+	-- either way), so 1x would not mean the same time as Hyprland's animations (Settings > Animations)
+	hl.exec_cmd("env QSG_USE_SIMPLE_ANIMATION_DRIVER=1 quickshell") -- bar + wallpaper picker (config/quickshell)
 	-- notifications are served by quickshell now (config/quickshell/Notifs.qml)
 	hl.exec_cmd("hyprctl setcursor Oxygen-White 24")
 	-- Kept running only as the NetworkManager secret agent and the bluez pairing agent; their tray

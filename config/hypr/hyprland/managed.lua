@@ -40,6 +40,19 @@
 -- Values are clamped to the option ranges (tint: AARRGGBB integer). On a Hyprland without the solid_glass
 -- options (stock) nothing is applied and no option is ever touched (M.glass_supported()).
 --
+-- Animations (Settings > Animations): a THIRD state file next to appearance.json,
+-- ${XDG_STATE_HOME:-~/.local/state}/quickshell/animations.json (env override ANIM_FILE), flat, written only by
+-- Quickshell (Motion.qml). The popup* keys are Quickshell's own; the Hyprland ones:
+--   {"version":1,"hyprEnabled":true,"hyprSpeed":1.5,"hyprCurve":"snappy",
+--    "windowsSpeed":0.8,"windowsCurve":"overshoot","fadeEnabled":false, ...}
+--   hyprEnabled -> animations.enabled; hyprSpeed (0.25-10, higher = faster) divides every leaf's speed
+--   (= duration) of animations.lua; hyprCurve = "config" (each leaf keeps its own curve) or a preset of
+--   M.ANIM_CURVES (all leaves). Per group (M.ANIM_GROUPS: windows, layers, fade, workspaces, border,
+--   specialWorkspace): <group>Enabled, <group>Speed (multiplies hyprSpeed), <group>Curve (overrides hyprCurve).
+-- The base values are the hand-written leaves in animations.lua (styles are always kept). With no Hyprland key
+-- set, nothing is touched at load. anim_apply() (Quickshell: hyprctl eval "if anim_apply then anim_apply() end")
+-- re-reads the file and rewrites every leaf from the base, so removing a key restores the hand-written value.
+--
 -- Runtime: Quickshell runs `hyprctl eval "if layout_apply then layout_apply() end"` after saving (and
 -- `hyprctl reload config-only` when smartGaps or smartMonitors changed). A config reload re-runs
 -- everything, so it gives the same result.
@@ -437,6 +450,216 @@ function M.apply_glass(g)
 	return pcall(hl.config, { decoration = { blur = { solid_glass = t } } })
 end
 
+-- Glass fade (fork option decoration:blur:solid_glass:layer_alpha_ref, branch more-blur-rebased-20261021): the
+-- glass of a LAYER surface follows the surface's own alpha at each pixel, full strength at this alpha. Quickshell's
+-- glass cards fill with Theme.bg at 0.3 (Theme.cardFill / glassFill with glass on), so a card fading from 0 to 1
+-- fades its glass from 0 to full (PopupHost / ModalMenu animations). On a build without the option nothing is set
+-- (no config error); the glass then stays at full strength during fades, as before.
+M.GLASS_LAYER_ALPHA_REF = 0.3
+function M.apply_glass_layer_alpha()
+	local ok, v = pcall(hl.get_config, "decoration.blur.solid_glass.layer_alpha_ref")
+	if not ok or v == nil then
+		return false, "no layer_alpha_ref option"
+	end
+	return pcall(hl.config, { decoration = { blur = { solid_glass = { layer_alpha_ref = M.GLASS_LAYER_ALPHA_REF } } } })
+end
+
+-- ---------------------------------------------------------------- animations (animations.json)
+
+-- preset curves, registered as qs_<id>; "config" = the leaf's own curve from animations.lua
+M.ANIM_CURVES = {
+	smooth = { type = "bezier", points = { { 0.25, 0.1 }, { 0.25, 1 } } },
+	snappy = { type = "bezier", points = { { 0.16, 1 }, { 0.3, 1 } } },
+	overshoot = { type = "bezier", points = { { 0.34, 1.56 }, { 0.64, 1 } } },
+	linear = { type = "bezier", points = { { 0, 0 }, { 1, 1 } } },
+	-- settle_ms: measured time to settle within 2 % of the target UNSCALED (window move, 2026-10-20); the curve is
+	-- time-scaled so it settles in BASE_MS / factor, like the bezier leaves (damping ratio kept, ~0.5 % overshoot)
+	spring = { type = "spring", mass = 1, stiffness = 71.2633, dampening = 15.8273644, settle_ms = 575 },
+}
+M.ANIM_GROUPS = {
+	windows = { "windows", "windowsMove", "windowsIn", "windowsOut" },
+	layers = { "layers", "layersIn", "layersOut" },
+	fade = { "fade", "fadeIn", "fadeOut", "fadeLayersIn", "fadeLayersOut" },
+	workspaces = { "workspaces", "workspacesIn", "workspacesOut" },
+	border = { "border" },
+	specialWorkspace = { "specialWorkspace" },
+}
+M.ANIM_SPEED = { 0.25, 10 } -- every speed key; same as Motion.qml speedRange
+-- effective factor = hyprSpeed x group speed (0.0625-100); leaf speed (ds) = base / factor, floored at 0.01 (1 ms;
+-- the fork accepts it), so at most 32 ds for the 2.0 (BASE_MS 200) base. Springs get "qs_spring_<round(f*100)>" (6-10000,
+-- integers, e.g. 2.5x -> qs_spring_250); measured stable (no ringing) up to f = 100.
+local LEAF_GROUP = {}
+for g, leaves in pairs(M.ANIM_GROUPS) do
+	for _, l in ipairs(leaves) do
+		LEAF_GROUP[l] = g
+	end
+end
+
+function M.anim_path()
+	local p = os.getenv("ANIM_FILE")
+	if p ~= nil and p ~= "" then
+		return p
+	end
+	return (M.state_path():match("^(.*)/[^/]*$") or ".") .. "/animations.json"
+end
+
+local function anim_curve_ok(id)
+	return id == "config" or M.ANIM_CURVES[id] ~= nil
+end
+
+-- Pure: text -> {hyprEnabled=bool, hyprSpeed=n, hyprCurve=id, <group>Enabled/Speed/Curve} with only the
+-- valid Hyprland keys that are set. Never raises.
+function M.parse_anim(text)
+	local a = {}
+	if type(text) ~= "string" or #text > M.MAX_BYTES then
+		return a
+	end
+	local body = text:match("^%s*(%b{})%s*$")
+	if body == nil then
+		return a
+	end
+	local function num(key)
+		local tok = last_token(body, key)
+		local v = tok and tok:match("^%-?%d[%d%.eE+%-]*$") and tonumber(tok)
+		if type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge then
+			a[key] = math.max(M.ANIM_SPEED[1], math.min(M.ANIM_SPEED[2], v))
+		end
+	end
+	local function bool(key)
+		local tok = last_token(body, key)
+		if tok == "true" then
+			a[key] = true
+		elseif tok == "false" then
+			a[key] = false
+		end
+	end
+	local function curve(key)
+		local tok = last_token(body, key)
+		local id = tok and tok:match('^"([%w_]+)"$')
+		if id and anim_curve_ok(id) then
+			a[key] = id
+		end
+	end
+	bool("hyprEnabled")
+	bool("launcherMotion")
+	num("hyprSpeed")
+	curve("hyprCurve")
+	for g in pairs(M.ANIM_GROUPS) do
+		bool(g .. "Enabled")
+		num(g .. "Speed")
+		curve(g .. "Curve")
+	end
+	return a
+end
+
+function M.read_anim()
+	local ok, a = pcall(function()
+		local text = M.read_small_file(M.anim_path())
+		return text and M.parse_anim(text) or {}
+	end)
+	return ok and type(a) == "table" and a or {}
+end
+
+-- Springs ignore an animation's `speed` (measured 2026-10-20: identical motion at speed 0.5 and 5), so the speed
+-- factor f is applied to the spring itself: time-scaling x'' = -(k/m)x - (c/m)x' by f gives k*f^2 and c*f (same
+-- shape, f times faster). One curve per factor, "qs_<id>_<f*100>", registered by M.apply_anim.
+-- curve id, factor -> curve name (and remembers it in M.anim_springs). Pure apart from that table.
+M.anim_springs = {}
+function M.spring_curve(cid, factor)
+	local pct = math.max(1, math.floor(factor * 100 + 0.5))
+	local name = "qs_" .. cid .. "_" .. pct
+	if M.anim_springs[name] == nil then
+		local c, f = M.ANIM_CURVES[cid], pct / 100
+		M.anim_springs[name] = {
+			type = "spring",
+			mass = c.mass,
+			stiffness = c.stiffness * f * f,
+			dampening = c.dampening * f,
+		}
+	end
+	return name
+end
+
+-- settings + one base leaf (animations.lua) -> the leaf spec to apply. Pure.
+function M.anim_leaf(a, base, base_ms)
+	local g = LEAF_GROUP[base.leaf]
+	local factor = (a.hyprSpeed or 1) * (g and a[g .. "Speed"] or 1)
+	local cid = (g and a[g .. "Curve"]) or a.hyprCurve or "config"
+	local spec = {
+		leaf = base.leaf,
+		enabled = base.enabled ~= false and not (g and a[g .. "Enabled"] == false),
+		speed = math.max(0.01, math.floor(base.speed / factor * 1000 + 0.5) / 1000),
+		style = base.style,
+	}
+	-- a spring curve is referenced with `spring = <name>`; `bezier = <spring name>` fails with "no such bezier"
+	-- (reported, not raised, and the leaf keeps its old values)
+	if cid == "config" then
+		spec.bezier, spec.spring = base.bezier, base.spring
+	elseif M.ANIM_CURVES[cid].type == "spring" then
+		local c = M.ANIM_CURVES[cid]
+		spec.spring = M.spring_curve(cid, factor * (c.settle_ms or 200) / (base_ms or 200))
+	else
+		spec.bezier = "qs_" .. cid
+	end
+	return spec
+end
+
+M.anim_base_enabled = nil -- animations.enabled as the hand-written config set it (read at load)
+
+-- settings -> applies them. force = false (config load): nothing at all when no key is set.
+-- -> true, or false plus the first error.
+function M.apply_anim(a, force)
+	a = type(a) == "table" and a or {}
+	if not force and next(a) == nil then
+		return true
+	end
+	local okb, base = pcall(require, "hyprland.animations")
+	if not okb or type(base) ~= "table" or type(base.leaves) ~= "table" then
+		return false, "animations.lua not loaded"
+	end
+	local ok_all, first_err = true, nil
+	local function note(ok, err)
+		if not ok and ok_all then
+			ok_all, first_err = false, err
+		end
+	end
+	for id, c in pairs(M.ANIM_CURVES) do
+		local def = {}
+		for k, v in pairs(c) do
+			if k ~= "settle_ms" then
+				def[k] = v
+			end
+		end
+		note(pcall(hl.curve, "qs_" .. id, def))
+	end
+	M.anim_springs = {}
+	local specs = {}
+	for i, b in ipairs(base.leaves) do
+		specs[i] = M.anim_leaf(a, b, base.BASE_MS)
+	end
+	for name, c in pairs(M.anim_springs) do -- the scaled springs the leaves refer to
+		note(pcall(hl.curve, name, c))
+	end
+	for _, spec in ipairs(specs) do
+		note(pcall(hl.animation, spec))
+	end
+	-- launcher "Like popups" (Motion.qml launcherMotion): the launcher animates itself, so Hyprland's layer fade
+	-- for qs-launcher is switched off (the qs-popup one is off for good in rules.lua)
+	if M.launcher_noanim ~= nil then
+		pcall(function()
+			M.launcher_noanim:set_enabled(a.launcherMotion == true)
+		end)
+	end
+	local en = a.hyprEnabled
+	if en == nil then
+		en = M.anim_base_enabled
+	end
+	if type(en) == "boolean" then
+		note(pcall(hl.config, { animations = { enabled = en } }))
+	end
+	return ok_all, first_err
+end
+
 -- ---------------------------------------------------------------- apply
 
 -- Keys this file has overridden since the config was loaded.
@@ -692,6 +915,14 @@ pcall(M.apply_options, initial)
 pcall(function()
 	M.apply_glass(M.read_glass())
 end)
+pcall(M.apply_glass_layer_alpha)
+pcall(function()
+	M.anim_base_enabled = hl.get_config("animations.enabled")
+end)
+pcall(function()
+	M.launcher_noanim = hl.layer_rule({ match = { namespace = "qs-launcher" }, no_anim = true, enabled = false })
+end)
+pcall(M.apply_anim, M.read_anim(), false)
 
 -- Smart gaps ("lone window fills the screen"): a lone tiled window gets no gaps and no border/rounding.
 -- w[tv1] = exactly one visible tiled window; f[1] = one fullscreen-capable window. The gaps rules only
@@ -760,6 +991,18 @@ function layout_apply()
 	if type(pip_bar_changed) == "function" then
 		pcall(pip_bar_changed)
 	end
+	if not ok then
+		return false, ok2
+	end
+	return ok2, err
+end
+
+-- Global entry point for Settings > Animations: hyprctl eval "if anim_apply then anim_apply() end"
+-- -> true, or false plus the error message.
+function anim_apply()
+	local ok, ok2, err = pcall(function()
+		return M.apply_anim(M.read_anim(), true)
+	end)
 	if not ok then
 		return false, ok2
 	end

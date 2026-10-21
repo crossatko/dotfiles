@@ -13,13 +13,14 @@ Rectangle {
 
     implicitHeight: 54
     radius: Theme.radiusItem
-    color: on ? Theme.alpha(Theme.accent, area.containsMouse ? 0.34 : 0.26)
-              : Theme.alpha(Theme.fg, area.containsMouse ? 0.13 : 0.07)
+    color: on ? Theme.alpha(Theme.accent, glow.hovered ? 0.30 : 0.26)
+              : Theme.alpha(Theme.fg, glow.hovered ? 0.10 : 0.07)
     border.width: 1
     border.color: on ? Theme.alpha(Theme.accent, 0.85) : Theme.alpha(Theme.overlay, 0.45)
     Behavior on color { ColorAnimation { duration: 120 } }
     Behavior on border.color { ColorAnimation { duration: 120 } }
 
+    HoverGlow { id: glow; area: area; radius: tile.radius }
     RowLayout {
         anchors { fill: parent; leftMargin: 12; rightMargin: 10 }
         spacing: 10

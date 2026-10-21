@@ -38,17 +38,25 @@ Singleton {
     // the qs-.* layer rule blurs as before. Re-checked on every config reload.
     property bool glass: false
     property bool glassKnown: false     // false until the first check finished
+    // true when the running Hyprland fades a layer's glass with the layer's own alpha (fork option
+    // decoration:blur:solid_glass:layer_alpha_ref > 0, set by managed.lua when the option exists): a card fading its
+    // opacity then fades its glass too. false (installed build without the option): the glass is drawn at full
+    // strength whatever the card's opacity, so it would stay as a dark empty box after the content has faded and
+    // vanish in one frame (measured 2026-10-21); glassScaleAt() then shrinks the glass instead in the last part.
+    property bool glassFades: false
     // fill alpha of glass cards (popups, OSD, toasts): low enough for the lens / rim to show; else the original fill
     readonly property real cardFill: glass ? 0.3 : Math.min(1, barOpacity + 0.3)
     function checkGlass() { glassProbe.running = true }
     Process {
         id: glassProbe
-        command: ["hyprctl", "-j", "--batch", "getoption decoration:blur:enabled ; getoption decoration:blur:variant"]
+        command: ["hyprctl", "-j", "--batch", "getoption decoration:blur:enabled ; getoption decoration:blur:variant ; getoption decoration:blur:solid_glass:layer_alpha_ref"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const en = /"decoration:blur:enabled",\s*"(?:bool|int)":\s*(true|1)\b/.test(text)
                 const va = /"decoration:blur:variant",\s*"int":\s*(\d+)/.exec(text)
                 root.glass = en && va !== null && va[1] === "11"      // 11 = solid_glass
+                const rf = /"decoration:blur:solid_glass:layer_alpha_ref",\s*"float":\s*([\d.eE+-]+)/.exec(text)
+                root.glassFades = rf !== null && parseFloat(rf[1]) > 0
                 root.glassKnown = true
             }
         }
@@ -100,11 +108,39 @@ Singleton {
     readonly property int popupGap: barFloating ? Math.max(4, gapOut) : 8     // popup card <-> bar
     // popup motion (PopupHost.qml), ms: open fade/scale-in, close fade-out, card glide + resize when switching chips,
     // old content fading out / new content fading in during a switch
-    readonly property int popupOpenMs: 200
-    readonly property int popupCloseMs: 200
-    readonly property int popupMoveMs: 200
-    readonly property int popupFadeOutMs: 70
-    readonly property int popupFadeInMs: 130
+    // Base values at speed 1 (Settings -> Animations: Motion.qml, animations.json): duration = base / popupSpeed,
+    // style "none" = 0 (instant)
+    readonly property real popupSpeedK: Motion.popupStyle === "none" ? 0 : 1 / Motion.popupSpeed
+    // floor of one frame (16 ms) for any animated value, so 10x never gives 1-7 ms steps
+    function popupMs(base) { return popupSpeedK === 0 ? 0 : Math.max(16, Math.round(base * popupSpeedK)) }
+    // 1x = Motion.baseMs (shared with Hyprland); the switch's content fades are 35 % / 65 % of it
+    readonly property int popupOpenMs: popupMs(Motion.baseMs)
+    readonly property int popupCloseMs: popupMs(Motion.baseMs * 0.75)    // close = 0.75 x open
+    readonly property int popupMoveMs: popupMs(Motion.baseMs)
+    readonly property int popupFadeOutMs: popupMs(Motion.baseMs * 0.35)
+    readonly property int popupFadeInMs: popupMs(Motion.baseMs * 0.65)
+    // curve (Motion.popupCurve): open / move ease out (Back overshoots); close = the same family decelerating WITHOUT
+    // overshoot (Back closes with OutCubic), so it is visible to the very end: no last-frame drop from an ease-in, no
+    // crossing of 0 before the end (2026-10-20; before: In* curves, and Back closed early, see PopupHost)
+    readonly property int popupEaseOpen: ({ quint: Easing.OutQuint, expo: Easing.OutExpo, back: Easing.OutBack, linear: Easing.Linear })[Motion.popupCurve] ?? Easing.OutCubic
+    readonly property int popupEaseClose: ({ quint: Easing.OutQuint, expo: Easing.OutExpo, linear: Easing.Linear })[Motion.popupCurve] ?? Easing.OutCubic
+    readonly property int popupEaseMove: popupEaseOpen
+    // Glass of a card in open / close motion at progress t (1 = open), as a scale of the card's glass region about its
+    // centre (Glass.qml `glassScale`). With a fading glass (glassFades) always 1: the glass fades with the card. Without
+    // it the glass cannot fade, so below t = glassTailFrom (content <= 15 % visible) the region shrinks instead,
+    // linearly in time for the cubic curves (cube roots), down to nothing at t = 0.005 (Glass.qml drops a region
+    // below opacity 0.004 anyway: ending there left a 30 % box that vanished at once, measured), so the last glass
+    // frame is a tiny one rather than the full card vanishing at once.
+    readonly property real glassTailFrom: 0.15
+    function glassScaleAt(t) {
+        if (glassFades || t >= glassTailFrom) return 1
+        const a = Math.cbrt(Math.max(0, t)), e = Math.cbrt(0.005)
+        return Math.max(0, (a - e) / (Math.cbrt(glassTailFrom) - e))
+    }
+    // style (Motion.popupStyle): scale = fade + scale 0.96 -> 1 + 10 px slide (default); slide = fade + 24 px
+    // slide; fade = fade only; none = instant
+    readonly property real popupScaleFrom: Motion.popupStyle === "scale" ? 0.96 : 1
+    readonly property real popupSlidePx: Motion.popupStyle === "scale" ? 10 : Motion.popupStyle === "slide" ? 24 : 0
     readonly property int edgeGap: barFloating ? gapOut : 12                  // popups/toasts <-> screen edge
 
     // Concentric inner radius: an element inset by `inset` inside one of radius `outer`.

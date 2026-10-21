@@ -1,5 +1,6 @@
 singleton Theme 1.0 Theme.qml
 singleton Appearance 1.0 Appearance.qml
+singleton Motion 1.0 Motion.qml
 Chip 1.0 Chip.qml
 Label 1.0 Label.qml
 Bar 1.0 Bar.qml
@@ -42,6 +43,7 @@ Settings 1.0 Settings.qml
 SettingsBar 1.0 SettingsBar.qml
 SettingsWallpaper 1.0 SettingsWallpaper.qml
 SettingsAppearance 1.0 SettingsAppearance.qml
+SettingsAnimations 1.0 SettingsAnimations.qml
 SettingsGlass 1.0 SettingsGlass.qml
 TailscaleSection 1.0 TailscaleSection.qml
 RowState 1.0 RowState.qml
@@ -61,3 +63,5 @@ Meter 1.0 Meter.qml
 Glass 1.0 Glass.qml
 singleton GlassTuneCtl 1.0 GlassTuneCtl.qml
 Launcher 1.0 Launcher.qml
+HoverGlow 1.0 HoverGlow.qml
+SwipeDismiss 1.0 SwipeDismiss.qml

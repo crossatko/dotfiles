@@ -20,9 +20,9 @@ Rectangle {
     property bool interactive: true                // false: no hover, no click (e.g. a wired link with nothing to connect)
     property bool rightClick: false                // also emit clicked() for the right button
     property color baseColor: Theme.alpha(Theme.fg, 0.05)
-    readonly property bool hovered: area.containsMouse && interactive
+    readonly property bool hovered: glow.hovered && interactive   // pointer anywhere on the card, also over child controls (HoverGlow)
     // the default fill; a row with an extra state (Wi-Fi password form) overrides `color` and falls back to this
-    readonly property color stateColor: hovered ? Theme.alpha(Theme.fg, 0.12) : selected ? Theme.alpha(Theme.accent, 0.18) : baseColor
+    readonly property color stateColor: selected ? Theme.alpha(Theme.accent, hovered ? 0.22 : 0.18) : hovered ? Theme.alpha(Theme.fg, 0.08) : baseColor
 
     default property alias content: head.data
     property alias body: below.data
@@ -52,6 +52,9 @@ Rectangle {
         acceptedButtons: row.rightClick ? Qt.LeftButton | Qt.RightButton : Qt.LeftButton
         onClicked: mouse => row.clicked(mouse)
     }
+
+    // pointer-following highlight over the lighter flat hover tint (HoverGlow.qml)
+    HoverGlow { id: glow; area: area; radius: row.radius }
 
     RowLayout {
         id: head

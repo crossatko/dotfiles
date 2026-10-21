@@ -31,7 +31,7 @@ ColumnLayout {
         Layout.fillWidth: true
         implicitHeight: 30
         radius: Theme.radiusItem
-        color: head.containsMouse ? Theme.alpha(Theme.fg, 0.13) : Theme.alpha(Theme.fg, 0.07)
+        color: headGlow.hovered ? Theme.alpha(Theme.fg, 0.13) : Theme.alpha(Theme.fg, 0.07)
         border.width: dp.open ? 1 : 0
         border.color: Theme.alpha(Theme.accent, 0.8)
         Behavior on color { ColorAnimation { duration: 100 } }
@@ -47,6 +47,7 @@ ColumnLayout {
                 Behavior on rotation { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
             }
         }
+        HoverGlow { id: headGlow; area: head; radius: Theme.radiusItem }
         MouseArea { id: head; anchors.fill: parent; hoverEnabled: true; onClicked: dp.open = !dp.open }
     }
 
@@ -69,12 +70,13 @@ ColumnLayout {
                     Layout.fillWidth: true
                     implicitHeight: 30
                     radius: Theme.radiusItem
-                    color: isCurrent ? Theme.alpha(Theme.accent, 0.22) : opt.containsMouse ? Theme.alpha(Theme.fg, 0.12) : "transparent"
+                    color: isCurrent ? Theme.alpha(Theme.accent, 0.22) : optGlow.hovered ? Theme.alpha(Theme.fg, 0.12) : "transparent"
                     RowLayout {
                         anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
                         Label { text: dp.label(modelData); Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: Theme.fontSmall; color: parent.parent.isCurrent ? Theme.accent : Theme.fg }
                         Icon { visible: parent.parent.isCurrent; text: "\uf00c"; font.pixelSize: 12; color: Theme.accent }
                     }
+                    HoverGlow { id: optGlow; area: opt; radius: Theme.radiusItem }
                     MouseArea { id: opt; anchors.fill: parent; hoverEnabled: true; onClicked: dp.choose(modelData) }
                 }
             }

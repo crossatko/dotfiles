@@ -111,13 +111,14 @@ Rectangle {
 
     implicitHeight: body.implicitHeight + (compact ? 16 : 18)
     radius: Theme.radiusItem
-    color: compact && tileArea.containsMouse && !editing ? Theme.alpha(Theme.fg, 0.12)
+    color: compact && tileGlow.hovered && !editing ? Theme.alpha(Theme.fg, 0.12)
          : on ? Theme.alpha(Theme.accent, 0.14) : Theme.alpha(Theme.fg, 0.05)
     border.width: on ? 1 : 0
     border.color: Theme.alpha(Theme.accent, 0.45)
     opacity: hiddenNow || unavailable ? 0.45 : 1
     Behavior on color { ColorAnimation { duration: 120 } }
 
+    HoverGlow { id: tileGlow; area: tileArea; radius: ent.radius }
     MouseArea {                               // scene / script tile: click runs it
         id: tileArea
         anchors.fill: parent

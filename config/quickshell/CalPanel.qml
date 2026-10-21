@@ -192,7 +192,7 @@ GridLayout {
                     Layout.fillWidth: true
                     implicitHeight: 38
                     radius: Theme.radiusItem
-                    color: isToday ? Theme.alpha(Theme.accent, 0.32) : hover.containsMouse ? Theme.alpha(Theme.fg, 0.10) : "transparent"
+                    color: isToday ? Theme.alpha(Theme.accent, 0.32) : cellGlow.hovered ? Theme.alpha(Theme.fg, 0.10) : "transparent"
                     border.width: isSel ? 1 : 0
                     border.color: Theme.accent
                     Behavior on color { ColorAnimation { duration: 100 } }
@@ -212,6 +212,7 @@ GridLayout {
                             Rectangle { required property string modelData; width: 5; height: 5; radius: 3; color: modelData; opacity: cell.inMonth ? 1 : 0.5 }
                         }
                     }
+                    HoverGlow { id: cellGlow; area: hover; radius: cell.radius }
                     MouseArea {
                         id: hover
                         anchors.fill: parent

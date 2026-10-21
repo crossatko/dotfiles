@@ -114,13 +114,14 @@ GridLayout {
             Layout.minimumHeight: 52
             Layout.preferredHeight: Notifs.count === 0 ? 52 : Math.min(contentHeight, 360)
             clip: true
-            spacing: 8
+            spacing: 0                                       // the gap is part of each row, so it collapses with it
             model: Notifs.all.values.slice().reverse()      // newest first
             delegate: Item {
                 id: row
                 required property var modelData
+                required property int index
                 width: list.width
-                height: card.implicitHeight * card.collapse
+                height: (card.implicitHeight + (index < list.count - 1 ? 8 : 0)) * card.collapse
                 clip: card.leaving
                 NotifCard {
                     id: card

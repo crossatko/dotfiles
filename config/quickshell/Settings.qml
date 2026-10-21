@@ -22,6 +22,7 @@ FloatingWindow {
         { id: "bar",      title: "Bar",      icon: "\uf0db", source: "SettingsBar.qml" },
         { id: "wallpaper", title: "Wallpaper & theme", icon: "\uf03e", source: "SettingsWallpaper.qml" },
         { id: "appearance", title: "Appearance", icon: "\uf53f", source: "SettingsAppearance.qml" },
+        { id: "animations", title: "Animations", icon: "\uf008", source: "SettingsAnimations.qml" },
         { id: "glass", title: "Glass", icon: "\uf0d0", source: "SettingsGlass.qml", glassOnly: true }
     ]
     readonly property var pages: allPages.filter(p => !p.glassOnly || Theme.glass)

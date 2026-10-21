@@ -7,6 +7,7 @@ Item {
     property real value: 0
     property bool dim: false
     property real floor: 0              // lowest value a drag / wheel can emit (brightness keeps screens from going black)
+    property real mark: -1              // optional tick on the track at this position (0..1), e.g. the 1x of a speed slider
     signal moved(real v)
 
     implicitHeight: 24
@@ -19,6 +20,14 @@ Item {
         value: sl.shown
         animMs: 90
         animate: !drag.pressed
+    }
+    Rectangle {
+        visible: sl.mark >= 0 && sl.mark <= 1
+        width: 2; height: 12
+        radius: 1
+        anchors.verticalCenter: parent.verticalCenter
+        x: Math.round(Math.max(0, Math.min(1, sl.mark)) * (sl.width - 16) + 8 - width / 2)   // at the handle centre for that value
+        color: Theme.alpha(Theme.fg, 0.45)
     }
     Rectangle {
         // Handle is always square (width == height). Radius = min(size / 2, Theme.radius): a square at

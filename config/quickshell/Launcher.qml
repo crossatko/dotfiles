@@ -18,6 +18,7 @@ ModalMenu {
     id: lc
 
     kind: "launcher"
+    animated: Motion.launcherMotion          // Settings -> Animations "Launcher": popup speed / curve / style
     cardWidth: 640
     // always the main display (Hyprland's monitors.primary = monitor1 sits at 0,0 on the workstation / VM hosts), and
     // inside its usable area (bar reserve + monitor reserved_area), so the card centres there

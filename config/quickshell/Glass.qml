@@ -79,11 +79,17 @@ Item {
             return g.none
         const p0 = it.mapToItem(g.root, 0, 0)
         const p1 = it.mapToItem(g.root, it.width, it.height)
-        const x = Math.round(p0.x), y = Math.round(p0.y)
-        const w = Math.round(p1.x) - x, h = Math.round(p1.y) - y
+        // optional `glassScale` on the item (0..1): the region shrinks about its centre (Theme.glassScaleAt: a card in
+        // motion on a compositor whose glass cannot fade)
+        const k = it.glassScale !== undefined ? Math.max(0, Math.min(1, it.glassScale)) : 1
+        const cx = (p0.x + p1.x) / 2, cy = (p0.y + p1.y) / 2
+        const hw = (p1.x - p0.x) * k / 2, hh = (p1.y - p0.y) * k / 2
+        const x = Math.round(cx - hw), y = Math.round(cy - hh)
+        const w = Math.round(cx + hw) - x, h = Math.round(cy + hh) - y
         if (w <= 1 || h <= 1)
             return g.none
-        return { x: x, y: y, w: w, h: h, r: Math.max(0, Math.round((it.radius !== undefined ? it.radius : 0) * w / it.width)) }
+        const r = Math.round((it.radius !== undefined ? it.radius : 0) * w / it.width)
+        return { x: x, y: y, w: w, h: h, r: Math.max(0, Math.min(r, Math.floor(Math.min(w, h) / 2))) }
     }
 
     onActiveChanged: refresh()

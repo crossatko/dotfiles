@@ -22,6 +22,34 @@ PanelWindow {
     property bool shown: false
     property var fixedScreen: null                 // opt-in: always open on this screen instead of the focused one
     property bool respectReserved: false           // opt-in: lay out in the usable area (bar strip, monitor reserved_area) instead of the full monitor
+    // opt-in card motion with the bar popup tokens (Theme.popup*: Settings -> Animations speed / curve / style):
+    // open / close fade + scale + slide from above, height glides. false = no motion of its own (only Hyprland's
+    // layer animation), exactly as before.
+    property bool animated: false
+    // open progress 0..1; without `animated` it jumps (1 while shown)
+    property real t: 0
+    // explicit open / close animations from the current t, same as PopupHost.qml (a Behavior whose easing is bound
+    // to `shown` still had the open easing when a close started: Back closed early and was cut off)
+    NumberAnimation { id: openAnim; target: win; property: "t"; to: 1; easing.type: Theme.popupEaseOpen }
+    NumberAnimation { id: closeAnim; target: win; property: "t"; to: 0; easing.type: Theme.popupEaseClose }
+    readonly property bool moving: animated && (openAnim.running || closeAnim.running || opener.running || (t > 0 && t < 1))
+    onShownChanged: {
+        if (!shown) {
+            opener.stop(); openAnim.stop(); closeAnim.stop()
+            if (!animated || t <= 0) { t = 0; return }
+            closeAnim.duration = Math.round(Theme.popupCloseMs * Math.min(1, t))
+            closeAnim.start()
+        } else if (animated) {
+            closeAnim.stop()
+            if (t > 0) startOpen(); else opener.restart()   // cold: let the layer surface map first (as PopupHost)
+        } else t = 1
+    }
+    function startOpen() {
+        openAnim.stop()
+        openAnim.duration = Math.round(Theme.popupOpenMs * Math.max(0, Math.min(1, 1 - t)))
+        openAnim.start()
+    }
+    Timer { id: opener; interval: 40; onTriggered: if (win.shown) win.startOpen() }
     readonly property alias card: cardBox
     default property alias content: body.data
 
@@ -46,7 +74,7 @@ PanelWindow {
         shown ? close() : open()
     }
 
-    visible: shown
+    visible: shown || (animated && (t > 0 || closeAnim.running))
     anchors { left: true; right: true; top: true; bottom: true }
     color: "transparent"                           // no dim backdrop; the window still catches click-outside
     exclusiveZone: respectReserved ? 0 : -1        // 0 = Normal: the compositor lays the surface out inside the other surfaces' zones and the reserved area
@@ -72,6 +100,18 @@ PanelWindow {
         anchors.centerIn: parent
         width: Math.min(parent.width - 32, win.cardWidth)
         height: body.implicitHeight + 40
+        Behavior on height { enabled: win.animated && win.shown && win.t >= 1; NumberAnimation { duration: Theme.popupMoveMs; easing.type: Theme.popupEaseMove } }
+        opacity: win.animated ? Math.max(0, Math.min(1, win.t)) : 1
+        readonly property real glassScale: win.animated ? Theme.glassScaleAt(win.t) : 1   // see PopupHost card
+        layer.enabled: win.moving
+        transform: [
+            Scale {
+                origin.x: cardBox.width / 2; origin.y: 0
+                xScale: win.animated ? Theme.popupScaleFrom + (1 - Theme.popupScaleFrom) * win.t : 1
+                yScale: xScale
+            },
+            Translate { y: win.animated ? -(1 - win.t) * Theme.popupSlidePx : 0 }
+        ]
         radius: Theme.radius
         color: Theme.alpha(Theme.bg, Theme.glass ? 0.3 : 0.85)   // glass behind it (Glass.qml); without solid_glass: blurred by the qs-.* layer rule
         border.width: 1

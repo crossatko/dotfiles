@@ -357,5 +357,9 @@ hl.window_rule({
 -- new) is blurred (the pattern must match the whole namespace: `qs-.*`, not `^qs-`) wherever it draws something at least 10% opaque; fully transparent pixels get no blur.
 hl.layer_rule({ match = { namespace = "qs-.*" }, blur = true })
 hl.layer_rule({ match = { namespace = "qs-.*" }, ignore_alpha = 0.1 })
+-- Bar popups animate themselves (PopupHost.qml: fade / scale / slide with Settings > Animations speed, curve, style).
+-- Hyprland's own layer fade on map / unmap would run on top of it with the HYPRLAND speed and curve; off for them.
+-- (The launcher's equivalent is switched with its "Like popups" setting in managed.lua.)
+hl.layer_rule({ match = { namespace = "qs-popup" }, no_anim = true })
 -- Fullscreen overlays with a card (Settings, ModalMenu kinds) are transparent around the card, so the 0.1 rule above
 -- blurs only the card.

@@ -49,6 +49,10 @@ ShellRoot {
         function toggle(name: string): void {
             Popups.toggle(name, Popups.focusedName())
         }
+        // a named monitor instead of the focused one (tests; focus may follow the mouse back)
+        function toggleOn(name: string, screen: string): void {
+            Popups.toggle(name, screen)
+        }
         function close(): void { Popups.close() }
         function esc(): void { Popups.esc() }
     }

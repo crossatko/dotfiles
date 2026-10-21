@@ -35,6 +35,15 @@ ColumnLayout {
             n += (HomeAssistant.sections[d] || []).filter(id => !HomeAssistant.isAvailable(id) && !HomeAssistant.isHidden(id)).length
         return n
     }
+    // names of those unavailable entities (shown in the footer, so a device that is offline in Home Assistant itself
+    // does not just silently vanish from the popup)
+    readonly property var unavailableNames: {
+        const out = []
+        for (const d of HomeAssistant.domains) if (!HomeAssistant.isSectionHidden(HomeAssistant.sectionOf(d)))
+            for (const id of (HomeAssistant.sections[d] || []))
+                if (!HomeAssistant.isAvailable(id) && !HomeAssistant.isHidden(id)) out.push(HomeAssistant.name(id))
+        return out
+    }
     readonly property int hiddenCount: HomeAssistant.hidden.filter(id => HomeAssistant.byId[id] !== undefined).length
     readonly property int hiddenSectionCount: HomeAssistant.hiddenSections.filter(k => groups.some(g => g.key === k && availableOf(g).length > 0)).length
     // sections drawn at all (hidden ones count in edit mode); the list stays up while any is there
@@ -189,10 +198,13 @@ ColumnLayout {
 
     Label {
         visible: HomeAssistant.configured && HomeAssistant.status === "ok" && hp.unavailableCount > 0
-        text: hp.unavailableCount + " unavailable"
+        Layout.fillWidth: true
+        wrapMode: Text.Wrap
+        text: "Unavailable in Home Assistant: " + hp.unavailableNames.slice(0, 4).join(", ")
+            + (hp.unavailableNames.length > 4 ? " +" + (hp.unavailableNames.length - 4) : "")
+            + ". They come back here once Home Assistant reaches them again."
         color: Theme.muted
         font.pixelSize: Theme.fontCaption
-        Layout.alignment: Qt.AlignRight
     }
 
     Label {

@@ -39,10 +39,26 @@ Rectangle {
     }
     SequentialAnimation {
         id: leaveAnim
-        NumberAnimation { target: card; property: "x"; to: card.width + 40; duration: 200; easing.type: Easing.InCubic }
-        NumberAnimation { target: card; property: "collapse"; to: 0; duration: 200; easing.type: Easing.OutCubic }
+        // a swiped card is already off to the right: only the gap closes
+        NumberAnimation { target: card; property: "x"; to: card.width + 40; duration: card.swipedOut ? 0 : 200; easing.type: Easing.InCubic }
+        NumberAnimation { target: card; property: "collapse"; to: 0; duration: Theme.popupMoveMs; easing.type: Theme.popupEaseClose }
         ScriptAction { script: card.n.dismiss() }
     }
+    // the one dismiss path (close button, right click, swipe): toast -> leaves the stack and is closed after its exit
+    // animation; notification center -> leave()
+    function dismiss() {
+        if (toast) { Notifs.dismissPopup(n); Notifs.releaseLater(n) }
+        else card.leave()
+    }
+
+    // Swipe to the right with the mouse to dismiss (SwipeDismiss). Translate, not x: Toasts drives x (slide-in) and
+    // leave() animates it. Owners that set their own opacity multiply in `swipeFade`.
+    SwipeDismiss { id: swipe; onSwiped: card.dismiss() }
+    transform: Translate { x: swipe.offset }
+    readonly property real swipeFade: swipe.fade
+    readonly property bool swiping: swipe.busy       // dragging / springing back / flying off: toasts pause their timeout
+    readonly property bool swipedOut: swipe.gone
+    opacity: swipeFade
 
     HoverHandler { id: hover }
     // Clicking a notification takes you to the app: run its default action (so the app can open the right
@@ -55,14 +71,13 @@ Rectangle {
         console.log("notification click: desktopEntry=[" + n.desktopEntry + "] appName=[" + n.appName + "] startupClass=[" + (de ? de.startupClass : "") + "]")
         Quickshell.execDetached([Quickshell.shellDir + "/bin/focus-app", n.desktopEntry || "", n.appName || "",
             de && de.startupClass ? de.startupClass : ""])
-        if (toast) { Notifs.dismissPopup(n); Notifs.releaseLater(n) }
-        else card.leave()
+        card.dismiss()
     }
     TapHandler { onTapped: card.activate() }
     // right click: just dismiss, without going to the app
     TapHandler {
         acceptedButtons: Qt.RightButton
-        onTapped: { if (card.toast) { Notifs.dismissPopup(card.n); Notifs.releaseLater(card.n) } else card.leave() }
+        onTapped: card.dismiss()
     }
 
     // urgency stripe: flush with the left edge when square; with rounded corners a straight stripe looks cut off
@@ -109,7 +124,7 @@ Rectangle {
                     text: "\uf00d"
                     color: closeArea.containsMouse ? Theme.accent : Theme.muted
                     font.pixelSize: 13
-                    MouseArea { id: closeArea; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true; onClicked: { if (card.toast) { Notifs.dismissPopup(n); Notifs.releaseLater(n) } else card.leave() } }
+                    MouseArea { id: closeArea; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true; onClicked: card.dismiss() }
                 }
             }
             Label {
@@ -141,10 +156,11 @@ Rectangle {
                     Rectangle {
                         required property var modelData
                         radius: Math.min(Theme.inner(card.radius, 12), Math.floor(height / 3))   // like Btn: concentric, never a pill
-                        color: btn.containsMouse ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.1)
+                        color: btnGlow.hovered ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.1)
                         implicitWidth: label.implicitWidth + 20
                         implicitHeight: 28
                         Label { id: label; anchors.centerIn: parent; text: modelData.text; font.pixelSize: Theme.fontSmall }
+                        HoverGlow { id: btnGlow; area: btn; radius: parent.radius }
                         MouseArea { id: btn; anchors.fill: parent; hoverEnabled: true; onClicked: modelData.invoke() }
                     }
                 }

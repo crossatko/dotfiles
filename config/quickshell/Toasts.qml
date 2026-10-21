@@ -18,7 +18,25 @@ PanelWindow {
         right: 0
     }
     implicitWidth: 400 + Theme.edgeGap // the cards + edgeGap of room: the slide-out then leaves through the screen edge
-    implicitHeight: Math.max(1, col.implicitHeight)
+    // The window is NOT sized to the animating column: a layer surface that is resized is shown stretched to its new
+    // size until the matching buffer arrives, which squashed and overlapped the cards on every frame of a gap opening
+    // or closing (nested frame captures 2026-10-21; a single shrink still squashed one frame). So it is sized to the
+    // FULL heights of the cards in the stack (entering ones at once, leaving ones until they leave the model) and,
+    // with solid_glass (only the cards are glass, the rest is transparent and outside the input mask), it only grows
+    // while toasts are up and shrinks when the stack is empty and the window hides. Without solid_glass the whole
+    // window is the blur region, so it follows the stack (one resize after a card has left).
+    property real stackHeight: 0
+    property real heldHeight: 0
+    function updateStack() {
+        let h = 0
+        for (let i = 0; i < stack.count; i++) {
+            const it = stack.itemAt(i)
+            if (it) h += it.fullHeight
+        }
+        stackHeight = h
+        heldHeight = stack.count === 0 ? 0 : Math.max(heldHeight, h)
+    }
+    implicitHeight: Math.max(1, Theme.glass ? heldHeight : stackHeight)
     color: "transparent"
     exclusiveZone: -1                  // ignore the monitor's reserved area (the pinned-video strip), so it stays in the screen corner
     WlrLayershell.layer: WlrLayer.Overlay
@@ -62,8 +80,10 @@ PanelWindow {
         spacing: 0
 
         Repeater {
+            id: stack
             model: items
-            onItemAdded: glass.refresh()   // the new card has its glass from its first frame
+            onItemAdded: { glass.refresh(); win.updateStack() }   // the new card has its glass from its first frame
+            onItemRemoved: Qt.callLater(win.updateStack)
 
             Item {
                 id: slot
@@ -75,7 +95,9 @@ PanelWindow {
                 property real slideX: col.width + 40 // distance from its resting place
 
                 width: col.width
-                height: n ? Math.round((card.implicitHeight + 8) * appear) : 0
+                readonly property real fullHeight: n ? card.implicitHeight + 8 : 0
+                onFullHeightChanged: win.updateStack()
+                height: Math.round(fullHeight * appear)
                 clip: false
 
                 NotifCard {
@@ -86,12 +108,12 @@ PanelWindow {
                     width: col.width
                     height: implicitHeight
                     x: slot.slideX
-                    opacity: Math.min(1, slot.appear * 1.6)
+                    opacity: Math.min(1, slot.appear * 1.6) * card.swipeFade
 
                     // sticky only when critical; apps asking for "never expire" get 7s on screen
                     Timer {
                         interval: card.n && card.n.expireTimeout > 0 ? card.n.expireTimeout * 1000 : 7000
-                        running: !card.critical && !card.hovered && !slot.gone
+                        running: !card.critical && !card.hovered && !card.swiping && !slot.gone
                         onTriggered: Notifs.dismissPopup(card.n)
                     }
                     Connections {
@@ -109,12 +131,13 @@ PanelWindow {
                     NumberAnimation { target: slot; property: "appear"; to: 1; duration: 200; easing.type: Easing.OutCubic }
                 }
 
-                // exit: slide out to the right, then collapse the gap and leave the model
+                // exit: slide out to the right, then collapse the gap and leave the model (a swiped card is already
+                // out: only the gap closes)
                 onGoneChanged: if (gone) { enter.stop(); leave.start() }
                 SequentialAnimation {
                     id: leave
-                    NumberAnimation { target: slot; property: "slideX"; to: col.width + 40; duration: 200; easing.type: Easing.InCubic }
-                    NumberAnimation { target: slot; property: "appear"; to: 0; duration: 200; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: slot; property: "slideX"; to: col.width + 40; duration: card.swipedOut ? 0 : 200; easing.type: Easing.InCubic }
+                    NumberAnimation { target: slot; property: "appear"; to: 0; duration: Theme.popupMoveMs; easing.type: Theme.popupEaseClose }
                     ScriptAction { script: items.remove(slot.index) }
                 }
             }

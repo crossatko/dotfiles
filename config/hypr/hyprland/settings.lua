@@ -281,32 +281,8 @@ hl.config({
 	},
 })
 
--- Current Hyprland (0.55) animation syntax (wiki/default style)
-hl.curve("easeOutQuint", { type = "bezier", points = { { 0.23, 1 }, { 0.32, 1 } } })
-hl.curve("linear", { type = "bezier", points = { { 0, 0 }, { 1, 1 } } })
-hl.curve("almostLinear", { type = "bezier", points = { { 0.5, 0.5 }, { 0.75, 1 } } })
-hl.curve("quick", { type = "bezier", points = { { 0.15, 0 }, { 0.1, 1 } } })
-hl.curve("easy", { type = "spring", mass = 1, stiffness = 71.2633, dampening = 15.8273644 })
-
-hl.animation({ leaf = "global", enabled = true, speed = 0.5, bezier = "default" })
-hl.animation({ leaf = "border", enabled = true, speed = 0.5, bezier = "easeOutQuint" })
-hl.animation({ leaf = "windows", enabled = true, speed = 0.5, bezier = "quick" })
-hl.animation({ leaf = "windowsMove", enabled = true, speed = 0.5, bezier = "quick" })
-hl.animation({ leaf = "windowsIn", enabled = true, speed = 0.5, bezier = "quick", style = "popin 87%" })
-hl.animation({ leaf = "windowsOut", enabled = true, speed = 0.5, bezier = "linear", style = "popin 87%" })
-hl.animation({ leaf = "fadeIn", enabled = true, speed = 0.5, bezier = "almostLinear" })
-hl.animation({ leaf = "fadeOut", enabled = true, speed = 0.5, bezier = "almostLinear" })
-hl.animation({ leaf = "fade", enabled = true, speed = 0.5, bezier = "quick" })
-hl.animation({ leaf = "layers", enabled = true, speed = 0.5, bezier = "easeOutQuint" })
-hl.animation({ leaf = "layersIn", enabled = true, speed = 0.5, bezier = "easeOutQuint", style = "fade" })
-hl.animation({ leaf = "layersOut", enabled = true, speed = 0.5, bezier = "linear", style = "fade" })
-hl.animation({ leaf = "fadeLayersIn", enabled = true, speed = 0.5, bezier = "almostLinear" })
-hl.animation({ leaf = "fadeLayersOut", enabled = true, speed = 0.5, bezier = "almostLinear" })
-hl.animation({ leaf = "workspaces", enabled = true, speed = 0.5, bezier = "almostLinear", style = "slidefade 5%" })
-hl.animation({ leaf = "workspacesIn", enabled = true, speed = 0.5, bezier = "almostLinear", style = "slidefade 5%" })
-hl.animation({ leaf = "workspacesOut", enabled = true, speed = 0.5, bezier = "almostLinear", style = "slidefade 5%" })
-hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 0.5, bezier = "quick", style = "fade" }) -- scratchpad (SUPER+R)
-hl.animation({ leaf = "zoomFactor", enabled = true, speed = 0.5, bezier = "quick" })
+-- Curves and per-leaf animations live in animations.lua (Settings > Animations scales them, see managed.lua)
+require("hyprland.animations")
 
 hl.config({
 	dwindle = {

@@ -20,12 +20,13 @@ Rectangle {
     radius: Math.min(Theme.inner(outerRadius, inset), Math.floor(height / 3))
     opacity: enabledLook ? 1 : 0.5
     color: active ? Theme.alpha(Theme.accent, 0.3)
-         : area.containsMouse ? Theme.alpha(Theme.fg, 0.14)
+         : glow.hovered ? Theme.alpha(Theme.fg, 0.14)
          : Theme.alpha(Theme.fg, 0.07)
     border.width: active ? 1 : 0
     border.color: Theme.alpha(Theme.accent, 0.8)
     Behavior on color { ColorAnimation { duration: 100 } }
 
+    HoverGlow { id: glow; area: area; radius: btn.radius }
     Label { id: label; anchors.centerIn: parent; text: btn.text; font.pixelSize: btn.icon ? 14 : 12; font.family: btn.icon ? Theme.iconFont : Theme.font; font.styleName: btn.icon ? "Regular" : "";  color: btn.active ? Theme.accent : Theme.fg }
     MouseArea {
         id: area
