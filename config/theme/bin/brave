@@ -8,5 +8,12 @@ fi
 # Chromium's GTK file dialogs (Open / Save) ignore ~/.config/gtk-3.0 settings and user CSS but obey
 # GTK_THEME, so point them at the generated "Wall" theme. Set only for Brave: a global GTK_THEME
 # would also hit libadwaita apps (Nautilus), which treat it as "use a non-Adwaita stylesheet".
-export GTK_THEME=Wall:dark
+# brave_mode = "gtk" in theme.toml: Brave runs in GTK mode (theme.py brave sets it in Preferences) and takes its
+# frame colours from "Wall-Glass" = Wall + translucent header bars, so the tab strip shows the window glass.
+if grep -qE '^brave_mode *= *"gtk"' "$HOME/.config/theme/theme.toml" 2>/dev/null \
+   && [ -f "$HOME/.local/share/themes/Wall-Glass/gtk-3.0/gtk.css" ]; then
+  export GTK_THEME=Wall-Glass:dark
+else
+  export GTK_THEME=Wall:dark
+fi
 exec /usr/bin/brave "$@"
