@@ -26,7 +26,9 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.namespace: "qs-bar"
 
-    // glass shapes: Glass.qml scans the bar for Chips and declares each as its own blur region
+    // glass shape: Glass.qml declares the bar container below (docked: full width, square; floating: the inset window,
+    // Theme.barRadius corners) as the blur region. The window itself is already inset by the floating gap, so the
+    // transparent gap around a floating bar is never blurred. Chips sit flat on it (no glass of their own).
     BackgroundEffect.blurRegion: Region { regions: glass.instances }
     Glass { id: glass; root: bar.contentItem }
 
@@ -202,8 +204,9 @@ PanelWindow {
     // ---- visuals --------------------------------------------------------------
     Rectangle {
         anchors.fill: parent
+        readonly property bool isGlassItem: true
         radius: Theme.barRadius
-        color: Theme.alpha(Theme.bg, Theme.barOpacity)
+        color: Theme.alpha(Theme.bg, Theme.barFill)
         border.width: Theme.barBorder
         border.color: Theme.alpha(Theme.overlay, 0.55)
     }

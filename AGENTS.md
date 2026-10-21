@@ -361,6 +361,14 @@ The workstation runs the Arch `hyprland` package (0.56.2, no `decoration:blur:va
 
 Not verified on the real workstation. After pulling there: `~/.config/theme/theme.py render` once (relinks GTK CSS to `out/host/`; until then the old links dangle and GTK apps use stock Adwaita).
 
+## Bar glass (2026-10-21)
+
+The bar container is a glass surface like the popup cards: `Bar.qml`'s background Rectangle has `isGlassItem: true` and radius `Theme.barRadius`, so Glass.qml declares it as the blur region (docked: full width, square; floating: the window is already inset by `Theme.barGap`, the region follows it with the Appearance radius corners, and the transparent gap around it is never blurred). It follows the bar rectangle live (it is a binding to the item), so toggling floating / gap / radius / top-bottom in Settings needs nothing else. Exclusive zone / `BarReserve.qml` untouched.
+- **Fill:** new `Theme.barFill` = `cardFill` (0.3) on solid_glass, else `bar_opacity` (so on stock the bar looks exactly as before: whole-window blur region via Glass.qml's fallback, `qs-.*` layer rule, `bar_opacity` fill). `SettingsBar.qml`'s preview uses it too. On solid_glass `bar_opacity` is no longer used by the bar (the cards never used it either); border unchanged.
+- **Chips:** `Chip.qml` no longer sets `isGlassItem`: chips sit flat on the bar's glass (a glass item's subtree is not searched, but chips are siblings of the background, so they would have been a second lens on top of it).
+- **Verified (2026-10-21):** nested Hyprland (the installed fork binary, own `XDG_RUNTIME_DIR`, headless output `TEST`, isolated `HOME`/`XDG_*` with a copy of the shell, a checkerboard Background-layer window as backdrop, `grim -g` on the bar strip only): docked-bottom, floating-bottom, floating-top, docked-top; floating changed to docked and top/bottom by rewriting `appearance.json` / `bars.json` in the test home (live reload, no restart). Lens / rim follow the rounded floating bar, docked bar is square, gap area shows the unblurred backdrop. Live shell reloaded ("Configuration Loaded"), `hyprctl configerrors` empty.
+- **Not verified:** the stock Hyprland path (unchanged code path: `glass` false -> `barFill` = `bar_opacity`, whole-window region), scales other than 1, multi-monitor. A "Binding loop ... Chip.qml:50 RowLayout x" warning shows in the live log on reload; not attributed to this change (the chip layout code is untouched).
+
 ## Hyprland config (`config/hypr`)
 
 - `theme.lua`: border 2px, rounding 0; `settings.lua`: gaps 0. (Settings → Appearance overrides: see **Appearance** above.)

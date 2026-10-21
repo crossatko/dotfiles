@@ -17,7 +17,7 @@ Rectangle {
     signal clicked(var mouse)
     signal wheel(int dy)
 
-    readonly property bool isGlassItem: true   // Glass.qml declares this chip as its own glass shape
+    // no glass of its own: the chip sits flat on the glass of its panel (the bar container, see Bar.qml)
 
     implicitHeight: Theme.chipHeight
     implicitWidth: Math.max(Theme.chipHeight, iconOnly ? Theme.chipHeight : Math.ceil(row.implicitWidth) + 2 * padX)   // never narrower than tall (min 1:1)

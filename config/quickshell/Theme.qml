@@ -46,6 +46,8 @@ Singleton {
     property bool glassFades: false
     // fill alpha of glass cards (popups, OSD, toasts): low enough for the lens / rim to show; else the original fill
     readonly property real cardFill: glass ? 0.3 : Math.min(1, barOpacity + 0.3)
+    // fill alpha of the bar container: like the cards on glass, else the bar_opacity setting over the plain blur
+    readonly property real barFill: glass ? cardFill : barOpacity
     function checkGlass() { glassProbe.running = true }
     Process {
         id: glassProbe

@@ -309,7 +309,7 @@ Item {
             Layout.fillWidth: true
             implicitHeight: 34
             radius: Theme.barFloating ? Theme.radiusPage : 0     // docked bar = square, like the real one
-            color: Theme.alpha(Theme.bg, Theme.barOpacity)
+            color: Theme.alpha(Theme.bg, Theme.barFill)
             border.width: 1
             border.color: Theme.alpha(Theme.overlay, 0.55)
             Row {
