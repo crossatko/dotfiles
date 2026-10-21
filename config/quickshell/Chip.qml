@@ -47,12 +47,18 @@ Rectangle {
         // half-pixel shift is real and stays sharp (an odd leftover pixel cannot be split otherwise). Rows without
         // ink-reporting items (tray bitmaps) and icon-only chips (box centred, BarIcon centres the ink) stay on
         // whole pixels.
-        x: chip.iconOnly || !chip.inkAware ? Math.round((chip.width - width) / 2)
-                                           : (chip.width - chip.contentW + chip.inkR - chip.inkL) / 2
         y: 0
         width: Math.ceil(implicitWidth)
         height: parent.height
         spacing: Theme.chipGap
+    }
+    // Bound outside the RowLayout and delayed: the ink insets and the row width are laid-out values, so a layout
+    // pass (a chip item appearing / changing size) re-enters the row's own x binding = binding loop. Delayed
+    // evaluates it once after the pass settles.
+    Binding {
+        target: row; property: "x"; delayed: true
+        value: chip.iconOnly || !chip.inkAware ? Math.round((chip.width - row.width) / 2)
+                                               : (chip.width - chip.contentW + chip.inkR - chip.inkL) / 2
     }
 
     MouseArea {

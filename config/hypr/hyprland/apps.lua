@@ -8,6 +8,5 @@ return {
 	signal = "flatpak run org.signal.Signal",
 	mail = "thunderbird",
 	filemanager = "nautilus --new-window",
-	screenshot = "hyprshot -m region --clipboard-only",
 	jellyfin = "flatpak run org.jellyfin.JellyfinDesktop",
 }

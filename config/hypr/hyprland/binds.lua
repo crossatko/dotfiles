@@ -23,13 +23,13 @@ end
 -- pin into the right strip; flush + square while a lone tiled window has no gaps (scripts/side-pin.lua)
 bind({ mod, "SHIFT", "P" }, side_pin.pin)
 
-bind("Print", exec(apps.screenshot))
 -- screen recording (scripts/screenrec.sh, wf-recorder + slurp): one key. While recording it stops;
 -- otherwise it opens the Quickshell mode menu (region / window / screen + desktop audio), and if the shell
 -- is down it records a region (scripts/screenrec-key.sh)
 bind({ "SHIFT", "Print" }, exec("$HOME/.config/hypr/scripts/screenrec-key.sh"))
--- screenshot menu (scripts/screenshot.sh, grim + slurp): region / window / screen, saved + copied
--- (scripts/screenshot-key.sh; falls back to a region shot if the shell is down). Plain Print stays hyprshot.
+-- screenshots (scripts/screenshot.sh, grim + slurp; saved + copied): Print = region shot straight away,
+-- CTRL+Print = Quickshell menu region / window / screen (scripts/screenshot-key.sh; region shot if the shell is down)
+bind("Print", exec("$HOME/.config/hypr/scripts/screenshot.sh region"))
 bind({ "CTRL", "Print" }, exec("$HOME/.config/hypr/scripts/screenshot-key.sh"))
 bind({ mod, "D" }, exec(apps.menu))
 bind({ mod, "T" }, exec("qs ipc call picker toggle")) -- wallpaper + theme picker
