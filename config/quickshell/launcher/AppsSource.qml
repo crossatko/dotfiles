@@ -11,6 +11,12 @@ QtObject {
     property var byId: ({})
     property var items: build()
 
+    function webappSlug(a) {
+        const m = /^webapp_([a-z0-9][a-z0-9_.-]{0,63})$/.exec(a.id || "")
+        const cmd = a.command || []
+        return m && cmd.some(c => String(c).startsWith("--app=")) && /(brave|chrom)/.test(String(cmd[0] || "")) ? m[1] : ""
+    }
+
     function build() {
         const out = [], map = {}
         for (const a of DesktopEntries.applications.values) {
@@ -26,7 +32,12 @@ QtObject {
                 source: "Application",
                 icon: a.icon || "",
                 glyph: "",                 // cube
-                desktopId: a.id
+                desktopId: a.id,
+                // web apps from bin/webapp-install (or the old create_brave_webapp function): webapp_<slug>.desktop running
+                // a browser with --app=; Ctrl+K offers "Uninstall webapp" (WebappSource.action)
+                actions: webappSlug(a) ? [{ id: "webapp-uninstall", label: "Uninstall webapp", glyph: "\uf1f8", confirm: true,
+                                           confirmText: "Uninstall " + a.name + "?", sub: "Removes its launcher entry and icon; site data stays in Brave" }] : [],
+                webappSlug: webappSlug(a)
             })
         }
         byId = map
@@ -37,6 +48,12 @@ QtObject {
     property var conn: Connections {
         target: DesktopEntries.applications
         function onValuesChanged() { src.items = src.build() }
+    }
+    // a rescan that only changes existing entries in place (a web app reinstalled with a new Icon= / Name=) leaves the
+    // list itself unchanged, so valuesChanged does not fire: rebuild on every finished scan too
+    property var rescan: Connections {
+        target: DesktopEntries
+        function onApplicationsChanged() { src.items = src.build() }
     }
     Component.onCompleted: DesktopEntries.applications.values.length
 

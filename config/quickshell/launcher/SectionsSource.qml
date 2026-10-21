@@ -29,6 +29,8 @@ QtObject {
     signal updated()
 
     property var jf: null                           // JellyfinSource (set by Launcher): the "jellyfin" section delegates header / glyph / enter to it
+    property var web: null                          // WebappSource (set by Launcher): the "webapp" section delegates enter / rows / headerSub to it
+    property var net: null                          // NetSource (set by Launcher): the "network" / "bluetooth" sections delegate rows / headerSub to it
 
     readonly property var sections: ({
         "sound-output": { title: "Sound output", header: "Audio output", glyph: "", sub: "Choose the default audio output",
@@ -41,6 +43,12 @@ QtObject {
                           aliases: ["stream", "streams"], words: ["live", "channels", "watch"] },
         "jellyfin":     { title: "Jellyfin", glyph: "\uf008", sub: "Movies, shows and music",
                           aliases: ["jf", "movies", "shows", "tv", "music", "media", "video", "films"], words: ["jellyfin", "series", "episodes", "albums", "watch", "listen"] },
+        "network":      { title: "Network", glyph: "\uf1eb", sub: "Wi-Fi networks and wired connections",
+                          aliases: ["wifi", "wi-fi", "wlan", "ethernet", "wired", "internet"], words: ["network", "wireless", "ssid", "lan", "connect"] },
+        "bluetooth":    { title: "Bluetooth", glyph: "\uf293", sub: "Connect, pair and scan for devices",
+                          aliases: ["bt", "bluez", "pair"], words: ["bluetooth", "devices", "headset", "earbuds", "mouse", "keyboard", "controller"] },
+        "webapp":       { title: "Install webapp", header: "Install web app", glyph: "\uf0ac", sub: "Brave app window for a site, with its own icon",
+                          aliases: ["webapp", "web app", "pwa"], words: ["install", "brave", "app", "website", "shortcut"] },
         "screenshot":   { title: "Screenshot", glyph: "\uf030", sub: "Region, window or screen",
                           aliases: ["print", "grab", "snip", "capture"], words: ["screen", "region", "window", "monitor", "image"] },
         "record":       { title: "Record", glyph: "\uf03d", sub: "Screen recording: region, window or screen",
@@ -85,6 +93,7 @@ QtObject {
 
     function enter(name) {
         if (name === "jellyfin" && jf) jf.enter()
+        if (name === "webapp" && web) web.enter()
         if (name === "record") { Quickshell.execDetached(["mkdir", "-p", src.prefsDir]); prefs.reload(); recording = false; statusProc.running = false; statusProc.running = true }
         if (name === "sound-output") { outRows = []; outError = ""; outLoading = true; outProc.running = false; outProc.running = true }
         else if (name === "sound-input") { inRows = []; inError = ""; inLoading = true; inProc.running = false; inProc.running = true }
@@ -105,6 +114,8 @@ QtObject {
         if (name === "power") return powerRows
         if (name === "screenshot") return shotRows
         if (name === "record") return recordRows()
+        if ((name === "network" || name === "bluetooth") && net) return net.rows(name)
+        if (name === "webapp" && web) return web.rows()
         if (name === "twitch") {
             if (vodActive) return vodList()
             if (twitchLoading) return [info("loading", "Loading followed channels...", "", "")]
@@ -125,6 +136,8 @@ QtObject {
     // small dim text next to the section header
     function headerSub(name) {
         if (name === "jellyfin") return jf ? jf.headerSub() : ""
+        if ((name === "network" || name === "bluetooth") && net) return net.headerSub(name)
+        if (name === "webapp" && web) return web.headerSub()
         if (name === "twitch" && vodActive) return vodName
         return name === "twitch" && twProbed ? "Player: " + twitchPlayerLabel() : ""
     }

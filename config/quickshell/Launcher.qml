@@ -42,7 +42,7 @@ ModalMenu {
         : modeSource ? modeSource.modeTitle : "Launcher"
     titleSub: actionsOpen || argItem ? "" : section !== "" ? secSrc.headerSub(section) : ""
     icon: actionsOpen ? rocket
-        : argItem ? (argItem.glyph || rocket)
+        : argItem ? (argItem.argGlyph || argItem.glyph || rocket)
         : section !== "" ? (secSrc.glyph(section) || rocket)
         : modeSource ? modeSource.modeGlyph : rocket
 
@@ -58,6 +58,8 @@ ModalMenu {
     property var aliases: ({})
     property var argItem: null                      // item waiting for its text argument (item.argument set)
     property string argQuery: ""                    // the search text before the argument prompt
+    property string argNote: ""                     // footer note under an argument prompt (e.g. a Wi-Fi password that is too short)
+    readonly property bool argSecret: !!(argItem && argItem.secret)   // masked prompt (Wi-Fi password): never kept in history
 
     property string section: ""                     // "" = main list; else the open sub-menu (SectionsSource: sound-output, sound-input, power, twitch, screenshot, record)
     property bool sectionDirect: false              // section opened by IPC / keybind (openSection), not from the main list: Esc closes instead of going back
@@ -79,8 +81,30 @@ ModalMenu {
     FileSource { id: fileSrc; onUpdated: lc.refreshKeep() }
     ClipboardSource { id: clipSrc; active: lc.shown; onUpdated: lc.refreshKeep() }
     JellyfinSource { id: jfSrc; onUpdated: lc.refreshKeep() }
-    SectionsSource { id: secSrc; jf: jfSrc; onUpdated: lc.refreshKeep() }
-    readonly property var sourceList: [appsSrc, winSrc, cmdSrc, secSrc, jfSrc, scriptSrc, calcSrc, emojiSrc, fileSrc, clipSrc, webSrc]
+    NetSource { id: netSrc; active: lc.shown; section: lc.section; onUpdated: lc.refreshKeep(); onFinished: lc.close() }   // Network / Bluetooth sections (closes after a connect)
+    WebappSource {                                  // Install webapp section: opens its own text prompts, closes after installing
+        id: waSrc
+        onUpdated: lc.refreshKeep()
+        onFinished: lc.close()
+        // a new prompt replaces an open webapp prompt (address -> name), but never a non-empty filter the user is typing in
+        onPrompt: item => {
+            if (!lc.shown || lc.section !== "webapp" || lc.actionsOpen) return
+            if (lc.argItem ? !waSrc.owns(lc.argItem) : lc.query !== "") return
+            lc.argItem = null
+            lc.runItem(item)
+        }
+        // lookup done: the open name prompt gets the new row; the suggestion goes into the field only while it is empty,
+        // so a name typed meanwhile stays exactly as typed
+        onSuggest: (item, text) => {
+            if (!lc.shown || lc.section !== "webapp" || lc.actionsOpen) return
+            if (lc.argItem && lc.argItem.kind === item.kind) {
+                lc.argItem = item
+                if (lc.focusItem.text === "" && text !== "") { lc.focusItem.text = text; lc.focusItem.cursorPosition = text.length }
+            } else if (!lc.argItem && lc.query === "") lc.runItem(item)
+        }
+    }
+    SectionsSource { id: secSrc; jf: jfSrc; net: netSrc; web: waSrc; onUpdated: lc.refreshKeep() }
+    readonly property var sourceList: [appsSrc, winSrc, cmdSrc, secSrc, jfSrc, netSrc, waSrc, scriptSrc, calcSrc, emojiSrc, fileSrc, clipSrc, webSrc]
 
     readonly property var allItems: {
         const out = []
@@ -97,7 +121,7 @@ ModalMenu {
     // A source with exclusive(q) true (prefix modes: ":" emoji, "/" files) owns the whole list for that query.
     // dynamic() items with `top: true` go above the ranked results.
     function refresh(keep) {
-        const q = query.trim()
+        const q = argItem ? argQuery : query.trim()     // under a text prompt the field holds the argument, not a filter
         if (section !== "") {                           // inside a section: only its rows, filtered with the ranker (no usage)
             let rows = section === "jellyfin" ? jfSrc.listFor(q) : secSrc.rows(section)   // jellyfin: nested level / server search, no usage ranking
             if (q !== "" && section !== "jellyfin") rows = secSrc.extra(section, q).concat(Ranker.rank(rows, q, {}, Date.now(), { limit: 50 }).map(r => r.item))
@@ -110,7 +134,7 @@ ModalMenu {
             while (isStatus(results[sel]) && statusAt > 0 && isStatus(results[statusAt - 1])) statusAt--
             const fromStatus = isStatus(results[sel])
             results = rows.map(it => it.id === confirmId
-                ? Object.assign({}, it, { name: "Confirm: " + it.name, subtitle: "Press Enter again to confirm", glyph: "\uf071", iconColor: "red" })
+                ? Object.assign({}, it, { name: it.confirmText || ("Confirm: " + it.name), subtitle: it.confirmSub || "Press Enter again to confirm", glyph: "\uf071", iconColor: "red" })
                 : it)
             let i = 0
             if (keep) {                                 // same row stays selected (rows can shift: Stop recording appears once the status is known)
@@ -139,7 +163,7 @@ ModalMenu {
         if (keep) { sel = Math.min(sel, Math.max(0, list.length - 1)); first = Math.min(first, sel) }
         else { sel = 0; first = 0 }
     }
-    function refreshKeep() { if (shown && !argItem) refresh(true) }
+    function refreshKeep() { if (shown) refresh(true) }   // also under a prompt: rows behind it stay current (lookup / connect progress)
 
     function clearConfirm() { if (confirmId !== "") { confirmId = ""; if (shown) refresh(true) } }
     onQueryChanged: { confirmId = ""; jfSrc.track(query, section); if (shown && !argItem) refresh() }
@@ -290,8 +314,21 @@ ModalMenu {
             return
         }
         if (item.argument && arg === undefined) {       // ask for the argument first
-            argQuery = query.trim(); argItem = item
-            input.text = ""
+            argQuery = query.trim(); argNote = ""; argItem = item
+            input.text = item.argInit || ""             // e.g. the suggested web app name, editable
+            input.cursorPosition = input.text.length
+            return
+        }
+        const inPlace = [netSrc, waSrc].find(s => s.owns(item))
+        if (inPlace) {                                  // Network / Bluetooth / Install webapp rows act in place: progress and errors show on the row
+            const r = inPlace.activate(item, arg)
+            if (typeof r === "string") { argNote = r; return }   // the prompt stays, with this note in the footer
+            const prompt = argItem !== null
+            argItem = null; argNote = ""; confirmId = ""
+            if (prompt) { input.text = argQuery; input.cursorPosition = input.text.length }   // also wipes the password from the field
+            refresh(true)
+            const i = results.findIndex(r => r.id === item.id)   // the text change above re-ran refresh(): stay on the row that is connecting
+            if (i >= 0) { sel = i; if (sel < first) first = sel; else if (sel >= first + numResults) first = sel - numResults + 1 }
             return
         }
         const q = argItem ? argQuery : query.trim()
@@ -329,6 +366,9 @@ ModalMenu {
         const it = current
         if (!it) { actionsOpen = false; return }
         if (id === "run") { runItem(it); return }
+        const def = actions.find(a => a.id === id)
+        if (def && def.confirm && actionConfirm !== id) { actionConfirm = id; return }
+        actionConfirm = ""
         if (id === "pin") {
             usage = Frecency.setPinned(usage, it.id, !(usage[it.id] && usage[it.id].pinned))
             saveUsage.restart()
@@ -354,9 +394,13 @@ ModalMenu {
 
     function openActions() {
         if (!current) return
-        asel = 0
+        asel = 0; actionConfirm = ""
         actionsOpen = true
     }
+    // action-panel entries with `confirm: true` (Uninstall webapp) need a second Enter; moving or closing the panel disarms
+    property string actionConfirm: ""
+    onAselChanged: actionConfirm = ""
+    onActionsOpenChanged: actionConfirm = ""
 
     // ---- state files -------------------------------------------------------------------------------------
     Component.onCompleted: mkdir.running = true
@@ -418,7 +462,7 @@ ModalMenu {
         RowLayout {
             anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
             spacing: 10
-            Icon { text: ""; font.pixelSize: 14; color: Theme.muted; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22 }   // magnifying-glass
+            Icon { text: lc.argSecret ? "\uf084" : ""; font.pixelSize: 14; color: Theme.muted; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22 }   // magnifying-glass (key while a Wi-Fi password is typed)
             TextInput {
                 id: input
                 Layout.fillWidth: true
@@ -428,7 +472,11 @@ ModalMenu {
                 selectedTextColor: Theme.fg
                 font.family: Theme.font
                 font.pixelSize: 14
-                onTextChanged: lc.query = text
+                // Wi-Fi password prompt: masked, no input-method prediction / learning
+                echoMode: lc.argSecret ? TextInput.Password : TextInput.Normal
+                passwordCharacter: "\u2022"
+                inputMethodHints: lc.argSecret ? Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase : Qt.ImhNone
+                onTextChanged: { lc.query = text; if (lc.argNote !== "") lc.argNote = "" }
                 onTextEdited: lc.histPos = -1
 
                 Label {
@@ -450,7 +498,7 @@ ModalMenu {
                     const k = ev.key
                     ev.accepted = true
                     if (lc.argItem) {
-                        if (k === Qt.Key_Escape || (ctrl && k === Qt.Key_C)) { lc.argItem = null; text = lc.argQuery }
+                        if (k === Qt.Key_Escape || (ctrl && k === Qt.Key_C)) { lc.argItem = null; lc.argNote = ""; text = lc.argQuery }
                         else if (k === Qt.Key_Return || k === Qt.Key_Enter) lc.runItem(lc.argItem, text)
                         else ev.accepted = false
                         return
@@ -488,7 +536,7 @@ ModalMenu {
                     else ev.accepted = false
                 }
             }
-            Label { text: lc.results.length; color: Theme.muted; font.pixelSize: Theme.fontCaption }
+            Label { visible: !lc.argSecret; text: lc.results.length; color: Theme.muted; font.pixelSize: Theme.fontCaption }
         }
     }
 
@@ -560,17 +608,21 @@ ModalMenu {
                     required property var modelData
                     required property int index
                     readonly property bool sel: index === lc.asel
+                    readonly property bool arming: lc.actionConfirm === modelData.id
                     width: parent.width
                     rowH: 40
                     radius: Theme.radiusModal
-                    icon: modelData.glyph
+                    icon: arming ? "\uf071" : modelData.glyph
                     iconSize: 14
                     iconColor: sel ? Theme.accent : Theme.fgDim
                     outlined: sel
                     border.color: Theme.alpha(Theme.accent, 0.8)
                     color: sel ? Theme.alpha(Theme.accent, 0.26) : hovered ? Theme.alpha(Theme.fg, 0.10) : "transparent"
                     onClicked: lc.doAction(modelData.id)
-                    RowText { title: arow.modelData.label }
+                    RowText {
+                        title: arow.arming ? (arow.modelData.confirmText || "Confirm: " + arow.modelData.label) : arow.modelData.label
+                        sub: arow.arming ? "Press Enter again to confirm" : (arow.modelData.sub || "")
+                    }
                 }
             }
         }
@@ -599,10 +651,11 @@ ModalMenu {
         Layout.fillWidth: true
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
-        text: lc.actionsOpen ? "↑↓ select · Enter do · ← / Esc back"
+        text: lc.argItem ? (lc.argNote !== "" ? lc.argNote + " · " : "") + "Enter " + (lc.argItem.argVerb || "run") + " · Esc cancel"
+            : lc.actionsOpen ? "↑↓ select · Enter do · ← / Esc back"
             : lc.section !== "" ? "↑↓ select · Enter run · " + (lc.rightHint ? lc.rightHint + " · " : "") + "← / Backspace back · Esc " + (lc.sectionDirect ? "close" : "back")
             : "↑↓ select · Enter run · " + (lc.rightHint ? lc.rightHint + " · " : "") + "Ctrl+1-9 quick run · Esc close"
-        color: Theme.muted
+        color: lc.argNote !== "" ? Theme.red : Theme.muted
         font.pixelSize: Theme.fontCaption
     }
 

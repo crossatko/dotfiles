@@ -1,0 +1,623 @@
+#!/usr/bin/env -S python3 -I
+"""Brave web apps for the launcher ("Install webapp" section, launcher/WebappSource.qml). JSON on stdout.
+
+  webapp-install probe <url>                 -> {"url", "host", "name", "title", "reachable", "error", "icon": {...}}
+  webapp-install install <url> --name <name> -> {"name", "url", "desktop", "icon", "iconSource", "wmClass", "warnings"}
+  webapp-install uninstall <slug>            -> {"removed": [paths]}: applications/webapp_<slug>.desktop (only if it is a
+      `--app=` browser entry: ours, marked X-Webapp-Installer=1, or one from the old create_brave_webapp function) and
+      the icons named exactly webapp-<slug>[.<hash8>].{png,svg} under icons/hicolor/*/apps; every path must resolve inside
+      $XDG_DATA_HOME (default ~/.local/share). Browser profiles / site data are never touched.
+
+The page is fetched from the URL itself (plus the icon / manifest URLs that page declares, and /favicon.ico of its
+origin): no third-party favicon service. Only http(s), at most 5 redirects (each again http(s)), 8 s timeouts
+($WEBAPP_TIMEOUT), size limits (page 2 MB, manifest 512 KB, icon 4 MB), browser-like User-Agent ($WEBAPP_UA), no cookies.
+Icon / manifest URLs the page declares may be on another host (static-asset CDNs, protocol-relative //host/...);
+they are fetched under the same http(s) / redirect / size rules. Fallback chain, best score first: manifest icons
+(purpose any before maskable at comparable size), <link> apple-touch-icon / icon, then the guessed
+/apple-touch-icon.png and /favicon.ico of the page's origin, then the letter tile.
+Best icon: manifest / <link rel=icon|apple-touch-icon> / favicon.ico, largest raster (>= 128 px preferred) or SVG;
+converted to PNG with Python PIL, else rsvg-convert / magick, else PNG passthrough. Nothing usable -> a generated
+letter tile, so the entry never shows the generic browser icon.
+Installs (XDG_DATA_HOME, default ~/.local/share):
+  icons/hicolor/<N>x<N>/apps/webapp-<slug>.<hash8>.png (+ scalable/apps/webapp-<slug>.<hash8>.svg for SVG icons /
+  tiles); Icon= is the absolute path of that file (no theme lookup: long-running Qt apps cache lookups by name)
+  applications/webapp_<slug>.desktop: Exec=brave --app="<url>" (the `brave` on PATH, i.e. the theme shim),
+  Icon=<absolute icon path>, StartupWMClass=brave-<host>_<path with / -> _>-Default (what Chromium sets for --app
+  windows of the Default profile; bin/focus-app keys on ^brave-<host>__), Categories=Network;WebBrowser;
+Same name again = the entry and the icon files of that name are replaced (no per-app browser profile is created or
+touched: --app uses Brave's Default profile, exactly like the old create_brave_webapp shell function).
+The name is used exactly as given (trimmed); the file name is its slug (lowercase, spaces -> _), so "WhatsApp" -> webapp_whatsapp.
+Exit codes: 0 ok, 1 usage / invalid URL, name or slug, 2 could not write / remove the files, 4 no such web app entry.
+Env (tests): WEBAPP_TIMEOUT (seconds), WEBAPP_BROWSER (default brave), XDG_DATA_HOME.
+"""
+import hashlib
+import html.parser
+import io
+import json
+import os
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
+
+TIMEOUT = float(os.environ.get("WEBAPP_TIMEOUT") or 8)
+# A browser-like User-Agent: some sites answer a non-browser UA with an error page (seen: HTTP 400 for
+# "...webapp-install/1" on a big messaging site, 200 with icons for a Chrome UA), which left only the letter tile.
+# The app itself runs in Brave, which sends this kind of UA too. $WEBAPP_UA overrides it.
+UA = os.environ.get("WEBAPP_UA") or "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+PAGE_MAX, MANIFEST_MAX, ICON_MAX = 2 << 20, 512 << 10, 4 << 20
+SIZES = [16, 22, 24, 32, 48, 64, 96, 128, 192, 256, 512]
+
+
+class Fail(Exception):
+    pass
+
+
+# ---- url -------------------------------------------------------------------------------------------------------
+def normalize(raw):
+    """User text -> canonical http(s) URL, or raise Fail. Adds https://, lowercases the host, drops the fragment."""
+    t = (raw or "").strip()
+    if not t or len(t) > 2000 or re.search(r"[\s<>\"'`\\]", t):
+        raise Fail("Not a URL")
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", t):
+        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", t) and not re.match(r"^[^:/]+:\d+(/|$)", t):
+            raise Fail("Only http and https addresses")
+        t = "https://" + t
+    u = urllib.parse.urlsplit(t)
+    if u.scheme.lower() not in ("http", "https"):
+        raise Fail("Only http and https addresses")
+    host = (u.hostname or "").lower()
+    if not host or u.username or u.password:
+        raise Fail("Not a URL")
+    if not re.match(r"^(localhost|[a-z0-9-]+(\.[a-z0-9-]+)+|\[[0-9a-f:.]+\])$", host) and not re.match(r"^\d+(\.\d+){3}$", host):
+        raise Fail("Not a host name: " + host)
+    try:
+        port = u.port
+    except ValueError:
+        raise Fail("Bad port")
+    netloc = host + (":%d" % port if port else "")
+    return urllib.parse.urlunsplit((u.scheme.lower(), netloc, u.path or "/", u.query, ""))
+
+
+def wm_class(url, browser="brave"):
+    # Chromium: app name = host + "_" + path, "/" -> "_", window class "<browser>-<app name>-<profile dir>"
+    u = urllib.parse.urlsplit(url)
+    return "%s-%s_%s-Default" % (browser, u.hostname or "", (u.path or "/").replace("/", "_"))
+
+
+def slug(name):
+    s = re.sub(r"\s+", "_", name.strip().lower())
+    s = re.sub(r"[^a-z0-9_-]", "", s).strip("_-")     # no "." (icon files are webapp-<slug>.<hash>.png)
+    return s[:48]
+
+
+# ---- http --------------------------------------------------------------------------------------------------------
+class Redirects(urllib.request.HTTPRedirectHandler):
+    max_redirections = 5
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if urllib.parse.urlsplit(newurl).scheme.lower() not in ("http", "https"):
+            raise Fail("Redirect to a non-http address")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+OPENER = urllib.request.build_opener(Redirects())   # no HTTPCookieProcessor: no cookies kept or sent
+
+
+def fetch(url, limit, accept="*/*"):
+    """GET -> (final url, content type, bytes); raises Fail with a short reason."""
+    if urllib.parse.urlsplit(url).scheme.lower() not in ("http", "https"):
+        raise Fail("not http(s)")
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": accept, "Accept-Language": "en-US,en;q=0.8"})
+    try:
+        with OPENER.open(req, timeout=TIMEOUT) as r:
+            n = r.headers.get("Content-Length")
+            if n and n.isdigit() and int(n) > limit:
+                raise Fail("too large")
+            data = r.read(limit + 1)
+            if len(data) > limit:
+                raise Fail("too large")
+            return r.geturl(), (r.headers.get("Content-Type") or "").split(";")[0].strip().lower(), data
+    except Fail:
+        raise
+    except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 303, 307, 308):
+            raise Fail("too many redirects")
+        raise Fail("HTTP %d" % e.code)
+    except urllib.error.URLError as e:
+        r = e.reason
+        if "SSL" in type(r).__name__ or "ssl" in str(r).lower():
+            raise Fail("TLS failed")
+        raise Fail("timed out" if "timed out" in str(r) else "unreachable (%s)" % (getattr(r, "strerror", None) or r))
+    except (TimeoutError, OSError) as e:
+        raise Fail("timed out" if isinstance(e, TimeoutError) or "timed out" in str(e) else "unreachable")
+    except Exception as e:  # malformed responses etc.
+        raise Fail(type(e).__name__)
+
+
+# ---- page parsing ------------------------------------------------------------------------------------------------
+class Page(html.parser.HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.title, self.in_title, self.links, self.meta = "", False, [], {}
+
+    def handle_starttag(self, tag, attrs):
+        a = {k.lower(): (v or "") for k, v in attrs}
+        if tag == "title":
+            self.in_title = True
+        elif tag == "link" and a.get("href"):
+            self.links.append(a)
+        elif tag == "meta":
+            k = (a.get("name") or a.get("property") or "").lower()
+            if k and a.get("content"):
+                self.meta.setdefault(k, a["content"])
+
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self.in_title = False
+
+    def handle_data(self, d):
+        if self.in_title and len(self.title) < 300:
+            self.title += d
+
+
+def sizes_of(s):
+    out = []
+    for p in (s or "").lower().split():
+        if p == "any":
+            out.append(512)
+        m = re.match(r"^(\d+)x(\d+)$", p)
+        if m:
+            out.append(min(int(m.group(1)), int(m.group(2))))
+    return max(out) if out else 0
+
+
+def candidates(page, base, manifest, mbase):
+    """[(score, url, kind, declared size)] best first. kind: svg | raster | ico | mask."""
+    c = []
+
+    def add(href, rel, typ, size, src_base, origin, purpose="any"):
+        url = urllib.parse.urljoin(src_base, href.strip())
+        if urllib.parse.urlsplit(url).scheme not in ("http", "https"):
+            return
+        low = url.lower().split("?")[0]
+        svg = typ == "image/svg+xml" or low.endswith(".svg")
+        kind = "mask" if rel == "mask-icon" else "svg" if svg else "ico" if low.endswith(".ico") or "icon" in typ and "x-icon" in typ else "raster"
+        if not size:
+            size = 512 if kind == "svg" else 180 if rel.startswith("apple-touch-icon") else 0
+        score = {"raster": 0, "svg": 0, "ico": -40, "mask": -100}[kind] + min(size, 512) / 4
+        if kind == "raster" and size >= 128:
+            score += 60
+        if kind == "svg":
+            score += 50
+        if origin == "manifest":
+            score += 5
+        if origin == "default":
+            score -= 30         # guessed path, not declared by the page: only when nothing declared works
+        if "any" in purpose.split() or not purpose.strip():
+            score += 3          # comparable sizes: a plain icon beats a maskable one (maskable has a safe-zone border)
+        c.append((score, url, kind, size))
+
+    for l in page.links:
+        rels = (l.get("rel") or "").lower().split()
+        rel = next((r for r in ("apple-touch-icon", "apple-touch-icon-precomposed", "mask-icon", "icon") if r in rels), "")
+        if rel:
+            add(l["href"], rel, (l.get("type") or "").lower(), sizes_of(l.get("sizes")), base, "link")
+    for i in (manifest or {}).get("icons") or []:
+        if isinstance(i, dict) and isinstance(i.get("src"), str):
+            add(i["src"], "manifest", str(i.get("type") or "").lower(), sizes_of(str(i.get("sizes") or "")), mbase, "manifest",
+                str(i.get("purpose") or "any").lower())
+    # bounded well-known fallbacks on the page's origin (also when the page itself could not be read)
+    u = urllib.parse.urlsplit(base)
+    root = "%s://%s/" % (u.scheme, u.netloc)
+    add("/apple-touch-icon.png", "apple-touch-icon", "image/png", 180, root, "default")
+    add("/favicon.ico", "icon", "image/x-icon", 0, root, "default")
+    seen, out = set(), []
+    for x in sorted(c, key=lambda x: -x[0]):
+        if x[1] not in seen:
+            seen.add(x[1])
+            out.append(x)
+    return out
+
+
+def clean_title(t):
+    t = re.sub(r"\s+", " ", t or "").strip()
+    parts = [p.strip() for p in re.split(r"\s+[-|·•—–:]\s+", t) if p.strip()]
+    return (parts[0] if parts else t)[:60]
+
+
+def host_name(host):
+    h = re.sub(r"^(www|app|web|m)\.", "", host)
+    first = h.split(".")[0] if not re.match(r"^\d", h) else h
+    return first[:1].upper() + first[1:] if first else host
+
+
+def probe(url):
+    out = {"url": url, "host": urllib.parse.urlsplit(url).hostname, "title": "", "reachable": False, "error": "",
+           "icons": [], "manifestName": ""}
+    try:
+        final, typ, data = fetch(url, PAGE_MAX, "text/html,application/xhtml+xml,*/*;q=0.8")
+    except Fail as e:
+        out["error"] = str(e)
+        out["candidates"] = candidates(Page(), url, None, url)
+        out["name"] = host_name(out["host"])
+        return out
+    out["reachable"] = True
+    page = Page()
+    try:
+        page.feed(data.decode("utf-8", "replace"))
+    except Exception:
+        pass
+    manifest, mbase = None, final
+    for l in page.links:
+        if "manifest" in (l.get("rel") or "").lower().split():
+            mbase = urllib.parse.urljoin(final, l["href"])
+            try:
+                _, _, m = fetch(mbase, MANIFEST_MAX)
+                manifest = json.loads(m.decode("utf-8", "replace"))
+                if not isinstance(manifest, dict):
+                    manifest = None
+            except (Fail, ValueError):
+                manifest = None
+            break
+    out["title"] = re.sub(r"\s+", " ", page.title).strip()[:200]
+    mname = ""
+    if manifest:
+        for k in ("short_name", "name"):
+            if isinstance(manifest.get(k), str) and manifest[k].strip():
+                mname = manifest[k].strip()[:60]
+                break
+    out["manifestName"] = mname
+    out["name"] = (mname or page.meta.get("application-name", "").strip()[:60] or page.meta.get("og:site_name", "").strip()[:60]
+                   or clean_title(out["title"]) or host_name(out["host"]))
+    out["candidates"] = candidates(page, final, manifest, mbase)
+    return out
+
+
+# ---- images -----------------------------------------------------------------------------------------------------
+try:
+    from PIL import Image  # system python3-pillow (python3 -I still sees system site-packages)
+except Exception:  # pragma: no cover - depends on the machine
+    Image = None
+
+
+def png_size(b):
+    if b[:8] == b"\x89PNG\r\n\x1a\n" and len(b) >= 24:
+        return struct.unpack(">II", b[16:24])
+    return None
+
+
+def is_svg(b, kind):
+    head = b[:512].lstrip().lower()
+    return kind in ("svg", "mask") and (head.startswith(b"<?xml") or head.startswith(b"<svg") or b"<svg" in b[:2048].lower())
+
+
+def to_png(b, tmp):
+    """raster bytes -> (png bytes, size) at most 512, square; None if it cannot be decoded."""
+    if Image is not None:
+        try:
+            im = Image.open(io.BytesIO(b))
+            if getattr(im, "format", "") == "ICO" and hasattr(im, "ico"):
+                im = im.ico.getimage(max(im.ico.sizes()))
+            im.load()
+            im = im.convert("RGBA")
+            w, h = im.size
+            if w < 1 or h < 1 or w > 8192 or h > 8192:
+                return None
+            px = im.load()
+            # full-bleed icon (all four corners opaque: a PWA icon made for the OS to mask): round its corners the way a
+            # launcher mask would, so it does not show as a hard square next to the other app icons
+            if w == h and w >= 64 and all(px[x, y][3] >= 250 for x, y in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1))):
+                from PIL import ImageDraw
+                mask = Image.new("L", (w * 4, h * 4), 0)
+                ImageDraw.Draw(mask).rounded_rectangle((0, 0, w * 4 - 1, h * 4 - 1), radius=int(w * 4 * 0.22), fill=255)
+                im.putalpha(Image.composite(im.getchannel("A"), Image.new("L", (w, h), 0), mask.resize((w, h), Image.LANCZOS)))
+            if w != h:
+                s = max(w, h)
+                sq = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+                sq.paste(im, ((s - w) // 2, (s - h) // 2))
+                im = sq
+            if im.size[0] > 512:
+                im = im.resize((512, 512), Image.LANCZOS)
+            o = io.BytesIO()
+            im.save(o, "PNG")
+            return o.getvalue(), im.size[0]
+        except Exception:
+            return None
+    ps = png_size(b)
+    if ps:
+        return b, min(ps)
+    if shutil.which("magick"):
+        src, dst = os.path.join(tmp, "in.bin"), os.path.join(tmp, "out.png")
+        open(src, "wb").write(b)
+        if subprocess.run(["magick", src + "[0]", "-resize", "512x512>", dst], capture_output=True, timeout=20).returncode == 0:
+            pb = open(dst, "rb").read()
+            ps = png_size(pb)
+            if ps:
+                return pb, min(ps)
+    return None
+
+
+def svg_to_png(svg, tmp, size=256):
+    src, dst = os.path.join(tmp, "in.svg"), os.path.join(tmp, "out.png")
+    open(src, "wb").write(svg)
+    for cmd in (["rsvg-convert", "-w", str(size), "-h", str(size), "-a", "-o", dst, src],
+                ["magick", "-background", "none", "-density", "384", src, "-resize", "%dx%d" % (size, size), dst]):
+        if shutil.which(cmd[0]):
+            try:
+                if subprocess.run(cmd, capture_output=True, timeout=20).returncode == 0 and png_size(open(dst, "rb").read()):
+                    return open(dst, "rb").read()
+            except (subprocess.TimeoutExpired, OSError):
+                pass
+    return None
+
+
+def svg_ok(b):
+    t = b.decode("utf-8", "replace").lower()
+    return "<svg" in t and "<script" not in t and "<!entity" not in t
+
+
+def tile_rgb(name, host):
+    import colorsys
+    hue = int(hashlib.sha1((host or name).encode()).hexdigest()[:4], 16) % 360
+    return tuple(int(x * 255) for x in colorsys.hls_to_rgb(hue / 360, 0.42, 0.55))
+
+
+def tile_svg(name, host):
+    # plain hex colour: Qt's SVG renderer (launcher icons) does not understand hsl()
+    letter = (re.sub(r"[^0-9A-Za-z]", "", name)[:1] or (host or "?")[:1]).upper()
+    return ('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">'
+            '<rect x="8" y="8" width="240" height="240" rx="56" fill="#%02x%02x%02x"/>'
+            '<text x="128" y="128" dy=".35em" text-anchor="middle" font-family="sans-serif" font-weight="700" '
+            'font-size="150" fill="#ffffff">%s</text></svg>' % (tile_rgb(name, host) + (letter,))).encode()
+
+
+def tile_png(name, host):
+    if Image is None:
+        return None
+    from PIL import ImageDraw, ImageFont
+    r, g, b = tile_rgb(name, host)
+    im = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    d.rounded_rectangle((8, 8, 248, 248), radius=56, fill=(r, g, b, 255))
+    letter = (re.sub(r"[^0-9A-Za-z]", "", name)[:1] or (host or "?")[:1]).upper()
+    font = None
+    for f in ("/usr/share/fonts/TTF/DejaVuSans-Bold.ttf", "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+              "/usr/share/fonts/noto/NotoSans-Bold.ttf", "/usr/share/fonts/liberation/LiberationSans-Bold.ttf"):
+        if os.path.exists(f):
+            font = ImageFont.truetype(f, 150)
+            break
+    font = font or ImageFont.load_default()
+    d.text((128, 132), letter, fill=(255, 255, 255, 255), font=font, anchor="mm")
+    o = io.BytesIO()
+    im.save(o, "PNG")
+    return o.getvalue()
+
+
+def best_icon(cands, tmp, tries=6):
+    """-> {"png": bytes, "size": n, "svg": bytes|None, "source": url} or None"""
+    best = None
+    for score, url, kind, _ in [x for x in cands if x[2] != "mask"][:tries]:
+        try:
+            _, typ, b = fetch(url, ICON_MAX)
+        except Fail:
+            continue
+        if is_svg(b, kind) or typ == "image/svg+xml":
+            if not svg_ok(b):
+                continue
+            png = svg_to_png(b, tmp)
+            if png:
+                got = {"png": png, "size": 256, "svg": b, "source": url, "eff": 512}
+            else:
+                got = {"png": None, "size": 0, "svg": b, "source": url, "eff": 300}
+        else:
+            r = to_png(b, tmp)
+            if not r:
+                continue
+            got = {"png": r[0], "size": r[1], "svg": None, "source": url, "eff": r[1]}
+        if not best or got["eff"] > best["eff"]:
+            best = got
+        if best["eff"] >= 256:
+            break
+    if best and best["eff"] < 32:
+        return None  # a 16 px favicon blown up looks worse than the tile
+    return best
+
+
+# ---- install ----------------------------------------------------------------------------------------------------
+def data_home():
+    return os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+
+
+def write_atomic(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".webapp-")
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, path)
+
+
+def desktop_quote(s):
+    # Exec argument inside double quotes (Desktop Entry spec): escape " ` $ \, and % as %%
+    return '"' + re.sub(r'(["`$\\])', r"\\\1", s).replace("%", "%%") + '"'
+
+
+def desktop_value(s):
+    return s.replace("\\", "\\\\").replace("\n", " ").replace("\r", " ").replace("\t", " ")
+
+
+def install(url, name):
+    name = re.sub(r"\s+", " ", name or "").strip()
+    sl = slug(name)
+    if not name or not sl:
+        raise Fail("The name needs a letter or digit")
+    browser = os.environ.get("WEBAPP_BROWSER") or "brave"
+    warnings = []
+    info = probe(url)
+    if not info["reachable"]:
+        warnings.append("Page not reachable (%s): generated icon" % info["error"])
+    icon_name = "webapp-" + sl
+    hic = os.path.join(data_home(), "icons", "hicolor")
+    with tempfile.TemporaryDirectory(prefix="webapp-") as tmp:
+        ic = best_icon(info["candidates"], tmp) if info["candidates"] else None
+        source = ic["source"] if ic else "letter tile"
+        svg = ic["svg"] if ic else None
+        png, size = (ic["png"], ic["size"]) if ic else (None, 0)
+        if not ic:
+            svg = tile_svg(name, info["host"])
+            png = tile_png(name, info["host"]) or svg_to_png(svg, tmp)
+            size = 256 if png else 0
+        # replace whatever this web app had before (other sizes / older content hashes)
+        remove_icons(hic, sl)
+        # File names carry a content hash and Icon= is the absolute path: a long-running shell caches theme lookups by
+        # icon NAME (a reinstall under the same name kept showing the old, deleted or missing file until a restart), a
+        # new path is a new cache key, and no icon theme / index / cache is involved at all.
+        tag = hashlib.sha1(png or svg or b"").hexdigest()[:8]
+        files = []
+        try:
+            if png:
+                bucket = max([s for s in SIZES if s <= size] or [16])
+                p = os.path.join(hic, "%dx%d" % (bucket, bucket), "apps", "%s.%s.png" % (icon_name, tag))
+                write_atomic(p, png)
+                files.append(p)
+            if svg:
+                p = os.path.join(hic, "scalable", "apps", "%s.%s.svg" % (icon_name, tag))
+                write_atomic(p, svg)
+                files.append(p)
+        except OSError as e:
+            raise Fail("Could not write the icon: %s" % e.strerror) from None
+    if os.path.exists(os.path.join(hic, "icon-theme.cache")) and shutil.which("gtk-update-icon-cache"):
+        # only refresh a cache that already exists: creating one would hide icons other apps add later
+        subprocess.run(["gtk-update-icon-cache", "-f", "-t", "-q", hic], capture_output=True, timeout=30)
+    cls = wm_class(url, browser)
+    apps = os.path.join(data_home(), "applications")
+    desktop = os.path.join(apps, "webapp_%s.desktop" % sl)
+    host = info["host"] or ""
+    text = "\n".join([
+        "[Desktop Entry]",
+        "Version=1.0",
+        "Type=Application",
+        "Name=" + desktop_value(name),
+        "Comment=" + desktop_value("Web app (%s)" % host),
+        "Exec=%s --app=%s" % (browser, desktop_quote(url)),
+        "Terminal=false",
+        "Categories=Network;WebBrowser;",
+        "Icon=" + desktop_value(files[0] if files else "applications-internet"),
+        "StartupNotify=true",
+        "StartupWMClass=" + cls,
+        "X-Webapp-Url=" + desktop_value(url),
+        "X-Webapp-Installer=1",
+        "X-Webapp-Icon-Source=" + desktop_value(source),      # which icon was chosen (URL or "letter tile"), for diagnosis
+        ""])
+    try:
+        write_atomic(desktop, text.encode())
+    except OSError as e:
+        raise Fail("Could not write the entry: %s" % e.strerror) from None
+    if shutil.which("desktop-file-validate"):
+        r = subprocess.run(["desktop-file-validate", desktop], capture_output=True, text=True, timeout=20)
+        for line in (r.stdout + r.stderr).splitlines():
+            if "error:" in line:
+                warnings.append(line.split("error:", 1)[1].strip()[:160])
+    if shutil.which("update-desktop-database"):
+        subprocess.run(["update-desktop-database", "-q", apps], capture_output=True, timeout=30)
+    return {"name": name, "url": url, "desktop": desktop, "icon": files[0] if files else "", "iconFiles": files, "iconSource": source,
+            "iconSize": size, "wmClass": cls, "warnings": warnings}
+
+
+def icon_files(hic, sl):
+    """this web app's icon files: webapp-<slug>.{png,svg} (older installs) and webapp-<slug>.<8 hex>.{png,svg}"""
+    pat = re.compile(r"^webapp-%s(\.[0-9a-f]{8})?\.(png|svg)$" % re.escape(sl))
+    out = []
+    if os.path.isdir(hic):
+        for d in sorted(os.listdir(hic)):
+            a = os.path.join(hic, d, "apps")
+            if os.path.isdir(a) and not os.path.islink(a):
+                out += [os.path.join(a, f) for f in sorted(os.listdir(a)) if pat.match(f)]
+    return [p for p in out if os.path.isfile(p) and not os.path.islink(p) and inside(p, hic)]
+
+
+def remove_icons(hic, sl):
+    gone = []
+    for p in icon_files(hic, sl):
+        os.remove(p)
+        gone.append(p)
+    return gone
+
+
+def inside(path, root):
+    rp, rr = os.path.realpath(path), os.path.realpath(root)
+    return rp.startswith(rr + os.sep)
+
+
+def uninstall(sl):
+    if not re.match(r"^[a-z0-9][a-z0-9_.-]{0,63}$", sl or "") or ".." in sl:
+        raise Fail("Not a web app name: %r" % (sl or "")[:40])
+    home = data_home()
+    apps = os.path.join(home, "applications")
+    desktop = os.path.join(apps, "webapp_%s.desktop" % sl)
+    if not os.path.lexists(desktop):
+        raise Missing("No web app entry webapp_%s.desktop" % sl)
+    if os.path.islink(desktop) or not os.path.isfile(desktop) or not inside(desktop, apps) or not inside(apps, home):
+        raise Fail("Refusing to remove a file outside %s" % apps)
+    try:
+        with open(desktop, encoding="utf-8", errors="replace") as f:
+            text = f.read(65536)
+    except OSError as e:
+        raise Fail("Could not read the entry: %s" % e.strerror) from None
+    exec_line = next((l for l in text.splitlines() if l.startswith("Exec=")), "")
+    if "--app=" not in exec_line:
+        raise Fail("webapp_%s.desktop is not a browser --app entry; left alone" % sl)
+    removed = []
+    try:
+        os.remove(desktop)
+        removed.append(desktop)
+        hic = os.path.join(home, "icons", "hicolor")
+        if os.path.isdir(hic) and inside(hic, home):
+            removed += remove_icons(hic, sl)
+    except OSError as e:
+        raise Fail("Could not remove: %s" % e.strerror) from None
+    hic = os.path.join(home, "icons", "hicolor")
+    if os.path.exists(os.path.join(hic, "icon-theme.cache")) and shutil.which("gtk-update-icon-cache"):
+        subprocess.run(["gtk-update-icon-cache", "-f", "-t", "-q", hic], capture_output=True, timeout=30)
+    if shutil.which("update-desktop-database"):
+        subprocess.run(["update-desktop-database", "-q", apps], capture_output=True, timeout=30)
+    return {"removed": removed}
+
+
+class Missing(Fail):
+    pass
+
+
+def main(argv):
+    if len(argv) >= 2 and argv[0] == "probe":
+        url = normalize(argv[1])
+        info = probe(url)
+        if not info["reachable"] and not re.match(r"^\s*https?://", argv[1], re.I):
+            alt = probe("http://" + url[len("https://"):])     # typed without a scheme and https failed: try plain http
+            if alt["reachable"]:
+                info = alt
+        c = info.pop("candidates")
+        info["icons"] = [{"url": x[1], "kind": x[2], "size": x[3]} for x in c[:8]]
+        return info
+    if len(argv) >= 4 and argv[0] == "install" and argv[2] == "--name":
+        return install(normalize(argv[1]), argv[3])
+    if len(argv) == 2 and argv[0] == "uninstall":
+        return uninstall(argv[1])
+    raise Fail("usage: webapp-install probe <url> | install <url> --name <name>")
+
+
+if __name__ == "__main__":
+    try:
+        out = main(sys.argv[1:])
+    except Fail as e:
+        msg = str(e)
+        print(json.dumps({"error": msg}))
+        print(msg, file=sys.stderr)
+        sys.exit(4 if isinstance(e, Missing) else 2 if msg.startswith("Could not") else 1)
+    print(json.dumps(out))

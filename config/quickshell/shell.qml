@@ -119,6 +119,6 @@ ShellRoot {
         function show(): void { launcher.open() }
         function hide(): void { launcher.close() }
         function query(q: string): void { launcher.openWith(q) }   // open prefilled, e.g. "v " = clipboard history
-        function section(name: string): void { launcher.openSection(name) }   // open inside a section: sound-output | sound-input | power | twitch | screenshot | record
+        function section(name: string): void { launcher.openSection(name) }   // open inside a section: sound-output | sound-input | power | twitch | screenshot | record | network | bluetooth | jellyfin
     }
 }
