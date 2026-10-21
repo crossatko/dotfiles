@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Re-render the theme after a pull (called by post-merge and post-rewrite): the per-host outputs in
+# config/theme/out/host/ (GTK3 / GTK4 CSS, Kvantum, Brave Wall-Glass) are git-ignored and depend on the running
+# compositor, so a pull that changes config/theme/ needs a `theme.py render` on every host. Runs only when the
+# pulled range touched config/theme/ or the host outputs are missing. Never fails the git command.
+# Skip once with THEME_RENDER_SKIP=1 git pull.
+[ -n "${THEME_RENDER_SKIP:-}" ] && exit 0
+top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+theme="$top/config/theme/theme.py"
+[ -f "$theme" ] || exit 0
+
+changed=0
+if [ ! -d "$top/config/theme/out/host" ]; then
+	changed=1
+elif git rev-parse -q --verify ORIG_HEAD >/dev/null &&
+	! git diff --quiet ORIG_HEAD HEAD -- config/theme 2>/dev/null; then
+	changed=1
+fi
+[ "$changed" = 1 ] || exit 0
+
+echo "theme-render: config/theme changed, running theme.py render"
+python3 -I "$theme" render || echo "theme-render: theme.py render failed (run it by hand)" >&2
+exit 0

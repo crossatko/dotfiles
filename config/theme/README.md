@@ -39,6 +39,8 @@ overrides ──┘                      │
 * `out/` is committed on purpose so a fresh clone works before the first `apply`, except `out/host/` (git-ignored):
   `gtk3.css`, `gtk4.css`, `kvantum.kvconfig`, `brave-glass.css` depend on the running compositor (card fill 0.3 on the
   solid_glass fork, `bar_opacity + 0.3` elsewhere), so each host renders its own; only `theme.py` links them.
+  A pull that changes `config/theme/` re-renders them automatically (`.githooks/post-merge` / `post-rewrite` ->
+  `.githooks/theme-render`, active via `core.hooksPath .githooks` from install.sh; skip once with `THEME_RENDER_SKIP=1`).
 
 ## How the extractor picks colors
 Background/foreground come from the darkest third / lightest quarter of the image,

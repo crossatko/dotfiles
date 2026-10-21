@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# After git pull --rebase (pull.rebase = true here): re-render the theme when config/theme changed, see theme-render.
+[ "$1" = rebase ] || exit 0
+exec "$(dirname "$0")/theme-render"
