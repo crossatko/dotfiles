@@ -71,6 +71,7 @@ bind({ mod, "SHIFT", "E" }, exec("qs ipc call launcher section power"))
 bind({ mod, "SHIFT", "S" }, exec("qs ipc call launcher section sound-output"))
 bind({ mod, "SHIFT", "M" }, exec("qs ipc call launcher section sound-input"))
 bind({ mod, "SHIFT", "T" }, exec("qs ipc call launcher section twitch"))
+bind({ mod, "SHIFT", "J" }, exec("qs ipc call launcher section jellyfin"))
 
 local directions = {
 	h = "left",
