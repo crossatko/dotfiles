@@ -370,6 +370,10 @@ The bar container is a glass surface like the popup cards: `Bar.qml`'s backgroun
 - **Chip binding loop (2026-10-21):** `Chip.qml` row `x` logged `Binding loop detected for property "x"` in bursts of ~7 at runtime (not on a plain reload; seen after a chip's content changed, e.g. around the Home Assistant connect). Not caused by the glass commit (that Chip.qml change only dropped `isGlassItem`). The x reads laid-out values (`row.width`, ink insets from the labels' widths), which a layout pass changes while x is being evaluated. Fix: x moved into a `Binding { target: row; property: "x"; delayed: true }` outside the RowLayout; positions unchanged (chip x/width/row.x logged for all 14 chips before and after, identical). Not reproduced on demand, so the fix is confirmed only by a clean log after reloads; if the warning returns, look at which chip it is.
 - **Not verified:** the stock Hyprland path (unchanged code path: `glass` false -> `barFill` = `bar_opacity`, whole-window region), scales other than 1, multi-monitor. A "Binding loop ... Chip.qml:50 RowLayout x" warning shows in the live log on reload; not attributed to this change (the chip layout code is untouched).
 
+## zsh / zoxide (`.zshrc`, 2026-10-22)
+- zoxide used to be the full `zoxide init zsh` output pasted mid-file (stale, with nvm/starship/PATH lines after it). Now `eval "$(zoxide init zsh)"` is the last line of `.zshrc`; keep it last (its doctor warns if anything after it changes the chpwd hooks).
+- `alias cd=z`: Claude Code's Bash tool replays aliases/functions from a shell snapshot but not `chpwd_functions`, so every `cd` there printed the doctor warning. `.zshrc` sets `_ZO_DOCTOR=0` only when `$CLAUDECODE` is set. Verified: `zsh -ic 'cd /tmp; z /home'` prints no warning and `chpwd_functions` contains `__zoxide_hook`. Already-running Claude sessions keep the old snapshot until restarted.
+
 ## Hyprland config (`config/hypr`)
 
 - `theme.lua`: border 2px, rounding 0; `settings.lua`: gaps 0. (Settings → Appearance overrides: see **Appearance** above.)
