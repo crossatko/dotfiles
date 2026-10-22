@@ -108,6 +108,7 @@ Item {
                             titleWidth: pg.titleW
                             readonly property int cur: pg.tintChannel(modelData.s)
                             Slider {
+                                wheel: false
                                 objectName: "slider-tint-" + trow.modelData.s
                                 Layout.fillWidth: true
                                 value: trow.cur / 255
@@ -152,6 +153,7 @@ Item {
             title: modelData.label
             titleWidth: pg.titleW
             Slider {
+                wheel: false
                 objectName: "slider-" + row.modelData.key
                 Layout.fillWidth: true
                 value: pg.toNorm(row.modelData, row.cur)

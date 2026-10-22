@@ -714,6 +714,7 @@ ColumnLayout {
             title: "Play for"
             titleWidth: 84
             Slider {
+                wheel: false
                 id: playSlider
                 objectName: "slider-play"
                 onDownChanged: if (!down) page.flushTiming()
@@ -732,6 +733,7 @@ ColumnLayout {
             title: "Wind down"
             titleWidth: 84
             Slider {
+                wheel: false
                 id: windSlider
                 objectName: "slider-wind"
                 onDownChanged: if (!down) page.flushTiming()
@@ -751,6 +753,7 @@ ColumnLayout {
             title: "Ease-in"
             titleWidth: 84
             Slider {
+                wheel: false
                 id: easeSlider
                 objectName: "slider-ease"
                 onDownChanged: if (!down) page.flushTiming()

@@ -8,6 +8,7 @@ Item {
     property bool dim: false
     property real floor: 0              // lowest value a drag / wheel can emit (brightness keeps screens from going black)
     property real mark: -1              // optional tick on the track at this position (0..1), e.g. the 1x of a speed slider
+    property bool wheel: true           // false = the wheel passes through (sliders on scrolling pages: scrolling must not change them)
     signal moved(real v)
 
     implicitHeight: 24
@@ -175,6 +176,6 @@ Item {
         function set(x) { live = sl.valueAt(x); sl.moved(live) }
         onPressed: mouse => set(mouse.x)
         onPositionChanged: mouse => { if (pressed) set(mouse.x) }
-        onWheel: w => { live = Math.max(sl.floor, Math.min(1, sl.value + (w.angleDelta.y > 0 ? 0.03 : -0.03))); sl.moved(live) }
+        onWheel: w => { if (!sl.wheel) { w.accepted = false; return } live = Math.max(sl.floor, Math.min(1, sl.value + (w.angleDelta.y > 0 ? 0.03 : -0.03))); sl.moved(live) }
     }
 }

@@ -48,6 +48,7 @@ Item {
             title: "Speed"
             titleWidth: pg.titleW
             Slider {
+                wheel: false
                 objectName: "slider-popupSpeed"
                 Layout.fillWidth: true
                 mark: pg.oneX
@@ -198,6 +199,7 @@ Item {
                 title: "Speed"
                 titleWidth: pg.titleW
                 Slider {
+                    wheel: false
                     objectName: "slider-hyprSpeed"
                     Layout.fillWidth: true
                     mark: pg.oneX
@@ -239,6 +241,7 @@ Item {
                         onToggled: want => want ? Motion.unset(grow.gid + "Enabled") : Motion.set(grow.gid + "Enabled", false)
                     }
                     Slider {
+                        wheel: false
                         objectName: "slider-" + grow.gid + "Speed"
                         Layout.fillWidth: true
                         dim: !grow.on

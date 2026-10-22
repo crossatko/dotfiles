@@ -272,6 +272,7 @@ Item {
             titleWidth: pg.titleW
             visible: modelData.key !== "edgeGap" || own
             Slider {
+                wheel: false
                 objectName: "slider-" + row.modelData.key
                 Layout.fillWidth: true
                 value: row.cur / row.modelData.max
