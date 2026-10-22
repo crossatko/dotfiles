@@ -21,5 +21,7 @@ Small Jellyfin CLI for the Quickshell launcher (python3 stdlib only) plus an mpv
 - `play` writes per-session files (mpv include with the auth header, curl config, optional m3u, IPC socket)
   mode 0600 under `$XDG_RUNTIME_DIR/jellyfin-qs/`; the token is never in argv or URLs.
   `mpv/jellyfin-report.lua` reports Playing/Progress/Stopped and removes the files on exit.
+  `play` first stops any running jellyfin-qs player (`quit` over its IPC socket, so Stopped is reported;
+  SIGTERM/SIGKILL to the socket's peer if it hangs), so a new playback replaces the old one.
 - Tests: `python3 -m unittest discover -s config/launcher/jellyfin/tests` (fake server, needs mpv for one test).
   Env overrides: `JELLYFIN_QS_CONFIG_DIR`, `JELLYFIN_QS_STATE_DIR`, `JELLYFIN_QS_MPV`, `JELLYFIN_QS_MPV_ARGS`.

@@ -245,6 +245,36 @@ class Play(Base):
         time.sleep(0.5)
         self.assertEqual([f for f in os.listdir(self.tmp + "/jellyfin-qs") if f.endswith((".conf", ".curl"))], [])
 
+    def test_play_replaces_running_player(self):
+        if not shutil.which("mpv"):
+            self.skipTest("no mpv")
+        self.login_files()
+        self.env["JELLYFIN_QS_MPV_ARGS"] = "--no-config --vo=null --ao=null --really-quiet"
+        d = self.tmp + "/jellyfin-qs"
+        pids = []
+        for item in ("t1", "t2"):
+            self.assertEqual(self.run_cli("play", item).returncode, 0)
+            for _ in range(100):
+                if any(r["path"] == "/Sessions/Playing" and json.loads(r["body"])["ItemId"] == item
+                       for r in self.srv.log): break
+                time.sleep(0.1)
+            socks = [f for f in os.listdir(d) if f.endswith(".sock")]
+            self.assertEqual(len(socks), 1, socks)  # the first player is gone before the second starts
+            if item == "t1":
+                first = socks[0]
+            else:
+                self.assertNotEqual(socks[0], first)
+        stops = [json.loads(r["body"])["ItemId"] for r in self.srv.log if r["path"] == "/Sessions/Playing/Stopped"]
+        self.assertEqual(stops, ["t1"])
+        # dead session files are dropped; the running player is quit again by the next play
+        open(d + "/dead.sock", "w").close(); open(d + "/dead.conf", "w").close()
+        self.env["JELLYFIN_QS_MPV_ARGS"] += " --length=1"
+        self.assertEqual(self.run_cli("play", "t1").returncode, 0)
+        self.assertFalse(os.path.exists(d + "/dead.conf") or os.path.exists(d + "/dead.sock"))
+        for _ in range(100):
+            if not [f for f in os.listdir(d) if f.endswith(".sock")]: break
+            time.sleep(0.1)
+
 
 if __name__ == "__main__":
     unittest.main()

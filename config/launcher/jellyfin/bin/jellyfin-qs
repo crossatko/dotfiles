@@ -7,8 +7,8 @@ Exit codes: 0 ok, 1 usage/missing program, 2 not configured / not logged in / to
 Test hooks: JELLYFIN_QS_CONFIG_DIR, JELLYFIN_QS_STATE_DIR, JELLYFIN_QS_MPV (binary),
 JELLYFIN_QS_MPV_ARGS (extra mpv args).
 """
-import argparse, getpass, http.client, json, os, random, shlex, socket, subprocess, sys
-import time, urllib.parse, uuid
+import argparse, getpass, http.client, json, os, random, shlex, signal, socket, struct
+import subprocess, sys, time, urllib.parse, uuid
 
 CONNECT_TIMEOUT = 3
 TOTAL_TIMEOUT = 10
@@ -391,6 +391,54 @@ def cleanup_stale(d):
         pass
 
 
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+
+
+def stop_players(d):
+    """Quit every running jellyfin-qs mpv (only those listen on <id>.sock here) so jellyfin-report.lua
+    reports the stop, and drop the files of dead sessions. SIGTERM, then SIGKILL, to the socket peer
+    if quit hangs."""
+    try:
+        socks = [n for n in os.listdir(d) if n.endswith(".sock")]
+    except OSError:
+        return
+    pids = []
+    for n in socks:
+        c = socket.socket(socket.AF_UNIX)
+        c.settimeout(1)
+        try:
+            c.connect(os.path.join(d, n))
+            pid = struct.unpack("3i", c.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))[0]
+            c.sendall(b'{"command":["quit"]}\n')
+            pids.append(pid)
+        except OSError:
+            # dead player: nobody will remove its files
+            for f in os.listdir(d):
+                if f.split(".")[0] == n[:-5]:
+                    try: os.remove(os.path.join(d, f))
+                    except OSError: pass
+        finally:
+            c.close()
+    for sig, wait in ((signal.SIGTERM, 5), (signal.SIGKILL, 2)):
+        end = time.time() + wait
+        while pids and time.time() < end:
+            pids = [x for x in pids if alive(x)]
+            time.sleep(0.05)
+        for x in pids:
+            try: os.kill(x, sig)
+            except OSError: pass
+    for n in socks:  # mpv leaves its socket file behind
+        try: os.remove(os.path.join(d, n))
+        except OSError: pass
+
+
 def cmd_play(a):
     api = Api()
     raw = api.one(a.id)
@@ -416,6 +464,7 @@ def cmd_play(a):
     rt = os.environ.get("XDG_RUNTIME_DIR")
     d = os.path.join(rt if rt and os.path.isdir(rt) else STATE_DIR, "jellyfin-qs")
     os.makedirs(d, mode=0o700, exist_ok=True)
+    stop_players(d)
     cleanup_stale(d)
     sid = uuid.uuid4().hex[:8]
     pre = os.path.join(d, sid)
