@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# vpn-switch tailscale|mullvad|mullvad-off: the network popup's VPN switches (VpnSwitch.qml runs this; turning
+# Tailscale OFF does not come here). Two modes:
+# - exclusive (default): Tailscale and Mullvad are never up together.
+#     tailscale:   refuse while Mullvad lockdown mode is on (it blocks everything outside the Mullvad tunnel,
+#                  Tailscale included, even while disconnected); `mullvad disconnect` unless already disconnected
+#                  (or the daemon is not running) and wait for it; then `tailscale up`.
+#     mullvad:     `tailscale down` if it is Running/Starting and wait for Stopped; then `mullvad connect`.
+#     mullvad-off: `mullvad disconnect` and wait; then `tailscale up` again (skipped with a hint under lockdown).
+# - coexist: while mullvad-tailscale.service is active (system/etc/mullvad-tailscale: nft rules that let tailnet
+#   traffic bypass Mullvad) each command only switches its own VPN; `tailscale` still refuses under lockdown while
+#   Mullvad is not connected (tailscaled's own UDP is blocked then). VPN_SWITCH_MODE=exclusive|coexist forces one.
+# If the first step fails or does not finish within VPN_SWITCH_WAIT seconds (default 10) nothing else is run.
+# Exit: 0 ok, 1 usage, 2 first step failed / timed out, 3 refused or skipped (lockdown), else the final command's
+# exit code. The reason is on stderr (first line = what the popup shows; the final command's output follows).
+# QS_MULLVAD / QS_TAILSCALE replace the binaries (tests), as in MullvadSection.qml / TailscaleSection.qml.
+set -u
+MV=${QS_MULLVAD:-mullvad}
+TS=${QS_TAILSCALE:-tailscale}
+WAIT=${VPN_SWITCH_WAIT:-10}
+
+have() { command -v "$1" >/dev/null 2>&1; }
+# tunnel state (connected, connecting, disconnected, disconnecting, error); empty = no CLI / daemon not running
+mv_state() { have "$MV" && "$MV" status -j 2>/dev/null | grep -o '"state" *: *"[a-z_]*"' | head -n 1 | sed 's/.*"\([a-z_]*\)"$/\1/'; }
+# BackendState (Running, Starting, Stopped, NeedsLogin, ...); empty = no CLI / tailscaled not running
+ts_state() { have "$TS" && "$TS" status --json 2>/dev/null | grep -o '"BackendState" *: *"[A-Za-z]*"' | head -n 1 | sed 's/.*"\([A-Za-z]*\)"$/\1/'; }
+# wait_for <state fn> <wanted state>
+wait_for() {
+	local i=0
+	while [ "$i" -lt $((WAIT * 4)) ]; do
+		[ "$($1)" = "$2" ] && return 0
+		sleep 0.25
+		i=$((i + 1))
+	done
+	return 1
+}
+fail() { echo "$2" >&2; exit "$1"; }
+mv_lockdown() { [ "$("$MV" lockdown-mode get 2>/dev/null | grep -oiE '\b(on|off)\b' | tail -n 1)" = "on" ]; }
+mv_down() {
+	out=$("$MV" disconnect 2>&1) || fail 2 "mullvad disconnect failed$1: $(echo "$out" | head -n 1)"
+	wait_for mv_state disconnected || fail 2 "Mullvad did not disconnect within ${WAIT} s$1"
+}
+mode=${VPN_SWITCH_MODE:-}
+if [ -z "$mode" ]; then
+	if systemctl is-active --quiet mullvad-tailscale.service 2>/dev/null; then mode=coexist; else mode=exclusive; fi
+fi
+LOCK_HINT="Mullvad lockdown mode is on: it blocks all traffic outside Mullvad, Tailscale included. Turn lockdown off first."
+
+case "${1:-}" in
+tailscale)
+	st=$(mv_state)
+	if [ -n "$st" ]; then
+		if [ "$mode" = coexist ]; then
+			[ "$st" != "connected" ] && mv_lockdown && fail 3 "$LOCK_HINT"
+		else
+			mv_lockdown && fail 3 "$LOCK_HINT"
+			[ "$st" != "disconnected" ] && mv_down ", Tailscale left off"
+		fi
+	fi
+	have "$TS" || fail 127 "tailscale is not installed"
+	exec timeout 25 "$TS" up 1>&2
+	;;
+mullvad)
+	have "$MV" || fail 127 "mullvad is not installed"
+	st=$(ts_state)
+	if [ "$mode" = exclusive ] && { [ "$st" = "Running" ] || [ "$st" = "Starting" ]; }; then
+		out=$(timeout "$WAIT" "$TS" down 2>&1) || fail 2 "tailscale down failed, Mullvad left off: $(echo "$out" | head -n 1)
+$out"
+		wait_for ts_state Stopped || fail 2 "Tailscale did not stop within ${WAIT} s, Mullvad left off"
+	fi
+	exec "$MV" connect 1>&2
+	;;
+mullvad-off)
+	have "$MV" || fail 127 "mullvad is not installed"
+	if [ "$mode" = coexist ]; then exec "$MV" disconnect 1>&2; fi
+	mv_down ""
+	have "$TS" || exit 0
+	mv_lockdown && fail 3 "Mullvad is off; Tailscale not started: lockdown mode blocks it. Turn lockdown off first."
+	exec timeout 25 "$TS" up 1>&2
+	;;
+*)
+	fail 1 "usage: vpn-switch tailscale|mullvad|mullvad-off"
+	;;
+esac

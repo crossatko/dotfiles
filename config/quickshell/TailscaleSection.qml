@@ -2,8 +2,10 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import "launcher/js/Vpn.js" as Vpn
 
-// Tailscale section of the network popup: connect/disconnect toggle + every machine on the tailnet.
+// Tailscale section of the network popup: connect/disconnect toggle + every machine on the tailnet, folded by
+// default (FoldSection: the head row keeps a state summary and the switch).
 // Lives only while the popup is open (the Loader drops it on close), so it polls `tailscale status --json`
 // every 4 s while visible and not at all otherwise. `QS_TAILSCALE` replaces the binary (tests).
 ColumnLayout {
@@ -29,13 +31,14 @@ ColumnLayout {
 
     readonly property bool running: backend === "Running"
     readonly property bool starting: backend === "Starting" || acting === "up"
+    readonly property bool switching: VpnSwitch.switching("tailscale")     // a Tailscale <-> Mullvad switch runs
     readonly property bool canToggle: loaded && !daemonDown && (backend === "Running" || backend === "Starting" || backend === "Stopped")
     readonly property int onlineCount: peers.filter(p => p.online).length
 
     // ---- polling -------------------------------------------------------------------------------------------
     function refresh() { if (!statusProc.running) statusProc.running = true }
-    Component.onCompleted: refresh()
-    Timer { interval: ts.acting !== "" || ts.backend === "Starting" ? 1000 : 4000; running: true; repeat: true; onTriggered: ts.refresh() }
+    Component.onCompleted: { refresh(); VpnSwitch.checkMode() }
+    Timer { interval: ts.acting !== "" || ts.switching || ts.backend === "Starting" ? 1000 : 4000; running: true; repeat: true; onTriggered: ts.refresh() }
 
     Process {
         id: statusProc
@@ -66,38 +69,7 @@ ColumnLayout {
         if (s !== sig) { sig = s; peers = list }
     }
 
-    // One flat object per machine. Name = first label of DNSName (the MagicDNS machine name, renameable in the
-    // admin console); host = the OS hostname the machine reports (HostName), shown when it differs.
-    function build(d) {
-        const users = d.User || {}
-        const selfUser = d.Self ? d.Self.UserID : null
-        const one = (p, isSelf) => {
-            const fqdn = String(p.DNSName || "").replace(/\.$/, "")
-            const host = String(p.HostName || "")
-            const ips = Array.isArray(p.TailscaleIPs) ? p.TailscaleIPs : []
-            const u = users[String(p.UserID)]
-            const seen = String(p.LastSeen || "")
-            return {
-                id: String(p.ID || p.PublicKey || fqdn || host),
-                name: fqdn ? fqdn.split(".")[0] : host,
-                fqdn: fqdn,
-                host: host,
-                os: String(p.OS || ""),
-                online: isSelf ? true : p.Online === true,
-                lastSeen: seen.startsWith("0001-") ? "" : seen,
-                ipv4: ips.find(a => a.indexOf(":") < 0) || "",
-                ipv6: ips.find(a => a.indexOf(":") >= 0) || "",
-                exitNode: p.ExitNode === true,
-                exitOption: p.ExitNodeOption === true,
-                tags: Array.isArray(p.Tags) ? p.Tags.map(String) : [],
-                owner: !isSelf && selfUser !== null && p.UserID !== selfUser && u ? String(u.DisplayName || u.LoginName || "") : "",
-                self: isSelf
-            }
-        }
-        const others = Object.values(d.Peer || {}).map(p => one(p, false))
-            .sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name))
-        return (d.Self ? [one(d.Self, true)] : []).concat(others)
-    }
+    function build(d) { return Vpn.tsPeers(d) }
 
     // ---- actions -------------------------------------------------------------------------------------------
     function run(kind, args) {
@@ -109,7 +81,21 @@ ColumnLayout {
         actProc.running = true
         actTimeout.restart()
     }
-    function setUp(want) { run(want ? "up" : "down", [want ? "up" : "down"]) }
+    // on = VpnSwitch (bin/vpn-switch: takes Mullvad down first unless both may run); off = plain `tailscale down`
+    function setUp(want) {
+        if (!want) { run("down", ["down"]); return }
+        if (actProc.running || VpnSwitch.busy) return
+        error = ""
+        needOperator = false
+        if (VpnSwitch.run("tailscale")) acting = "up"
+    }
+    Connections {
+        target: VpnSwitch
+        function onFinished(t, code, text) {
+            if (t === "tailscale") ts.actionDone(code, text)
+            else ts.refresh()
+        }
+    }
     function useExit(p) { run("exit", ["set", "--exit-node=" + (p ? p.ipv4 : "")]) }
 
     Process {
@@ -150,16 +136,7 @@ ColumnLayout {
         return o === "linux" ? "" : o === "ios" || o === "macos" || o === "tvos" ? ""
              : o === "android" ? "" : o === "windows" ? "" : ""
     }
-    function ago(iso) {
-        const t = Date.parse(iso)
-        if (isNaN(t)) return ""
-        const m = Math.floor((Date.now() - t) / 60000)
-        if (m < 1) return "just now"
-        if (m < 60) return m + " min ago"
-        if (m < 1440) return Math.floor(m / 60) + " h ago"
-        if (m < 43200) return Math.floor(m / 1440) + " d ago"
-        return iso.slice(0, 10)
-    }
+    function ago(iso) { return Vpn.ago(iso) }
     function stateLine() {
         if (!loaded) return "Checking…"
         if (daemonDown) return "tailscaled is not running"
@@ -173,181 +150,202 @@ ColumnLayout {
         }
     }
 
+    // one-word state for the folded head (stateLine() has the full sentence inside)
+    function shortState() {
+        if (!loaded) return "Checking…"
+        if (daemonDown) return "Not running"
+        if (backend === "Starting" || acting === "up") return "Connecting…"
+        switch (backend) {
+        case "Stopped": return "Disconnected"
+        case "NeedsLogin": return "Logged out"
+        case "NeedsMachineAuth": return "Needs approval"
+        default: return backend
+        }
+    }
+    // a failed switch click explains itself inside the fold, so unfold it
+    onErrorChanged: if (error !== "") fold.open = true
+    onNeedOperatorChanged: if (needOperator) fold.open = true
+
     // ---- UI ------------------------------------------------------------------------------------------------
-    SectionHead {
+    // folded by default; the head row keeps the summary and the switch (FoldSection.qml)
+    FoldSection {
+        id: fold
+        Layout.fillWidth: true
+        Layout.fillHeight: true
         title: "Tailscale"
-        detail: ts.running ? ts.onlineCount + " / " + ts.peers.length + " online" : ts.acting === "down" ? "Disconnecting…" : ""
-        Toggle {
+        detail: ts.switching ? "Switching…" : ts.running ? ts.onlineCount + " / " + ts.peers.length + " online" : ts.acting === "down" ? "Disconnecting…"
+              : fold.open ? "" : ts.shortState()
+        trailing: Toggle {
             checked: ts.running || ts.starting
-            busy: ts.acting === "up" || ts.acting === "down" || ts.backend === "Starting"
+            busy: ts.acting === "up" || ts.acting === "down" || ts.switching || ts.backend === "Starting"
             enabledLook: ts.canToggle
             onToggled: want => ts.setUp(want)
         }
-    }
 
-    Label {
-        visible: text !== ""
-        Layout.fillWidth: true
-        text: ts.stateLine()
-        color: Theme.muted
-        wrapMode: Text.Wrap
-    }
-    Label {
-        visible: ts.running && ts.tailnet !== ""
-        Layout.fillWidth: true
-        Layout.topMargin: -4
-        text: ts.tailnet
-        color: Theme.muted
-        font.pixelSize: Theme.fontCaption
-        elide: Text.ElideRight
-    }
-    Label {
-        visible: ts.error !== ""
-        Layout.fillWidth: true
-        text: ts.error
-        color: Theme.red
-        font.pixelSize: Theme.fontCaption
-        wrapMode: Text.Wrap
-    }
-
-    // operator hint: same box as NetPanel's confirm row
-    Notice {
-        visible: ts.needOperator
-        danger: true
-        padX: 8
-        padY: 8
         Label {
+            visible: text !== ""
             Layout.fillWidth: true
+            text: ts.stateLine()
+            color: Theme.muted
             wrapMode: Text.Wrap
-            text: "Tailscale refused: this user is not its operator. Run once in a terminal:"
-            font.pixelSize: Theme.fontSmall
         }
-        Rectangle {
+        Label {
+            visible: ts.running && ts.tailnet !== ""
             Layout.fillWidth: true
-            implicitHeight: 30
-            radius: Theme.inner(Theme.radiusItem, 8)
-            color: Theme.alpha(Theme.bg, 0.6)
-            Label {
-                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 10 }
-                text: ts.copied === "operator" ? "Copied" : "sudo tailscale set --operator=$USER"
-                color: ts.copied === "operator" ? Theme.accent : Theme.fg
-                font.pixelSize: Theme.fontSmall
-                elide: Text.ElideRight
-            }
+            Layout.topMargin: -4
+            text: ts.tailnet
+            color: Theme.muted
+            font.pixelSize: Theme.fontCaption
+            elide: Text.ElideRight
         }
-        RowLayout {
-            spacing: 6
-            Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Dismiss"; onClicked: ts.needOperator = false }
-            Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Copy command"; active: true; onClicked: ts.copy("operator", "sudo tailscale set --operator=$USER") }
+        Label {
+            visible: ts.error !== ""
+            Layout.fillWidth: true
+            text: ts.error
+            color: Theme.red
+            font.pixelSize: Theme.fontCaption
+            wrapMode: Text.Wrap
         }
-    }
 
-    ListView {
-        id: list
-        visible: ts.running && ts.peers.length > 0
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-        Layout.preferredHeight: Math.min(ts.maxListH, contentHeight)
-        Layout.maximumHeight: Math.min(ts.maxListH, contentHeight)
-        Layout.minimumHeight: Math.min(2 * ts.rowH + 6, contentHeight)
-        clip: true
-        spacing: 6
-        boundsBehavior: Flickable.StopAtBounds
-        model: ts.peers
-        delegate: ListRow {
-            id: card
-            required property var modelData
-            required property int index
-            readonly property var p: modelData
-            readonly property bool open: ts.expanded === p.id
-            readonly property string brand: ts.osGlyph(p.os)
-            width: list.width
-            rowH: ts.rowH
-            icon: brand || "\uf390"
-            iconFamily: brand ? Theme.brandFont : Theme.iconFont
-            iconSize: 16
-            iconColor: p.online ? Theme.accent : Theme.muted
-            selected: p.self
-            outlined: open
-            onClicked: ts.expanded = card.open ? "" : card.p.id
-            // expanded details under the text column
-            expanded: open
-            bodyLeft: 48
-            onHeightChanged: if (open) list.positionViewAtIndex(index, ListView.Contain)
-
-            RowText {
-                title: card.p.name
-                titleColor: card.p.online ? Theme.fg : Theme.fgDim
-                sub: !card.p.online ? (card.p.lastSeen ? "Last seen " + ts.ago(card.p.lastSeen) : "Offline")
-                    : [card.p.tags.map(t => t.replace(/^tag:/, "")).join(", "), card.p.exitOption && !card.p.exitNode ? "exit node available" : ""].filter(s => s).join(" · ") || card.p.os
-                Label { visible: card.p.self; text: "this device"; color: Theme.accent; font.pixelSize: Theme.fontTiny }
-                Label { visible: card.p.exitNode; text: "exit node"; color: Theme.orange; font.pixelSize: Theme.fontTiny }
-            }
-            // click-to-copy IPv4 (its MouseArea sits above the row's own)
+        // operator hint: same box as NetPanel's confirm row
+        Notice {
+            visible: ts.needOperator
+            danger: true
+            padX: 8
+            padY: 8
             Label {
-                id: ipLabel
-                readonly property bool done: ts.copied === card.p.id + "/4"
-                text: done ? "Copied" : card.p.ipv4
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: "Tailscale refused: this user is not its operator. Run once in a terminal:"
                 font.pixelSize: Theme.fontSmall
-                color: done ? Theme.accent : ipArea.containsMouse ? Theme.fg : Theme.fgDim
-                MouseArea { id: ipArea; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ts.copy(card.p.id + "/4", card.p.ipv4) }
             }
             Rectangle {
-                Layout.preferredWidth: 8
-                Layout.preferredHeight: 8
-                radius: 4
-                color: card.p.online ? Theme.green : Theme.alpha(Theme.muted, 0.6)
-            }
-
-            body: ColumnLayout {
-                id: details
                 Layout.fillWidth: true
-                spacing: 2
-                Repeater {
-                    model: [
-                        { k: "MagicDNS", v: card.p.fqdn, c: "/dns" },
-                        { k: "Hostname", v: card.p.host.toLowerCase() !== card.p.name.toLowerCase() ? card.p.host : "", c: "" },
-                        { k: "IPv4", v: card.p.ipv4, c: "/4" },
-                        { k: "IPv6", v: card.p.ipv6, c: "/6" },
-                        { k: "OS", v: card.p.os, c: "" },
-                        { k: "Owner", v: card.p.owner, c: "" },
-                        { k: "Tags", v: card.p.tags.join(", "), c: "" },
-                        { k: "Exit node", v: card.p.exitNode ? "in use" : card.p.exitOption ? "available" : "", c: "" }
-                    ].filter(r => r.v)
-                    RowLayout {
-                        id: kv
-                        required property var modelData
-                        readonly property bool done: modelData.c !== "" && ts.copied === card.p.id + modelData.c
-                        Layout.fillWidth: true
-                        spacing: 8
-                        Label { text: kv.modelData.k; color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.preferredWidth: 64 }
-                        Label {
+                implicitHeight: 30
+                radius: Theme.inner(Theme.radiusItem, 8)
+                color: Theme.alpha(Theme.bg, 0.6)
+                Label {
+                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 10 }
+                    text: ts.copied === "operator" ? "Copied" : "sudo tailscale set --operator=$USER"
+                    color: ts.copied === "operator" ? Theme.accent : Theme.fg
+                    font.pixelSize: Theme.fontSmall
+                    elide: Text.ElideRight
+                }
+            }
+            RowLayout {
+                spacing: 6
+                Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Dismiss"; onClicked: ts.needOperator = false }
+                Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Copy command"; active: true; onClicked: ts.copy("operator", "sudo tailscale set --operator=$USER") }
+            }
+        }
+
+        ListView {
+            id: list
+            visible: ts.running && ts.peers.length > 0
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.preferredHeight: Math.min(ts.maxListH, contentHeight)
+            Layout.maximumHeight: Math.min(ts.maxListH, contentHeight)
+            Layout.minimumHeight: Math.min(2 * ts.rowH + 6, contentHeight)
+            clip: true
+            spacing: 6
+            boundsBehavior: Flickable.StopAtBounds
+            model: ts.peers
+            delegate: ListRow {
+                id: card
+                required property var modelData
+                required property int index
+                readonly property var p: modelData
+                readonly property bool open: ts.expanded === p.id
+                readonly property string brand: ts.osGlyph(p.os)
+                width: list.width
+                rowH: ts.rowH
+                icon: brand || "\uf390"
+                iconFamily: brand ? Theme.brandFont : Theme.iconFont
+                iconSize: 16
+                iconColor: p.online ? Theme.accent : Theme.muted
+                selected: p.self
+                outlined: open
+                onClicked: ts.expanded = card.open ? "" : card.p.id
+                // expanded details under the text column
+                expanded: open
+                bodyLeft: 48
+                onHeightChanged: if (open) list.positionViewAtIndex(index, ListView.Contain)
+
+                RowText {
+                    title: card.p.name
+                    titleColor: card.p.online ? Theme.fg : Theme.fgDim
+                    sub: !card.p.online ? (card.p.lastSeen ? "Last seen " + ts.ago(card.p.lastSeen) : "Offline")
+                        : [card.p.tags.map(t => t.replace(/^tag:/, "")).join(", "), card.p.exitOption && !card.p.exitNode ? "exit node available" : ""].filter(s => s).join(" · ") || card.p.os
+                    Label { visible: card.p.self; text: "this device"; color: Theme.accent; font.pixelSize: Theme.fontTiny }
+                    Label { visible: card.p.exitNode; text: "exit node"; color: Theme.orange; font.pixelSize: Theme.fontTiny }
+                }
+                // click-to-copy IPv4 (its MouseArea sits above the row's own)
+                Label {
+                    id: ipLabel
+                    readonly property bool done: ts.copied === card.p.id + "/4"
+                    text: done ? "Copied" : card.p.ipv4
+                    font.pixelSize: Theme.fontSmall
+                    color: done ? Theme.accent : ipArea.containsMouse ? Theme.fg : Theme.fgDim
+                    MouseArea { id: ipArea; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ts.copy(card.p.id + "/4", card.p.ipv4) }
+                }
+                Rectangle {
+                    Layout.preferredWidth: 8
+                    Layout.preferredHeight: 8
+                    radius: 4
+                    color: card.p.online ? Theme.green : Theme.alpha(Theme.muted, 0.6)
+                }
+
+                body: ColumnLayout {
+                    id: details
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Repeater {
+                        model: [
+                            { k: "MagicDNS", v: card.p.fqdn, c: "/dns" },
+                            { k: "Hostname", v: card.p.host.toLowerCase() !== card.p.name.toLowerCase() ? card.p.host : "", c: "" },
+                            { k: "IPv4", v: card.p.ipv4, c: "/4" },
+                            { k: "IPv6", v: card.p.ipv6, c: "/6" },
+                            { k: "OS", v: card.p.os, c: "" },
+                            { k: "Owner", v: card.p.owner, c: "" },
+                            { k: "Tags", v: card.p.tags.join(", "), c: "" },
+                            { k: "Exit node", v: card.p.exitNode ? "in use" : card.p.exitOption ? "available" : "", c: "" }
+                        ].filter(r => r.v)
+                        RowLayout {
+                            id: kv
+                            required property var modelData
+                            readonly property bool done: modelData.c !== "" && ts.copied === card.p.id + modelData.c
                             Layout.fillWidth: true
-                            text: kv.done ? "Copied" : kv.modelData.v
-                            color: kv.done ? Theme.accent : kv.modelData.c !== "" && valArea.containsMouse ? Theme.fg : Theme.fgDim
-                            font.pixelSize: Theme.fontCaption
-                            elide: Text.ElideMiddle
-                            MouseArea {
-                                id: valArea
-                                anchors.fill: parent
-                                enabled: kv.modelData.c !== ""
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: ts.copy(card.p.id + kv.modelData.c, kv.modelData.v)
+                            spacing: 8
+                            Label { text: kv.modelData.k; color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.preferredWidth: 64 }
+                            Label {
+                                Layout.fillWidth: true
+                                text: kv.done ? "Copied" : kv.modelData.v
+                                color: kv.done ? Theme.accent : kv.modelData.c !== "" && valArea.containsMouse ? Theme.fg : Theme.fgDim
+                                font.pixelSize: Theme.fontCaption
+                                elide: Text.ElideMiddle
+                                MouseArea {
+                                    id: valArea
+                                    anchors.fill: parent
+                                    enabled: kv.modelData.c !== ""
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: ts.copy(card.p.id + kv.modelData.c, kv.modelData.v)
+                                }
                             }
                         }
                     }
-                }
-                RowLayout {
-                    visible: !card.p.self && (card.p.exitOption || card.p.exitNode)
-                    Layout.topMargin: 4
-                    spacing: 6
-                    Btn {
-                        outerRadius: card.radius
-                        text: card.p.exitNode ? "Stop using exit node" : "Use as exit node"
-                        active: card.p.exitNode
-                        enabledLook: ts.acting === "" && card.p.online
-                        onClicked: if (enabledLook) ts.useExit(card.p.exitNode ? null : card.p)
+                    RowLayout {
+                        visible: !card.p.self && (card.p.exitOption || card.p.exitNode)
+                        Layout.topMargin: 4
+                        spacing: 6
+                        Btn {
+                            outerRadius: card.radius
+                            text: card.p.exitNode ? "Stop using exit node" : "Use as exit node"
+                            active: card.p.exitNode
+                            enabledLook: ts.acting === "" && card.p.online
+                            onClicked: if (enabledLook) ts.useExit(card.p.exitNode ? null : card.p)
+                        }
                     }
                 }
             }

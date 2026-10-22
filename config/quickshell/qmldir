@@ -70,3 +70,6 @@ WallpaperTile 1.0 WallpaperTile.qml
 MonitorLinkButton 1.0 MonitorLinkButton.qml
 MonitorCardRow 1.0 MonitorCardRow.qml
 NotchMask 1.0 NotchMask.qml
+MullvadSection 1.0 MullvadSection.qml
+FoldSection 1.0 FoldSection.qml
+singleton VpnSwitch 1.0 VpnSwitch.qml

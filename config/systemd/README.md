@@ -21,6 +21,8 @@ Edit the live files and re-copy, or convert to a symlink (see bottom).
 | `user/hypr-focus-daemon.service` | `~/.config/systemd/user/` |
 | `../../system/etc/systemd/system/getty@tty1.service.d/autologin.conf` | `/etc/systemd/system/` (root) |
 | `../../system/etc/systemd/logind.conf.d/inhibit-delay.conf` | `/etc/systemd/logind.conf.d/` (root) |
+| `../../system/etc/systemd/system/mullvad-tailscale.service` | `/etc/systemd/system/` (root; optional, Tailscale alongside Mullvad, see AGENTS.md) |
+| `../../system/etc/mullvad-tailscale/coexist.nft` | `/etc/mullvad-tailscale/` (root; loaded by the unit above) |
 
 Packages: `gamescope`, `lib32-gamescope` (**must match `gamescope`'s exact
 version** or pacman refuses the dependency), `gamescope-session-cachyos`.

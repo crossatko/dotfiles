@@ -1,0 +1,15 @@
+# Let Tailscale run alongside Mullvad (rules in /etc/mullvad-tailscale/coexist.nft). While this unit is active the
+# network popup treats the two VPNs as independent (bin/vpn-switch checks `systemctl is-active`); stop or disable
+# it to get the mutually exclusive switches back.
+[Unit]
+Description=Tailscale traffic bypasses the Mullvad tunnel and firewall
+After=mullvad-daemon.service tailscaled.service nftables.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/nft -f /etc/mullvad-tailscale/coexist.nft
+ExecStop=/usr/bin/nft delete table inet mullvad-ts
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,22 @@
+#!/usr/sbin/nft -f
+# Tailscale alongside Mullvad: traffic to / from the tailnet gets Mullvad's split-tunnel marks, so Mullvad's
+# firewall lets it through and its routing rule (not fwmark 0x6d6f6c65 -> Mullvad table) leaves it to
+# Tailscale's table 52. Everything else still goes through the Mullvad tunnel. Own table, so Mullvad rebuilding
+# `inet mullvad` on every reconnect does not touch it. Loaded by mullvad-tailscale.service; idempotent (the
+# first two lines drop an older copy).
+#   100.64.0.0/10, fd7a:115c:a1e0::/48 = Tailscale's address ranges; 100.100.100.100 = MagicDNS (public ranges, privacy-ok)
+#   ct mark 0x00000f41 / meta mark 0x6d6f6c65 = what mullvad-exclude / split-tunnel uses
+table inet mullvad-ts {}
+delete table inet mullvad-ts
+
+table inet mullvad-ts {
+	chain outgoing {
+		type route hook output priority -100; policy accept;
+		ip daddr 100.64.0.0/10 ct mark set 0x00000f41 meta mark set 0x6d6f6c65 # privacy-ok: public Tailscale range
+		ip6 daddr fd7a:115c:a1e0::/48 ct mark set 0x00000f41 meta mark set 0x6d6f6c65
+	}
+	chain incoming {
+		type filter hook input priority -100; policy accept;
+		iifname "tailscale0" ct mark set 0x00000f41 meta mark set 0x6d6f6c65
+	}
+}

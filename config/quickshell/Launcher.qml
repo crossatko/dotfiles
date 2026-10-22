@@ -105,8 +105,9 @@ ModalMenu {
             } else if (!lc.argItem && lc.query === "") lc.runItem(item)
         }
     }
-    SectionsSource { id: secSrc; jf: jfSrc; net: netSrc; web: waSrc; onUpdated: lc.refreshKeep() }
-    readonly property var sourceList: [appsSrc, winSrc, cmdSrc, secSrc, jfSrc, netSrc, waSrc, scriptSrc, calcSrc, emojiSrc, fileSrc, clipSrc, webSrc]
+    VpnSource { id: vpnSrc; sw: VpnSwitch; active: lc.shown; section: lc.section; onUpdated: lc.refreshKeep() }   // Tailscale / Mullvad sections
+    SectionsSource { id: secSrc; jf: jfSrc; vpn: vpnSrc; net: netSrc; web: waSrc; onUpdated: lc.refreshKeep() }
+    readonly property var sourceList: [appsSrc, winSrc, cmdSrc, secSrc, jfSrc, netSrc, vpnSrc, waSrc, scriptSrc, calcSrc, emojiSrc, fileSrc, clipSrc, webSrc]
 
     readonly property var allItems: {
         const out = []
@@ -183,7 +184,8 @@ ModalMenu {
     }
 
     // opening on an EMPTY workspace advances that monitor's play-once video wallpaper by one burst (like a workspace switch,
-    // hypr/scripts/video-replay.lua); `video replay` debounces itself and does nothing for loop / image wallpapers
+    // hypr/scripts/video-replay.lua); theme/mpv/replay.py (= `theme.py video replay`, ~5 ms instead of ~50) debounces itself
+    // and does nothing for loop / image wallpapers
     property string replayConn: ""
     function replayWallpaper() {
         const m = Hyprland.focusedMonitor, ws = m ? m.activeWorkspace : null
@@ -195,7 +197,7 @@ ModalMenu {
     }
     Process {
         id: replay
-        command: ["python3", "-I", Quickshell.env("HOME") + "/.config/theme/theme.py", "video", "replay", lc.replayConn]
+        command: ["python3", "-I", "-S", Quickshell.env("HOME") + "/.config/theme/mpv/replay.py", lc.replayConn]
     }
 
     // ---- sections (sub-menus: sound output / input, power, twitch) ------------------------------------------------
@@ -222,6 +224,16 @@ ModalMenu {
     function back() {
         if (section === "") { close(); return }
         if (section === "jellyfin" && jfSrc.depth > 0) { backJellyfin(); return }
+        if (section === "mullvad" && vpnSrc.country !== "") {   // nested city level -> the country list, country stays selected
+            const id = "vpn:mv:cc:" + vpnSrc.country
+            vpnSrc.leaveCountry()
+            confirmId = ""; histPos = -1
+            input.text = ""
+            refresh()
+            const i = results.findIndex(r => r.id === id)
+            if (i > 0) { sel = i; first = Math.max(0, i - numResults + 1) }
+            return
+        }
         if (section === "twitch" && secSrc.vodActive) {  // nested "Past broadcasts" level -> the channel list, channel stays selected
             const id = "sec:twitch:" + secSrc.vodLogin
             secSrc.leaveVods()
@@ -274,9 +286,11 @@ ModalMenu {
     function keyRight() {
         if (actionsOpen || argItem || !current) return false
         const jfBrowse = jfSrc.rightHintFor(current)
-        if (!jfBrowse && actions.length < 2) return false
+        const cities = current.kind === "vpn-country"     // Mullvad country -> its cities
+        if (!jfBrowse && !cities && actions.length < 2) return false
         if (input.text !== "" && (input.cursorPosition !== input.text.length || input.selectionStart !== input.selectionEnd)) return false
-        if (current.actions && current.actions.some(a => a.id === "twitch-vods")) doAction("twitch-vods")
+        if (cities) runItem(current)
+        else if (current.actions && current.actions.some(a => a.id === "twitch-vods")) doAction("twitch-vods")
         else if (jfBrowse) doAction("jf-browse")
         else openActions()
         return true
@@ -288,8 +302,8 @@ ModalMenu {
         return true
     }
     // footer hint for Right ("" = the selected row has no options)
-    readonly property string rightHint: actionsOpen || argItem || !current || (actions.length < 2 && !jfSrc.rightHintFor(current)) ? ""
-        : current.actions && current.actions.some(a => a.id === "twitch-vods") ? "→ broadcasts" : jfSrc.rightHintFor(current) ? "→ browse" : "→ options"
+    readonly property string rightHint: actionsOpen || argItem || !current || (actions.length < 2 && !jfSrc.rightHintFor(current) && current.kind !== "vpn-country") ? ""
+        : current.kind === "vpn-country" ? "→ cities" : current.actions && current.actions.some(a => a.id === "twitch-vods") ? "→ broadcasts" : jfSrc.rightHintFor(current) ? "→ browse" : "→ options"
 
     // open with the search field prefilled (qs ipc call launcher query "v "); on an open launcher just sets the text
     property string preset: ""
@@ -326,6 +340,11 @@ ModalMenu {
             if (r === "enter") afterEnter(); else refresh(true)
             return
         }
+        if (item.kind === "vpn-country") {               // Mullvad: descend to the cities of a country (not recorded, launcher stays open)
+            vpnSrc.enterCountry(item.cc)
+            afterEnter()
+            return
+        }
         if (item.kind === "rec-opt") {                   // recording options: toggle, save, stay open
             secSrc.run(item)
             refresh(true)
@@ -342,7 +361,7 @@ ModalMenu {
             input.cursorPosition = input.text.length
             return
         }
-        const inPlace = [netSrc, waSrc].find(s => s.owns(item))
+        const inPlace = [netSrc, vpnSrc, waSrc].find(s => s.owns(item))
         if (inPlace) {                                  // Network / Bluetooth / Install webapp rows act in place: progress and errors show on the row
             const r = inPlace.activate(item, arg)
             if (typeof r === "string") { argNote = r; return }   // the prompt stays, with this note in the footer
@@ -596,7 +615,7 @@ ModalMenu {
                     readonly property string avatar: modelData.avatar || ""      // local image (twitch profile picture), drawn in the icon slot
                     icon: iconPath === "" && avatar === "" ? (modelData.glyph || "") : ""
                     iconSize: 16
-                    iconColor: modelData.iconColor === "red" ? Theme.red : sel ? Theme.accent : modelData.iconColor === "muted" ? Theme.muted : Theme.fgDim
+                    iconColor: modelData.iconColor === "red" ? Theme.red : modelData.iconColor === "green" ? Theme.green : sel ? Theme.accent : modelData.iconColor === "muted" ? Theme.muted : Theme.fgDim
                     outlined: sel
                     border.color: Theme.alpha(Theme.accent, 0.8)
                     color: sel ? Theme.alpha(Theme.accent, 0.26) : hovered ? Theme.alpha(Theme.fg, 0.10) : "transparent"

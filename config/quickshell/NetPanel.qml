@@ -3,13 +3,13 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Networking
 
-// Wired status + Wi-Fi list + Tailscale machines. Wi-Fi password prompt appears inline for new secured networks.
+// Wired status + Wi-Fi list + Tailscale machines + Mullvad (both VPN sections fold, see FoldSection). Wi-Fi password prompt appears inline for new secured networks.
 ColumnLayout {
     id: net
     spacing: 8
     readonly property int rowH: 44         // every connection row, wired or Wi-Fi
     readonly property int rowGap: 6        // gap between any two rows
-    implicitHeight: Math.min(760, header.implicitHeight + body.implicitHeight + tailscale.implicitHeight + 48)
+    implicitHeight: Math.min(760, header.implicitHeight + body.implicitHeight + tailscale.implicitHeight + mullvad.implicitHeight + 56)
 
     readonly property var devs: Networking.devices.values
     readonly property var wired: devs.filter(d => d.type === DeviceType.Wired)
@@ -255,6 +255,12 @@ ColumnLayout {
     // own file, so this already-loaded panel needs no inline component (hot reload)
     TailscaleSection {
         id: tailscale
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        Layout.topMargin: 8
+    }
+    MullvadSection {
+        id: mullvad
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.topMargin: 8
