@@ -125,6 +125,7 @@ Item {
                 border.color: Theme.alpha(Theme.overlay, 0.5)
                 clip: true
                 property real t: 1
+                HoverGlow { area: demoArea; radius: demo.radius }
                 Rectangle {
                     id: demoBar
                     x: 8; y: 8; width: parent.width - 16; height: 18
@@ -164,7 +165,7 @@ Item {
                     PauseAnimation { duration: 260 }
                     NumberAnimation { target: demo; property: "t"; to: 1; duration: Theme.popupOpenMs; easing.type: Theme.popupEaseOpen }
                 }
-                MouseArea { anchors.fill: parent; onClicked: replay.restart() }
+                MouseArea { id: demoArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: replay.restart() }
             }
             Label { Layout.fillWidth: true; text: "click to replay"; color: Theme.muted; font.pixelSize: Theme.fontCaption }
         }

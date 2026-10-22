@@ -26,6 +26,7 @@ Item {
         border.color: sw.checked ? Theme.alpha(Theme.accent, 0.9) : Theme.alpha(Theme.overlay, 0.7)
         Behavior on color { ColorAnimation { duration: 160 } }
         Behavior on border.color { ColorAnimation { duration: 160 } }
+        HoverGlow { area: tap; radius: sw.r }
     }
 
     Rectangle {
@@ -50,6 +51,7 @@ Item {
     }
 
     MouseArea {
+        id: tap
         anchors { fill: parent; margins: -4 }
         enabled: sw.enabledLook && !sw.busy
         cursorShape: Qt.PointingHandCursor
