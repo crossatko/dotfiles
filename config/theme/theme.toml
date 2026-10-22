@@ -26,6 +26,7 @@ ui_font_size = 11
 qt_style = "kvantum"     # Qt widget style: "kvantum" = the generated Kvantum theme Wall (translucent glass windows); "Fusion" = opaque, palette only
 qt_symbolic_icons = true # Qt / KDE like libadwaita: icon theme Wall-Adwaita-Qt (symbolic toolbar / sidebar icons) + kdeglobals 16 px icon-only toolbars, Dolphin places 16 px
 brave = true             # write a seed-color theme into Brave (applied when Brave is closed)
+thunderbird = false      # userChrome.css / userContent.css + a user.js block in the default Thunderbird profile (read at Thunderbird start)
 brave_seed = "accent_soft"  # palette key used as the seed; brave_variant: 0 system,1 tonal,2 neutral,3 vibrant
 brave_variant = 2
 brave_mode = "gtk"       # "gtk": Brave in GTK mode with the Wall-Glass theme (glass tab strip; bin/brave exports GTK_THEME=Wall-Glass:dark); "seed": the seed-color theme above
