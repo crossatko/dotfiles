@@ -29,3 +29,8 @@ wait_for_monitors && echo "monitors up: $(hyprctl monitors -j | jq -r '[.[].name
 sleep 3                                              # outputs / DRM still settling after the count is non-zero
 start
 echo "started"
+
+# Video wallpapers (mpvpaper above hyprpaper): the players must map AFTER hyprpaper's surfaces, so they start here.
+# `video start` waits for hyprpaper to answer, starts the players the state file asks for and is a no-op without any
+# (and for players that already run). Also re-run on monitor.added (hyprland/autostart.lua).
+python3 -I "$HOME/.config/theme/theme.py" video start

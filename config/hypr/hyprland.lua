@@ -22,3 +22,4 @@ require("scripts.steam-launcher-cleanup")
 require("scripts.steam-streaming")
 require("scripts.diacritics")
 require("scripts.modal-windows")
+pcall(require, "scripts.video-replay") -- play-once video wallpapers replay on an empty workspace

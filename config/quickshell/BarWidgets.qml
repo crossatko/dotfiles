@@ -84,12 +84,19 @@ Singleton {
 
     function sectionOf(l, id) { return sections.find(s => l[s].indexOf(id) >= 0) || "" }
 
+    // Monitors linked in BarConfig (Settings > Bar) share one layout: a change to any of them is written to all of them
+    // (also unplugged ones, so the group is still identical when they come back).
     function store(key, l) {
         const d = { default: data.default, monitors: Object.assign({}, data.monitors) }
-        if (l === null) delete d.monitors[key]; else d.monitors[key] = normalize(l)
+        const n = l === null ? null : normalize(l)
+        for (const k of BarConfig.groupKeys(key)) {
+            if (n === null) delete d.monitors[k]; else d.monitors[k] = copy(n)
+        }
         data = d
         saver.restart()
     }
+    // a linked group takes `key`'s layout (used right after linking): its own, or the default one if it has none
+    function syncGroup(key) { store(key, hasOwn(key) ? copy(layoutFor(key)) : null) }
     function copy(l) { return { left: l.left.slice(), center: l.center.slice(), right: l.right.slice(), hidden: l.hidden.slice() } }
 
     // put `id` into `section` at `index` (index counted in the list as it is before the move; -1 = end)

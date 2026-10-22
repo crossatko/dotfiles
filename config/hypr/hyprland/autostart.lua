@@ -53,3 +53,14 @@ hl.on("hyprland.start", function()
 		hl.exec_cmd("bash ~/.config/hypr/scripts/tv-input-poll.sh &")
 	end
 end)
+
+-- Video wallpapers (mpvpaper above hyprpaper; theme.py video, AGENTS.md "Video wallpapers"): a monitor that comes
+-- or goes gets its player (re)started / reaped. The delay lets hyprpaper map its surface for the new output first
+-- (the video layer has to be mapped after it); `video start` is a no-op for players that already run and for
+-- setups without any video entry. At login start-hyprpaper.sh starts the players itself.
+hl.on("monitor.added", function()
+	hl.exec_cmd("sh -c 'sleep 3; python3 -I \"$HOME/.config/theme/theme.py\" video start'")
+end)
+hl.on("monitor.removed", function()
+	hl.exec_cmd("sh -c 'sleep 1; python3 -I \"$HOME/.config/theme/theme.py\" video start'")
+end)

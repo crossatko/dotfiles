@@ -2,9 +2,15 @@
 #   ~/.config/theme/theme.py render      (re-render, no wallpaper analysis)
 #   ~/.config/theme/theme.py apply [img] (analyse wallpaper, render, reload apps)
 
-wallpaper = "~/Pictures/wallpapers/wallhaven-8g8v11.png"
+wallpaper = "~/.cache/theme/video/raycast-hero-4k120-hevc-full-once2-3a6ed8756fb7-t1500.png"
 # folders the quickshell picker (SUPER+T) scans for images
 wallpaper_dirs = ["~/Pictures/wallpapers"]
+# folders scanned for VIDEO wallpapers (mp4/webm/mkv, played by mpvpaper); unset = <xdg VIDEOS dir>/wallpapers
+video_dirs = ["~/Videos/wallpapers"]
+# Replays of a play-once clip (switching to an empty workspace): short bursts that advance the clip along its loop, each an
+# ease-in from rest followed by the wind-down. replay_ease_in = seconds of the ease-in of every burst (0 = none, per monitor in
+# Settings; a burst is at least 1 s long).
+replay_ease_in = 0.5
 
 [settings]
 ansi_saturation = 0.38   # 0 = greyscale terminal colors, 1 = vivid

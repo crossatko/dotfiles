@@ -65,3 +65,8 @@ singleton GlassTuneCtl 1.0 GlassTuneCtl.qml
 Launcher 1.0 Launcher.qml
 HoverGlow 1.0 HoverGlow.qml
 SwipeDismiss 1.0 SwipeDismiss.qml
+WallpaperMonitorCard 1.0 WallpaperMonitorCard.qml
+WallpaperTile 1.0 WallpaperTile.qml
+MonitorLinkButton 1.0 MonitorLinkButton.qml
+MonitorCardRow 1.0 MonitorCardRow.qml
+NotchMask 1.0 NotchMask.qml

@@ -32,6 +32,7 @@ Singleton {
     readonly property color orange: p.orange
     readonly property string wallpaper: p.wallpaper
     readonly property var wallpaperDirs: p.wallpaper_dirs
+    readonly property var videoDirs: p.video_dirs && p.video_dirs.length > 0 ? p.video_dirs : [home + "/Videos/wallpapers"]   // video wallpapers (mp4/webm/mkv), see SettingsWallpaper.qml
     readonly property real barOpacity: p.bar_opacity
     // Glass look: on while the running Hyprland draws decoration:blur:variant solid_glass (the blur fork). Anything else
     // (stock Hyprland without that variant, kawase, blur off, no hyprctl) keeps the original, more opaque fills, which
@@ -108,6 +109,8 @@ Singleton {
     readonly property int chipGap: 6
     readonly property int chipIcon: 16                      // fixed square box every bar icon is centred in (by its ink bounds)
     readonly property int popupGap: barFloating ? Math.max(4, gapOut) : 8     // popup card <-> bar
+    // gap between adjacent controls (the 6 of Settings rows / button groups, = chipGap; blocks are 2x apart)
+    readonly property int controlGap: 6
     // popup motion (PopupHost.qml), ms: open fade/scale-in, close fade-out, card glide + resize when switching chips,
     // old content fading out / new content fading in during a switch
     // Base values at speed 1 (Settings -> Animations: Motion.qml, animations.json): duration = base / popupSpeed,
@@ -186,6 +189,7 @@ Singleton {
             property string orange: "#c69980"
             property string wallpaper: ""
             property var wallpaper_dirs: []
+            property var video_dirs: []
             property real bar_opacity: 0.55
             property int bar_border: 0
             property var rounding: 0

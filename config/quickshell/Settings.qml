@@ -13,7 +13,9 @@ import Quickshell.Wayland
 // A page root may declare `readonly property bool wantsFocus: true` (gets the keyboard focus; unhandled keys
 // such as Escape bubble up to the card), `property Flickable flick` (set to the page's scroller) and
 // `property Component headerItem` (shown in the title row, between the title and the close button; it
-// fills that width, is vertically centered on the row's fixed height and doesn't scroll).
+// fills that width, is vertically centered on the row's fixed height and doesn't scroll) and
+// `property var memory` (set to a per-page object that outlives the page: pages are unloaded when Settings closes,
+// so this is where a page keeps session state such as a selected tab; not saved to disk).
 FloatingWindow {
     id: win
 
@@ -28,6 +30,7 @@ FloatingWindow {
     readonly property var pages: allPages.filter(p => !p.glassOnly || Theme.glass)
     readonly property var glassCtl: GlassTuneCtl       // instantiates the controller (and its `glasstune` IPC target) with the shell
     property string page: "bar"
+    property var pageMemory: ({})                   // page id -> object handed to a page's `memory` hook (session only)
     readonly property var current: pages.find(p => p.id === page) || pages[0]
 
     property bool shown: false
@@ -129,9 +132,10 @@ FloatingWindow {
                             implicitWidth: navRow.implicitWidth + 12 + 18    // left padding + right padding with some air
                             implicitHeight: 36
                             radius: Theme.radiusItem
-                            color: sel ? Theme.alpha(Theme.accent, 0.26) : navArea.containsMouse ? Theme.alpha(Theme.fg, 0.10) : "transparent"
+                            color: sel ? Theme.alpha(Theme.accent, 0.26) : navGlow.hovered ? Theme.alpha(Theme.fg, 0.10) : "transparent"
                             border.width: sel ? 1 : 0
                             border.color: Theme.alpha(Theme.accent, 0.8)
+                            HoverGlow { id: navGlow; area: navArea; radius: nav.radius }
                             RowLayout {
                                 id: navRow
                                 anchors { fill: parent; leftMargin: 12; rightMargin: 18 }
@@ -192,6 +196,10 @@ FloatingWindow {
                         source: win.current.source
                         onLoaded: {
                             if (item.flick !== undefined) item.flick = flick
+                            if (item.memory !== undefined) {
+                                if (!win.pageMemory[win.current.id]) win.pageMemory[win.current.id] = {}
+                                item.memory = win.pageMemory[win.current.id]
+                            }
                             win.focusPage()
                         }
                     }

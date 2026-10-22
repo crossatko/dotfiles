@@ -19,7 +19,7 @@ overrides ──┘                      │
 ## Editing
 * **Pin a color**: `[overrides]` in `theme.toml` (e.g. `accent = "#c0392b"`), then `render`.
 * **Tone down / punch up terminal colors**: `ansi_saturation`, `ansi_lightness`.
-* **Picker folders**: `wallpaper_dirs`.
+* **Picker folders**: `wallpaper_dirs` (images), `video_dirs` (video wallpapers, default `~/Videos/wallpapers`).
 * **Layout defaults** (`[settings]`, Quickshell only): `rounding` (default corner radius, px), `gap` (window gap, px),
   `border_size`, `bar_floating` (false = docked bar), `smart_gaps` (lone window: no gaps/border/rounding),
   plus `bar_border` and `bar_opacity`. They are static (the wallpaper only drives colors) and are written

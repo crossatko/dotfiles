@@ -15,6 +15,20 @@ Item {
     readonly property string key: sel ? BarWidgets.keyOf(sel) : ""
     readonly property var lay: BarWidgets.layoutFor(key)
     readonly property bool own: BarWidgets.hasOwn(key)
+    // monitors linked to the picked one (BarConfig.links): they share on/off, edge and this layout, so every edit below goes to all of them
+    readonly property var group: BarConfig.groupKeys(key)
+    readonly property var groupScreens: group.map(k => BarConfig.screenFor(k)).filter(s => s !== null)
+    readonly property bool linkedGroup: groupScreens.length > 1
+    function toggleLink(i) {
+        const a = Quickshell.screens[i], b = Quickshell.screens[i + 1]
+        if (!a || !b) return
+        const ka = BarConfig.keyOf(a), kb = BarConfig.keyOf(b)
+        if (BarConfig.linked(ka, kb)) { BarConfig.unlink(ka, kb); return }
+        // linking: the group takes the picked monitor's on/off, edge and layout (the left card's when it is on neither side)
+        const from = BarConfig.groupKeys(ka).concat(BarConfig.groupKeys(kb)).indexOf(key) >= 0 ? key : ka
+        BarConfig.link(ka, kb, from)
+        BarWidgets.syncGroup(from)
+    }
     function screenTitle(s) { return s.model || s.name }
 
     // ---- drag state (the proxy below follows the pointer; DropAreas are the section boxes) ----
@@ -62,11 +76,12 @@ Item {
         readonly property var w: BarWidgets.info(wid)
         implicitHeight: 34
         radius: editor.chipRadius
-        color: chipArea.containsMouse ? Theme.alpha(Theme.fg, 0.12) : Theme.alpha(Theme.fg, 0.06)
+        color: chipGlow.hovered ? Theme.alpha(Theme.fg, 0.12) : Theme.alpha(Theme.fg, 0.06)
         border.width: 1
         border.color: section === "hidden" ? Theme.alpha(Theme.overlay, 0.5) : Theme.alpha(Theme.accent, 0.45)
         opacity: editor.dragId === wid ? 0.35 : 1
 
+        HoverGlow { id: chipGlow; area: chipArea; radius: chip.radius }
         MouseArea {
             id: chipArea
             anchors.fill: parent
@@ -216,28 +231,39 @@ Item {
 
         // ---- monitors: one card each = bar on/off + edge; clicking a card picks the layout edited below ----
         SectionHead { title: "Monitors"; detail: BarConfig.enabledCount + " of " + Quickshell.screens.length + " with a bar" }
-        Flow {
-            id: monFlow
+        MonitorCardRow {
+            id: monRow
             Layout.fillWidth: true
-            spacing: 10
-            readonly property int cols: Math.max(1, Math.min(Quickshell.screens.length, Math.floor((width + spacing) / (260 + spacing))))
-            readonly property real cardW: (width - (cols - 1) * spacing) / cols
+            count: Quickshell.screens.length
+            minCardW: 260
+            cardH: 70
+            linkedAt: i => Quickshell.screens[i + 1] ? BarConfig.linked(BarConfig.keyOf(Quickshell.screens[i]), BarConfig.keyOf(Quickshell.screens[i + 1])) : false
+            linkTip: i => (linkedAt(i) ? "Unlink " : "Link ") + ed.screenTitle(Quickshell.screens[i]) + " and " + ed.screenTitle(Quickshell.screens[i + 1])
+            onLinkToggled: i => ed.toggleLink(i)
             Repeater {
                 model: Quickshell.screens
                 Rectangle {
                     id: mon
                     required property var modelData
+                    required property int index
                     readonly property bool on: BarConfig.enabled(modelData)
-                    readonly property bool onlyOne: on && BarConfig.enabledCount <= 1   // the last bar is the way back into Settings
+                    readonly property bool onlyOne: on && !BarConfig.canDisable(modelData)   // the last bar (or the last linked group with a bar) is the way back into Settings
                     readonly property bool picked: modelData.name === ed.selName
+                    readonly property bool grouped: !picked && ed.group.indexOf(BarConfig.keyOf(modelData)) >= 0   // linked to the picked one
                     readonly property string edge: BarConfig.edge(modelData)
-                    width: monFlow.cardW
-                    height: 70
+                    x: monRow.xOf(index); y: monRow.yOf(index)
+                    width: monRow.cardW
+                    height: monRow.cardH
                     radius: Theme.radiusPage
-                    color: picked ? Theme.alpha(Theme.accent, 0.12) : monArea.containsMouse ? Theme.alpha(Theme.fg, 0.08) : Theme.alpha(Theme.fg, 0.04)
+                    color: picked ? Theme.alpha(Theme.accent, 0.12) : grouped ? Theme.alpha(Theme.accent, 0.06) : monGlow.hovered ? Theme.alpha(Theme.fg, 0.08) : Theme.alpha(Theme.fg, 0.04)
                     border.width: 1
-                    border.color: picked ? Theme.alpha(Theme.accent, 0.85) : Theme.alpha(Theme.overlay, 0.45)
+                    border.color: picked ? Theme.alpha(Theme.accent, 0.85) : grouped ? Theme.alpha(Theme.accent, 0.5) : Theme.alpha(Theme.overlay, 0.45)
+                    // round cut-outs for the link buttons (MonitorCardRow)
+                    readonly property var notches: monRow.notchesOf(index)
+                    layer.enabled: notches.length > 0
+                    layer.effect: NotchMask { notches: mon.notches; radius: mon.radius; borderWidth: mon.border.width; borderColor: mon.border.color }
 
+                    HoverGlow { id: monGlow; area: monArea; radius: mon.radius }
                     // below the toggle / edge buttons, so those keep their own clicks
                     MouseArea { id: monArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ed.selName = mon.modelData.name }
 
@@ -280,10 +306,18 @@ Item {
         // ---- layout of the picked monitor: actions, preview, editor ----
         SectionHead {
             Layout.topMargin: 6
-            title: "Layout · " + (ed.sel ? ed.screenTitle(ed.sel) : "")
-            detail: ed.own ? "own layout" : "default layout"
+            title: "Layout · " + (ed.linkedGroup ? ed.groupScreens.map(s => ed.screenTitle(s)).join(" + ") : ed.sel ? ed.screenTitle(ed.sel) : "")
+            detail: (ed.linkedGroup ? "linked, " : "") + (ed.own ? "own layout" : "default layout")
+            Btn { inset: 18; implicitHeight: 24; text: "Reset"; enabledLook: ed.own; onClicked: if (ed.own) BarWidgets.reset(ed.key) }
+        }
+        // "Copy from <other monitor>": a wrapping row of its own (with 3 monitors the names do not fit next to the head at 920 px)
+        Flow {
+            visible: copyRep.count > 0
+            Layout.fillWidth: true
+            spacing: 6
             Repeater {
-                model: Quickshell.screens.filter(s => s.name !== ed.selName)
+                id: copyRep
+                model: Quickshell.screens.filter(s => ed.group.indexOf(BarConfig.keyOf(s)) < 0)   // copying from a linked monitor would change nothing
                 Btn {
                     required property var modelData
                     inset: 18                 // page level, like the monitor cards (radiusPage)
@@ -292,7 +326,6 @@ Item {
                     onClicked: BarWidgets.copyFrom(ed.key, BarWidgets.keyOf(modelData))
                 }
             }
-            Btn { inset: 18; implicitHeight: 24; text: "Reset"; enabledLook: ed.own; onClicked: if (ed.own) BarWidgets.reset(ed.key) }
         }
         Label {
             visible: ed.sel ? !BarConfig.enabled(ed.sel) : false
@@ -348,7 +381,7 @@ Item {
             wrapMode: Text.WordWrap
             color: Theme.muted
             font.pixelSize: Theme.fontCaption
-            text: "Drag chips between the columns to move or reorder them, onto Hidden to hide them (or use the eye). Monitors without their own layout use the default one; changes apply to the bar right away. The last bar can't be turned off: its bell chip is the way back into Settings."
+            text: "Drag chips between the columns to move or reorder them, onto Hidden to hide them (or use the eye). Monitors without their own layout use the default one; changes apply to the bar right away. Linked monitors (the chain button between two cards) share one layout, one on/off switch and one edge: an edit on any of them applies to all. The last bar can't be turned off: its bell chip is the way back into Settings."
         }
 
     }

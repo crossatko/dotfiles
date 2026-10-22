@@ -182,17 +182,49 @@ PanelWindow {
 
     IdleInhibitor { window: bar; enabled: bar.inhibit }
 
-    Process {
-        running: true
-        // one long-lived awk: it needs the PREVIOUS /proc/stat sample to compute a percentage (starting a new
-        // awk per sample, as before, never had one, so the chip stayed at 0%)
-        command: ["awk", "BEGIN { while (1) { getline l < \"/proc/stat\"; close(\"/proc/stat\"); split(l, a, \" \"); busy = a[2] + a[3] + a[4]; tot = busy + a[5] + a[6] + a[7] + a[8] + a[9]; if (pt > 0 && tot > pt) printf \"%d\\n\", (busy - pb) * 100 / (tot - pt); pb = busy; pt = tot; fflush(); system(\"sleep 2\") } }"]
-        stdout: SplitParser { onRead: line => { if (line) { bar.cpu = line + "%"; bar.cpuHist = bar.pushSample(bar.cpuHist, parseInt(line)) } } }
+    // CPU / memory: pure QML (FileView on procfs + Timer), no child processes (a shell loop in a Process orphans
+    // to systemd when qs exits). CPU needs the PREVIOUS /proc/stat sample for a percentage.
+    property real cpuPrevBusy: 0
+    property real cpuPrevTot: 0
+    Timer {
+        interval: 2000; running: true; repeat: true; triggeredOnStart: true
+        onTriggered: statFile.reload()
     }
-    Process {
-        running: true
-        command: ["sh", "-c", "while :; do awk '/MemTotal/{t=$2} /MemAvailable/{a=$2} END{printf \"%d\\n\",(t-a)*100/t}' /proc/meminfo; sleep 3; done"]
-        stdout: SplitParser { onRead: line => { if (line) { bar.mem = line + "%"; bar.memHist = bar.pushSample(bar.memHist, parseInt(line)) } } }
+    FileView {
+        id: statFile
+        path: "/proc/stat"
+        printErrors: false
+        onLoaded: {
+            const a = text().split("\n")[0].trim().split(/\s+/).map(Number)   // cpu user nice system idle iowait irq softirq steal
+            const busy = a[1] + a[2] + a[3]
+            const tot = busy + a[4] + a[5] + a[6] + a[7] + a[8]
+            if (bar.cpuPrevTot > 0 && tot > bar.cpuPrevTot) {
+                const v = Math.trunc((busy - bar.cpuPrevBusy) * 100 / (tot - bar.cpuPrevTot))
+                bar.cpu = v + "%"
+                bar.cpuHist = bar.pushSample(bar.cpuHist, v)
+            }
+            bar.cpuPrevBusy = busy
+            bar.cpuPrevTot = tot
+        }
+    }
+    Timer {
+        interval: 3000; running: true; repeat: true; triggeredOnStart: true
+        onTriggered: memFile.reload()
+    }
+    FileView {
+        id: memFile
+        path: "/proc/meminfo"
+        printErrors: false
+        onLoaded: {
+            const t = text()
+            const total = parseInt((t.match(/MemTotal:\s+(\d+)/) || [])[1])
+            const avail = parseInt((t.match(/MemAvailable:\s+(\d+)/) || [])[1])
+            if (total > 0 && avail >= 0) {
+                const v = Math.trunc((total - avail) * 100 / total)
+                bar.mem = v + "%"
+                bar.memHist = bar.pushSample(bar.memHist, v)
+            }
+        }
     }
     SystemClock { id: clock; precision: SystemClock.Minutes }
 
