@@ -2,15 +2,15 @@
 themes {
     wall {
         bg "#232022"
-        fg "#d5b9bb"
-        red "#e7313c"
+        fg "#d5b9bd"
+        red "#e92b3e"
         green "#82c680"
         blue "#809cc6"
         yellow "#c6b380"
         magenta "#c580c6"
-        orange "#e7313c"
+        orange "#e92b3e"
         cyan "#80c6c6"
         black "#08090b"
-        white "#d5b9bb"
+        white "#d5b9bd"
     }
 }
