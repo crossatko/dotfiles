@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import Quickshell.Widgets
 import QtQuick.Effects
 import "launcher"
@@ -178,6 +179,23 @@ ModalMenu {
         presetSection = ""
         query = preset; input.text = preset; preset = ""
         refresh()
+        replayWallpaper()
+    }
+
+    // opening on an EMPTY workspace advances that monitor's play-once video wallpaper by one burst (like a workspace switch,
+    // hypr/scripts/video-replay.lua); `video replay` debounces itself and does nothing for loop / image wallpapers
+    property string replayConn: ""
+    function replayWallpaper() {
+        const m = Hyprland.focusedMonitor, ws = m ? m.activeWorkspace : null
+        if (!ws || ws.toplevels.values.length > 0 || replay.running) return
+        const c = m.name
+        if (typeof c !== "string" || !/^[A-Za-z0-9_.-]+$/.test(c) || c.length > 40) return
+        replayConn = c
+        replay.running = true
+    }
+    Process {
+        id: replay
+        command: ["python3", "-I", Quickshell.env("HOME") + "/.config/theme/theme.py", "video", "replay", lc.replayConn]
     }
 
     // ---- sections (sub-menus: sound output / input, power, twitch) ------------------------------------------------
@@ -293,6 +311,10 @@ ModalMenu {
     function runItem(item, arg) {
         if (!item) { close(); return }
         if (item.kind === "info") return                 // loading / error rows in a section
+        if (item.descend !== undefined) {                // file browser: a folder row descends (query = its path + "/"), nothing recorded
+            input.text = item.descend; input.cursorPosition = input.text.length
+            return
+        }
         if (item.kind === "section") {                   // root row: push the section (the entry itself is recorded)
             usage = Frecency.record(usage, item.id, query.trim().toLowerCase(), Date.now())
             saveUsage.restart()
