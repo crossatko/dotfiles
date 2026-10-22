@@ -1,8 +1,10 @@
 -- Play-once video wallpapers: EVERY workspace change on a monitor advances its clip by one burst (a short ease-in + wind-down
--- baked into the player's file; `theme.py video replay <connector>`, which ignores the event while the previous burst is
--- still playing: the debounce). See AGENTS.md "Video wallpapers".
+-- baked into the player's file; theme/mpv/replay.py <connector> = `theme.py video replay`, which ignores the event while the
+-- previous burst is still playing: the debounce). See AGENTS.md "Video wallpapers".
+-- Timing: Hyprland emits workspace.active synchronously in CMonitor::changeWorkspace right AFTER startAnimation() of the
+-- old/new workspace, in the same main-loop iteration (before the first animated frame is rendered): the earliest hook.
 --
--- Not a trigger: special workspaces (scratchpad toggles), loop mode / image wallpapers (the player has no socket: the command
+-- Not a trigger: special workspaces (scratchpad toggles), loop mode / image wallpapers (no held play-once player: the command
 -- does nothing). A workspace moved to another monitor fires `workspace.active` for the monitors whose active workspace
 -- changed, which is exactly the rule: only a changed active workspace counts.
 -- NB: hl.* monitors, workspaces and windows are USERDATA (type() is "userdata", not "table"): nil checks and pcall only.
@@ -32,7 +34,9 @@ local function on_active(ws)
 		if type(conn) ~= "string" or not conn:match("^[%w_.-]+$") or #conn > 40 then
 			return
 		end
-		hl.exec_cmd('sh -c \'python3 -I "$HOME/.config/theme/theme.py" video replay ' .. conn .. "'")
+		-- mpv/replay.py, not `theme.py video replay` (same code): ~5 ms to the unpause instead of ~50 (theme.py compiles 4k lines).
+		-- exec_cmd already runs `/bin/sh -c`; `exec` drops the shell.
+		hl.exec_cmd('exec python3 -I -S "$HOME/.config/theme/mpv/replay.py" ' .. conn)
 	end)
 	if not ok then
 		pcall(function() hl.log("video-replay: " .. tostring(err)) end)

@@ -57,6 +57,11 @@ ColumnLayout {
     property var wpLinks: []                   // [[keyA, keyB], ...] edges; chained edges form a group
     property bool optimize: true               // "Optimize for monitor" (theme.py video optimize on|off), default on
     property bool optBusy: false
+    property string optSpeed: "background"     // how the copies are encoded (theme.py video optimize-speed background|balanced|fast); same output either way
+    function setOptSpeed(v) {
+        optSpeed = v   // no apply, no player restart: a running encode is only re-prioritized
+        Quickshell.execDetached(["python3", "-I", Theme.themeDir + "/theme.py", "video", "optimize-speed", v])
+    }
     property var optJob: ({})                  // {state: encoding|idle, label, pct} written by the background encoder
     readonly property string optFile: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/theme-video/optimize.json"
     function setOptimize(on) {
@@ -346,6 +351,7 @@ ColumnLayout {
             page.wpLinks = d && Array.isArray(d.links) ? d.links : []
             page.wpPrimaryVideo = d && d.primary_video && typeof d.primary_video === "object" ? d.primary_video : null
             page.optimize = !(d && d.optimize === false)
+            page.optSpeed = d && (d.optimize_speed === "fast" || d.optimize_speed === "balanced") ? d.optimize_speed : "background"
         }
         onLoadFailed: { page.wpMonitors = {}; page.wpPrimary = ""; page.wpPrimaryVideo = null; page.wpLinks = [] }
     }
@@ -706,6 +712,30 @@ ColumnLayout {
                                                                                        : "Off: videos play from the original file.")
                     : page.optJob.state === "encoding" ? "Optimizing " + page.optJob.label + " … " + page.optJob.pct + " %"
                     : "One copy per monitor at its resolution and a fitting frame rate: less GPU."
+            }
+        }
+        SettingRow {
+            visible: page.optimize
+            title: "Speed"
+            titleWidth: 84
+            Segmented {
+                values: ["background", "balanced", "fast"]
+                labels: ["Background", "Balanced", "Fast"]
+                objectNames: ["optspeed-background", "optspeed-balanced", "optspeed-fast"]
+                current: page.optSpeed
+                outerRadius: Theme.radiusPage; inset: 10
+                segHeight: 26
+                segWidth: 96
+                onPicked: v => page.setOptSpeed(v)
+            }
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                font.pixelSize: Theme.fontCaption
+                color: Theme.muted
+                text: page.optSpeed === "fast" ? "Encodes on every core at normal priority: done soonest, the desktop may stutter meanwhile."
+                    : page.optSpeed === "balanced" ? "Uses about 60 % of the machine at low priority: quicker, the desktop stays responsive."
+                    : "Encodes slowly on idle CPU time only, so the desktop stays smooth. Same result in every mode."
             }
         }
         // play-once timing: full speed for N s, then ease to a stop over M s and hold that frame (mpv/winddown.lua)

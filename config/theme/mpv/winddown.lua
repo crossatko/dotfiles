@@ -7,7 +7,7 @@
 -- end=, and the still it puts under the player). This runtime ramp is the FALLBACK: once the per-monitor BAKED file
 -- exists (theme.py bake_*: the wind retimed + interpolated into the file) it is swapped in and runs at speed 1.
 -- timed=no: untimed play-once clips, baked files, loop players: only the replay / swap messages below.
--- `script-message winddown-restart` (sent by `theme.py video replay` over the input-ipc-server socket) replays
+-- `script-message winddown-restart` (sent by theme/mpv/replay.py = `theme.py video replay` over the input-ipc-server socket) replays
 -- the clip from 0 with the same timing: speed 1, seek 0, unpause; end= and keep-open then hold it again. With a BAKED file
 -- (winddown-bursts) a replay is the NEXT BURST: seek to its start, end= its end, unpause, advance (and persist) the station
 -- index (see the block above `parse_bursts`); the bursts are short slow-motion pieces along the clip (ease-in, wind-down).

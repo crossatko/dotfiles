@@ -67,6 +67,7 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 | GTK 4 / libadwaita apps, nautilus | `~/.config/gtk-4.0/gtk.css` -> `out/host/gtk4.css` (= `out/gtk.css` + translucent backgrounds and a compositor blur request, `gtk_glass*` in theme.toml); `gtk-3.0` -> `out/host/gtk3.css` (= `out/gtk.css` + the same glass for client-side-decorated GTK3 windows only; Firefox / Thunderbird and SSD windows stay opaque) | **after the app restarts** (see below) |
 | Adwaita icons | generated hue-rotated copy `Wall-Adwaita` (see below) | new windows / apps that reload icons |
 | Brave | seed-color theme written into its Preferences by the `~/.local/bin/brave` launcher shim | at next start (Brave rewrites Preferences on exit, so it can't be edited while running) |
+| Thunderbird | `out/thunderbird-userChrome.css` / `-userContent.css` copied into the default profile's `chrome/` (+ marked block in `user.js`) by `apply_thunderbird`; `thunderbird` / `thunderbird_radius` in `theme.toml`; shared variables in `tb-vars.css` | at next start |
 
 * **GTK4/libadwaita cannot restyle an open window**: nothing re-reads the user CSS (tested
   with color-scheme / gtk-theme / accent-color / settings.ini changes). Open windows keep

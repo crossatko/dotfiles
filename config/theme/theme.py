@@ -362,7 +362,7 @@ def entry_image(v):
 
 
 def load_wp_state():
-    st = {"primary": "", "monitors": {}, "primary_video": None, "optimize": True, "links": []}
+    st = {"primary": "", "monitors": {}, "primary_video": None, "optimize": True, "optimize_speed": "background", "links": []}
     try:
         d = json.loads(wallpapers_file().read_text())
     except (OSError, ValueError):
@@ -374,6 +374,8 @@ def load_wp_state():
         if isinstance(m, dict):
             st["monitors"] = {k: n for k, v in m.items() if valid_key(k) and (n := norm_entry(v))}
         st["optimize"] = d.get("optimize") is not False   # default on
+        if d.get("optimize_speed") in OPT_SPEEDS:
+            st["optimize_speed"] = d["optimize_speed"]
         st["links"] = norm_links(d.get("links"))
         pv = norm_entry(d.get("primary_video"))
         st["primary_video"] = pv if isinstance(pv, dict) else None
@@ -383,7 +385,7 @@ def load_wp_state():
 def save_wp_state(st):
     f = wallpapers_file()
     f.parent.mkdir(parents=True, exist_ok=True)
-    out = {k: v for k, v in st.items() if v is not None and not (k == "links" and not v)}   # no links = key absent (old files stay byte-compatible)
+    out = {k: v for k, v in st.items() if v is not None and not (k == "links" and not v) and not (k == "optimize_speed" and v == OPT_SPEEDS[0])}   # no links / default speed = key absent (old files stay byte-compatible)
     write_atomic(f, json.dumps({"version": 1, **out}, indent=2) + "\n")
 
 
@@ -955,6 +957,11 @@ _RUN = {"poked": False, "cancel": False, "dest": None, "procs": [], "lock": thre
 
 def job_stale():
     """True once the running job's file is no longer wanted. Cheap unless the runner was poked."""
+    if _RUN.pop("repri", False):
+        try:
+            opt_speed_refresh()
+        except Exception:   # noqa: BLE001 - a failed re-prioritization must not kill a good job
+            pass
     with _RUN["lock"]:
         if _RUN["cancel"]:
             return True
@@ -984,7 +991,7 @@ def proc_kill(pr, hard=False):
             comm = Path(f"/proc/{pr.pid}/comm").read_text().strip()
         except OSError:
             break
-        if not comm.startswith(("ffmpeg", "nice", "ionice", "rife")):
+        if not comm.startswith(PRIO_COMMS):
             return
         try:
             os.killpg(pr.pid, sig)
@@ -1004,7 +1011,7 @@ def procs_kill(procs):
     import signal
     for pr in procs:
         try:
-            if pr.poll() is None and Path(f"/proc/{pr.pid}/comm").read_text().strip().startswith(("ffmpeg", "nice", "ionice", "rife")):
+            if pr.poll() is None and Path(f"/proc/{pr.pid}/comm").read_text().strip().startswith(PRIO_COMMS):
                 os.killpg(pr.pid, signal.SIGKILL)
         except OSError:
             pass
@@ -1027,6 +1034,121 @@ def job_reap(pr):
     with _RUN["lock"]:
         if pr in _RUN["procs"]:
             _RUN["procs"].remove(pr)
+
+
+# Optimize speed (Settings > Wallpaper > Videos "Speed", `theme.py video optimize-speed background|balanced|fast`,
+# wallpapers.json `optimize_speed`, absent = background). Only the COST changes, never the output (same encoders / QP /
+# filters; decoder / filter thread counts and the number of parallel chunks / RIFE processes do not change the result):
+#   background (default): every encode / decode / RIFE process at SCHED_IDLE (runs only on otherwise idle CPU time) + nice 19
+#     + ionice idle, decoders limited to BG_DEC_THREADS threads, BG_FILTER_THREADS filter threads, a quarter of the cores as
+#     parallel chunk workers, one RIFE process, one PNG decoder.
+#   balanced: about BALANCED_FRAC (60 %) of the machine: decoder / filter threads, chunk workers, PNG decoders and the RIFE
+#     count fast would use, each x 0.6 (at least 1, threads at least 2); SCHED_BATCH + nice 19 + ionice best-effort 7.
+#     SCHED_BATCH (not IDLE) so the encode still progresses at a small guaranteed share while the desktop is busy (nice 19 =
+#     weight 15 vs 1024 for a nice-0 desktop thread, and BATCH never preempts a waking interactive thread); IDLE would stall
+#     it completely whenever the desktop uses the CPU, which is background's job. No cgroup CPUQuota: a quota per spawned
+#     process does not add up to a job-wide cap, and a runner-wide scope would need its own unit plus `set-property` on
+#     every switch; the thread / worker limits already bound it, and the priority keeps the desktop first.
+#   fast: the old behaviour (nice BAKE_NICE, ffmpeg ionice best-effort 4, every core, VRAM-sized RIFE worker count).
+# GPU: not throttled in any mode beyond the RIFE worker count (1 RIFE process alone keeps the GPU ~93 % busy; amdgpu has no
+# userland priority for another process's Vulkan compute, and RIFE tiling would change the output).
+# A switch while the runner works (SIGUSR1 poke) re-prioritizes the RUNNING processes at once (opt_prio_apply: scheduler
+# policy + nice of every thread, ionice of the process group); thread / worker counts change with the next process spawned.
+OPT_SPEEDS = ("background", "balanced", "fast")
+BG_DEC_THREADS = 2
+BG_FILTER_THREADS = 2
+BALANCED_FRAC = 0.6
+PRIO_COMMS = ("ffmpeg", "nice", "ionice", "chrt", "rife")
+
+
+def opt_speed():
+    """"background" | "balanced" | "fast": the runner's current value (refreshed on a poke), else the state file's."""
+    return _RUN.get("speed") or load_wp_state()["optimize_speed"]
+
+
+def ncpu():
+    """Cores this process may use (cgroup / affinity aware)."""
+    try:
+        return len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        return os.cpu_count() or 4
+
+
+def speed_scale(n_fast, bg):
+    """A parallelism count for the current speed: fast = n_fast, balanced = BALANCED_FRAC of it, background = bg (all >= 1)."""
+    sp = opt_speed()
+    return max(1, n_fast if sp == "fast" else round(n_fast * BALANCED_FRAC) if sp == "balanced" else bg)
+
+
+def speed_prio(speed=None):
+    """(scheduler policy or None, nice, ionice args) of a speed."""
+    sp = speed or opt_speed()
+    if sp == "background":
+        return getattr(os, "SCHED_IDLE", None), 19, ["-c3"]
+    if sp == "balanced":
+        return getattr(os, "SCHED_BATCH", None), 19, ["-c2", "-n", "7"]
+    return os.SCHED_OTHER, BAKE_NICE, ["-c2", "-n", "4"]
+
+
+def job_prio(ff=False, nice=None):
+    """Command prefix that sets a spawned encode / decode / RIFE process's priority for the current speed (ff = an ffmpeg
+    encode: fast mode also gives it ionice best-effort 4, as before)."""
+    sp = opt_speed()
+    io = shutil.which("ionice")
+    if sp in ("background", "balanced"):
+        _, nv, ia = speed_prio(sp)
+        return (["chrt", "-i" if sp == "background" else "-b", "0"] if shutil.which("chrt") else []) + ["nice", "-n", str(nv)] + (["ionice", *ia] if io else [])
+    return ["nice", "-n", str(BAKE_NICE if nice is None else nice)] + (["ionice", "-c2", "-n", "4"] if ff and io else [])
+
+
+def bg_threads(opt="-threads", n=BG_DEC_THREADS):
+    """[opt, n] (an ffmpeg thread limit placed before an input / as a global option): background n, balanced
+    BALANCED_FRAC of the cores (at least 2), fast [] (ffmpeg's own automatic count)."""
+    sp = opt_speed()
+    if sp == "background":
+        return [opt, str(n)]
+    if sp == "balanced":
+        return [opt, str(max(2, round(ncpu() * BALANCED_FRAC)))]
+    return []
+
+
+def opt_prio_apply():
+    """Re-prioritize every process the runner started (and their threads, and anything else in their process groups) for
+    the current speed. Lowering is always allowed; raising back (fast) needs RLIMIT_NICE >= 20 - BAKE_NICE (failures ignored)."""
+    pol, nice, ia = speed_prio()
+    with _RUN["lock"]:
+        groups = {pr.pid for pr in _RUN["procs"] if pr.poll() is None}
+    if not groups:
+        return
+    for d in Path("/proc").iterdir():
+        if not d.name.isdigit():
+            continue
+        try:
+            stat = (d / "stat").read_text()
+            if int(stat.rsplit(")", 1)[1].split()[2]) not in groups or not (d / "comm").read_text().strip().startswith(PRIO_COMMS):
+                continue
+            tids = [int(t.name) for t in (d / "task").iterdir()]
+        except (OSError, ValueError, IndexError):
+            continue
+        for tid in tids:
+            try:
+                if pol is not None:
+                    os.sched_setscheduler(tid, pol, os.sched_param(0))
+                os.setpriority(os.PRIO_PROCESS, tid, nice)
+            except OSError:
+                pass
+    if shutil.which("ionice"):
+        for g in groups:   # IOPRIO_WHO_PGRP: every thread of every process in the group
+            subprocess.run(["ionice", *ia, "-P", str(g)], stdin=subprocess.DEVNULL, capture_output=True)
+
+
+def opt_speed_refresh():
+    """Runner side of a poke: re-read the speed; when it changed, re-prioritize the running processes."""
+    new = load_wp_state()["optimize_speed"]
+    if new != _RUN.get("speed"):
+        _RUN["speed"] = new
+        print(f"theme: optimize speed {new}", flush=True)
+        opt_prio_apply()
 
 
 # Output codec of the optimized copies and the bakes: HEVC Main (8-bit) when this machine both DECODES it in hardware (the
@@ -1190,7 +1312,6 @@ def ff_encode(in_args, vf, dest, total, label, pct=(0, 99), out_args=(), cfr=Tru
     H.264 (VA-API, libx264 fallback). Progress: prog(fraction of `total` s) or optimize.json mapped into pct. True on
     success; raises JobCancelled (partial output deleted) when the runner's job went stale."""
     import select
-    nice = BAKE_NICE if nice is None else nice
     tries = ff_tries(vf)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(".tmp-" + dest.name)
@@ -1200,8 +1321,8 @@ def ff_encode(in_args, vf, dest, total, label, pct=(0, 99), out_args=(), cfr=Tru
     for pre, vfs, codec in tries:
         # fc = a filter_complex up to its single output (the hwupload / format tail is appended); else a plain -vf chain
         graph = ["-filter_complex", f"{fc},{vfs}"] if fc else ["-map", "0:v:0", "-vf", vfs]
-        cmd = ["nice", "-n", str(nice)] + (["ionice", "-c2", "-n", "4"] if shutil.which("ionice") else []) + [
-            "ffmpeg", "-hide_banner", "-v", "error", "-nostats", "-progress", "pipe:1", "-y", *pre, *in_args, *graph, "-an", *([] if cfr else ["-fps_mode", "passthrough"]), *out_args, *codec, "-video_track_timescale", "90000",
+        cmd = job_prio(ff=True, nice=nice) + [
+            "ffmpeg", "-hide_banner", "-v", "error", "-nostats", "-progress", "pipe:1", "-y", *bg_threads("-filter_threads", BG_FILTER_THREADS), *(bg_threads("-filter_complex_threads", BG_FILTER_THREADS) if fc else []), *pre, *bg_threads(), *in_args, *graph, "-an", *([] if cfr else ["-fps_mode", "passthrough"]), *out_args, *codec, "-video_track_timescale", "90000",
             "-movflags", "+faststart", "-f", "mp4", str(tmp)]   # one timescale for every part: the stream-copy concat mangles mixed ones
         errf = tempfile.TemporaryFile("w+")
         try:
@@ -1504,11 +1625,8 @@ def bake_workers(own_pids=()):
     force = os.environ.get("THEME_BAKE_LOAD", "")
     if force.isdigit():
         return max(1, int(force)), BAKE_NICE
-    try:
-        n = len(os.sched_getaffinity(0))
-    except (AttributeError, OSError):
-        n = os.cpu_count() or 4
-    return max(1, n), BAKE_NICE
+    n = ncpu()
+    return speed_scale(n, n // 4), BAKE_NICE   # (re-evaluated every second: a speed switch changes the count of the chunks started next)
 
 
 def mem_available():
@@ -1607,10 +1725,20 @@ def rife_worker_count(bp):
     scaled by the pixel count; margin = max(1.5 GB, 10 % of the VRAM). A process that fails anyway (out of memory) halves the count.
     $THEME_RIFE_WORKERS = n forces exactly n (manual testing).
     No known discrete GPU or less than 3 GB of VRAM = 1."""
-    GB = float(1 << 30)
     forced = os.environ.get("THEME_RIFE_WORKERS", "")
     if forced.isdigit() and int(forced) > 0:   # manual testing: exactly this many (the out-of-memory halving still applies)
         return int(forced), f"RIFE workers {int(forced)} (forced by THEME_RIFE_WORKERS)"
+    if opt_speed() == "background":
+        return 1, "RIFE workers 1 (background speed)"
+    n, why = rife_worker_count_fast(bp)
+    if opt_speed() == "balanced":
+        return speed_scale(n, 1), f"RIFE workers {speed_scale(n, 1)} (balanced: {BALANCED_FRAC:.0%} of {why})"
+    return n, why
+
+
+def rife_worker_count_fast(bp):
+    """rife_worker_count at full speed: the VRAM-sized count."""
+    GB = float(1 << 30)
     v = gpu_vram()
     per = max(0.4, 1.3 * bp["w"] * bp["h"] / (2560 * 1440))
     if not v or v[0] < 3 * GB:
@@ -1999,11 +2127,11 @@ class RifeStore:
         vf = ",".join(bake_geometry(self.bp) + [RGB_UP, "format=rgb24"])
 
         def cmd(lo, hi, hwdec):
-            return (["nice", "-n", str(BAKE_NICE), "ffmpeg", "-hide_banner", "-v", "error", "-y"]
+            return (job_prio() + ["ffmpeg", "-hide_banner", "-v", "error", "-y"] + bg_threads()
                     + (["-hwaccel", "vaapi", "-hwaccel_device", hwdec] if hwdec else [])
                     + (["-ss", f"{(lo - 0.5) / sfps:.6f}"] if lo > 0 else []) + ["-i", self.video, "-map", "0:v:0", "-an", "-vf", vf, "-fps_mode", "passthrough",
                                                                                   "-compression_level", "1", "-frames:v", str(hi - lo + 1), "-start_number", str(lo), str(d / "%06d.png")])
-        par = max(1, min(4, (os.cpu_count() or 4) // 4))
+        par = speed_scale(max(1, min(4, (os.cpu_count() or 4) // 4)), 1)
         want = set(srcs)
         queue = [(lo, hi, hw) for lo, hi in runs]
         active = []
@@ -2078,7 +2206,7 @@ class RifeStore:
                     omap[rd / "out" / f"{i + 1:08d}.png"] = (a, b, j)
             for k, f in enumerate(lst):
                 os.link(f, rd / "in" / f"{k:08d}.png")
-            cmd = ["nice", "-n", str(BAKE_NICE), self.exe, "-i", str(rd / "in"), "-o", str(rd / "out"), "-n", str(T), "-m", self.model, "-g", str(RIFE_GPU), *RIFE_ARGS]
+            cmd = job_prio() + [self.exe, "-i", str(rd / "in"), "-o", str(rd / "out"), "-n", str(T), "-m", self.model, "-g", str(RIFE_GPU), *RIFE_ARGS]
             if RIFE_OOM_TEST and limit > RIFE_OOM_TEST:   # test hook: more than N at once "runs out of memory"
                 cmd = ["false"]
             active[r] = (self._spawn(cmd), rd, omap)
@@ -2150,7 +2278,7 @@ def rife_encode(paths, spec_video, label, part, lo, hi, F, keep=None):
     tmp = part.with_name(".tmp-" + part.name)
     sc, tags = bake_rgb_down(spec_video)
     pre, vfs, codec = ff_tries([sc])[0]
-    cmd = ["nice", "-n", str(BAKE_NICE), "ffmpeg", "-hide_banner", "-v", "error", "-y", *pre, "-threads", "4", "-f", "image2pipe", "-c:v", "png", "-framerate", str(F), "-i", "-",
+    cmd = job_prio() + ["ffmpeg", "-hide_banner", "-v", "error", "-y", *bg_threads("-filter_threads", BG_FILTER_THREADS), *pre, "-threads", "4", "-f", "image2pipe", "-c:v", "png", "-framerate", str(F), "-i", "-",
            "-vf", vfs, "-an", *tags, "-fps_mode", "passthrough", *codec, "-video_track_timescale", "90000", "-movflags", "+faststart", "-f", "mp4", str(tmp)]
     enc = job_spawn(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     ok = False
@@ -2385,7 +2513,7 @@ def bake_src_clip(video, bp, i_s, n, rp, dest):
     files = []
     for j, (a, cnt) in enumerate(pieces):
         f = dest.with_name(f"{dest.stem}-{j}.nut")
-        r = subprocess.run(["nice", "-n", str(BAKE_NICE), "ffmpeg", "-hide_banner", "-v", "error", "-y", *(["-ss", f"{max(0.0, a / sfps - 0.5 / sfps):.6f}"] if a > 0 else []), "-i", video,
+        r = subprocess.run([*job_prio(), "ffmpeg", "-hide_banner", "-v", "error", "-y", *bg_threads(), *(["-ss", f"{max(0.0, a / sfps - 0.5 / sfps):.6f}"] if a > 0 else []), "-i", video,
                             "-map", "0:v:0", "-an", "-vf", ",".join(bake_geometry(bp) + [f"setpts=N/({sfps:.9f}*TB)"]), "-frames:v", str(cnt), "-c:v", "ffv1",
                             "-fps_mode", "passthrough", *tags, str(f)], stdin=subprocess.DEVNULL, capture_output=True)
         if r.returncode != 0 or not f.exists():
@@ -2770,7 +2898,8 @@ def video_optimize_run():
             fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             return
-        signal.signal(signal.SIGUSR1, lambda *_: _RUN.__setitem__("poked", True))   # before the pid is published
+        _RUN["speed"] = load_wp_state()["optimize_speed"]
+        signal.signal(signal.SIGUSR1, lambda *_: _RUN.update(poked=True, repri=True))   # before the pid is published
 
         def die(*_):   # stopped (logout, restart of the shell session): take our ffmpegs with us, no orphans
             with _RUN["lock"]:
@@ -2788,6 +2917,8 @@ def video_optimize_run():
         write_atomic(vp_dir() / "optimize.pid", str(os.getpid()))
         done = 0
         while load_wp_state()["optimize"]:
+            if _RUN.pop("repri", False):
+                opt_speed_refresh()
             jobs = opt_jobs()
             if not jobs:
                 break
@@ -3012,14 +3143,13 @@ def vp_ipc(conn, *cmd):
 
 def video_replay(conn):
     """Replay a play-once clip that has stopped (held frame) with the same timing; one that is still playing or
-    winding down is left alone, so a burst of workspace switches cannot stack restarts. True when restarted."""
-    d = vp_read(vp_dir() / f"{conn}.json") if re.fullmatch(CONN_RE, conn or "") else None
-    if not d or d.get("mode") != "once" or not vp_alive(d["pid"]):
-        return False
-    if vp_ipc(conn, "get_property", "pause") is not True:   # playing, winding down, or unreachable
-        return False
-    vp_ipc(conn, "script-message", "winddown-restart")
-    return True
+    winding down is left alone, so a burst of workspace switches cannot stack restarts. True when restarted.
+    The one implementation is mpv/replay.py (the workspace-switch hot path runs it directly: ~5 ms instead of ~50)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("theme_replay", ROOT / "mpv" / "replay.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.replay(conn or "")
 
 
 def video_wanted(st=None, mons=None):
@@ -3095,7 +3225,7 @@ def video_sync(start=True, force=False, only=None, wait=False):
 def video_command(args):
     """video start|stop|restart|sync [key] | replay <connector> | optimize [on|off] | thumb <file> | thumbs <file>... | status"""
     sub, rest = (args[0] if args else "sync"), args[1:]
-    if sub == "replay":   # hot path (workspace switches): no monitor query
+    if sub == "replay":   # no monitor query; the workspace-switch hot path runs mpv/replay.py itself
         if rest:
             video_replay(rest[0])
         return
@@ -3116,6 +3246,16 @@ def video_command(args):
             save_wp_state(st)
             video_sync(force=True, wait=True)   # players restart on the copy (on) or the original (off); "on" also encodes
         print("on" if load_wp_state()["optimize"] else "off")
+    elif sub == "optimize-speed":   # background | balanced | fast: no player restart, no re-apply; a running encode is re-prioritized at once
+        st = load_wp_state()
+        if rest[:1] and rest[0] in OPT_SPEEDS:
+            st["optimize_speed"] = rest[0]
+            save_wp_state(st)
+            pid = opt_runner_pid()
+            if pid:
+                import signal
+                os.kill(pid, signal.SIGUSR1)
+        print(load_wp_state()["optimize_speed"])
     elif sub == "stop":
         for f in vp_dir().glob("*.json"):
             if not only or f.stem == only:
@@ -3165,7 +3305,9 @@ def render_all(pal, cfg):
     tv = os.path.expanduser(extra.get("tv_wallpaper", ""))
     if not tv or not os.path.exists(tv):
         extra["tv_wallpaper"] = wp
-    extra["tb_radius"] = int(cfg.get("settings", {}).get("rounding", 0))  # Thunderbird userChrome: same radius as the shell default
+    # Thunderbird: the shared variable block (tb-vars.css) is rendered once and pasted into userChrome / userContent as {{tb_vars}}
+    extra["tb_radius"] = int(cfg.get("settings", {}).get("thunderbird_radius", cfg.get("settings", {}).get("rounding", 0)))
+    extra["tb_vars"] = render((ROOT / "tb-vars.css").read_text(), pal, extra)
     # per-monitor wallpapers (empty strings without entries, so the output is unchanged): see monitor_entries()
     extra.update(monitor_extras())
     for tpl in sorted((ROOT / "templates").iterdir()):
