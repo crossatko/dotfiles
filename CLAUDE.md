@@ -42,7 +42,7 @@ After making changes in any project, record them so the next agent can continue 
 - Write to the project's existing notes file if there is one (`NOTES.md`, `AGENTS.md`, `docs/`, etc.). Otherwise create `NOTES.md` at the project root.
 - Notes describe the **current state** plus **short caveats**, not a history:
   - **Current state**: what exists and how it works now, and how to build, run or test it.
-  - **Caveats**: one or two lines each: known limitations, things tried that failed and why, unverified assumptions, open follow-ups.
+  - **Caveats**: one or two lines each: known limitations, things tried that failed and why, unverified assumptions, open follow-ups. In the dotfiles, caveats are about the config side only (e.g. "needs font X installed", "requires the fork, stock Hyprland lacks option Y"); implementation caveats (e.g. "build with flag X, otherwise Z") belong in the app's own repo.
   - No dated change logs or "fixed X, then Y" narratives. Histories belong in commit messages or a project-local plan file.
 - Each piece of software documents itself. App internals, design, build and install steps, and what an integration needs live in that app's own repo, never in the dotfiles. This applies to all the user's own projects and custom apps (forks, plugins, tools).
 - The dotfiles notes only record the user's config state per machine: what is installed and linked, which settings are set, changed system settings, and caveats specific to that machine. For the user's own projects, a line saying where it is installed plus a link to its repo is enough.
