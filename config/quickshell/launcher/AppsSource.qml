@@ -61,7 +61,7 @@ QtObject {
         if (item.kind !== "app") return false
         const e = byId[item.desktopId]
         if (!e) return true
-        if (e.runInTerminal) Quickshell.execDetached(["kitty", "-e"].concat(e.command))
+        if (e.runInTerminal) Quickshell.execDetached(["ghostty", "-e"].concat(e.command))
         else e.execute()
         // same launch log Menu.qml writes, so the old launcher's ordering keeps learning too
         Quickshell.execDetached(["sh", "-c",

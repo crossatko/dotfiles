@@ -139,7 +139,7 @@ hl.window_rule({
 	workspace = "special:scratchpad",
 	size = "(monitor_w*0.6) (monitor_h*0.6)",
 	center = true,
-	match = { class = "^scratchpad$" },
+	match = { class = "^(dotfiles\\.scratchpad|scratchpad)$" },
 })
 
 hl.window_rule({

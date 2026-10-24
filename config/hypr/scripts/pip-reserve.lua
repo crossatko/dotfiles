@@ -80,7 +80,17 @@ end
 -- How far the box is lifted off the bottom edge: over a bottom bar (and its floating gap), flush with the
 -- edge otherwise.
 local function bottom_offset(mon)
-	return bar_edge(mon) == "bottom" and bar_reserve() or 0
+	if bar_edge(mon) ~= "bottom" then
+		return 0
+	end
+	-- per bar: floating gap and the flush-mode height of THIS monitor's bar (managed.bar_reserve)
+	if managed ~= nil and type(managed.bar_reserve) == "function" then
+		local ok, r = pcall(managed.bar_reserve, mon)
+		if ok and type(r) == "number" then
+			return r
+		end
+	end
+	return bar_reserve()
 end
 
 -- Window gaps (Settings -> Appearance): the box keeps the same distance as tiled windows, gaps_out, from the
@@ -137,7 +147,21 @@ local function smart_gaps_apply(mon)
 	return ok and res == true
 end
 
+local base_margins
+-- The outer gap on the bar's own side is 0 on a monitor whose docked bar has "transparent when flush" on (managed.lua
+-- apply_bar_gaps), so the box sits right at the bar's reserved edge there too.
 local function margins(mon)
+	local m = base_margins(mon)
+	if managed ~= nil and type(managed.bar_flush_edge) == "function" then
+		local ok, edge = pcall(managed.bar_flush_edge, mon)
+		if ok and (edge == "top" or edge == "bottom") then
+			m[edge] = 0
+		end
+	end
+	return m
+end
+
+function base_margins(mon)
 	if smart_gaps_apply(mon) then
 		return { top = 0, right = 0, bottom = 0, left = 0 }
 	end

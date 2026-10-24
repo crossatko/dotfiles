@@ -17,6 +17,11 @@ Item {
     readonly property bool dragging: dragHold.running
     Timer { id: dragHold; interval: 300 }
 
+    // the previews show the first bar's mode (docked / floating is per bar now, Settings > Bar)
+    readonly property var pvBar: Quickshell.screens.find(s => BarConfig.enabled(s)) ?? Quickshell.screens[0] ?? null
+    readonly property bool pvFloat: BarConfig.floating(pvBar)
+    readonly property real pvGap: pvFloat ? Theme.gapOut : 0
+
     // effective value of a numeric key
     function eff(key) {
         if (key === "radius") return Theme.radius
@@ -113,28 +118,6 @@ Item {
             }
         }
 
-        // ---- bar ----
-        SectionHead { title: "Bar"; Layout.topMargin: 6 }
-        SettingRow {
-            title: "Bar mode"
-            titleWidth: pg.titleW
-            Segmented {
-                values: [false, true]
-                labels: ["Docked", "Floating"]
-                objectNames: ["btn-docked", "btn-floating"]
-                current: Theme.barFloating
-                inset: 18
-                segHeight: 24
-                segWidth: 78
-                onPicked: v => Appearance.set("barFloating", v)
-            }
-            Label {
-                text: Theme.barFloating ? "edge gap from the screen edges, corner radius" : "flush with the screen edge, square"
-                color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.fillWidth: true; elide: Text.ElideRight
-            }
-            Label { visible: !Appearance.overridden("barFloating"); text: "(default)"; color: Theme.muted; font.pixelSize: Theme.fontCaption }
-        }
-
         // ---- previews ----
         SectionHead { title: "Preview"; detail: "outer " + Theme.radius + " / inner " + Theme.radiusItem + " / inner " + Theme.radiusDeep; Layout.topMargin: 6 }
         Flow {
@@ -194,9 +177,9 @@ Item {
 
                 // bar
                 Rectangle {
-                    x: mini.s(Theme.barGap); y: mini.s(Theme.barGap)
+                    x: mini.s(pg.pvGap); y: mini.s(pg.pvGap)
                     width: mini.width - 2 * x; height: mini.s(Theme.barHeight)
-                    radius: mini.s(Theme.barRadius)
+                    radius: mini.s(pg.pvFloat ? Theme.radius : 0)
                     color: Theme.surface2
                     Row {
                         anchors { left: parent.left; leftMargin: mini.s(Theme.barPad); verticalCenter: parent.verticalCenter }
@@ -218,7 +201,7 @@ Item {
                     model: 2
                     Rectangle {
                         required property int index
-                        readonly property real wy: Theme.barReserve + Theme.gapOut
+                        readonly property real wy: Theme.barHeight + pg.pvGap + Theme.gapOut
                         readonly property real areaW: mini.sw - 2 * Theme.gapOut
                         readonly property real w: (areaW - 2 * Theme.gapIn) / 2
                         x: mini.s(Theme.gapOut + index * (w + 2 * Theme.gapIn))

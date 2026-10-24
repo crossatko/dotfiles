@@ -24,7 +24,7 @@ PanelWindow {
     anchors { bottom: true }
     // above a (floating) bottom bar
     // qmllint disable missing-property
-    margins.bottom: 70 + (bars[(screen ? screen.name : "")] === "bottom" ? Theme.barReserve : 0)
+    margins.bottom: 70 + (bars[(screen ? screen.name : "")] === "bottom" ? BarConfig.reserveOf(screen) : 0)
     // qmllint enable missing-property
     implicitWidth: 320
     implicitHeight: 56

@@ -24,6 +24,7 @@ Item {
     id: g
     required property Item root
     property bool active: true
+    property bool hidden: false   // declare nothing at all (a surface that is fully transparent: no blurred box may stay behind)
     property int interval: 250
     property var items: []
     property var transforms: []   // per item: the Transform objects on it and its ancestors (collected at search time)
@@ -44,7 +45,9 @@ Item {
         if (!g.active)
             return
         const found = []
-        if (Theme.glass)
+        if (g.hidden)
+            found.length = 0
+        else if (Theme.glass)
             g.find(g.root, found)
         else if (Theme.glassKnown)          // nothing until known: a whole-window region would flash as glass
             found.push(g.root)
@@ -94,6 +97,7 @@ Item {
     }
 
     onActiveChanged: refresh()
+    onHiddenChanged: refresh()
     Connections { target: Theme; function onGlassChanged() { g.refresh() } function onGlassKnownChanged() { g.refresh() } }
     Component.onCompleted: refresh()
     Timer { interval: g.interval; repeat: true; running: g.active; onTriggered: g.refresh() }

@@ -1,6 +1,6 @@
 return {
 	menu = "qs ipc call launcher toggle", -- quickshell launcher (config/quickshell/Launcher.qml)
-	terminal = "kitty",
+	terminal = "ghostty", -- kitty stays installed as a fallback
 	browser = "brave",
 	whatsapp = "brave --app='https://web.whatsapp.com'",
 	messages = "brave --app='https://messages.google.com'",

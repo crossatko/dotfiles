@@ -7,7 +7,7 @@ import "js/Vpn.js" as Vpn
 // headerSub / enter here). Same CLIs and the same parsing as the network popup (js/Vpn.js); on / off for Tailscale
 // (on) and Mullvad go through VpnSwitch (bin/vpn-switch), Tailscale off is plain `tailscale down`.
 //   tailscale: first row = state + switch (Enter), then the other machines, online first (green dot, offline dim; subtitle =
-//              OS, offline: last seen). Enter copies the MagicDNS name; Ctrl+K: copy IP, copy name, ssh in kitty,
+//              OS, offline: last seen). Enter copies the MagicDNS name; Ctrl+K: copy IP, copy name, ssh in the terminal,
 //              open http://<name>. `tailscale status --json` is polled every 4 s (1 s while a switch runs) while the section is shown.
 //   mullvad:   first row = tunnel state + switch (Enter), Reconnect while on, then the countries (Enter descends to
 //              "Any city" + its cities; picking one runs `mullvad relay set location <cc> [city]` and connects when
@@ -337,7 +337,7 @@ QtObject {
         if (id === "vpn-copy-ip") { if (item.ipv4) copy(item.ipv4, "Copied IP"); return true }
         if (id === "vpn-copy-name") { if (item.target) copy(item.target, "Copied name"); return true }
         if (!hostOk(item.target)) return false
-        if (id === "vpn-ssh") { Quickshell.execDetached(["kitty", "--title", "ssh " + item.target, "ssh", item.target]); return true }
+        if (id === "vpn-ssh") { Quickshell.execDetached(["ghostty", "--title=ssh " + item.target, "-e", "ssh", item.target]); return true }
         if (id === "vpn-web") { Quickshell.execDetached(["xdg-open", "http://" + item.target]); return true }
         return false
     }

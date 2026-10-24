@@ -39,7 +39,7 @@ PACKAGES=(
   gnome-themes-extra qt5-wayland qt6-wayland dconf
 
   # Terminal & Shell
-  zellij rust rust-wasm fzf wl-clipboard cliphist kitty zsh starship fastfetch bash-completion zsh-completions
+  zellij rust rust-wasm fzf wl-clipboard cliphist kitty ghostty zsh starship fastfetch bash-completion zsh-completions
   zsh-autosuggestions zsh-syntax-highlighting libqalculate
 
   # Hyprland Ecosystem
@@ -327,7 +327,7 @@ update-desktop-database ~/.local/share/applications 2>/dev/null || true
 # Clean up package cache to free up space
 echo "Cleaning up yay cache..."
 yay -Sc --noconfirm
-# The WC3 icon font (pairs with the symbol_map line in kitty.conf) is installed to ~/.local/share/fonts by
+# The WC3 icon font (pairs with the symbol_map lines in kitty/linux.conf and the font-codepoint-map lines in ghostty/config) is installed to ~/.local/share/fonts by
 # the claude-tabs setup.sh call above.
 fc-cache -fv
 

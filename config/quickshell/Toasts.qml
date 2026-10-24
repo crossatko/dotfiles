@@ -15,10 +15,10 @@ PanelWindow {
     anchors { top: true; right: true }
     margins {
         // Theme.edgeGap from the screen edge, or below a top bar (incl. a floating bar's gap) by the same amount
-        top: Theme.edgeGap + (bars[(screen ? screen.name : "")] === "top" ? Theme.barReserve : 0)
+        top: BarConfig.edgeGapOf(screen) + (bars[(screen ? screen.name : "")] === "top" ? BarConfig.reserveOf(screen) : 0)
         right: 0
     }
-    implicitWidth: 400 + Theme.edgeGap // the cards + edgeGap of room: the slide-out then leaves through the screen edge
+    implicitWidth: 400 + BarConfig.edgeGapOf(screen) // the cards + edgeGap of room: the slide-out then leaves through the screen edge
     // The window is NOT sized to the animating column: a layer surface that is resized is shown stretched to its new
     // size until the matching buffer arrives, which squashed and overlapped the cards on every frame of a gap opening
     // or closing (nested frame captures 2026-10-21; a single shrink still squashed one frame). So it is sized to the

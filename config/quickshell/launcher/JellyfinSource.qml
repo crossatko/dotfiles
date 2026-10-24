@@ -82,7 +82,7 @@ QtObject {
         const l = errLine(err)
         if (code === 2) return [info("auth", "Not logged in to Jellyfin", l, ""),
                                 info("auth-how", "Run `jellyfin-qs login` in a terminal", "", ""),
-                                actionRow("login", "jf-login", "Open login in terminal", "kitty -e jellyfin-qs login", "")]
+                                actionRow("login", "jf-login", "Open login in terminal", "ghostty -e jellyfin-qs login", "")]
         if (code === 3) return [info("net", "Jellyfin server unreachable (is Tailscale connected?)", l, ""),
                                 actionRow("retry", "jf-retry", "Try again", "", "")]
         if (code === 127) return [info("missing", "jellyfin-qs not found: run install.sh", "", "")]
@@ -518,7 +518,7 @@ QtObject {
             return true
         }
         if (item.kind === "jf-login") {
-            Quickshell.execDetached(["kitty", "-e", "sh", "-c", 'PATH="$PATH:$HOME/.local/bin"; exec jellyfin-qs login'])
+            Quickshell.execDetached(["ghostty", "-e", "sh", "-c", 'PATH="$PATH:$HOME/.local/bin"; exec jellyfin-qs login'])
             return true
         }
         return false

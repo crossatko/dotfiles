@@ -128,14 +128,18 @@ PanelWindow {
     Item {
         id: barStrip
         width: parent.width
-        height: host.hasBar ? Theme.barReserve : 0
+        height: host.hasBar ? BarConfig.reserveOf(host.modelData) : 0
         y: card.atTop ? 0 : parent.height - height
     }
     mask: Region { item: scrim; regions: [ Region { item: barStrip; intersection: Intersection.Subtract } ] }
 
     Rectangle {
         id: card
-        readonly property bool isGlassItem: true
+        // A bare popup (the notification center) has no card at all: no fill, border or blur region of its own; its
+        // content (glass cards) brings its own glass. Add a name here to make another popup bare.
+        readonly property bool bare: host.content === "notif"
+        readonly property real pad: bare ? 0 : 12
+        readonly property bool isGlassItem: !bare
         readonly property bool atTop: Popups.edgeOf(host.modelData.name) === "top"
         // Glass: the card's glass region is the card itself (Glass.qml maps it through the Scale / Translate below, so
         // it grows / slides with the card every frame). Its STRENGTH follows the card's opacity only on a compositor
@@ -144,14 +148,12 @@ PanelWindow {
         // motion instead (glassScale below, Theme.glassScaleAt).
         // bar edge: past the bar (incl. a floating bar's CURRENT gap, so it follows the compact animation) plus popupGap; other sides: `side` from the screen
         // edge (docked keeps the old 8 px, floating lines up with the bar's gapOut)
-        readonly property real inset: (host.hasBar ? Theme.barHeight + Popups.barGapOf(host.modelData.name) : 0) + Theme.popupGap
-        readonly property real side: Theme.barFloating ? Theme.edgeGap : 8
+        readonly property real inset: (host.hasBar ? BarConfig.heightOf(host.modelData) - (BarConfig.flushMode(host.modelData) ? BarConfig.padSide(host.modelData) : 0) + Popups.barGapOf(host.modelData.name) : 0) + BarConfig.popupGapOf(host.modelData)
+        readonly property real side: BarConfig.floating(host.modelData) ? BarConfig.edgeGapOf(host.modelData) : 8
 
         // target size; the card itself follows it with a Behavior while `morphing`
-        readonly property real targetW: host.content === "center" ? 420 : host.content === "cal" ? 390 : host.content === "ha" || host.content === "ai" ? 400 : 380
-        // the control / notification center never gets shorter than 480 px; the others fit their content
-        readonly property real minHeight: host.content === "center" ? 480 : 0
-        readonly property real targetH: Math.min(host.height - inset - side, Math.max(minHeight, ((loader.item as Item)?.implicitHeight ?? 60) + 24))
+        readonly property real targetW: host.content === "center" ? 420 : host.content === "notif" ? 400 : host.content === "cal" ? 390 : host.content === "ha" || host.content === "ai" ? 400 : 380
+        readonly property real targetH: Math.min(host.height - inset - side, ((loader.item as Item)?.implicitHeight ?? 60) + 2 * pad)
         // x is computed from the TARGET width, so x and width animate together (same curve) instead of x chasing a
         // moving width. y hangs off the bar edge, so the card grows away from the bar.
         // Plain computed position, not anchors: switching a card between top / bottom anchors at runtime
@@ -167,8 +169,8 @@ PanelWindow {
         Behavior on height { enabled: host.morphing; NumberAnimation { duration: Theme.popupMoveMs; easing.type: Theme.popupEaseMove } }
 
         radius: Theme.radius
-        color: Theme.alpha(Theme.bg, Theme.cardFill)
-        border.width: 1
+        color: bare ? "transparent" : Theme.alpha(Theme.bg, Theme.cardFill)
+        border.width: bare ? 0 : 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
 
         opacity: Math.max(0, Math.min(1, host.t))
@@ -192,19 +194,21 @@ PanelWindow {
         // Content keeps its TARGET size (not the animating card size), so it never re-lays out per frame while the
         // card resizes; the card just reveals / crops it. Clipped only while morphing (dropdowns may overhang otherwise).
         Item {
-            x: 12; y: 12
-            width: card.width - 24; height: card.height - 24
+            x: card.pad; y: card.pad
+            width: card.width - 2 * card.pad; height: card.height - 2 * card.pad
             clip: host.morphing
             opacity: host.contentOpacity
             Loader {
                 id: loader
-                width: card.targetW - 24; height: card.targetH - 24
+                width: card.targetW - 2 * card.pad; height: card.targetH - 2 * card.pad
                 source: ({
                     center: "CenterPanel.qml", net: "NetPanel.qml", bt: "BtPanel.qml",
                     cal: "CalPanel.qml", media: "MediaPanel.qml", audio: "AudioPanel.qml", ha: "HaPanel.qml",
-                    ai: "AiPanel.qml"
+                    ai: "AiPanel.qml", notif: "NotifPanel.qml"
                 })[host.content] || ""
             }
+            // the bare notification center scales its own glass cards with the popup's motion (Glass.qml)
+            Binding { target: loader.item; property: "popupScale"; value: card.glassScale; when: card.bare && loader.item !== null }
         }
     }
 }

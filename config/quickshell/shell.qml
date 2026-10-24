@@ -42,7 +42,7 @@ ShellRoot {
     }
 
 
-    // qs ipc call popup toggle center|net|bt|cal|media   (focused monitor)
+    // qs ipc call popup toggle center|notif|net|bt|cal|media   (focused monitor)
     // No chip to measure: hang it under the right end of the bar, where the bell chip is (same measure
     // as Bar.pop(): screen edge -> bar window (Theme.barGap) -> right section (Theme.barPad); docked = 8).
     IpcHandler {

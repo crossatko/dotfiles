@@ -282,9 +282,9 @@ QtObject {
         } else if (id === "showfolder" || id === "folder") {
             Quickshell.execDetached(["nautilus", "--select", p])
         } else if (id === "term") {
-            Quickshell.execDetached(["kitty", "--directory", p])
+            Quickshell.execDetached(["ghostty", "--working-directory=" + p])
         } else if (id === "edit") {
-            sh("exec kitty --directory \"$(dirname -- \"$1\")\" -e \"${EDITOR:-nvim}\" \"$1\"", p)
+            sh("exec ghostty --working-directory=\"$(dirname -- \"$1\")\" -e \"${EDITOR:-nvim}\" \"$1\"", p)
         } else if (id === "mpv") {
             Quickshell.execDetached(["mpv", "--", p])
         } else if (id === "copyfile") {

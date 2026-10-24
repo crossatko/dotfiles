@@ -8,7 +8,7 @@ import Quickshell.Io
 //   subtitle   second line
 //   icon       freedesktop icon name (optional; a terminal glyph is shown otherwise)
 //   aliases    comma-separated extra search terms
-//   mode       silent (default) | toast (first stdout line as a notification) | terminal (runs in kitty)
+//   mode       silent (default) | toast (first stdout line as a notification) | terminal (runs in the terminal)
 //   argument   present = the launcher asks for text after selection, passed as $1 (value = prompt label)
 // The directory is rescanned each time the launcher opens (`active` follows Launcher.shown).
 // Override the directory with $LAUNCHER_COMMANDS_DIR.
@@ -79,7 +79,7 @@ QtObject {
         const path = dir + "/" + item.file
         const args = (item.argument && arg !== undefined && arg !== "") ? [arg] : []
         if (item.mode === "terminal") {
-            Quickshell.execDetached(["kitty", "--title", item.name, "-e", path].concat(args))
+            Quickshell.execDetached(["ghostty", "--title=" + item.name, "-e", path].concat(args))
         } else if (item.mode === "toast") {
             // first line of stdout (stderr too when it failed) becomes a notification; the script env is never shown
             Quickshell.execDetached(["sh", "-c",

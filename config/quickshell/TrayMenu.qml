@@ -27,7 +27,7 @@ PopupWindow {
     anchor.window: host
     anchor.rect.x: anchorX
     // a floating bar gets popupGap of air between bar and menu; docked stays flush with the bar
-    readonly property int gapToBar: Theme.barFloating ? Theme.popupGap : 0
+    readonly property int gapToBar: BarConfig.floating(tm.host ? tm.host.screen : null) ? BarConfig.popupGapOf(tm.host.screen) : 0
     anchor.rect.y: atTop ? host.height + gapToBar : -gapToBar
     anchor.rect.width: 18
     anchor.rect.height: 1

@@ -5,7 +5,7 @@ import Quickshell
 
 // Settings -> Bar: per-monitor layout editor (BarWidgets). Pick a monitor, then drag widget chips between
 // Left / Center / Right / Hidden to move, reorder or hide them; the eye button hides / shows a chip in place.
-// The bell chip is fixed at the right end of every bar and can't be moved or hidden.
+// The control center chip can be moved but not hidden.
 Item {
     id: ed
     implicitHeight: col.implicitHeight
@@ -109,7 +109,7 @@ Item {
             Label { text: chip.w.title; Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: Theme.fontSmall; color: chip.section === "hidden" ? Theme.fgDim : Theme.fg }
             Mb {
                 text: chip.section === "hidden" ? "\uf06e" : "\uf070"
-                enabledLook: true
+                enabledLook: chip.wid !== BarWidgets.pinnedId        // the control center can't be hidden
                 onClicked: chip.section === "hidden" ? BarWidgets.show(chip.editor.key, chip.wid) : BarWidgets.hide(chip.editor.key, chip.wid)
             }
         }
@@ -121,7 +121,6 @@ Item {
         required property string section
         required property string title
         property var editor
-        property bool locked: false             // the right box ends with the fixed bell chip
         readonly property var ids: editor.lay[section]
         readonly property bool horizontal: section === "hidden"
         property int dropIndex: -1
@@ -174,26 +173,9 @@ Item {
                         model: box.horizontal ? [] : box.ids
                         WChip { required property string modelData; wid: modelData; section: box.section; editor: box.editor; width: list.width }
                     }
-                    Rectangle {               // the bell: always the last chip on the right, can't move
-                        visible: box.locked
-                        width: list.width
-                        height: 34
-                        radius: box.editor.chipRadius
-                        color: Theme.alpha(Theme.fg, 0.03)
-                        border.width: 1
-                        border.color: Theme.alpha(Theme.overlay, 0.4)
-                        RowLayout {
-                            anchors { fill: parent; leftMargin: 8; rightMargin: 10 }
-                            spacing: 6
-                            Icon { text: "\uf023"; font.pixelSize: 11; color: Theme.muted }
-                            Icon { text: "\uf0f3"; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: Theme.fgDim }
-                            Label { text: "Control center"; Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: Theme.fontSmall; color: Theme.fgDim }
-                            Label { text: "fixed"; font.pixelSize: Theme.fontCaption; color: Theme.muted }
-                        }
-                    }
                 }
                 Label {
-                    visible: !box.horizontal && box.ids.length === 0 && !box.locked
+                    visible: !box.horizontal && box.ids.length === 0
                     anchors.centerIn: parent
                     text: "drop here"; color: Theme.muted; font.pixelSize: Theme.fontCaption
                 }
@@ -304,6 +286,88 @@ Item {
             }
         }
 
+        // ---- backdrop of the picked monitor's bar (linked monitors share it, like on/off and edge) ----
+        // ---- docked or floating, per bar (bars.json `floating`; linked monitors share it) ----
+        SectionHead {
+            Layout.topMargin: 6
+            title: "Style · " + (ed.linkedGroup ? ed.groupScreens.map(s => ed.screenTitle(s)).join(" + ") : ed.sel ? ed.screenTitle(ed.sel) : "")
+        }
+        SettingRow {
+            title: "Bar mode"
+            titleWidth: 120
+            opacity: ed.sel && BarConfig.enabled(ed.sel) ? 1 : 0.45
+            Segmented {
+                values: [true, false]
+                labels: ["Floating", "Docked"]
+                objectNames: ["btn-floating", "btn-docked"]
+                current: ed.sel ? BarConfig.floating(ed.sel) : false
+                enabledLook: ed.sel ? BarConfig.enabled(ed.sel) : false
+                inset: 18
+                segHeight: 24
+                segWidth: 78
+                onPicked: v => { if (ed.sel && BarConfig.enabled(ed.sel)) BarConfig.set(ed.sel, "floating", v) }
+            }
+            Label {
+                text: ed.sel && BarConfig.floating(ed.sel) ? "gap to the edges, rounded" : "flush, square"
+                color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.fillWidth: true; elide: Text.ElideRight
+            }
+        }
+        SectionHead {
+            Layout.topMargin: 6
+            title: "Backdrop · " + (ed.linkedGroup ? ed.groupScreens.map(s => ed.screenTitle(s)).join(" + ") : ed.sel ? ed.screenTitle(ed.sel) : "")
+            detail: "transparent when flush"
+            Toggle {
+                checked: ed.sel ? BarConfig.transparentFlush(ed.sel) : false
+                enabledLook: ed.sel ? BarConfig.enabled(ed.sel) : false
+                onToggled: want => { if (ed.sel) BarConfig.set(ed.sel, "transparentFlush", want) }
+            }
+        }
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            color: Theme.muted
+            font.pixelSize: Theme.fontCaption
+            text: "When on, the bar draws no glass, fill, border or blur while it sits flush with the screen edge (docked bar, or compacted by a maximized window); the chips stay. A floating bar looks as usual. With a docked bar the padding below also applies."
+        }
+
+        // padding of the bar in that mode (docked + transparent when flush): Auto = 3 x the window gap, or a manual total
+        SettingRow {
+            id: padRow
+            readonly property bool active: ed.sel ? BarConfig.flushMode(ed.sel) : false
+            readonly property bool auto: ed.sel ? BarConfig.flushPadding(ed.sel) === "auto" : true
+            readonly property int total: ed.sel ? BarConfig.padTotal(ed.sel) : 0
+            title: "Bar padding"
+            titleWidth: 120
+            opacity: active ? 1 : 0.45
+            Segmented {
+                values: [true, false]
+                labels: ["Auto", "Manual"]
+                objectNames: ["btn-pad-auto", "btn-pad-manual"]
+                current: padRow.auto
+                enabledLook: padRow.active
+                inset: 18
+                segHeight: 24
+                segWidth: 70
+                onPicked: v => { if (padRow.active && ed.sel) BarConfig.set(ed.sel, "flushPadding", v ? "auto" : padRow.total) }
+            }
+            Slider {
+                wheel: false
+                objectName: "slider-pad"
+                Layout.fillWidth: true
+                dim: padRow.auto || !padRow.active
+                value: padRow.total / BarConfig.flushPadManualMax
+                onMoved: v => { if (padRow.active && ed.sel) BarConfig.set(ed.sel, "flushPadding", Math.round(v * BarConfig.flushPadManualMax / 2) * 2) }
+            }
+            Label { text: padRow.total + " px"; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
+        }
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            color: Theme.muted
+            font.pixelSize: Theme.fontCaption
+            text: "Total space above and below the chips while the backdrop is gone (docked bar). Auto is three times the gap between windows (4 to 16 px per side); Manual is 0 to 48 px. The bar is chip height plus this, windows start right at its edge."
+        }
+
         // ---- layout of the picked monitor: actions, preview, editor ----
         SectionHead {
             Layout.topMargin: 6
@@ -342,7 +406,7 @@ Item {
             id: preview
             Layout.fillWidth: true
             implicitHeight: 34
-            radius: Theme.barFloating ? Theme.radiusPage : 0     // docked bar = square, like the real one
+            radius: BarConfig.floating(ed.sel) ? Theme.radiusPage : 0     // docked bar = square, like the real one
             color: Theme.alpha(Theme.bg, Theme.barFill)
             border.width: 1
             border.color: Theme.alpha(Theme.overlay, 0.55)
@@ -363,7 +427,6 @@ Item {
                 anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
                 spacing: 3
                 Repeater { model: ed.lay.right; Mini { required property string modelData; glyph: BarWidgets.info(modelData).icon } }
-                Mini { glyph: "\uf0f3"; color: Theme.alpha(Theme.accent, 0.18) }
             }
         }
 
@@ -373,7 +436,7 @@ Item {
             spacing: 10
             SectionBox { Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop; section: "left";   title: "Left";   editor: ed }
             SectionBox { Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop; section: "center"; title: "Center"; editor: ed }
-            SectionBox { Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop; section: "right";  title: "Right";  editor: ed; locked: true }
+            SectionBox { Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop; section: "right";  title: "Right";  editor: ed }
         }
         SectionBox { Layout.fillWidth: true; section: "hidden"; title: "Hidden"; editor: ed }
 
@@ -382,7 +445,7 @@ Item {
             wrapMode: Text.WordWrap
             color: Theme.muted
             font.pixelSize: Theme.fontCaption
-            text: "Drag chips between the columns to move or reorder them, onto Hidden to hide them (or use the eye). Monitors without their own layout use the default one; changes apply to the bar right away. Linked monitors (the chain button between two cards) share one layout, one on/off switch and one edge: an edit on any of them applies to all. The last bar can't be turned off: its bell chip is the way back into Settings."
+            text: "Drag chips between the columns to move or reorder them, onto Hidden to hide them (or use the eye). Monitors without their own layout use the default one; changes apply to the bar right away. Linked monitors (the chain button between two cards) share one layout, one on/off switch and one edge: an edit on any of them applies to all. The control center chip can be moved like the others but not hidden, and the last bar can't be turned off: the control center is the way back into Settings."
         }
 
     }

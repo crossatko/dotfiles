@@ -5,15 +5,12 @@ import Quickshell.Networking
 import Quickshell.Bluetooth
 import Quickshell.Services.Pipewire
 
-// Control + notification center: quick toggles, volume / microphone, brightness, then the notification history.
+// Control center: quick toggles (incl. do not disturb), volume / microphone, brightness. The notification list is NotifPanel (clock chip).
 GridLayout {
     id: cc
     columns: 1
     rowSpacing: 12
     columnSpacing: 0
-    // The control section hangs next to the bar and the notifications sit beyond it: panel at the
-    // bottom -> notifications on top, control center at the bottom; bar at the top -> reversed.
-    readonly property bool barBottom: Popups.edgeOf(Popups.screen) !== "top"
 
     PwObjectTracker { objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource] }
     readonly property var sink: Pipewire.defaultAudioSink ? Pipewire.defaultAudioSink.audio : null
@@ -28,7 +25,6 @@ GridLayout {
     ColumnLayout {
         id: controlSec
         Layout.fillWidth: true
-        Layout.row: cc.barBottom ? 2 : 0
         spacing: 12
 
         PanelHeader {
@@ -82,60 +78,5 @@ GridLayout {
 
         AudioSection { Layout.fillWidth: true }
         BrightnessSection { Layout.fillWidth: true }
-    }
-
-    Rectangle {
-        Layout.fillWidth: true
-        Layout.row: 1
-        implicitHeight: 1
-        color: Theme.alpha(Theme.overlay, 0.5)
-    }
-
-    ColumnLayout {
-        id: notifSec
-        Layout.fillWidth: true
-        Layout.fillHeight: true               // takes whatever the minimum panel height leaves over
-        Layout.row: cc.barBottom ? 0 : 2
-        spacing: 12
-
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 6
-            Label { text: "Notifications"; font.pixelSize: 15; font.bold: true; Layout.fillWidth: true }
-            Label { visible: Notifs.count > 0; text: Notifs.count; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
-            Btn { text: "Clear"; enabledLook: Notifs.count > 0; onClicked: Notifs.clearAll() }
-        }
-
-        ListView {
-            id: list
-            Layout.fillWidth: true
-            Layout.fillHeight: true               // takes whatever the minimum panel height leaves over
-            Layout.minimumHeight: 52
-            Layout.preferredHeight: Notifs.count === 0 ? 52 : Math.min(contentHeight, 360)
-            clip: true
-            spacing: 0                                       // the gap is part of each row, so it collapses with it
-            model: Notifs.all.values.slice().reverse()      // newest first
-            delegate: Item {
-                id: row
-                required property var modelData
-                required property int index
-                width: list.width
-                height: (card.implicitHeight + (index < list.count - 1 ? 8 : 0)) * card.collapse
-                clip: card.leaving
-                NotifCard {
-                    id: card
-                    n: row.modelData
-                    width: row.width
-                }
-            }
-
-            Label {
-                anchors.centerIn: parent
-                visible: Notifs.count === 0
-                text: Notifs.dnd ? "Do not disturb is on" : "No notifications"
-                color: Theme.muted
-            }
-        }
     }
 }

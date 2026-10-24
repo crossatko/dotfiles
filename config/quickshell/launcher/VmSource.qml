@@ -13,7 +13,7 @@ import Quickshell.Io
 //               running = `vm-ctl focus` (Hyprland focus by qemu PID / SPICE viewer). Polled every 2 s while the section is shown.
 //   Ctrl+K:     stopped: SPICE viewer / headless start, Snapshots (nested level), Open VM folder, Edit config, Delete VM (confirm,
 //               gio trash); running: Shut down (ACPI), Force stop (confirm), Open VM folder, Edit config.
-//   picking an OS leaf opens kitty running `vm-ctl create-run` (quickget in the VM folder, progress visible, toast at the end).
+//   picking an OS leaf opens the terminal running `vm-ctl create-run` (quickget in the VM folder, progress visible, toast at the end).
 //   "From local ISO..." (first row of New VM): *.iso in isoDirs ($LAUNCHER_ISO_DIRS, colon list; else config.json "isoDirs"; else
 //               ~/Downloads, ~/ISOs, the VM folder; 2 levels deep, newest first); typing "/..." or "~/..." browses paths instead
 //               (`vm-ctl isopath`, unranked; folder rows descend). Picking one opens a form level (name, guest type, disk size,
@@ -574,7 +574,7 @@ QtObject {
         } else if (k === "vm-form-download") {
             const args = [helper, "create-run", dir, f.os, f.rel].concat(f.ed ? [f.ed] : [])
             for (const [opt, v] of [["--ram", f.ram], ["--cores", f.cores], ["--disk", f.size]]) if (v !== "auto") args.push(opt, v)
-            Quickshell.execDetached(["kitty", "--title", "New VM: " + f.label, "--directory", dir].concat(args))
+            Quickshell.execDetached(["ghostty", "--title=New VM: " + f.label, "--working-directory=" + dir, "-e"].concat(args))
             stack = []; form = null
             changed(); finished()
             return true
@@ -645,7 +645,7 @@ QtObject {
         case "vm-delete": ctl(["delete", dir, n]); mark(n, "moving to the trash...", false, 15000); return "keep"
         case "vm-folder": Quickshell.execDetached(["xdg-open", item.vmdir || dir]); return true
         case "vm-edit":
-            Quickshell.execDetached(["sh", "-c", "exec kitty --directory \"$(dirname -- \"$1\")\" -e \"${EDITOR:-nvim}\" \"$1\"", "sh", item.conf])
+            Quickshell.execDetached(["sh", "-c", "exec ghostty --working-directory=\"$(dirname -- \"$1\")\" -e \"${EDITOR:-nvim}\" \"$1\"", "sh", item.conf])
             return true
         case "vm-attach":
             stack = stack.concat([{ level: "iso", mode: "attach", vm: n, selId: item.id }])

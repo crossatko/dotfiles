@@ -10,8 +10,10 @@ import Quickshell.Io
 // Older files ({ "<widget id>": false, ... } = hidden) are read as the default layout with those widgets hidden.
 // Every layout is normalized on load: unknown ids are dropped, duplicates removed, and registry ids the
 // layout doesn't mention yet are appended to their default section, so adding a widget never breaks a saved
-// layout. The notifications / control-center chip is not part of the layout: it always sits at the right
-// end of every bar (it is the way into Settings, so it can never be hidden).
+// layout. The notifications / control-center chip (`controlcenter`) is a normal widget that can be moved and
+// reordered, with one exception: it can never be hidden (it is the way into Settings), so `move` refuses
+// "hidden" for it and `normalize` puts it back in its default section when a file lists it as hidden. Files
+// that predate it get it appended at the right end, where it always was.
 Singleton {
     id: root
 
@@ -31,8 +33,11 @@ Singleton {
         { id: "network",    title: "Network",      icon: "\uf1eb", section: "right" },
         { id: "bluetooth",  title: "Bluetooth",    icon: "\uf293", section: "right" },
         { id: "tray",       title: "Tray",         icon: "\uf0c9", section: "right" },
-        { id: "clock",      title: "Clock",        icon: "\uf017", section: "right" }
+        { id: "calendar",   title: "Calendar",     icon: "\uf073", section: "right", before: "clock" },   // icon-only chip; a layout file without it gets it right before the clock
+        { id: "clock",      title: "Clock",        icon: "\uf017", section: "right" },   // opens the notification center
+        { id: "controlcenter", title: "Control center", icon: "\uf0f3", section: "right" }   // last = rightmost by default; never hideable
     ]
+    readonly property string pinnedId: "controlcenter"
     readonly property var sections: ["left", "center", "right", "hidden"]
 
     function info(id) { return widgets.find(w => w.id === id) || { id: id, title: id, icon: "", section: "right" } }
@@ -43,8 +48,15 @@ Singleton {
         if (l && typeof l === "object")
             for (const s of sections)
                 for (const id of (Array.isArray(l[s]) ? l[s] : []))
-                    if (typeof id === "string" && !seen[id] && widgets.some(w => w.id === id)) { seen[id] = true; out[s].push(id) }
-        for (const w of widgets) if (!seen[w.id]) out[w.section].push(w.id)
+                    if (typeof id === "string" && !seen[id] && widgets.some(w => w.id === id) && !(s === "hidden" && id === pinnedId)) { seen[id] = true; out[s].push(id) }
+        // widgets the layout doesn't mention yet: appended to their default section; those with `before` go right
+        // before that widget wherever it is (so a new widget sits next to its neighbour in an old layout file)
+        for (const w of widgets) if (!seen[w.id] && !w.before) out[w.section].push(w.id)
+        for (const w of widgets) if (!seen[w.id] && w.before) {
+            const s = sections.find(k => out[k].indexOf(w.before) >= 0 && k !== "hidden")
+            if (s) out[s].splice(out[s].indexOf(w.before), 0, w.id)
+            else out[w.section].push(w.id)
+        }
         return out
     }
     readonly property var defaultLayout: normalize(null)        // today's bar: workspaces left, the rest right
@@ -102,6 +114,7 @@ Singleton {
     // put `id` into `section` at `index` (index counted in the list as it is before the move; -1 = end)
     function move(key, id, section, index) {
         if (sections.indexOf(section) < 0) return
+        if (id === pinnedId && section === "hidden") return        // the way into Settings stays on the bar
         const l = copy(layoutFor(key))
         const from = sectionOf(l, id)
         if (!from) return

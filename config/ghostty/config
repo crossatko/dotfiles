@@ -5,7 +5,8 @@ font-size = 18
 # The Wide variant fills 2 cells x the font's natural height (adjust-cell-height adds bands above/below).
 font-codepoint-map = U+1FA70-U+1FAD6=WC3 Icons Wide
 font-codepoint-map = U+1F7E0-U+1F7E6=WC3 Icons Wide
-adjust-cell-height = 0
+# Linux: kitty's modify_font cell_height 110%; macos.conf overrides it
+adjust-cell-height = 2
 adjust-cell-width = 0
 
 # --- Colors: generated, edit ~/.config/theme/theme.toml ---
@@ -16,7 +17,12 @@ background-opacity = 0.8
 window-padding-x = 0
 window-padding-y = 0
 window-padding-balance = false
-window-decoration = true
+# Linux (Hyprland draws the borders): no GTK titlebar; macos.conf puts the default back
+window-decoration = none
+# kitty: confirm_os_window_close 0; macos.conf puts the default back
+confirm-close-surface = false
+# Per-machine overrides (git-ignored, e.g. background-opacity on the battlestation, like kitty/host.py)
+config-file = ?~/.config/ghostty/host.local
 
 # --- Scrollback ---
 scrollback-limit = 10000

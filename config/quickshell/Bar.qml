@@ -24,7 +24,10 @@ PanelWindow {
     anchors { left: true; right: true; top: atTop; bottom: !atTop }
     // Always full width and tall enough for the floating gap: the visible bar (`frame`, below) moves inside the window,
     // so compacting never resizes the layer surface. Only `frame` takes input.
-    implicitHeight: Theme.barHeight + Theme.barGap
+    readonly property real barH: BarConfig.heightOf(bar.screen)        // the bar proper (Theme.barHeight, or the flush-mode height)
+    readonly property real padSide: BarConfig.padSide(bar.screen)       // chip inset (Theme.barPad, or the flush-mode padding)
+    readonly property real barGap: BarConfig.barGapOf(bar.screen)       // floating gap to the edges (0 docked), per bar
+    implicitHeight: barH + barGap
     mask: Region { item: frame }
     exclusiveZone: -1                  // full width even next to a reserved strip; BarReserve.qml reserves the space
     color: "transparent"
@@ -39,8 +42,8 @@ PanelWindow {
     readonly property bool compact: fsMonitor?.activeWorkspace?.lastIpcObject?.hasfullscreen ?? false
     property real compactState: compact ? 1 : 0
     Behavior on compactState { NumberAnimation { duration: Theme.popupMoveMs; easing.type: Theme.popupEaseClose } }
-    readonly property real gapNow: Theme.barGap * (1 - compactState)
-    readonly property real radiusNow: Theme.barRadius * (1 - compactState)
+    readonly property real gapNow: barGap * (1 - compactState)
+    readonly property real radiusNow: BarConfig.radiusOf(bar.screen) * (1 - compactState)
     onGapNowChanged: Popups.setBarGap(bar.screen.name, gapNow)
     Connections {
         target: Hyprland
@@ -55,7 +58,11 @@ PanelWindow {
     // Theme.barRadius corners) as the blur region. The window itself is already inset by the floating gap, so the
     // transparent gap around a floating bar is never blurred. Chips sit flat on it (no glass of their own).
     BackgroundEffect.blurRegion: Region { regions: glass.instances }
-    Glass { id: glass; root: bar.contentItem }
+    // Option "transparent when flush" (Settings > Bar, bars.json `transparentFlush`, per bar): the backdrop fades with the
+    // floating gap, so it is gone exactly when gapNow is 0 (docked, or compacted); `hidden` then also drops the blur region.
+    readonly property bool transparentFlush: BarConfig.transparentFlush(bar.screen)
+    readonly property real backdropOpacity: !transparentFlush ? 1 : barGap > 0 ? Math.max(0, Math.min(1, gapNow / barGap)) : 0
+    Glass { id: glass; root: bar.contentItem; hidden: bar.backdropOpacity <= 0.004 }
 
     // ---- shared state -------------------------------------------------------
     property string cpu: "0%"
@@ -269,12 +276,12 @@ PanelWindow {
     // Which widget sits in which section is BarWidgets' per-monitor layout (edited in Settings -> Bar).
     // Every widget is a Component below, keyed by its id; each section is a Row of Loaders over its id list.
     // A widget that has nothing to show right now (no player, empty tray) sets `show: false` and its Loader
-    // hides, so a Row leaves no gap. The bell (control center) chip is not in the layout: always last on the right.
+    // hides, so a Row leaves no gap. The bell (control center) chip is a widget like the rest, but never hideable (BarWidgets.pinnedId).
     readonly property var layout: BarWidgets.layoutFor(BarWidgets.keyOf(bar.screen))
     readonly property var widgetComps: ({
         workspaces: wsComp, recording: recComp, media: mediaComp, caffeine: caffeineComp, cpu: cpuComp, memory: memComp,
         homeassistant: haComp, ai: aiComp, volume: volumeComp, network: netComp, bluetooth: btComp,
-        tray: trayComp, clock: clockComp
+        tray: trayComp, calendar: calComp, clock: clockComp, controlcenter: bellComp
     })
 
 
@@ -284,14 +291,15 @@ PanelWindow {
         id: frame
         x: bar.gapNow
         width: bar.width - 2 * bar.gapNow
-        height: Theme.barHeight
-        y: bar.atTop ? bar.gapNow : bar.height - Theme.barHeight - bar.gapNow
+        height: bar.barH
+        y: bar.atTop ? bar.gapNow : bar.height - bar.barH - bar.gapNow
 
         // ---- visuals --------------------------------------------------------------
         Rectangle {
             anchors.fill: parent
             readonly property bool isGlassItem: true
             radius: bar.radiusNow
+            opacity: bar.backdropOpacity
             color: Theme.alpha(Theme.bg, Theme.barFill)
             border.width: Theme.barBorder
             border.color: Theme.alpha(Theme.overlay, 0.55)
@@ -306,7 +314,7 @@ PanelWindow {
         // a Repeater of Loaders over one section's id list (copied per section: an inline component here broke hot reload)
         Row {
             id: leftSec
-            anchors { left: parent.left; leftMargin: Theme.barPad; verticalCenter: parent.verticalCenter }
+            anchors { left: parent.left; leftMargin: bar.padSide; verticalCenter: parent.verticalCenter }
             spacing: 4
             Repeater {
                 model: bar.layout.left
@@ -338,7 +346,7 @@ PanelWindow {
         }
         Row {
             id: rightSec
-            anchors { right: parent.right; rightMargin: Theme.barPad; verticalCenter: parent.verticalCenter }
+            anchors { right: parent.right; rightMargin: bar.padSide; verticalCenter: parent.verticalCenter }
             spacing: 4
             Repeater {
                 model: bar.layout.right
@@ -347,15 +355,6 @@ PanelWindow {
                     sourceComponent: bar.widgetComps[modelData] || null
                     visible: item !== null && (item as Chip)?.show !== false
                 }
-            }
-
-            Chip {
-                id: bellChip               // always shown: it opens the control center, whose gear opens Settings
-                Component.onCompleted: bar.reg("center", bellChip)
-                active: bar.isOpen("center")
-                onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("center", bellChip)
-                BarIcon { text: Notifs.dnd ? "\uf1f6" : Notifs.count > 0 ? "\uf8fa" : "\uf0c9"; color: Notifs.dnd ? Theme.muted : Notifs.count > 0 ? Theme.accent : Theme.fg }
-                BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: Theme.accent; font.pixelSize: Theme.fontCaption }
             }
         }
     }
@@ -582,10 +581,35 @@ PanelWindow {
         id: clockComp
         Chip {
             id: clockChip
-            Component.onCompleted: bar.reg("cal", clockChip)
+            // the clock opens the notification center; the calendar is its own chip (calComp)
+            Component.onCompleted: bar.reg("notif", clockChip)
+            active: bar.isOpen("notif")
+            onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("notif", clockChip)
+            BarIcon { visible: Notifs.dnd || Notifs.count > 0; text: Notifs.dnd ? "\uf1f6" : "\uf8fa"; color: Notifs.dnd ? Theme.muted : Theme.accent }
+            BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: Theme.accent; font.pixelSize: Theme.fontCaption }
+            BarLabel { text: Qt.formatDateTime(clock.date, "yyyy-MM-dd HH:mm"); color: Notifs.dnd ? Theme.muted : Theme.fg }
+        }
+    }
+
+    Component {
+        id: calComp
+        Chip {
+            id: calChip
+            Component.onCompleted: bar.reg("cal", calChip)
             active: bar.isOpen("cal")
-            onClicked: mouse => mouse.button === Qt.RightButton ? bar.run(["thunderbird", "--calendar"]) : bar.pop("cal", clockChip)
-            BarLabel { text: Qt.formatDateTime(clock.date, "yyyy-MM-dd HH:mm") }
+            onClicked: mouse => mouse.button === Qt.RightButton ? bar.run(["thunderbird", "--calendar"]) : bar.pop("cal", calChip)
+            BarIcon { text: "\uf073"; color: Theme.fg }
+        }
+    }
+
+    Component {
+        id: bellComp
+        Chip {
+            id: bellChip               // opens the control center, whose gear opens Settings; popups centre on it wherever it sits
+            Component.onCompleted: bar.reg("center", bellChip)
+            active: bar.isOpen("center")
+            onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("center", bellChip)
+            BarIcon { text: "\uf0c9"; color: Notifs.dnd ? Theme.muted : Theme.fg }
         }
     }
 }

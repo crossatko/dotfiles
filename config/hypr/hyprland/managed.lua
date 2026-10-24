@@ -20,7 +20,8 @@
 --     Quickshell Hyprland.monitorFor(screen).description), or the connector name when the description
 --     is not a valid key. Valid key: 1-96 printable ASCII characters without '"' and '\'. At most 16
 --     entries, values true/false only; anything else makes the whole map "not set".
---   barFloating only matters for scripts/pip-reserve.lua (the bar reserve, see M.get())
+--   barFloating is only the DEFAULT for bars without their own bars.json `floating` (docked / floating is per bar now,
+--     Settings > Bar); see M.bar_floating / M.bar_reserve, used by apply_bar_gaps and scripts/pip-reserve.lua
 --   scripts/pip-reserve.lua also keeps the pinned video box gaps_out away from the screen edges and the
 --   bar (M.edge_margins()); layout_apply() re-fits it through pip_bar_changed()
 -- A missing key leaves the hand-written value alone. Values are clamped and rounded; anything odd
@@ -870,6 +871,158 @@ function M.smart_enabled(mon, s)
 	return ok and on == true
 end
 
+-- ---------------------------------------------------------------- bar-side gap (per monitor)
+
+-- Settings > Bar > Backdrop "transparent when flush" (bars.json `transparentFlush`, per monitor) with a DOCKED bar: the bar
+-- draws no backdrop, so the outer gap on the bar's own side (top for a top bar, bottom for a bottom bar) is 0 on that
+-- monitor and tiled windows start right at the bar's reserved edge. The other three sides keep gaps_out. Done with
+-- workspace rules on the monitor's selector, replaced in place (hl.workspace_rule with the same workspace string replaces
+-- the rule) at every layout_apply(); Quickshell calls that after bars.json / appearance.json writes.
+local BAR_FALLBACK = { ["DP-5"] = "bottom", ["DP-3"] = "bottom", ["Virtual-1"] = "bottom", ["HDMI-A-1"] = "top" }
+
+-- HL.Monitor -> the bar's edge ("top" | "bottom" | "none") and whether transparentFlush is on for it. Mirrors
+-- Quickshell BarConfig (monitors are matched by model and serial inside the description; the file is tiny and flat).
+-- Never raises.
+function M.bar_state(mon)
+	local ok, edge, flush, pad, floating = pcall(function()
+		local text = M.read_small_file((os.getenv("HOME") or "") .. "/.local/state/quickshell/bars.json", 65536)
+		if text then
+			local desc = mon.description or ""
+			for key, body in text:gmatch('"([^"]+)"%s*:%s*(%b{})') do
+				local model, serial = key:match("^(.-)|(.*)$")
+				-- a monitor without a model is keyed by its connector name (BarConfig.keyOf)
+				if
+					key == mon.name
+					or (model and model ~= "" and desc:find(model, 1, true) and (serial == "" or desc:find(serial, 1, true)))
+				then
+					if not body:find('"enabled"%s*:%s*true') then
+						return "none", false
+					end
+					return body:match('"edge"%s*:%s*"(%a+)"') == "top" and "top" or "bottom",
+						body:find('"transparentFlush"%s*:%s*true') ~= nil,
+						tonumber(body:match('"flushPadding"%s*:%s*(%d+)')),
+						({ ["true"] = true, ["false"] = false })[body:match('"floating"%s*:%s*(%a+)') or ""]
+				end
+			end
+		end
+		return BAR_FALLBACK[mon.name] or "none", false
+	end)
+	if ok then
+		return edge, flush == true, pad, floating
+	end
+	return "none", false, nil, nil
+end
+
+-- Is the bar on this monitor floating? Per bar (bars.json `floating`, Settings > Bar), else the global appearance.json
+-- barFloating (the default for bars without their own value, same as Quickshell BarConfig.floating). `s` = settings.
+function M.bar_floating(mon, s)
+	s = type(s) == "table" and s or M.read()
+	local _, _, _, floating = M.bar_state(mon)
+	if type(floating) == "boolean" then
+		return floating
+	end
+	return s.barFloating == true
+end
+
+M.CHIP_HEIGHT = 28 -- Theme.qml chipHeight
+M.FLUSH_PAD_MIN, M.FLUSH_PAD_MAX, M.FLUSH_PAD_MANUAL_MAX = 8, 32, 48 -- BarConfig.qml flushPadMin / flushPadMax / flushPadManualMax
+
+-- The bar's height on `mon` (-> number). A docked bar with "transparent when flush" is the chip height plus a padding: the
+-- bars.json `flushPadding` number (0..48 total), else 3 x the visible window gap (2 x gaps_in) clamped to 8..32; even.
+-- Mirrors Quickshell BarConfig.heightOf. Otherwise M.BAR_HEIGHT.
+-- The screen space the bar on `mon` takes from its edge: its height plus the floating gap (gaps_out) when that bar floats.
+-- Per bar, so two monitors may differ. -> number. Never raises (falls back to the plain docked bar).
+function M.bar_reserve(mon, s)
+	local ok, r = pcall(function()
+		s = type(s) == "table" and s or M.read()
+		local gap = 0
+		if M.bar_floating(mon, s) then
+			gap = M.effective(s).gapsOut or M.BAR_GAP_DEFAULT
+		end
+		return M.bar_height(mon, s) + gap
+	end)
+	return ok and type(r) == "number" and r or M.BAR_HEIGHT
+end
+
+function M.bar_height(mon, s)
+	local ok, h = pcall(function()
+		s = type(s) == "table" and s or M.read()
+		if M.bar_flush_edge(mon, s) == nil then
+			return M.BAR_HEIGHT
+		end
+		local _, _, pad = M.bar_state(mon)
+		if pad == nil then
+			local gi = M.targets(s).gaps_in
+			if type(gi) ~= "number" then
+				gi = type(M.baseline) == "table" and M.baseline.gaps_in or 0
+			end
+			gi = type(gi) == "number" and gi or 0
+			pad = math.max(M.FLUSH_PAD_MIN, math.min(M.FLUSH_PAD_MAX, 3 * 2 * gi))
+		end
+		pad = math.max(0, math.min(M.FLUSH_PAD_MANUAL_MAX, pad))
+		return M.CHIP_HEIGHT + (pad - pad % 2)
+	end)
+	return ok and math.tointeger(h) or M.BAR_HEIGHT
+end
+
+-- Is the bar-side gap 0 on this monitor? -> edge ("top" | "bottom") or nil. `s` = settings (read when nil).
+function M.bar_flush_edge(mon, s)
+	s = type(s) == "table" and s or M.read()
+	if M.bar_floating(mon, s) then
+		return nil
+	end
+	local edge, flush = M.bar_state(mon)
+	if flush and (edge == "top" or edge == "bottom") then
+		return edge
+	end
+	return nil
+end
+
+local bar_gap_seen = {}
+-- Rules per monitor: A (>= 2 tiled windows, none maximized: the lone / maximized cases belong to the smart-gaps rules) always,
+-- B (every workspace of the monitor) only where smart gaps are off, so a lone window follows the rule too.
+function M.apply_bar_gaps(s)
+	s = type(s) == "table" and s or M.read()
+	local ok, mons = pcall(hl.get_monitors)
+	if not ok or type(mons) ~= "table" then
+		return false
+	end
+	local m = M.edge_margins(M.effective(s))
+	local count = 0
+	for _, mon in ipairs(mons) do
+		local key = M.monitor_key(mon)
+		local sel = key and M.monitor_selector(mon, mons)
+		if sel ~= nil then
+			local edge = M.bar_flush_edge(mon, s)
+			local active = edge ~= nil
+			if active or bar_gap_seen[sel] then
+				if not bar_gap_seen[sel] then
+					count = 0
+					for _ in pairs(bar_gap_seen) do
+						count = count + 1
+					end
+					if count >= M.SMART_SETS_MAX then
+						goto continue
+					end
+				end
+				bar_gap_seen[sel] = true
+				local g = { top = m.top, right = m.right, bottom = m.bottom, left = m.left }
+				if edge ~= nil then
+					g[edge] = 0
+				end
+				pcall(hl.workspace_rule, { workspace = "m[" .. sel .. "]w[tv2-99]f[-1]", gaps_out = g, enabled = active })
+				pcall(hl.workspace_rule, {
+					workspace = "m[" .. sel .. "]",
+					gaps_out = g,
+					enabled = active and not M.smart_for(s, key),
+				})
+			end
+		end
+		::continue::
+	end
+	return true
+end
+
 -- settings -> writes the four options: set keys are written, keys that were overridden before and are
 -- no longer set get their baseline back, everything else is left alone. -> true, or false plus the first error.
 function M.apply_options(s)
@@ -903,6 +1056,7 @@ function M.apply(s)
 	if not ok and ok_all then
 		ok_all, first_err = false, err
 	end
+	pcall(M.apply_bar_gaps, s)
 	return ok_all, first_err
 end
 
@@ -953,12 +1107,15 @@ do
 	})
 end
 pcall(M.apply_smart, initial)
+pcall(M.apply_bar_gaps, initial)
 
 -- Monitor hot-plug: register rules for new monitors (re-reads the file). The subscriptions of an
 -- earlier load are removed first, in case a reload keeps the Lua state (no double handlers).
 function M.on_monitors_changed()
 	return pcall(function()
-		M.apply_smart((M.read()))
+		local s = M.read()
+		M.apply_smart(s)
+		M.apply_bar_gaps(s)
 	end)
 end
 do

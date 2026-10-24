@@ -40,6 +40,47 @@ Singleton {
     }
     function enabled(s) { return entry(s).enabled === true }
     function edge(s) { return entry(s).edge === "top" ? "top" : "bottom" }
+    // per bar: docked or floating (Settings > Bar). bars.json `floating` (bool); absent = the default for bars without their own
+    // value: Theme.barFloating (appearance.json `barFloating` if present, else theme.toml bar_floating), so old state looks the same.
+    // Everything that used the global value reads these per-screen functions (the bar a screen has, or the default for screens without).
+    function floating(s) {
+        const v = s ? entry(s).floating : undefined
+        return typeof v === "boolean" ? v : Theme.barFloating
+    }
+    function barGapOf(s) { return floating(s) ? Theme.gapOut : 0 }                              // floating bar: distance from the edges
+    function radiusOf(s) { return floating(s) ? Theme.radius : 0 }
+    function popupGapOf(s) { return floating(s) ? Math.max(4, Theme.gapOut) : 8 }                // popup card <-> bar
+    function edgeGapOf(s) { return floating(s) ? Theme.gapOut : 12 }                             // popups / toasts <-> screen edge
+    // per bar: no glass / fill / border / blur behind the bar while it is flush with the screen edge (docked, or compacted
+    // by a fullscreen window). Absent = false, so old files and other readers behave as before.
+    function transparentFlush(s) { return entry(s).transparentFlush === true }
+    // "Flush mode": option on and the bar docked. The bar has no backdrop then (Bar.qml), Hyprland's outer gap on the bar's side
+    // is 0 on that monitor (hypr/hyprland/managed.lua apply_bar_gaps) and the bar's height follows the window gap: chip height +
+    // 3 x the visible gap between windows (2 x gaps_in), clamped to flushPadMin..flushPadMax in total, split evenly above and
+    // below the chips (4..16 px per side: chips never touch the edge, a big gap never makes a giant bar). Otherwise the
+    // plain bar (Theme.barHeight, 6 px per side). managed.lua bar_height() mirrors this for the pinned video box.
+    readonly property int flushPadMin: 8
+    readonly property int flushPadMax: 32
+    function flushMode(s) { return !!s && enabled(s) && transparentFlush(s) && !floating(s) }
+    // bars.json `flushPadding`: absent / "auto" = 3 x gap (clamped), or a number = the total vertical padding in px (0..flushPadManualMax)
+    readonly property int flushPadManualMax: 48
+    function flushPadding(s) {
+        const v = entry(s).flushPadding
+        return typeof v === "number" && isFinite(v) ? Math.max(0, Math.min(flushPadManualMax, Math.round(v))) : "auto"
+    }
+    function autoPad() {
+        const t = Math.max(flushPadMin, Math.min(flushPadMax, 3 * 2 * Theme.gapIn))
+        return t - t % 2
+    }
+    function padTotal(s) {
+        if (!flushMode(s)) return Theme.barHeight - Theme.chipHeight
+        const p = flushPadding(s)
+        const t = p === "auto" ? autoPad() : p
+        return t - t % 2
+    }
+    function padSide(s) { return padTotal(s) / 2 }                      // chip inset inside the bar (vertical and horizontal)
+    function heightOf(s) { return Theme.chipHeight + padTotal(s) }      // the bar proper
+    function reserveOf(s) { return heightOf(s) + barGapOf(s) }         // screen space the bar takes from its edge
 
     // connector name -> edge, for every screen that has a bar (what Bar, Toasts, Osd and popups consume)
     readonly property var bars: {
@@ -96,7 +137,7 @@ Singleton {
         const outside = Quickshell.screens.some(o => enabled(o) && g.indexOf(keyOf(o)) < 0)
         const on = src.enabled === true || !outside
         const d2 = JSON.parse(JSON.stringify(data))
-        for (const k of g) d2[k] = { enabled: on, edge: src.edge === "top" ? "top" : "bottom" }
+        for (const k of g) d2[k] = { enabled: on, edge: src.edge === "top" ? "top" : "bottom", transparentFlush: src.transparentFlush === true, flushPadding: src.flushPadding, floating: src.floating }
         data = d2
         saver.restart()
     }
@@ -113,12 +154,13 @@ Singleton {
 
     // Pinned video windows (PiP / mpv / Twitch player) sit flush with the screen edge when the bar is not
     // under them, so Hyprland has to re-read this file: its Lua config cannot watch it, but a Lua function
-    // can be called through `hyprctl dispatch` (hypr/scripts/pip-reserve.lua defines pip_bar_changed).
+    // can be called through `hyprctl dispatch` (hypr/scripts/pip-reserve.lua defines pip_bar_changed). layout_apply (managed.lua)
+    // runs first: it sets the bar-side gap of a docked bar with "transparent when flush" and then calls pip_bar_changed itself.
     Timer {
         id: notifier
         interval: 250                    // let the file write land first
         onTriggered: Quickshell.execDetached(["hyprctl", "dispatch",
-            "(function() if pip_bar_changed then pip_bar_changed() end return hl.dsp.exec_cmd(\"true\") end)()"])
+            "(function() if layout_apply then layout_apply() elseif pip_bar_changed then pip_bar_changed() end return hl.dsp.exec_cmd(\"true\") end)()"])
     }
 
     FileView {

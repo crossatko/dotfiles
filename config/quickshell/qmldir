@@ -74,3 +74,4 @@ NotchMask 1.0 NotchMask.qml
 MullvadSection 1.0 MullvadSection.qml
 FoldSection 1.0 FoldSection.qml
 singleton VpnSwitch 1.0 VpnSwitch.qml
+NotifHeader 1.0 NotifHeader.qml
