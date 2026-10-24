@@ -123,6 +123,12 @@ Rectangle {
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                 }
+                Label {
+                    visible: !card.toast
+                    text: Notifs.ago(n.id)
+                    color: Theme.muted
+                    font.pixelSize: Theme.fontCaption
+                }
                 Icon {
                     text: "\uf00d"
                     color: closeArea.containsMouse ? Theme.accent : Theme.muted

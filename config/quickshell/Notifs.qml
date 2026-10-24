@@ -12,6 +12,8 @@ Singleton {
     property bool dnd: false
     property var popups: []
     property var byId: ({})                 // id -> Notification, for the toast stack (ListModel holds ids)
+    property var times: ({})                // id -> arrival time (ms), shown on the notification center cards
+    property real now: Date.now()           // refreshed by `ticker` so relative times stay current
     readonly property var all: server.trackedNotifications
     readonly property int count: server.trackedNotifications.values.length
 
@@ -27,10 +29,33 @@ Singleton {
         onNotification: n => {
             n.tracked = true
             byId[n.id] = n
+            times[n.id] = Date.now()        // a replacement (same id) counts as new
+            root.now = Date.now()
             // do-not-disturb silences toasts but still files them away; critical always shows
             if (root.dnd && n.urgency !== NotificationUrgency.Critical) return
             root.popups = [n].concat(root.popups.filter(p => p.id !== n.id)).slice(0, 5)
         }
+    }
+
+    // "now", "5m", "2h", then clock time ("14:05"), with the weekday when not from today
+    function ago(id) {
+        const t = times[id]
+        if (!t) return ""
+        const m = Math.floor((now - t) / 60000)
+        if (m < 1) return "now"
+        if (m < 60) return m + "m"
+        if (m < 180) return Math.floor(m / 60) + "h"
+        const d = new Date(t)
+        return Qt.formatDateTime(d, d.toDateString() === new Date(now).toDateString() ? "HH:mm" : "ddd HH:mm")
+    }
+
+    // one shared timer for every card, only while something is tracked
+    Timer {
+        id: ticker
+        interval: 30000
+        repeat: true
+        running: root.count > 0
+        onTriggered: root.now = Date.now()
     }
 
     function dismissPopup(n) { popups = popups.filter(p => p !== n) }
