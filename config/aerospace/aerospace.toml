@@ -93,6 +93,10 @@ if.app-id = 'net.kovidgoyal.kitty'
 run = 'move-node-to-workspace 4'
 
 [[on-window-detected]]
+if.app-id = 'com.mitchellh.ghostty'
+run = 'move-node-to-workspace 4'
+
+[[on-window-detected]]
 if.app-id = 'com.apple.mail'
 run = 'move-node-to-workspace 8'
 
@@ -165,7 +169,7 @@ run = 'layout floating'
     #   SUPER+ALT                             -> cmd-ctrl-shift-
     #   SUPER+ALT+SHIFT                       -> cmd-alt-shift-
     # Regenerate this block with `python3 -I config/karabiner/generate.py --aerospace`.
-    cmd-ctrl-alt-enter = 'exec-and-forget /Applications/kitty.app/Contents/MacOS/kitty --single-instance'
+    cmd-ctrl-alt-enter = 'exec-and-forget osascript -e "if application \"Ghostty\" is running then" -e "tell application \"Ghostty\" to new window" -e "else" -e "tell application \"Ghostty\" to activate" -e "end if"'
     cmd-ctrl-alt-b = 'exec-and-forget open -na "Brave Browser" --args --new-window'
     cmd-ctrl-alt-e = 'exec-and-forget open -a Finder'
     cmd-ctrl-alt-shift-q = 'close'
