@@ -197,6 +197,9 @@ if [[ -d /opt/android-sdk ]]; then
   export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
 fi
 
+# Machine-local additions (git-ignored): installer-appended lines, per-host PATH, aliases. Keeps this file stable across machines.
+[[ -r $HOME/.zshrc.local ]] && source "$HOME/.zshrc.local"
+
 # zoxide must stay last: its doctor warns if anything after it touches the chpwd hooks.
 # Claude Code's shell snapshot keeps the `cd=z` alias but not the hook array, so mute the doctor there.
 [[ -n "$CLAUDECODE" ]] && export _ZO_DOCTOR=0
