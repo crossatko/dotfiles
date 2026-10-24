@@ -46,6 +46,23 @@ gaps.outer.bottom = 10
 gaps.outer.top = 10
 gaps.outer.right = 10
 
+# Workspaces per display (Hyprland workspaces.lua): 1-4 and 9-12 on the main display, the top row 5-8
+# on the second one. First matching entry wins; 'secondary' only exists with exactly two displays,
+# so with one (or 3+) connected the top row falls back to main.
+[workspace-to-monitor-force-assignment]
+1 = 'main'
+2 = 'main'
+3 = 'main'
+4 = 'main'
+5 = ['secondary', 'main']
+6 = ['secondary', 'main']
+7 = ['secondary', 'main']
+8 = ['secondary', 'main']
+9 = 'main'
+10 = 'main'
+11 = 'main'
+12 = 'main'
+
 # Apps pinned to a workspace (Hyprland rules.lua: chat on 7, mail on 8, media on 11). By bundle id;
 # rules for apps that aren't installed just never match.
 # Skyland extras kept off (JankyBorders border, animations and effects need the scripting addition).
@@ -61,7 +78,12 @@ shadow = 'off'
 enabled = false
 
 [gestures]
-workspace-swipe = true          # one switch per swipe (no payload needed)
+# OFF: SwipeAeroSpace does the three-finger swipe (it talks to Skyland through the
+# /tmp/bobko.aerospace-$USER.sock symlink, see launchd/swipe-socket-link.plist).
+# Reason: with the macOS three-finger swipe off, macOS mixes empty gesture events into
+# a swipe and gestures.swift follow() resets the swipe start on each one, so it never
+# switches. Keys below kept for when that is fixed upstream.
+workspace-swipe = false
 workspace-swipe-fingers = 3     # macOS three-finger horizontal swipe is off (trackpad defaults)
 workspace-swipe-distance = 120      # finger travel (trackpad points) of a whole switch, default 200
 workspace-swipe-cancel-ratio = 40   # switches after 40% of the distance (~48 pt), default 50 (100 pt)

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  At login: point SwipeAeroSpace's hardcoded AeroSpace socket path at Skyland's socket,
+  so SwipeAeroSpace drives Skyland. Waits up to 120 s for Skyland's socket. Leaves the
+  path alone while a real AeroSpace is running. Install: copy (not symlink) into
+  ~/Library/LaunchAgents, then launchctl bootstrap gui/$(id -u) <file>.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.dotfiles.swipe-socket-link</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>
+u="${USER:-$(id -un)}"
+target="/tmp/com.waxdred.skyland-$u.sock"
+link="/tmp/bobko.aerospace-$u.sock"
+i=0
+while [ $i -lt 120 ]; do
+  if /usr/bin/pgrep -x AeroSpace >/dev/null; then echo "$(date) AeroSpace running, link untouched"; exit 0; fi
+  if [ -S "$target" ]; then
+    /bin/ln -sfn "$target" "$link" &amp;&amp; echo "$(date) USER=$USER HOME=$HOME linked $link -> $target"
+    exit 0
+  fi
+  i=$((i+1)); /bin/sleep 1
+done
+echo "$(date) Skyland socket not found, gave up"
+exit 1
+        </string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/swipe-socket-link.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/swipe-socket-link.log</string>
+</dict>
+</plist>

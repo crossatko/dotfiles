@@ -1,0 +1,11 @@
+# SwipeAeroSpace (drives Skyland through the AeroSpace socket path symlink, see
+# config/aerospace/launchd/swipe-socket-link.plist). Read from
+# ~/.config/swipeareospace/config.toml (sic), which is a symlink to this directory.
+# Keys present here are read-only in its Settings window; the whole file is ignored
+# if any key or value is invalid.
+fingers = "Three"      # macOS three-finger horizontal swipe is off
+multiSwipe = false     # one workspace per swipe
+skip-empty = true      # only workspaces with windows on the focused monitor
+wrap = false
+natural = true         # default; flip if the direction feels reversed
+threshold = 1.0
