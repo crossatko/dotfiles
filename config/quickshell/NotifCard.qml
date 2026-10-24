@@ -92,7 +92,7 @@ Rectangle {
         width: 3
         height: parent.height - (inset ? 24 : 0)
         radius: inset ? width / 2 : 0
-        color: card.critical ? Theme.red : n.urgency === NotificationUrgency.Low ? Theme.muted : Theme.accent
+        color: card.critical ? Theme.red : card.n.urgency === NotificationUrgency.Low ? Theme.muted : Theme.accent
     }
 
     RowLayout {
@@ -117,7 +117,7 @@ Rectangle {
             RowLayout {
                 Layout.fillWidth: true
                 Label {
-                    text: n.appName
+                    text: card.n.appName
                     color: Theme.fgDim
                     font.pixelSize: Theme.fontCaption
                     elide: Text.ElideRight
@@ -125,7 +125,7 @@ Rectangle {
                 }
                 Label {
                     visible: !card.toast
-                    text: Notifs.ago(n.id)
+                    text: Notifs.ago(card.n.id)
                     color: Theme.muted
                     font.pixelSize: Theme.fontCaption
                 }
@@ -138,7 +138,7 @@ Rectangle {
             }
             Label {
                 Layout.fillWidth: true
-                text: n.summary
+                text: card.n.summary
                 font.bold: true
                 wrapMode: Text.Wrap
                 maximumLineCount: 2
@@ -146,8 +146,8 @@ Rectangle {
             }
             Label {
                 Layout.fillWidth: true
-                visible: n.body !== ""
-                text: n.body
+                visible: card.n.body !== ""
+                text: card.n.body
                 textFormat: Text.StyledText
                 color: Theme.fgDim
                 font.pixelSize: Theme.fontSmall
@@ -161,16 +161,17 @@ Rectangle {
                 visible: actions.count > 0
                 Repeater {
                     id: actions
-                    model: n.actions.filter(a => a.identifier !== "default")
+                    model: card.n.actions.filter(a => a.identifier !== "default")
                     Rectangle {
+                        id: actBtn
                         required property var modelData
                         radius: Math.min(Theme.inner(card.radius, 12), Math.floor(height / 3))   // like Btn: concentric, never a pill
                         color: btnGlow.hovered ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.1)
                         implicitWidth: label.implicitWidth + 20
                         implicitHeight: 28
-                        Label { id: label; anchors.centerIn: parent; text: modelData.text; font.pixelSize: Theme.fontSmall }
+                        Label { id: label; anchors.centerIn: parent; text: actBtn.modelData.text; font.pixelSize: Theme.fontSmall }
                         HoverGlow { id: btnGlow; area: btn; radius: parent.radius }
-                        MouseArea { id: btn; anchors.fill: parent; hoverEnabled: true; onClicked: modelData.invoke() }
+                        MouseArea { id: btn; anchors.fill: parent; hoverEnabled: true; onClicked: actBtn.modelData.invoke() }
                     }
                 }
             }

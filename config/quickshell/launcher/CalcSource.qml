@@ -49,11 +49,11 @@ QtObject {
     property var debounce: Timer {
         interval: 250
         onTriggered: {
-            if (src.wanted === "" || proc.running) return
+            if (src.wanted === "" || src.proc.running) return
             src.expr = src.wanted
             src.result = ""
-            proc.command = ["timeout", "2", "qalc", "-t", "--", src.normalize(src.expr)]
-            proc.running = true
+            src.proc.command = ["timeout", "2", "qalc", "-t", "--", src.normalize(src.expr)]
+            src.proc.running = true
         }
     }
 
@@ -64,7 +64,7 @@ QtObject {
                 src.result = (first === "" || /^error/i.test(first)) ? "" : first
                 src.updated()
                 // the query moved on while qalc was running
-                if (src.wanted !== "" && src.wanted !== src.expr) debounce.restart()
+                if (src.wanted !== "" && src.wanted !== src.expr) src.debounce.restart()
             }
         }
     }

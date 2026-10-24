@@ -26,7 +26,7 @@ Rectangle {
     border.color: linked ? Theme.alpha(Theme.accent, 0.85) : Theme.alpha(Theme.overlay, 0.6)
     Behavior on color { ColorAnimation { duration: 100 } }
 
-    HoverGlow { id: glow; area: area; radius: btn.radius }
+    HoverGlow { id: glow; area: hoverArea; radius: btn.radius }
     Icon {
         anchors.centerIn: parent
         text: btn.linked ? "" : ""            // link / link-slash
@@ -34,7 +34,7 @@ Rectangle {
         color: btn.linked ? Theme.accent : Theme.muted
     }
     MouseArea {
-        id: area
+        id: hoverArea
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor

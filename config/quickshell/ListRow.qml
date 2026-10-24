@@ -42,7 +42,7 @@ Rectangle {
     Behavior on implicitHeight { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
     MouseArea {
-        id: area
+        id: hoverArea
         anchors { left: parent.left; right: parent.right; top: parent.top }
         height: row.rowH
         z: -1
@@ -54,7 +54,7 @@ Rectangle {
     }
 
     // pointer-following highlight over the lighter flat hover tint (HoverGlow.qml)
-    HoverGlow { id: glow; area: area; radius: row.radius }
+    HoverGlow { id: glow; area: hoverArea; radius: row.radius }
 
     RowLayout {
         id: head

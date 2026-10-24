@@ -313,7 +313,7 @@ PanelWindow {
                 Loader {
                     required property string modelData
                     sourceComponent: bar.widgetComps[modelData] || null
-                    visible: item !== null && item.show !== false
+                    visible: item !== null && (item as Chip)?.show !== false
                 }
             }
         }
@@ -332,7 +332,7 @@ PanelWindow {
                 Loader {
                     required property string modelData
                     sourceComponent: bar.widgetComps[modelData] || null
-                    visible: item !== null && item.show !== false
+                    visible: item !== null && (item as Chip)?.show !== false
                 }
             }
         }
@@ -345,7 +345,7 @@ PanelWindow {
                 Loader {
                     required property string modelData
                     sourceComponent: bar.widgetComps[modelData] || null
-                    visible: item !== null && item.show !== false
+                    visible: item !== null && (item as Chip)?.show !== false
                 }
             }
 
@@ -368,12 +368,13 @@ PanelWindow {
             Repeater {
                 model: bar.shownWorkspaces
                 Chip {
+                    id: wsChip
                     required property var modelData
                     visible: modelData.id > 0
                     active: modelData.focused
                     dim: !modelData.active && !modelData.focused
                     onClicked: bar.run(["hyprctl", "dispatch", "hl.dsp.focus({workspace=" + modelData.id + "})"])
-                    BarIcon { text: String(bar.kana[modelData.id] || modelData.id); family: Theme.font; styleName: ""; pixelSize: Theme.fontSize; color: modelData.focused ? Theme.accent : Theme.fg }
+                    BarIcon { text: String(bar.kana[wsChip.modelData.id] || wsChip.modelData.id); family: Theme.font; styleName: ""; pixelSize: Theme.fontSize; color: wsChip.modelData.focused ? Theme.accent : Theme.fg }
                 }
             }
         }
@@ -383,7 +384,7 @@ PanelWindow {
     Component {
         id: recComp
         Chip {
-            property bool show: bar.recording
+            show: bar.recording
             onClicked: bar.run([bar.recScript, "stop"])
             Rectangle {
                 implicitWidth: 8; implicitHeight: 8; radius: 4
@@ -403,7 +404,7 @@ PanelWindow {
         Chip {
             id: mediaChip
             Component.onCompleted: bar.reg("media", mediaChip)
-            property bool show: bar.player !== null || bar.showTwitch
+            show: bar.player !== null || bar.showTwitch
             active: bar.isOpen("media")
             onClicked: mouse => {
                 if (bar.player === null) {   // Twitch player: raise its window
@@ -534,7 +535,7 @@ PanelWindow {
     Component {
         id: trayComp
         Chip {
-            property bool show: SystemTray.items.values.some(i => !bar.isApplet(i))
+            show: SystemTray.items.values.some(i => !bar.isApplet(i))   // qmllint disable missing-property
             padX: 6
             Repeater {
                 model: SystemTray.items

@@ -171,8 +171,9 @@ Item {
             // (2) scaled desktop: bar on the top edge, two tiled windows (Hyprland layout math, see Theme.qml)
             Rectangle {
                 id: mini
-                readonly property real sw: pg.Window.window && pg.Window.window.screen ? pg.Window.window.screen.width : 2560
-                readonly property real sh: pg.Window.window && pg.Window.window.screen ? pg.Window.window.screen.height : 1440
+                readonly property var scr: (pg.Window.window as Window)?.screen
+                readonly property real sw: scr ? scr.width : 2560
+                readonly property real sh: scr ? scr.height : 1440
                 readonly property real k: Math.min(0.2, (col.width - 2) / sw)
                 function s(v) { return v * k }
                 // a nonzero border stays visible at this scale

@@ -46,7 +46,7 @@ Rectangle {
             ? "Clean " + selRooms.length + (selRooms.length === 1 ? " room" : " rooms")
             : "Clean all") + (hasCycles && cycles > 1 ? " · " + cycles + "×" : "")
 
-    function pretty(s) { return s ? (s.charAt(0).toUpperCase() + s.slice(1)).replace(/_/g, " ") : "" }
+    function pretty(s) { return s ? String(s.charAt(0).toUpperCase() + s.slice(1)).replace(/_/g, " ") : "" }
     function batteryIcon(p) { return p >= 88 ? "" : p >= 63 ? "" : p >= 38 ? "" : p >= 13 ? "" : "" }
 
     implicitHeight: body.implicitHeight + 24

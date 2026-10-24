@@ -8,6 +8,8 @@ import Quickshell.Wayland
 // header, then the children you add, stacked with 14 px spacing. Registers with Popups (one click-away thing at
 // a time; another one opening, or a click on another monitor, closes it). Esc / click outside / X close.
 // The user handles keys in onKeyPressed (set ev.accepted) and resets its state in onOpening.
+// PanelWindow is an uncreatable interface type in Quickshell's qmltypes (the real window exists at runtime)
+// qmllint disable uncreatable-type
 PanelWindow {
     id: win
 
@@ -82,9 +84,9 @@ PanelWindow {
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.namespace: "qs-" + kind
     BackgroundEffect.blurRegion: Region { regions: glass.instances }
-    Glass { id: glass; root: contentItem; active: visible }
+    Glass { id: glass; root: win.contentItem; active: visible }
 
-    PopupRegistration { kind: win.kind; open: win.shown; screenName: win.screen ? win.screen.name : ""; onDismissed: win.close() }
+    PopupRegistration { kind: win.kind; open: win.shown; screenName: win.screen ? win.screen.name : ""; onDismissed: win.close() }   // qmllint disable missing-property
 
     Item {
         id: keys

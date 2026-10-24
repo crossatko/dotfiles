@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
 import Quickshell.Networking
 import Quickshell.Bluetooth
 import Quickshell.Services.Pipewire
@@ -19,9 +18,9 @@ GridLayout {
     PwObjectTracker { objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource] }
     readonly property var sink: Pipewire.defaultAudioSink ? Pipewire.defaultAudioSink.audio : null
     readonly property var source: Pipewire.defaultAudioSource ? Pipewire.defaultAudioSource.audio : null
-    readonly property var adapter: Bluetooth.defaultAdapter
-    readonly property int btConnected: adapter ? adapter.devices.values.filter(d => d.connected).length : 0
-    readonly property var netDevs: Networking.devices.values
+    readonly property var adapter: Bluetooth.defaultAdapter   // qmllint disable unresolved-type
+    readonly property int btConnected: adapter ? adapter.devices.values.filter(d => d.connected).length : 0   // qmllint disable missing-property
+    readonly property var netDevs: Networking.devices.values   // qmllint disable missing-property
     readonly property int wiredUp: netDevs.filter(d => d.type === DeviceType.Wired && d.connected).length
 
     function open(name) { Popups.toggle(name, Popups.screen) }
@@ -88,7 +87,7 @@ GridLayout {
     Rectangle {
         Layout.fillWidth: true
         Layout.row: 1
-        height: 1
+        implicitHeight: 1
         color: Theme.alpha(Theme.overlay, 0.5)
     }
 

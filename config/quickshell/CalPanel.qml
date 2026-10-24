@@ -102,31 +102,32 @@ GridLayout {
             // all-day first, then by time
             model: cal.eventsOn(cal.selected).slice().sort((a, b) => (b.allDay - a.allDay) || a.start.localeCompare(b.start))
             delegate: Rectangle {
+                id: evCard
                 required property var modelData
                 width: agenda.width
                 height: row.implicitHeight + 12
                 radius: Theme.radiusItem
                 color: Theme.alpha(Theme.fg, 0.06)
-                Rectangle { x: 0; y: parent.radius; width: 3; height: parent.height - parent.radius * 2; color: modelData.color }   // clear of the rounded corners
+                Rectangle { x: 0; y: parent.radius; width: 3; height: parent.height - parent.radius * 2; color: evCard.modelData.color }   // clear of the rounded corners
                 ColumnLayout {
                     id: row
                     anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 10 }
                     spacing: 1
                     RowLayout {
                         spacing: 8
-                        Label { text: modelData.title; Layout.fillWidth: true; elide: Text.ElideRight; font.bold: true }
-                        Label { text: cal.when(modelData); color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
+                        Label { text: evCard.modelData.title; Layout.fillWidth: true; elide: Text.ElideRight; font.bold: true }
+                        Label { text: cal.when(evCard.modelData); color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
                     }
                     Label {
-                        visible: modelData.location !== ""
+                        visible: evCard.modelData.location !== ""
                         textFormat: Text.StyledText
-                        text: "<font face=\"" + Theme.iconFont + "\">\uf3c5</font>  " + modelData.location
+                        text: "<font face=\"" + Theme.iconFont + "\">\uf3c5</font>  " + evCard.modelData.location
                         Layout.fillWidth: true
                         elide: Text.ElideRight
                         color: Theme.fgDim
                         font.pixelSize: Theme.fontCaption
                     }
-                    Label { text: modelData.calendar; color: Theme.muted; font.pixelSize: Theme.fontTiny }
+                    Label { text: evCard.modelData.calendar; color: Theme.muted; font.pixelSize: Theme.fontTiny }
                 }
             }
             Label {

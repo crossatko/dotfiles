@@ -38,19 +38,19 @@ Item {
         spacing: 12
 
         Label {
-            visible: !tune.ready
+            visible: !pg.tune.ready
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            color: tune.guard === "error" ? Theme.red : Theme.muted
+            color: pg.tune.guard === "error" ? Theme.red : Theme.muted
             font.pixelSize: Theme.fontSmall
-            text: tune.guard === "error" ? "Disabled: " + tune.guardError : "Checking the compositor instance..."
+            text: pg.tune.guard === "error" ? "Disabled: " + pg.tune.guardError : "Checking the compositor instance..."
         }
 
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 12
-            enabled: tune.ready
-            opacity: tune.ready ? 1 : 0.4
+            enabled: pg.tune.ready
+            opacity: pg.tune.ready ? 1 : 0.4
 
             Repeater {
                 model: ["Lens", "Light", "Material"]
@@ -63,7 +63,7 @@ Item {
 
                     SectionHead { title: grp.modelData; Layout.topMargin: grp.index > 0 ? 6 : 0 }
                     Repeater {
-                        model: tune.opts.filter(o => o.group === grp.modelData)
+                        model: pg.tune.opts.filter(o => o.group === grp.modelData)
                         delegate: optRow
                     }
 
@@ -83,7 +83,7 @@ Item {
                         }
                         Label {
                             Layout.fillWidth: true
-                            text: tune.fmt("tint", tune.values.tint)
+                            text: pg.tune.fmt("tint", pg.tune.values.tint)
                             color: Theme.fgDim; font.pixelSize: Theme.fontSmall
                         }
                         Btn {
@@ -91,8 +91,8 @@ Item {
                             icon: true; text: ""
                             implicitHeight: 20; implicitWidth: 24
                             outerRadius: Theme.radius; inset: 12
-                            enabledLook: tune.isChanged("tint")
-                            onClicked: tune.reset("tint")
+                            enabledLook: pg.tune.isChanged("tint")
+                            onClicked: pg.tune.reset("tint")
                         }
                     }
                     Repeater {
@@ -127,9 +127,9 @@ Item {
                 Layout.fillWidth: true
                 Layout.topMargin: 6
                 spacing: 8
-                Btn { objectName: "btn-copy-changed"; text: "Copy changed as Lua"; inset: 18; implicitHeight: 26; onClicked: tune.copy(true) }
-                Btn { objectName: "btn-copy-all"; text: "Copy all as Lua"; inset: 18; implicitHeight: 26; onClicked: tune.copy(false) }
-                Btn { objectName: "btn-reset-all"; text: "Reset all"; inset: 18; implicitHeight: 26; enabledLook: pg.anyChanged; onClicked: tune.reset("all") }
+                Btn { objectName: "btn-copy-changed"; text: "Copy changed as Lua"; inset: 18; implicitHeight: 26; onClicked: pg.tune.copy(true) }
+                Btn { objectName: "btn-copy-all"; text: "Copy all as Lua"; inset: 18; implicitHeight: 26; onClicked: pg.tune.copy(false) }
+                Btn { objectName: "btn-reset-all"; text: "Reset all"; inset: 18; implicitHeight: 26; enabledLook: pg.anyChanged; onClicked: pg.tune.reset("all") }
                 Item { Layout.fillWidth: true }
             }
             Label {
@@ -137,8 +137,8 @@ Item {
                 wrapMode: Text.WordWrap
                 color: Theme.muted
                 font.pixelSize: Theme.fontCaption
-                text: (tune.status ? tune.status + "\n" : "")
-                    + (tune.nestedOnly ? "Applies to the nested dev instance only\n" : "")
+                text: (pg.tune.status ? pg.tune.status + "\n" : "")
+                    + (pg.tune.nestedOnly ? "Applies to the nested dev instance only\n" : "")
                     + "Changes apply to Hyprland while you drag and are saved in glass.json, which overrides the solid_glass block of settings.lua at every config load."
             }
         }
@@ -150,7 +150,7 @@ Item {
         SettingRow {
             id: row
             required property var modelData
-            readonly property real cur: tune.values[modelData.key]
+            readonly property real cur: pg.tune.values[modelData.key]
             title: modelData.label
             titleWidth: pg.titleW
             Slider {
@@ -171,8 +171,8 @@ Item {
                 icon: true; text: ""
                 implicitHeight: 20; implicitWidth: 24
                 outerRadius: Theme.radius; inset: 12
-                enabledLook: tune.isChanged(row.modelData.key)
-                onClicked: tune.reset(row.modelData.key)
+                enabledLook: pg.tune.isChanged(row.modelData.key)
+                onClicked: pg.tune.reset(row.modelData.key)
             }
         }
     }

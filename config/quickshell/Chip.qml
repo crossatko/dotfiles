@@ -11,6 +11,7 @@ Rectangle {
     default property alias content: row.data
     property bool active: false
     property bool dim: false
+    property bool show: true   // read by the section Loaders in Bar.qml: false hides the widget (media without player, empty tray)
     property int padX: Theme.chipPadX
     readonly property real contentW: row.implicitWidth
     readonly property bool iconOnly: contentW <= Theme.chipIcon

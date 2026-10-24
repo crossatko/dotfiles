@@ -22,6 +22,8 @@ PopupWindow {
     readonly property string kind: "tray-" + tm.toString()
     PopupRegistration { kind: tm.kind; open: tm.visible; screenName: tm.host && tm.host.screen ? tm.host.screen.name : ""; onDismissed: tm.visible = false }
 
+    // PopupWindow.anchor (Quickshell's PopupAnchor) is not described in its qmltypes
+    // qmllint disable missing-property unresolved-type unqualified
     anchor.window: host
     anchor.rect.x: anchorX
     // a floating bar gets popupGap of air between bar and menu; docked stays flush with the bar
@@ -32,6 +34,7 @@ PopupWindow {
     anchor.edges: (atTop ? Edges.Bottom : Edges.Top) | Edges.Left
     anchor.gravity: (atTop ? Edges.Bottom : Edges.Top) | Edges.Right
     anchor.adjustment: PopupAdjustment.Flip | PopupAdjustment.Slide
+    // qmllint enable missing-property unresolved-type unqualified
     grabFocus: true
     color: "transparent"
     implicitWidth: Math.max(190, col.implicitWidth + 12)

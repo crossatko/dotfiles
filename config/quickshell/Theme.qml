@@ -168,35 +168,40 @@ Singleton {
         blockLoading: true
         watchChanges: true
         onFileChanged: reload()
-        JsonAdapter {
-            id: p
-            property string bg: "#131313"
-            property string bg_alt: "#181818"
-            property string surface: "#20201f"
-            property string surface2: "#2b2a2a"
-            property string overlay: "#464545"
-            property string muted: "#727170"
-            property string fg_dim: "#9c9a98"
-            property string fg: "#c9c7c5"
-            property string accent: "#cf5b59"
-            property string accent2: "#809cc6"
-            property string red: "#c68080"
-            property string green: "#82c680"
-            property string yellow: "#c6b380"
-            property string blue: "#809cc6"
-            property string magenta: "#c580c6"
-            property string cyan: "#80c6c6"
-            property string orange: "#c69980"
-            property string wallpaper: ""
-            property var wallpaper_dirs: []
-            property var video_dirs: []
-            property real bar_opacity: 0.55
-            property int bar_border: 0
-            property var rounding: 0
-            property var gap: 0
-            property var border_size: 2
-            property var bar_floating: false
-            property var smart_gaps: true
-        }
+        // qmllint disable missing-type
+        // false positive: Quickshell's qmltypes name this property's type "FileViewAdapter" instead of "qs::io::FileViewAdapter"
+        adapter: p
+        // qmllint enable missing-type
+    }
+
+    JsonAdapter {
+        id: p
+        property string bg: "#131313"
+        property string bg_alt: "#181818"
+        property string surface: "#20201f"
+        property string surface2: "#2b2a2a"
+        property string overlay: "#464545"
+        property string muted: "#727170"
+        property string fg_dim: "#9c9a98"
+        property string fg: "#c9c7c5"
+        property string accent: "#cf5b59"
+        property string accent2: "#809cc6"
+        property string red: "#c68080"
+        property string green: "#82c680"
+        property string yellow: "#c6b380"
+        property string blue: "#809cc6"
+        property string magenta: "#c580c6"
+        property string cyan: "#80c6c6"
+        property string orange: "#c69980"
+        property string wallpaper: ""
+        property var wallpaper_dirs: []
+        property var video_dirs: []
+        property real bar_opacity: 0.55
+        property int bar_border: 0
+        property var rounding: 0
+        property var gap: 0
+        property var border_size: 2
+        property var bar_floating: false
+        property var smart_gaps: true
     }
 }

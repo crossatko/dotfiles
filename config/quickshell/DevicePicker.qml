@@ -13,7 +13,7 @@ ColumnLayout {
 
     readonly property var current: isSink ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource
     readonly property string wantClass: isSink ? "Audio/Sink" : "Audio/Source"
-    readonly property var devices: Pipewire.nodes.values.filter(n =>
+    readonly property var devices: Pipewire.nodes.values.filter(n =>   // qmllint disable missing-property
         !n.isStream && n.isSink === isSink && n.properties && n.properties["media.class"] === wantClass)
 
     function label(n) { return n ? (n.description || n.nickname || n.name) : "No device" }
@@ -26,7 +26,7 @@ ColumnLayout {
     spacing: 4
 
     // properties (media.class, ...) are only filled in for nodes something is bound to
-    PwObjectTracker { objects: Pipewire.nodes.values }
+    PwObjectTracker { objects: Pipewire.nodes.values }   // qmllint disable missing-property
 
     Rectangle {
         Layout.fillWidth: true
@@ -66,6 +66,7 @@ ColumnLayout {
             Repeater {
                 model: dp.devices
                 Rectangle {
+                    id: optRow
                     required property var modelData
                     readonly property bool isCurrent: dp.current !== null && modelData.id === dp.current.id
                     Layout.fillWidth: true
@@ -74,11 +75,11 @@ ColumnLayout {
                     color: isCurrent ? Theme.alpha(Theme.accent, 0.22) : optGlow.hovered ? Theme.alpha(Theme.fg, 0.12) : "transparent"
                     RowLayout {
                         anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
-                        Label { text: dp.label(modelData); Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: Theme.fontSmall; color: parent.parent.isCurrent ? Theme.accent : Theme.fg }
-                        Icon { visible: parent.parent.isCurrent; text: "\uf00c"; font.pixelSize: 12; color: Theme.accent }
+                        Label { text: dp.label(optRow.modelData); Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: Theme.fontSmall; color: optRow.isCurrent ? Theme.accent : Theme.fg }
+                        Icon { visible: optRow.isCurrent; text: "\uf00c"; font.pixelSize: 12; color: Theme.accent }
                     }
                     HoverGlow { id: optGlow; area: opt; radius: Theme.radiusItem }
-                    MouseArea { id: opt; anchors.fill: parent; hoverEnabled: true; onClicked: dp.choose(modelData) }
+                    MouseArea { id: opt; anchors.fill: parent; hoverEnabled: true; onClicked: dp.choose(optRow.modelData) }
                 }
             }
             Label { visible: dp.devices.length === 0; text: "No devices"; color: Theme.muted; font.pixelSize: Theme.fontSmall }

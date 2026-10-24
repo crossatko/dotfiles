@@ -5,6 +5,8 @@ import Quickshell.Wayland
 
 // One per screen. A full-screen transparent overlay (click outside = close) holding the
 // popup card, hung off the bar edge at the x position of the chip that opened it.
+// PanelWindow is an uncreatable interface type in Quickshell's qmltypes (the real window exists at runtime)
+// qmllint disable uncreatable-type
 PanelWindow {
     id: host
 
@@ -100,7 +102,7 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "qs-popup"
     BackgroundEffect.blurRegion: Region { regions: glass.instances }
-    Glass { id: glass; root: contentItem; active: visible }
+    Glass { id: glass; root: host.contentItem; active: visible }
     // OnDemand keyboard focus (Wi-Fi password field) only once the popup has been open for a moment. If the surface
     // maps already asking for keyboard focus, Hyprland pulls the pointer off the bar (wl_pointer.leave) and the
     // popup never gets it; with the mouse at rest the next click on the same chip then went nowhere (it needed a
@@ -149,7 +151,7 @@ PanelWindow {
         readonly property real targetW: host.content === "center" ? 420 : host.content === "cal" ? 390 : host.content === "ha" || host.content === "ai" ? 400 : 380
         // the control / notification center never gets shorter than 480 px; the others fit their content
         readonly property real minHeight: host.content === "center" ? 480 : 0
-        readonly property real targetH: Math.min(host.height - inset - side, Math.max(minHeight, (loader.item ? loader.item.implicitHeight : 60) + 24))
+        readonly property real targetH: Math.min(host.height - inset - side, Math.max(minHeight, ((loader.item as Item)?.implicitHeight ?? 60) + 24))
         // x is computed from the TARGET width, so x and width animate together (same curve) instead of x chasing a
         // moving width. y hangs off the bar edge, so the card grows away from the bar.
         // Plain computed position, not anchors: switching a card between top / bottom anchors at runtime

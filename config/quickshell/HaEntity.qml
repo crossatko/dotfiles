@@ -89,7 +89,7 @@ Rectangle {
         }
         return ""
     }
-    function pretty(s) { return s ? (s.charAt(0).toUpperCase() + s.slice(1)).replace(/_/g, " ") : "" }
+    function pretty(s) { return s ? String(s.charAt(0).toUpperCase() + s.slice(1)).replace(/_/g, " ") : "" }
     function sub() {
         if (unavailable) return "Unavailable"
         let s = ""

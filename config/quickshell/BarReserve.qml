@@ -5,6 +5,8 @@ import Quickshell.Wayland
 // Invisible strip whose only job is reserving the bar's space for tiled windows. The visible bar
 // itself uses exclusiveZone -1 so it ignores the monitor's reserved_area (the pinned-video strip,
 // scripts/pip-reserve.lua) and keeps its full width; this surface may be squeezed, that is fine.
+// PanelWindow is an uncreatable interface type in Quickshell's qmltypes (the real window exists at runtime)
+// qmllint disable uncreatable-type
 PanelWindow {
     id: strip
     required property var modelData

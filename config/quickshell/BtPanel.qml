@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
 import Quickshell.Bluetooth
 
 // Bluetooth: power, scan, and a device list (click = connect / disconnect / pair, right-click = forget).
@@ -10,7 +9,7 @@ ColumnLayout {
     spacing: 8
     implicitHeight: Math.min(460, 70 + Math.min(300, list.contentHeight) + 20)
 
-    readonly property var adapter: Bluetooth.defaultAdapter
+    readonly property var adapter: Bluetooth.defaultAdapter   // qmllint disable unresolved-type
     // scanning is manual (the Scan button): auto start/stop on open/close races BlueZ ("operation already in progress")
 
     // BlueZ names unnamed devices after their MAC address ("2A-C5-C8-72-AF-B8"); that's discovery noise

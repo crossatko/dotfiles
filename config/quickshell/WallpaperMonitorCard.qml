@@ -28,8 +28,8 @@ Rectangle {
     layer.enabled: notches.length > 0
     layer.effect: NotchMask { notches: card.notches; radius: card.radius; borderWidth: card.border.width; borderColor: card.border.color }
 
-    HoverGlow { id: glow; area: area; radius: card.radius }   // pointer-following highlight (HoverHandler: never takes clicks)
-    MouseArea { id: area; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: card.clicked() }
+    HoverGlow { id: glow; area: hoverArea; radius: card.radius }   // pointer-following highlight (HoverHandler: never takes clicks)
+    MouseArea { id: hoverArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: card.clicked() }
 
     RowLayout {
         anchors { fill: parent; leftMargin: 10; rightMargin: 12; topMargin: 9; bottomMargin: 9 }

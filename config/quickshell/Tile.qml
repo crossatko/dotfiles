@@ -20,7 +20,7 @@ Rectangle {
     Behavior on color { ColorAnimation { duration: 120 } }
     Behavior on border.color { ColorAnimation { duration: 120 } }
 
-    HoverGlow { id: glow; area: area; radius: tile.radius }
+    HoverGlow { id: glow; area: hoverArea; radius: tile.radius }
     RowLayout {
         anchors { fill: parent; leftMargin: 12; rightMargin: 10 }
         spacing: 10
@@ -28,7 +28,7 @@ Rectangle {
         RowText { title: tile.title; sub: tile.sub }
     }
     MouseArea {
-        id: area
+        id: hoverArea
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton

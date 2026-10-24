@@ -2,7 +2,7 @@
 #   ~/.config/theme/theme.py render      (re-render, no wallpaper analysis)
 #   ~/.config/theme/theme.py apply [img] (analyse wallpaper, render, reload apps)
 
-wallpaper = "~/.cache/theme/video/raycast-hero-4k120-hevc-full-once2-3a6ed8756fb7-t2500.png"
+wallpaper = "~/.cache/theme/video/raycast-hero-4k120-hevc-full-once2-3a6ed8756fb7.png"
 # folders the quickshell picker (SUPER+T) scans for images
 wallpaper_dirs = ["~/Pictures/wallpapers"]
 # folders scanned for VIDEO wallpapers (mp4/webm/mkv, played by mpvpaper); unset = <xdg VIDEOS dir>/wallpapers

@@ -25,8 +25,11 @@ Shape {
     property real bottomLeftRadius: -1
     property real bottomRightRadius: -1
     // the item's fill (if it has one) made opaque; transparent / no fill -> the foreground colour
+    // duck-typed on purpose (any parent with a `color`): qmllint only knows Item here
+    // qmllint disable missing-property
     readonly property color fill: parent && parent.color !== undefined && parent.color.a > 0.01
         ? Qt.rgba(parent.color.r, parent.color.g, parent.color.b, 1) : Theme.fg
+    // qmllint enable missing-property
     property color color: fill
     readonly property real lum: 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b
     property real strength: Math.max(0.04, Math.min(0.12, 0.06 / Math.sqrt(Math.max(0.05, lum))))   // alpha at the centre

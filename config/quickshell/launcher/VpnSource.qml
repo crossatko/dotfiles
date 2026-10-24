@@ -68,7 +68,7 @@ QtObject {
     }
     function enter(name) { country = ""; tsError = ""; mvError = ""; tsNeedOp = false }
     property var ticker: Timer {
-        interval: src.tsAct !== "" || src.mvAct !== "" || sw.busy || src.tsBackend === "Starting" ? 1000 : src.current === "mullvad" ? 2000 : 4000
+        interval: src.tsAct !== "" || src.mvAct !== "" || src.sw.busy || src.tsBackend === "Starting" ? 1000 : src.current === "mullvad" ? 2000 : 4000
         repeat: true
         running: src.current !== ""
         onTriggered: src.poll()
@@ -314,7 +314,7 @@ QtObject {
                 return
             }
             Quickshell.execDetached(["notify-send", "-a", "Launcher", "Mullvad", "Location: " + src.locLabel + (src.locConnect ? " (connecting)" : "")])
-            if (src.locConnect && !sw.busy) sw.run("mullvad")
+            if (src.locConnect && !src.sw.busy) src.sw.run("mullvad")
             src.settingsProc.running = true
         })
     }

@@ -99,8 +99,9 @@ Item {
     property Item host: null
     function findHost() {
         let top = sl
+        // isGlassItem is a duck-typed marker (see Glass.qml), unknown to qmllint on Item
         for (let a = sl.parent; a; a = a.parent) {
-            if (a.isGlassItem === true && a.parent)
+            if (a.isGlassItem === true && a.parent)   // qmllint disable missing-property
                 return a
             if (a.parent)
                 top = a

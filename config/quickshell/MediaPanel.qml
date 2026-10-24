@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
-import Quickshell
 import Quickshell.Services.Mpris
 
 // Now playing: art, title, transport controls, seek bar.
@@ -12,7 +11,7 @@ ColumnLayout {
     implicitHeight: 230
 
     readonly property var player: {
-        const ps = Mpris.players.values
+        const ps = Mpris.players.values   // qmllint disable missing-property
         return ps.find(p => p.isPlaying) || ps.find(p => p.trackTitle) || ps[0] || null
     }
     function fmt(s) { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2) }

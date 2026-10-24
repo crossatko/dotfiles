@@ -11,16 +11,16 @@ ShellRoot {
     Binding { target: Popups; property: "bars"; value: root.bars }
 
     Variants {
-        model: Quickshell.screens.filter(s => bars[s.name] !== undefined)
+        model: Quickshell.screens.filter(s => root.bars[s.name] !== undefined)
         Bar {
-            atTop: bars[modelData.name] === "top"
+            atTop: root.bars[modelData.name] === "top"
         }
     }
 
     Variants {
-        model: Quickshell.screens.filter(s => bars[s.name] !== undefined)
+        model: Quickshell.screens.filter(s => root.bars[s.name] !== undefined)
         BarReserve {
-            atTop: bars[modelData.name] === "top"
+            atTop: root.bars[modelData.name] === "top"
         }
     }
 

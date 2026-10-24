@@ -20,6 +20,7 @@ Item {
         Repeater {
             model: Math.max(0, strip.colors.length - 1)
             Rectangle {
+                id: seg
                 required property int index
                 width: strip.width / (strip.colors.length - 1)
                 height: strip.height
@@ -29,8 +30,8 @@ Item {
                 bottomRightRadius: index === strip.colors.length - 2 ? strip.r : 0
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
-                    GradientStop { position: 0; color: strip.colors[index] }
-                    GradientStop { position: 1; color: strip.colors[index + 1] }
+                    GradientStop { position: 0; color: strip.colors[seg.index] }
+                    GradientStop { position: 1; color: strip.colors[seg.index + 1] }
                 }
             }
         }

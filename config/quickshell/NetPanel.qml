@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
 import Quickshell.Networking
 
 // Wired status + Wi-Fi list + Tailscale machines + Mullvad (both VPN sections fold, see FoldSection). Wi-Fi password prompt appears inline for new secured networks.
@@ -12,7 +11,7 @@ ColumnLayout {
     readonly property int rowGap: 6        // gap between any two rows
     implicitHeight: Math.min(760, header.implicitHeight + body.implicitHeight + tailscale.implicitHeight + mullvad.implicitHeight + 56)
 
-    readonly property var devs: Networking.devices.values
+    readonly property var devs: Networking.devices.values   // qmllint disable missing-property
     readonly property var wired: devs.filter(d => d.type === DeviceType.Wired)
     readonly property var wifiDev: devs.find(d => d.type === DeviceType.Wifi) || null
     property var asking: null       // WifiNetwork waiting for a password (its card shows the form)

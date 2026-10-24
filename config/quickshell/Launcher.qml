@@ -105,7 +105,7 @@ ModalMenu {
             if (!lc.shown || lc.section !== "webapp" || lc.actionsOpen) return
             if (lc.argItem && lc.argItem.kind === item.kind) {
                 lc.argItem = item
-                if (lc.focusItem.text === "" && text !== "") { lc.focusItem.text = text; lc.focusItem.cursorPosition = text.length }
+                if (input.text === "" && text !== "") { input.text = text; input.cursorPosition = text.length }
             } else if (!lc.argItem && lc.query === "") lc.runItem(item)
         }
     }

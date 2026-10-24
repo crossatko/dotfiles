@@ -11,6 +11,8 @@ import Quickshell.Wayland
 // or `qs ipc call settings toggle|open|close` / `qs ipc call settings page <id>`; `qs ipc call picker toggle`
 // (SUPER+T) = togglePage("wallpaper").
 // Adding a page: one entry in `allPages` (id, title, Font Awesome icon, QML file whose root fills the width).
+// The linter cannot see these optional page hooks on the dynamically loaded page, hence the
+// missing-property suppressions where they are read.
 // A page root may declare `readonly property bool wantsFocus: true` (gets the keyboard focus; unhandled keys
 // such as Escape bubble up to the card), `property Flickable flick` (set to the page's scroller) and
 // `property Component headerItem` (shown in the title row, between the title and the close button; it
@@ -47,7 +49,7 @@ FloatingWindow {
     maximumSize: pinSize ? Qt.size(implicitWidth, implicitHeight) : Qt.size(16384, 16384)
     Timer { id: unpin; interval: 150; onTriggered: win.pinSize = false }
     BackgroundEffect.blurRegion: Region { regions: glass.instances }
-    Glass { id: glass; root: contentItem; active: visible }
+    Glass { id: glass; root: win.contentItem; active: visible }
 
     // sized for the monitor of the popup it was asked from (control center gear), else the focused one; Hyprland
     // opens it on the focused monitor
@@ -68,7 +70,7 @@ FloatingWindow {
     function togglePage(p) { (shown && current.id === p) ? close() : open(p) }
     function focusPage() {
         const it = pageLoader.item
-        if (it && it.wantsFocus === true) it.forceActiveFocus()
+        if (it && it.wantsFocus === true) it.forceActiveFocus()   // qmllint disable missing-property
         else keys.forceActiveFocus()
     }
 
@@ -174,7 +176,7 @@ FloatingWindow {
                             Layout.fillWidth: true
                             Layout.preferredHeight: closeBtn.implicitHeight    // not fillHeight: that would stretch the row
                             Layout.alignment: Qt.AlignVCenter
-                            sourceComponent: pageLoader.item && pageLoader.item.headerItem ? pageLoader.item.headerItem : null
+                            sourceComponent: pageLoader.item && pageLoader.item.headerItem ? pageLoader.item.headerItem : null   // qmllint disable missing-property
                         }
                         Btn { id: closeBtn; icon: true; text: "\uf00d"; inset: 18; Layout.alignment: Qt.AlignVCenter; onClicked: win.close() }
                     }
@@ -186,9 +188,10 @@ FloatingWindow {
                     Layout.fillHeight: true
                     clip: true
                     contentWidth: width
-                    contentHeight: pageLoader.item ? pageLoader.item.implicitHeight : 0
+                    contentHeight: pageLoader.item ? (pageLoader.item as Item).implicitHeight : 0
                     boundsBehavior: Flickable.StopAtBounds
-                    interactive: !(pageLoader.item && pageLoader.item.dragging === true)   // don't scroll while a chip is dragged
+                    // don't scroll while a chip is dragged
+                    interactive: !(pageLoader.item && pageLoader.item.dragging === true)   // qmllint disable missing-property
 
                     Loader {
                         id: pageLoader
@@ -196,11 +199,13 @@ FloatingWindow {
                         active: win.shown
                         source: win.current.source
                         onLoaded: {
+                            // qmllint disable missing-property
                             if (item.flick !== undefined) item.flick = flick
                             if (item.memory !== undefined) {
                                 if (!win.pageMemory[win.current.id]) win.pageMemory[win.current.id] = {}
                                 item.memory = win.pageMemory[win.current.id]
                             }
+                            // qmllint enable missing-property
                             win.focusPage()
                         }
                     }

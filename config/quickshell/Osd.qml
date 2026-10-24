@@ -1,12 +1,13 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Services.Pipewire
 
 // Volume / brightness pill, bottom-center of the focused monitor. Volume is observed from
 // Pipewire (so wpctl keybinds just work); brightness when the keys step it (Brightness.stepped)
+// PanelWindow is an uncreatable interface type in Quickshell's qmltypes (the real window exists at runtime)
+// qmllint disable uncreatable-type
 PanelWindow {
     id: osd
 
@@ -21,7 +22,10 @@ PanelWindow {
     screen: target
     visible: shown
     anchors { bottom: true }
-    margins.bottom: 70 + (bars[(screen ? screen.name : "")] === "bottom" ? Theme.barReserve : 0)   // above a (floating) bottom bar
+    // above a (floating) bottom bar
+    // qmllint disable missing-property
+    margins.bottom: 70 + (bars[(screen ? screen.name : "")] === "bottom" ? Theme.barReserve : 0)
+    // qmllint enable missing-property
     implicitWidth: 320
     implicitHeight: 56
     color: "transparent"
@@ -29,7 +33,7 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "qs-osd"
     BackgroundEffect.blurRegion: Region { regions: glass.instances }
-    Glass { id: glass; root: contentItem; active: visible }
+    Glass { id: glass; root: osd.contentItem; active: visible }
     mask: Region {}                      // never takes input
 
     function focusScreen() {

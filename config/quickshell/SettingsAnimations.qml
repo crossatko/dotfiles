@@ -229,7 +229,7 @@ Item {
             Repeater {
                 model: Motion.groups
                 delegate: SettingRow {
-                    id: grow
+                    id: catRow
                     required property var modelData
                     readonly property string gid: modelData.id
                     readonly property bool on: Motion.value(gid + "Enabled")
@@ -237,24 +237,24 @@ Item {
                     title: modelData.label
                     titleWidth: pg.titleW
                     Toggle {
-                        objectName: "toggle-" + grow.gid + "Enabled"
-                        checked: grow.on
-                        onToggled: want => want ? Motion.unset(grow.gid + "Enabled") : Motion.set(grow.gid + "Enabled", false)
+                        objectName: "toggle-" + catRow.gid + "Enabled"
+                        checked: catRow.on
+                        onToggled: want => want ? Motion.unset(catRow.gid + "Enabled") : Motion.set(catRow.gid + "Enabled", false)
                     }
                     Slider {
                         wheel: false
-                        objectName: "slider-" + grow.gid + "Speed"
+                        objectName: "slider-" + catRow.gid + "Speed"
                         Layout.fillWidth: true
-                        dim: !grow.on
+                        dim: !catRow.on
                         mark: pg.oneX
-                value: pg.toNorm(Motion.value(grow.gid + "Speed"))
-                        onMoved: v => pg.slide(grow.gid + "Speed", v)
+                value: pg.toNorm(Motion.value(catRow.gid + "Speed"))
+                        onMoved: v => pg.slide(catRow.gid + "Speed", v)
                     }
-                    Label { text: pg.fmtSpeed(Motion.value(grow.gid + "Speed")); Layout.preferredWidth: pg.valueW; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
+                    Label { text: pg.fmtSpeed(Motion.value(catRow.gid + "Speed")); Layout.preferredWidth: pg.valueW; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
                     // curve: "" = follows the global curve; click cycles forward, right-click back
                     Btn {
-                        objectName: "btn-" + grow.gid + "Curve"
-                        readonly property string cur: Motion.value(grow.gid + "Curve")
+                        objectName: "btn-" + catRow.gid + "Curve"
+                        readonly property string cur: Motion.value(catRow.gid + "Curve")
                         text: pg.hyprCurveLabel(cur)
                         active: cur !== ""
                         implicitHeight: 24; implicitWidth: 104
@@ -263,16 +263,16 @@ Item {
                             const list = [""].concat(Motion.hyprCurves)
                             const step = mouse.button === Qt.RightButton ? list.length - 1 : 1
                             const next = list[(list.indexOf(cur) + step) % list.length]
-                            next === "" ? Motion.unset(grow.gid + "Curve") : Motion.set(grow.gid + "Curve", next)
+                            next === "" ? Motion.unset(catRow.gid + "Curve") : Motion.set(catRow.gid + "Curve", next)
                         }
                     }
                     Btn {
-                        objectName: "reset-" + grow.gid
+                        objectName: "reset-" + catRow.gid
                         icon: true; text: ""
                         implicitHeight: 20; implicitWidth: 24
                         outerRadius: Theme.radius; inset: 12
-                        enabledLook: grow.own
-                        onClicked: { Motion.unset(grow.gid + "Enabled"); Motion.unset(grow.gid + "Speed"); Motion.unset(grow.gid + "Curve") }
+                        enabledLook: catRow.own
+                        onClicked: { Motion.unset(catRow.gid + "Enabled"); Motion.unset(catRow.gid + "Speed"); Motion.unset(catRow.gid + "Curve") }
                     }
                 }
             }

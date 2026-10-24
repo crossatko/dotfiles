@@ -26,10 +26,10 @@ Rectangle {
     border.color: Theme.alpha(Theme.accent, 0.8)
     Behavior on color { ColorAnimation { duration: 100 } }
 
-    HoverGlow { id: glow; area: area; radius: btn.radius }
+    HoverGlow { id: glow; area: hoverArea; radius: btn.radius }
     Label { id: label; anchors.centerIn: parent; text: btn.text; font.pixelSize: btn.icon ? 14 : 12; font.family: btn.icon ? Theme.iconFont : Theme.font; font.styleName: btn.icon ? "Regular" : "";  color: btn.active ? Theme.accent : Theme.fg }
     MouseArea {
-        id: area
+        id: hoverArea
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton
