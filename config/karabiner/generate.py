@@ -30,7 +30,6 @@ BINDS = [
     ("SUPER", "e", "e", "exec-and-forget open -a Finder"),
     # cmd None: no AeroSpace bind, the emitted combo goes to the app (Raycast hotkey set to ⌃⌥⌘D, toggles)
     ("SUPER", "d", "d", None),
-    ("SUPER", "tab", "tab", "mode overview"),
     ("SUPER+SHIFT", "q", "q", "close"),
     ("SUPER", "f", "f", "fullscreen"),
     ("SUPER", "v", "v", "layout floating tiling"),
@@ -78,7 +77,15 @@ def rules():
             {"type": "basic", "from": {"key_code": "spacebar", "modifiers": {"mandatory": ["left_command"]}},
              "to": [{"key_code": "d", "modifiers": CLASSES["SUPER"][1]}]}],
     }
-    return [shift, kitty, layers, raycast]
+    # Corne layer 1 (MO(1), left thumb next to Space = left Command here): hjkl = arrows. Shift / Option /
+    # Control pass through (selection, word jumps); left Command itself is dropped from the output.
+    arrows = {
+        "description": "Left Command + h/j/k/l = arrow keys (Corne layer 1)",
+        "manipulators": [
+            {"type": "basic", "from": {"key_code": k, "modifiers": {"mandatory": ["left_command"], "optional": ["shift", "option", "control"]}},
+             "to": [{"key_code": a}]} for k, a in (("h", "left_arrow"), ("j", "down_arrow"), ("k", "up_arrow"), ("l", "right_arrow"))],
+    }
+    return [shift, kitty, layers, raycast, arrows]
 
 
 def aerospace():
