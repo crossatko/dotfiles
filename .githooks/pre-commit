@@ -47,6 +47,8 @@ grep -noE '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}' "$C"
 # token / secret / key / password assignments with a long value that mixes letters and digits
 grep -noiE '(token|secret|passw(or)?d|api_?key|[a-z_]*key)[A-Za-z0-9_]*["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9+/_.=-]{20,}' "$C" |
 	while IFS= read -r m; do
+		# keybind lines (ghostty, ...) are key combos, not keys: "keybind = super+0=reset_font_size"
+		[[ ${m#*:} =~ ^[[:space:]]*keybinds?[[:space:]]*= ]] && continue
 		v=${m#*:} v=${v#*[:=]} v=${v//[\"\' ]/}
 		[[ $v =~ [0-9] && $v =~ [A-Za-z] ]] && echo "${m%%:*}"
 	done | sort -un | hit secret-assignment || true
