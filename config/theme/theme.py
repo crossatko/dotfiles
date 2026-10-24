@@ -4347,9 +4347,12 @@ def seed_script():
 
 def seed_out(force=False):
     """Run bin/theme-seed (the one implementation, also used by the git hooks and on macOS): fills a missing / seeded out/
-    from default/. Only needed when out/ has no real render yet (marker present, or no palette.json)."""
+    from default/. Only needed when out/ has no real render yet (marker present, or no palette.json), and never on a
+    machine with its own selection (theme.local.toml): there a missing out/ is rendered from the selection, not seeded."""
+    if LOCAL_TOML.exists() and not force:
+        return
     if force or (OUT / MARKER).exists() or not (OUT / "palette.json").exists():
-        env = {**os.environ, "THEME_OUT_DIR": str(OUT)}
+        env = {**os.environ, "THEME_OUT_DIR": str(OUT), "THEME_SEED_FORCE": "1" if force else ""}
         subprocess.run(["sh", str(seed_script()), "-q"], env=env, check=False)
 
 

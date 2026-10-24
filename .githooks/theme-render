@@ -2,8 +2,9 @@
 # After git pull / checkout (called by post-merge, post-rewrite, post-checkout). The theme output is per machine
 # (git-ignored config/theme/out/, selection in config/theme/theme.local.toml), the committed default is
 # config/theme/default/:
-#  1. every OS: bin/theme-seed fills out/ from default/ when out/ has no real render (fresh clone, the Mac), and
-#     follows default/ changes while out/ is still the seeded default. A real render is never touched.
+#  1. every OS: bin/theme-seed fills out/ from default/ when out/ has no real render and the machine has no selection
+#     (theme.local.toml): fresh clone, the Mac. It follows default/ changes while out/ is still the seeded default; a
+#     real render is never touched. A machine WITH a selection but a missing / seeded out/ is rendered instead (1a).
 #  2. Linux, after a pull that removed the old tracked out/ (the commit that made the theme per machine): the machine's
 #     previous theme is rebuilt from the old blobs (or a backup in ~/.local/state/theme/legacy) by `theme.py adopt-legacy`.
 #  3. Linux: re-render when the pulled range touched config/theme (default/ only counts while out/ is the seeded
@@ -33,9 +34,28 @@ if [ "$(uname -s)" != Darwin ] && [ -z "${THEME_RENDER_SKIP:-}${THEME_SEED_ONLY:
 	fi
 fi
 
-# 1.
+# 1a. Linux, a machine WITH its own selection (theme.local.toml) whose out/ is missing / incomplete / the seeded default
+# (a rebase or merge that replays the untracking commit deletes the ignored out/ files, switching back from an old
+# commit that still tracked them too): RENDER from the selection. The default is never seeded over a selection, and
+# rendering reloads no app. Runs in every hook mode, post-checkout included.
+repaired=0
+if [ "$(uname -s)" != Darwin ] && [ -f "$theme" ] && [ -f "$top/config/theme/theme.local.toml" ] &&
+	{ [ ! -f "$out/palette.json" ] || [ -f "$out/.default" ]; }; then
+	if [ -n "${THEME_RENDER_SKIP:-}" ]; then
+		echo "theme-render: out/ is missing but THEME_RENDER_SKIP is set: run theme.py render" >&2
+	else
+		echo "theme-render: out/ is missing or only the default; rendering this machine's selection"
+		python3 -I "$theme" render || echo "theme-render: theme.py render failed (run it by hand)" >&2
+		# still nothing to read (e.g. the selected wallpaper is gone): the default keeps the consumers alive
+		[ -f "$out/palette.json" ] || THEME_SEED_FORCE=1 "$seed" -q
+		repaired=1
+	fi
+fi
+
+# 1. no selection (fresh clone, the Mac): out/ from the committed default (bin/theme-seed skips machines with a selection)
 [ -x "$seed" ] && "$seed" -q
 
+[ "$repaired" = 1 ] && exit 0
 [ -n "${THEME_RENDER_SKIP:-}${THEME_SEED_ONLY:-}" ] && exit 0
 [ "$(uname -s)" = Darwin ] && exit 0
 [ -f "$theme" ] || exit 0

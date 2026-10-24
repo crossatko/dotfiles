@@ -7,6 +7,7 @@
 #     out/.default is written (it holds a hash of default/).
 #   - marker present and default/ changed: all files are refreshed (a machine that never renders follows the default).
 # theme.py render/apply deletes the marker, from then on this script does nothing. Plain POSIX sh (macOS too).
+# It does nothing at all while theme.local.toml exists (this machine has a selection; see the guard below).
 # usage: theme-seed [-q]     THEME_OUT_DIR overrides out/ (tests).
 here=$(CDPATH= cd -- "$(dirname -- "$0")/.." 2>/dev/null && pwd -P) || exit 0
 def="$here/default"
@@ -16,6 +17,10 @@ quiet=0
 [ "$1" = "-q" ] && quiet=1
 [ -d "$def" ] || exit 0
 marker="$out/.default"
+
+# A machine with its own selection (theme.local.toml) never gets the default: its out/ is RENDERED from the selection
+# (theme.py render, run by the git hooks). Only THEME_SEED_FORCE=1 (theme.py seed, or the hook when a render failed) seeds.
+[ -f "$here/theme.local.toml" ] && [ -z "${THEME_SEED_FORCE:-}" ] && exit 0
 
 [ -f "$marker" ] || { [ -f "$out/palette.json" ] && exit 0; }
 

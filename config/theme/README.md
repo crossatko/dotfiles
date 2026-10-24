@@ -49,7 +49,7 @@ overrides ──┘                      │   (out/ is git-ignored; default/ is
   `out/.default`. install.sh, `theme.py` and the git hooks (`post-merge`, `post-rewrite`, `post-checkout` -> `theme-render`) call it, so a
   fresh clone and the Mac (the engine never runs there) have working files; while the marker exists `out/` follows changes
   of `default/`, the first `theme.py render/apply` deletes it and `out/` is then never touched by the seeder. A pull that
-  changes `config/theme/` re-renders on Linux (`THEME_RENDER_SKIP=1` skips). Consumers that would fail hard have fallbacks
+  changes `config/theme/` re-renders on Linux (`THEME_RENDER_SKIP=1` skips). On a machine with a `theme.local.toml` the default is never seeded: a missing / seeded `out/` (a rebase or merge replaying the untracking commit deletes it) is rendered from the selection by the hooks. Consumers that would fail hard have fallbacks
   (Hyprland `theme.lua` and nvim: `default/palette.lua`; ghostty `config-file = ?`).
 * **Other machines pulling the change that introduced this:** see AGENTS.md (Theme system) for `adopt-legacy`.
 
