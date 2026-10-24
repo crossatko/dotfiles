@@ -29,11 +29,11 @@ hypr/.secrets
 # WiVRn pairing secrets — cookie is an auth token, known_keys ties to real devices.
 config/wivrn/cookie
 config/wivrn/known_keys.json
-config/theme/out/*.tmp
+# per-machine theme: generated output (seeded from the committed config/theme/default/) and the wallpaper selection
+config/theme/out/
+config/theme/theme.local.toml
 __pycache__/
 
 # claude-tabs zellij plugin: standalone package (~/code/crossatko/zellij-wc3cz-claude); its setup.sh
 # creates the host-local link config/zellij/plugins/claude-tabs -> the checkout
 config/zellij/plugins/
-# per-host theme outputs (alphas depend on the running compositor; theme.py render writes them)
-config/theme/out/host/

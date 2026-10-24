@@ -4,8 +4,11 @@
     theme.py apply [WALLPAPER]   extract palette, render templates, reload apps
     theme.py render              re-render from current theme.toml (no extraction)
     theme.py show                print the resolved palette
+    theme.py default             regenerate the tracked default theme (default/), for a committer
+    theme.py seed                fill out/ from default/ when it has no real render (bin/theme-seed)
 
-Edit theme.toml to change anything. Wallpaper-derived values can be pinned with
+theme.toml is the tracked default settings; this machine's selection (wallpaper, local settings) lives in the
+git-ignored theme.local.toml, which `apply` writes. Edit theme.toml to change anything. Wallpaper-derived values can be pinned with
 [overrides]; everything else follows the wallpaper. Stdlib + ImageMagick only.
 """
 import colorsys
@@ -22,7 +25,12 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-OUT = ROOT / "out"
+# Generated per-machine theme (git-ignored). THEME_OUT_DIR (absolute, or relative to this folder) redirects it for tests.
+OUT = ROOT / (os.environ.get("THEME_OUT_DIR") or "out")
+DEFAULT_DIR = ROOT / "default"    # tracked default theme (neutral wallpaper + its outputs), see `theme.py default`
+LOCAL_TOML = ROOT / "theme.local.toml"   # git-ignored per-machine selection, merged over theme.toml
+MARKER = ".default"               # out/.default: out/ holds the seeded default (bin/theme-seed), not a real render
+DEFAULT_MODE = False              # True while `theme.py default` renders into DEFAULT_DIR: home-independent output
 HOME = Path.home()
 
 
@@ -458,6 +466,13 @@ def monitor_entries(st=None, mons=None):
         sel = key if any(m["name"] == key for m in mons) else "desc:" + key
         res.append((sel, conn, path))
     return res
+
+
+def static_blocks(cfg, extra):
+    """[vars] static_blocks (theme.local.toml): this machine's own hyprpaper blocks (per-monitor wallpapers keyed by
+    description / connector; the serials live only there). May use {{wallpaper_t}} / {{tv_wallpaper_t}}."""
+    sb = str(cfg.get("vars", {}).get("static_blocks", "")).strip("\n")
+    return "\n\n" + render(sb, {}, extra) if sb.strip() else ""
 
 
 def monitor_extras():
@@ -3293,9 +3308,12 @@ def video_command(args):
 
 
 def render_all(pal, cfg):
-    OUT.mkdir(exist_ok=True)
-    HOST_OUT.mkdir(exist_ok=True)
+    OUT.mkdir(parents=True, exist_ok=True)
+    if not DEFAULT_MODE:
+        HOST_OUT.mkdir(exist_ok=True)
     wp = str(Path(os.path.expanduser(cfg["wallpaper"])))
+    if DEFAULT_MODE:   # committed: no absolute home path (bin/theme-seed expands ~/ when it copies into out/)
+        wp = tilde(wp)
     extra = {"wallpaper": wp, "home": str(HOME), "out": str(OUT),
              **gtk_glass_alphas(cfg.get("settings", {})), **{k: v for k, v in cfg.get("vars", {}).items()}}
     # Brave GTK mode: active tab title and toolbar icons share one GTK colour (label); brave_tab_text picks it
@@ -3308,12 +3326,19 @@ def render_all(pal, cfg):
     extra["tb_radius"] = int(cfg.get("settings", {}).get("thunderbird_radius", cfg.get("settings", {}).get("rounding", 0)))
     extra["tb_vars"] = render((ROOT / "tb-vars.css").read_text(), pal, extra)
     # per-monitor wallpapers (empty strings without entries, so the output is unchanged): see monitor_entries()
-    extra.update(monitor_extras())
+    if not DEFAULT_MODE:   # (the default is the same for every machine: no per-monitor state)
+        extra.update(monitor_extras())
+    else:
+        extra["monitor_blocks"] = ""
     extra.update(wallpaper_t=tilde(wp), tv_wallpaper_t=tilde(extra["tv_wallpaper"]))   # hyprpaper expands ~
+    extra["static_blocks"] = static_blocks(cfg, extra)
     for tpl in sorted((ROOT / "templates").iterdir()):
+        if DEFAULT_MODE and tpl.name in HOST_TEMPLATES:
+            continue
         dest = (HOST_OUT if tpl.name in HOST_TEMPLATES else OUT) / tpl.name
         write_atomic(dest, render(tpl.read_text(), pal, extra))
-    dirs = [os.path.expanduser(d) for d in cfg.get("wallpaper_dirs", ["~/Pictures/wallpapers"])]
+    expand = tilde if DEFAULT_MODE else os.path.expanduser
+    dirs = [expand(d) for d in cfg.get("wallpaper_dirs", ["~/Pictures/wallpapers"])]
     s = cfg.get("settings", {})
     # Quickshell layout defaults (palette.json); Settings > Appearance overrides them via appearance.json
     # (never touched here). Hyprland does not read them: its values are hand-written in hypr/hyprland/.
@@ -3322,7 +3347,7 @@ def render_all(pal, cfg):
           "bar_floating": bool(s.get("bar_floating", False)),
           "smart_gaps": bool(s.get("smart_gaps", True)),
           "bar_border": s.get("bar_border", 0), "bar_opacity": s.get("bar_opacity", 0.55)}
-    write_atomic(OUT / "palette.json", json.dumps({"wallpaper": wp, "wallpaper_dirs": dirs, "video_dirs": video_dirs(cfg), **ui, **pal}, indent=2) + "\n")
+    write_atomic(OUT / "palette.json", json.dumps({"wallpaper": wp, "wallpaper_dirs": dirs, "video_dirs": [tilde(d) for d in video_dirs(cfg)] if DEFAULT_MODE else video_dirs(cfg), **ui, **pal}, indent=2) + "\n")
     lua = "return {\n" + f'  wallpaper = "{wp}",\n  rounding = {ui["rounding"]},\n' + "".join(f'  {k} = "{v}",\n' for k, v in pal.items()) + "}\n"
     write_atomic(OUT / "palette.lua", lua)
 
@@ -3343,14 +3368,11 @@ def link(dest, src):
 
 
 def inject(dest, text, name="theme", cm="#"):
-    """Replace/insert a marked block inside a file we don't fully own (herdr's
-    config.toml). Writes through symlinks, so a dotfiles-managed file stays a link."""
+    """Replace/insert a marked block inside a file we don't fully own (the tracked herdr base, by `theme.py default`).
+    Writes through symlinks."""
     dest = Path(os.path.expanduser(dest)).resolve()
-    begin, end = f"{cm} >>> {name} (generated, do not edit) >>>", f"{cm} <<< {name} <<<"
     cur = dest.read_text() if dest.exists() else ""
-    block = f"{begin}\n{text.rstrip()}\n{end}\n"
-    pat = re.compile(re.escape(begin) + r".*?" + re.escape(end) + r"\n?", re.S)
-    new = pat.sub(lambda _: block, cur) if pat.search(cur) else (cur.rstrip("\n") + "\n\n" if cur else "") + block
+    new = inject_text(cur, text, name, cm)
     if new != cur:
         dest.write_text(new)
 
@@ -3639,6 +3661,38 @@ def apply_fonts(cfg):
     sh(f"gsettings set org.gnome.desktop.interface monospace-font-name '{gtk}'")
 
 
+HERDR_BASE = ROOT.parent / "herdr" / "config.toml"   # tracked, carries the default [theme] block
+HERDR_HEADER = "# generated by theme.py (config/herdr/config.toml + this machine's theme block): edit the repo file, then run `theme.py render`\n"
+
+
+def inject_text(cur, text, name="theme", cm="#"):
+    begin, end = f"{cm} >>> {name} (generated, do not edit) >>>", f"{cm} <<< {name} <<<"
+    block = f"{begin}\n{text.rstrip()}\n{end}\n"
+    pat = re.compile(re.escape(begin) + r".*?" + re.escape(end) + r"\n?", re.S)
+    return pat.sub(lambda _: block, cur) if pat.search(cur) else (cur.rstrip("\n") + "\n\n" if cur else "") + block
+
+
+def deploy_herdr():
+    """~/.config/herdr/config.toml = the tracked base with this machine's theme block: a real generated file (herdr has
+    no include), so a wallpaper switch never touches the tracked file. The old symlink into the repo is replaced once."""
+    dest = Path.home() / ".config/herdr/config.toml"
+    if not (dest.exists() or dest.is_symlink() or dest.parent.exists() or shutil.which("herdr")):
+        return
+    base = HERDR_BASE.read_text() if HERDR_BASE.exists() else ""
+    new = HERDR_HEADER + inject_text(base, (OUT / "herdr.toml").read_text())
+    if dest.is_symlink():
+        dest.unlink()   # pointed into the repo: nothing to keep
+    elif dest.exists():
+        cur = dest.read_text()
+        if cur == new:
+            return
+        if not cur.startswith("# generated by theme.py"):   # a foreign file: keep the original
+            keep = dest.with_name(dest.name + ".pre-theme")
+            dest.rename(keep if not keep.exists() else dest.with_name(f"{dest.name}.pre-theme.{int(time.time())}"))
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    write_atomic(dest, new)
+
+
 def deploy(cfg, pal):
     link("~/.config/gtk-3.0/gtk.css", HOST_OUT / "gtk3.css")  # gtk.css + glass for CSD GTK3 windows (Gecko excluded)
     link("~/.config/gtk-4.0/gtk.css", HOST_OUT / "gtk4.css")  # gtk.css + translucent libadwaita (gtk_glass_*)
@@ -3677,9 +3731,7 @@ def deploy(cfg, pal):
     apply_qt_layout(cfg)
     purge_oxygen()
 
-    herdr = Path.home() / ".config/herdr/config.toml"
-    if herdr.exists():
-        inject(herdr, (OUT / "herdr.toml").read_text())
+    deploy_herdr()
 
 
 # ---------------------------------------------------------------------- brave
@@ -4120,16 +4172,42 @@ def reload_apps(cfg):
 
 
 # ------------------------------------------------------------------------ main
+def deep_merge(base, over):
+    out = dict(base)
+    for k, v in over.items():
+        out[k] = deep_merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
 def load_cfg():
+    """theme.toml (tracked) with theme.local.toml (git-ignored, per machine) merged over it."""
     with open(ROOT / "theme.toml", "rb") as f:
-        return tomllib.load(f)
+        cfg = tomllib.load(f)
+    if not DEFAULT_MODE and LOCAL_TOML.exists():
+        try:
+            with open(LOCAL_TOML, "rb") as f:
+                cfg = deep_merge(cfg, tomllib.load(f))
+        except (tomllib.TOMLDecodeError, OSError) as e:
+            print(f"theme: ignoring unreadable {LOCAL_TOML.name}: {e}", file=sys.stderr)
+    return cfg
+
+
+LOCAL_HEADER = """# Per-machine theme selection (git-ignored). theme.py apply writes `wallpaper` here; theme.toml (tracked) keeps the
+# defaults. Anything from theme.toml can be overridden here: [settings], [overrides], [vars].
+# [vars] tv_wallpaper = "~/..."   image of HDMI-A-1 (hyprpaper), [vars] static_blocks = per-monitor hyprpaper blocks.
+"""
 
 
 def set_wallpaper(path):
-    p = ROOT / "theme.toml"
-    t = p.read_text()
-    t = re.sub(r'(?m)^wallpaper\s*=.*$', f'wallpaper = "{path}"', t, count=1)
-    p.write_text(t)
+    """The selected wallpaper goes to theme.local.toml; the tracked theme.toml is never written."""
+    t = LOCAL_TOML.read_text() if LOCAL_TOML.exists() else LOCAL_HEADER
+    line = f'wallpaper = "{path}"'
+    if re.search(r'(?m)^wallpaper\s*=', t):
+        t = re.sub(r'(?m)^wallpaper\s*=.*$', lambda _: line, t, count=1)
+    else:
+        m = re.search(r'(?m)^\[', t)
+        t = t[:m.start()] + line + "\n\n" + t[m.start():] if m else t.rstrip("\n") + "\n\n" + line + "\n"
+    write_atomic(LOCAL_TOML, t)
 
 
 def write_hyprpaper(cfg):
@@ -4139,6 +4217,8 @@ def write_hyprpaper(cfg):
         extra["tv_wallpaper"] = extra["wallpaper"]
     extra.update(monitor_extras())
     extra.update(wallpaper_t=tilde(extra["wallpaper"]), tv_wallpaper_t=tilde(extra["tv_wallpaper"]))
+    extra["static_blocks"] = static_blocks(cfg, extra)
+    drop_marker()
     write_atomic(OUT / "hyprpaper.conf", render((ROOT / "templates/hyprpaper.conf").read_text(), {}, extra))
 
 
@@ -4261,11 +4341,152 @@ def pop_opt(args, name):
     return None
 
 
+def seed_script():
+    return ROOT / "bin" / "theme-seed"
+
+
+def seed_out(force=False):
+    """Run bin/theme-seed (the one implementation, also used by the git hooks and on macOS): fills a missing / seeded out/
+    from default/. Only needed when out/ has no real render yet (marker present, or no palette.json)."""
+    if force or (OUT / MARKER).exists() or not (OUT / "palette.json").exists():
+        env = {**os.environ, "THEME_OUT_DIR": str(OUT)}
+        subprocess.run(["sh", str(seed_script()), "-q"], env=env, check=False)
+
+
+def drop_marker():
+    """out/ is about to hold a real render: bin/theme-seed must never touch it again."""
+    try:
+        (OUT / MARKER).unlink()
+    except FileNotFoundError:
+        pass
+
+
+def toml_val(v):
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, list):
+        return "[" + ", ".join(toml_val(x) for x in v) + "]"
+    s = str(v)
+    if "\n" in s:
+        return "'''\n" + s.strip("\n") + "\n'''"
+    return json.dumps(s)
+
+
+def write_local(top, sections):
+    """theme.local.toml from {key: value} top-level pairs and {section: {key: value}}."""
+    out = [LOCAL_HEADER + "\n"]
+    out += [f"{k} = {toml_val(v)}\n" for k, v in top.items()]
+    for sec, kv in sections.items():
+        if kv:
+            out.append(f"\n[{sec}]\n" + "".join(f"{k} = {toml_val(v)}\n" for k, v in kv.items()))
+    write_atomic(LOCAL_TOML, "".join(out))
+
+
+def old_static_blocks(tpl_text):
+    """The machine-specific hyprpaper blocks of the pre-split template: every wallpaper block except the catch-all."""
+    blocks = re.findall(r"(?ms)^wallpaper \{\n.*?^\}", tpl_text)
+    return "\n\n".join(b for b in blocks if not re.search(r"(?m)^\s*monitor\s*=\s*$", b))
+
+
+def migrate_local(args):
+    """One-time, on the machine that generated the old tracked files: theme.local.toml from the working theme.toml
+    (wallpaper, tv_wallpaper) and the machine-specific blocks of the old hyprpaper template (read from git HEAD)."""
+    if LOCAL_TOML.exists() and "--force" not in args:
+        print(f"theme: {LOCAL_TOML} exists, leaving it (--force rewrites)")
+        return
+    with open(ROOT / "theme.toml", "rb") as f:
+        cur = tomllib.load(f)
+    vars_ = {}
+    if cur.get("vars", {}).get("tv_wallpaper"):
+        vars_["tv_wallpaper"] = cur["vars"]["tv_wallpaper"]
+    blocks = ""
+    r = subprocess.run(["git", "-C", str(ROOT), "show", "HEAD:config/theme/templates/hyprpaper.conf"], capture_output=True, text=True)
+    if r.returncode == 0:
+        blocks = old_static_blocks(r.stdout)
+    else:
+        print("theme: old hyprpaper template not found in git HEAD: static_blocks left empty", file=sys.stderr)
+    if blocks:
+        vars_["static_blocks"] = blocks
+    write_local({"wallpaper": cur["wallpaper"]}, {"vars": vars_})
+    print(f"theme: wrote {LOCAL_TOML.name}: wallpaper {cur['wallpaper']}" + (", static_blocks" if blocks else ""))
+
+
+def adopt_legacy(args):
+    """A machine that had the old tracked out/ and theme.toml: restore its theme from a backup folder (out/, theme.toml)
+    into the per-machine layout. A wallpaper that does not exist here falls back to the default (with a warning)."""
+    if not args:
+        sys.exit("theme: adopt-legacy <backup dir with out/ and theme.toml>")
+    d = Path(args[0]).expanduser()
+    try:
+        with open(d / "theme.toml", "rb") as f:
+            old = tomllib.load(f)
+        with open(ROOT / "theme.toml", "rb") as f:
+            new = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        sys.exit(f"theme: adopt-legacy: {e}")
+    wp = old.get("wallpaper")
+    if not wp or not os.path.exists(os.path.expanduser(wp)):
+        print(f"theme: adopt-legacy: wallpaper {wp!r} does not exist here, using the default theme", file=sys.stderr)
+        return False
+    top = {"wallpaper": wp}
+    tv = old.get("vars", {}).get("tv_wallpaper")
+    vars_ = {"tv_wallpaper": tv} if tv and os.path.exists(os.path.expanduser(tv)) else {}
+    sections = {"vars": vars_}
+    for sec in ("settings", "overrides"):   # local edits of the old theme.toml survive as local overrides
+        diff = {k: v for k, v in old.get(sec, {}).items() if new.get(sec, {}).get(k) != v}
+        sections[sec] = diff
+    if (d / "out").is_dir():
+        OUT.mkdir(parents=True, exist_ok=True)
+        for f in (d / "out").iterdir():
+            if f.is_file() and not f.name.endswith(".tmp"):
+                shutil.copy2(f, OUT / f.name)
+    drop_marker()
+    write_local(top, sections)
+    print(f"theme: adopted {d}: wallpaper {wp}")
+    return True
+
+
+def default_command():
+    """Regenerate the tracked default (default/ outputs + the [theme] block of the tracked herdr base) from
+    default/wallpaper.jpg and theme.toml alone (no theme.local.toml, no per-machine state, no host outputs, no reloads)."""
+    global OUT, DEFAULT_MODE
+    OUT, DEFAULT_MODE = DEFAULT_DIR, True
+    wpfile = DEFAULT_DIR / "wallpaper.jpg"
+    if not wpfile.exists():
+        sys.exit(f"theme: {wpfile} missing")
+    cfg = load_cfg()
+    if cfg["wallpaper"] != "~/.config/theme/default/wallpaper.jpg":
+        print(f"theme: theme.toml wallpaper is {cfg['wallpaper']!r}, expected the default one", file=sys.stderr)
+    base = extract(wpfile)
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "extracted.json").write_text(json.dumps({"wallpaper": cfg["wallpaper"], **base}))
+    pal = build_palette(base, cfg)
+    PAL[0] = pal
+    render_all(pal, cfg)
+    if HERDR_BASE.exists():
+        inject(HERDR_BASE, (OUT / "herdr.toml").read_text())
+    for f in OUT.glob("*.tmp"):
+        f.unlink()
+    print(f"theme: default  bg {pal['bg']}  fg {pal['fg']}  accent {pal['accent']}")
+
+
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else "apply"
     args = list(argv[2:])
     if cmd == "video":
         return video_command(args)
+    if cmd == "default":
+        return default_command()
+    if cmd == "seed":
+        return seed_out(force=True)
+    if cmd == "migrate-local":
+        return migrate_local(args)
+    if cmd == "adopt-legacy":
+        adopt_legacy(args)
+        cmd, args = "render", []
+    seed_out()
     o = {"mode": pop_opt(args, "--mode"),
          "play": pop_opt(args, "--play"), "wind": pop_opt(args, "--wind") or 0,   # no --play = full length
          "ease": pop_opt(args, "--ease")}   # replay transition seconds; absent = the theme.toml default
@@ -4296,11 +4517,13 @@ def main(argv):
     cache = OUT / "extracted.json"
     stale = True
     if cache.exists():
-        stale = json.loads(cache.read_text()).get("wallpaper") != str(wp)  # wallpaper edited in toml
+        stale = json.loads(cache.read_text()).get("wallpaper") not in (str(wp), tilde(wp))  # wallpaper edited in toml (the default's cache has the ~ form)
     if cmd in ("apply", "show") or stale:
-        OUT.mkdir(exist_ok=True)
+        OUT.mkdir(parents=True, exist_ok=True)
         base = extract(wp)
-        cache.write_text(json.dumps({"wallpaper": str(wp), **base}))
+        if cmd != "show" or not (OUT / MARKER).exists():   # `show` is not a render: it must not turn a seeded out/ into a real one
+            drop_marker()
+            cache.write_text(json.dumps({"wallpaper": str(wp), **base}))
     else:
         base = json.loads(cache.read_text())
         base = {k: base[k] for k in ("bg", "fg", "accent")}
@@ -4310,6 +4533,7 @@ def main(argv):
             print(f"{k:16}{v}")
         return
     PAL[0] = pal
+    drop_marker()
     render_all(pal, cfg)
     deploy(cfg, pal)
     apply_brave(cfg, pal)

@@ -6,7 +6,11 @@ return {
     config = function()
       local function apply()
         -- Palette is generated from the wallpaper: ~/.config/theme/theme.toml
-        local P = dofile(vim.fn.expand("~/.config/theme/out/palette.lua"))
+        -- out/ = this machine's render (git-ignored), default/ = committed fallback
+        local ok, P = pcall(dofile, vim.fn.expand("~/.config/theme/out/palette.lua"))
+        if not ok then
+          P = dofile(vim.fn.expand("~/.config/theme/default/palette.lua"))
+        end
         require("catppuccin").setup({
           flavour = "mocha",
           color_overrides = {

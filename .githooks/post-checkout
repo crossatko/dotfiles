@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# After checkout / switch (and clone, once hooksPath is set): fill the per-machine theme output from the committed
+# default when it has none yet, see theme-render. Branch checkouts only (flag 1). Never fails the git command.
+[ "$3" = 1 ] || exit 0
+THEME_SEED_ONLY=1 exec "$(dirname "$0")/theme-render"

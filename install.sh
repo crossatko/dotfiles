@@ -186,6 +186,7 @@ if [ -f "$FF_PROFILE_DIR/profiles.ini" ]; then
 fi
 
 # Generate every app's colors from the wallpaper (see config/theme/README.md)
+sh "$CONFIG_DIR/theme/bin/theme-seed" || true   # out/ from the committed default until the first render
 python3 -I "$CONFIG_DIR/theme/theme.py" render || true
 
 # Chromium 141+ enables the WaylandWpColorManagerV1 protocol by default,

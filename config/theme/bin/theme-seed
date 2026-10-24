@@ -1,0 +1,39 @@
+#!/bin/sh
+# Seed the per-machine theme output (out/, git-ignored) from the tracked default (default/) so every consumer
+# (kitty, ghostty, zellij, Hyprland, nvim, hyprlock, ...) finds its file before `theme.py render` has ever run:
+# a fresh clone, and the Mac, where theme.py never runs.
+#   - out/ has a real render (palette.json, no marker): nothing happens, never.
+#   - out/ empty or missing files: the missing files are copied (the leading "~/" of the default's paths becomes $HOME/),
+#     out/.default is written (it holds a hash of default/).
+#   - marker present and default/ changed: all files are refreshed (a machine that never renders follows the default).
+# theme.py render/apply deletes the marker, from then on this script does nothing. Plain POSIX sh (macOS too).
+# usage: theme-seed [-q]     THEME_OUT_DIR overrides out/ (tests).
+here=$(CDPATH= cd -- "$(dirname -- "$0")/.." 2>/dev/null && pwd -P) || exit 0
+def="$here/default"
+out="${THEME_OUT_DIR:-$here/out}"
+case "$out" in /*) ;; *) out="$here/$out" ;; esac
+quiet=0
+[ "$1" = "-q" ] && quiet=1
+[ -d "$def" ] || exit 0
+marker="$out/.default"
+
+[ -f "$marker" ] || { [ -f "$out/palette.json" ] && exit 0; }
+
+sum=$(cd "$def" && find . -type f | LC_ALL=C sort | while IFS= read -r f; do printf '%s\n' "$f"; cat "$f"; done | cksum | cut -d' ' -f1,2 | tr ' ' -)
+refresh=0
+[ -f "$marker" ] && [ "$(cat "$marker" 2>/dev/null)" != "$sum" ] && refresh=1
+
+mkdir -p "$out" || exit 0
+home_esc=$(printf '%s' "$HOME" | sed 's/[&|\\]/\\&/g')
+n=0
+for f in "$def"/*; do
+	[ -f "$f" ] || continue
+	name=${f##*/}
+	[ "$name" = wallpaper.jpg ] && continue
+	if [ "$refresh" = 1 ] || [ ! -e "$out/$name" ]; then
+		sed "s|~/|$home_esc/|g" "$f" >"$out/.$name.seed.tmp" && mv -f "$out/.$name.seed.tmp" "$out/$name" && n=$((n + 1))
+	fi
+done
+printf '%s\n' "$sum" >"$marker"
+[ "$quiet" = 1 ] || [ "$n" = 0 ] || echo "theme-seed: $n default file(s) copied into $out"
+exit 0

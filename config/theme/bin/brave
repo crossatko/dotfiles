@@ -10,7 +10,9 @@ fi
 # would also hit libadwaita apps (Nautilus), which treat it as "use a non-Adwaita stylesheet".
 # brave_mode = "gtk" in theme.toml: Brave runs in GTK mode (theme.py brave sets it in Preferences) and takes its
 # frame colours from "Wall-Glass" = Wall + translucent header bars, so the tab strip shows the window glass.
-if grep -qE '^brave_mode *= *"gtk"' "$HOME/.config/theme/theme.toml" 2>/dev/null \
+# (theme.local.toml, this machine's override, wins over the tracked theme.toml)
+brave_mode=$(grep -hE '^brave_mode *= *"' "$HOME/.config/theme/theme.local.toml" "$HOME/.config/theme/theme.toml" 2>/dev/null | head -n 1)
+if case "$brave_mode" in *'"gtk"'*) true ;; *) false ;; esac \
    && [ -f "$HOME/.local/share/themes/Wall-Glass/gtk-3.0/gtk.css" ]; then
   export GTK_THEME=Wall-Glass:dark
 else

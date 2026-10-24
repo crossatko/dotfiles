@@ -1,22 +1,55 @@
 #!/usr/bin/env bash
-# Re-render the theme after a pull (called by post-merge and post-rewrite): the per-host outputs in
-# config/theme/out/host/ (GTK3 / GTK4 CSS, Kvantum, Brave Wall-Glass) are git-ignored and depend on the running
-# compositor, so a pull that changes config/theme/ needs a `theme.py render` on every host. Runs only when the
-# pulled range touched config/theme/ or the host outputs are missing. Never fails the git command.
-# Skip once with THEME_RENDER_SKIP=1 git pull.
-[ -n "${THEME_RENDER_SKIP:-}" ] && exit 0
-# macOS: no render (theme.py exits there too); it uses the committed outputs.
-[ "$(uname -s)" = Darwin ] && exit 0
+# After git pull / checkout (called by post-merge, post-rewrite, post-checkout). The theme output is per machine
+# (git-ignored config/theme/out/, selection in config/theme/theme.local.toml), the committed default is
+# config/theme/default/:
+#  1. every OS: bin/theme-seed fills out/ from default/ when out/ has no real render (fresh clone, the Mac), and
+#     follows default/ changes while out/ is still the seeded default. A real render is never touched.
+#  2. Linux, after a pull that removed the old tracked out/ (the commit that made the theme per machine): the machine's
+#     previous theme is rebuilt from the old blobs (or a backup in ~/.local/state/theme/legacy) by `theme.py adopt-legacy`.
+#  3. Linux: re-render when the pulled range touched config/theme (default/ only counts while out/ is the seeded
+#     default) or the host outputs (out/host: GTK, Kvantum, Brave) are missing. macOS never renders (theme.py exits there).
+# Never fails the git command. Skip step 2 and 3 once with THEME_RENDER_SKIP=1 git pull (THEME_SEED_ONLY=1: step 1 only).
 top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+seed="$top/config/theme/bin/theme-seed"
 theme="$top/config/theme/theme.py"
+out="$top/config/theme/out"
+legacy="${XDG_STATE_HOME:-$HOME/.local/state}/theme/legacy"
+orig=0
+git rev-parse -q --verify ORIG_HEAD >/dev/null 2>&1 && orig=1
+
+# 2. (before seeding: adoption fills out/ with the old theme instead of the default)
+adopted=0
+if [ "$(uname -s)" != Darwin ] && [ -z "${THEME_RENDER_SKIP:-}${THEME_SEED_ONLY:-}" ] && [ -f "$theme" ] && [ "$orig" = 1 ] &&
+	[ ! -f "$top/config/theme/theme.local.toml" ] && [ ! -f "$out/palette.json" ] &&
+	git cat-file -e "ORIG_HEAD:config/theme/out/palette.json" 2>/dev/null; then
+	if [ ! -f "$legacy/theme.toml" ]; then
+		mkdir -p "$legacy/out" &&
+			git show "ORIG_HEAD:config/theme/theme.toml" >"$legacy/theme.toml" 2>/dev/null &&
+			git archive ORIG_HEAD config/theme/out | tar -x -C "$legacy/out" --strip-components=3 2>/dev/null
+	fi
+	if [ -f "$legacy/theme.toml" ]; then
+		echo "theme-render: adopting the previous theme into theme.local.toml"
+		python3 -I "$theme" adopt-legacy "$legacy" && adopted=1 || echo "theme-render: adopt-legacy failed (run it by hand)" >&2
+	fi
+fi
+
+# 1.
+[ -x "$seed" ] && "$seed" -q
+
+[ -n "${THEME_RENDER_SKIP:-}${THEME_SEED_ONLY:-}" ] && exit 0
+[ "$(uname -s)" = Darwin ] && exit 0
 [ -f "$theme" ] || exit 0
+[ "$adopted" = 1 ] && exit 0   # adopt-legacy already rendered
 
 changed=0
-if [ ! -d "$top/config/theme/out/host" ]; then
+if [ ! -d "$out/host" ]; then
 	changed=1
-elif git rev-parse -q --verify ORIG_HEAD >/dev/null &&
-	! git diff --quiet ORIG_HEAD HEAD -- config/theme 2>/dev/null; then
-	changed=1
+elif [ "$orig" = 1 ]; then
+	if [ -f "$out/.default" ]; then
+		git diff --quiet ORIG_HEAD HEAD -- config/theme 2>/dev/null || changed=1
+	else
+		git diff --quiet ORIG_HEAD HEAD -- config/theme ':(exclude)config/theme/default' 2>/dev/null || changed=1
+	fi
 fi
 [ "$changed" = 1 ] || exit 0
 

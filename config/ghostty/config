@@ -9,7 +9,7 @@ adjust-cell-height = 0
 adjust-cell-width = 0
 
 # --- Colors: generated, edit ~/.config/theme/theme.toml ---
-config-file = ~/.config/theme/out/ghostty
+config-file = ?~/.config/theme/out/ghostty
 
 # --- Window ---
 background-opacity = 0.8

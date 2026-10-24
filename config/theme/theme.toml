@@ -1,8 +1,12 @@
 # The one place to edit theme settings. After changing anything here run:
 #   ~/.config/theme/theme.py render      (re-render, no wallpaper analysis)
 #   ~/.config/theme/theme.py apply [img] (analyse wallpaper, render, reload apps)
+#
+# This file is the TRACKED default shared by every machine. The wallpaper a machine selects (theme.py apply, the picker)
+# and any per-machine setting live in the git-ignored theme.local.toml next to it, merged over this file; a wallpaper
+# switch never changes a tracked file. Output: git-ignored out/ (seeded from the committed default/ until the first render).
 
-wallpaper = "~/.cache/theme/video/raycast-hero-4k120-hevc-full-once2-3a6ed8756fb7.png"
+wallpaper = "~/.config/theme/default/wallpaper.jpg"
 # folders the quickshell picker (SUPER+T) scans for images
 wallpaper_dirs = ["~/Pictures/wallpapers"]
 # folders scanned for VIDEO wallpapers (mp4/webm/mkv, played by mpvpaper); unset = <xdg VIDEOS dir>/wallpapers
@@ -68,4 +72,5 @@ gtk_glass_control = 0.07  # pathbar, entries, buttons in bars: fg at this alpha 
 # Free-form values templates can use as {{name}}
 [vars]
 font = "Paper Mono"
-tv_wallpaper = "~/Pictures/wallpapers/nier.jpg"   # HDMI-A-1 only; not touched by the picker
+# per machine, in theme.local.toml only: tv_wallpaper = "~/..." (image for {{tv_wallpaper_t}}) and
+# static_blocks = hyprpaper `wallpaper { monitor = desc:<description> ... }` blocks of that machine's monitors

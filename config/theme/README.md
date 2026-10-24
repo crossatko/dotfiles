@@ -1,9 +1,10 @@
 # theme — one place for every color
 
 ```
-theme.toml ─┐
+theme.toml ─┐ (tracked defaults)
+theme.local.toml ─┤ (this machine: wallpaper, local settings; git-ignored)
 wallpaper ──┼─> theme.py ─> out/palette.{json,lua} + one file per app (templates/)
-overrides ──┘                      │
+overrides ──┘                      │   (out/ is git-ignored; default/ is the committed fallback)
                                    └─> kitty ghostty alacritty zellij hyprland
                                        hyprlock hyprtoolkit hyprpaper nvim quickshell
 ```
@@ -12,12 +13,14 @@ overrides ──┘                      │
 |---|---|
 | `SUPER+T` | open quickshell Settings on the Wallpaper & theme page (`qs ipc call picker toggle`; again = close); click a wallpaper (or arrows + Enter) to apply it everywhere |
 | `theme.py apply [image]` | re-analyse a wallpaper, render everything, reload apps |
-| `theme.py render` | re-render after editing `theme.toml` or a template (no re-analysis) |
+| `theme.py render` | re-render after editing `theme.toml`, `theme.local.toml` or a template (no re-analysis) |
+| `theme.py default` | (committer) regenerate the tracked default theme in `default/` from `default/wallpaper.jpg` and `theme.toml` |
+| `bin/theme-seed` (`theme.py seed`) | fill a missing `out/` from `default/` (done by install.sh, the git hooks, theme.py) |
 | `theme.py show` | print the resolved palette |
 | `python3 -I selftest.py` | run the extractor against 20 nasty synthetic wallpapers |
 
 ## Editing
-* **Pin a color**: `[overrides]` in `theme.toml` (e.g. `accent = "#c0392b"`), then `render`.
+* **Pin a color**: `[overrides]` in `theme.toml` (e.g. `accent = "#c0392b"`; for this machine only: in `theme.local.toml`), then `render`.
 * **Tone down / punch up terminal colors**: `ansi_saturation`, `ansi_lightness`.
 * **Picker folders**: `wallpaper_dirs` (images), `video_dirs` (video wallpapers, default `~/Videos/wallpapers`).
 * **Layout defaults** (`[settings]`, Quickshell only): `rounding` (default corner radius, px), `gap` (window gap, px),
@@ -36,11 +39,19 @@ overrides ──┘                      │
   `{{key.rgb}}` (`r, g, b`), `{{key.argb}}` (`0xffRRGGBB`), or `{{font}}`/`{{wallpaper}}`.
   It renders to `out/<same name>`; point the app at it (include/import/symlink).
   Palette keys: `theme.py show`.
-* `out/` is committed on purpose so a fresh clone works before the first `apply`, except `out/host/` (git-ignored):
-  `gtk3.css`, `gtk4.css`, `kvantum.kvconfig`, `brave-glass.css` depend on the running compositor (base fill 0.3 on the
-  solid_glass fork, `bar_opacity` over plain blur; `gtk_glass_fill` overrides), so each host renders its own; only `theme.py` links them.
-  A pull that changes `config/theme/` re-renders them automatically (`.githooks/post-merge` / `post-rewrite` ->
-  `.githooks/theme-render`, active via `core.hooksPath .githooks` from install.sh; skip once with `THEME_RENDER_SKIP=1`).
+* **Per machine, nothing tracked changes on a switch.** Tracked: `theme.toml` (settings; `wallpaper` = the default) and
+  `default/` (a generated neutral wallpaper + its outputs, `theme.py default`; paths written `~/...`). Git-ignored:
+  `theme.local.toml` (this machine's `wallpaper`, written by `apply` / the picker; optional local `[settings]`,
+  `[overrides]`, `[vars]` `tv_wallpaper` and `static_blocks` = this machine's hyprpaper per-monitor blocks, merged over
+  `theme.toml`) and `out/` (what every app reads, incl. `out/host/`: `gtk3.css`, `gtk4.css`, `kvantum.kvconfig`,
+  `brave-glass.css`, which depend on the running compositor; only `theme.py` links them).
+* **Seeding:** `bin/theme-seed` (POSIX sh) copies `default/` into a missing `out/` (leading `~/` becomes `$HOME/`) and writes
+  `out/.default`. install.sh, `theme.py` and the git hooks (`post-merge`, `post-rewrite`, `post-checkout` -> `theme-render`) call it, so a
+  fresh clone and the Mac (the engine never runs there) have working files; while the marker exists `out/` follows changes
+  of `default/`, the first `theme.py render/apply` deletes it and `out/` is then never touched by the seeder. A pull that
+  changes `config/theme/` re-renders on Linux (`THEME_RENDER_SKIP=1` skips). Consumers that would fail hard have fallbacks
+  (Hyprland `theme.lua` and nvim: `default/palette.lua`; ghostty `config-file = ?`).
+* **Other machines pulling the change that introduced this:** see AGENTS.md (Theme system) for `adopt-legacy`.
 
 ## How the extractor picks colors
 Background/foreground come from the darkest third / lightest quarter of the image,
@@ -57,7 +68,7 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 | alacritty | `general.import` | yes (watches imports) |
 | nvim | catppuccin fed from `out/palette.lua` | yes, every running instance (RPC `ThemeReload()`) |
 | zellij | theme file `themes/wall.kdl` | yes (rewrite of config.kdl triggers its watcher) |
-| herdr | managed `[theme]` block injected into `config/herdr/config.toml` | `herdr server reload-config` |
+| herdr | `~/.config/herdr/config.toml` is generated (tracked `config/herdr/config.toml` + this machine's `[theme]` block; herdr has no include) | `herdr server reload-config` |
 | hyprland, hyprlock, hyprtoolkit, hyprpaper | `dofile` / `source` / symlink | yes (`hyprctl reload`, hyprpaper restart); hyprlock reads its wallpaper path on each lock |
 | quickshell bar + Settings | watches `out/palette.json` | instant |
 | notifications | quickshell `Notifs.qml` server + toasts + notification center | instant, palette-driven |
@@ -89,9 +100,6 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 * **Blur**: the quickshell bar opts in to Hyprland's own blur via the `qs-bar` layer rule in
   `hypr/hyprland/rules.lua`; tune with `bar_opacity`.
 * Not themed: Discord, web page contents.
-* `out/` is committed on purpose so a fresh clone works before the first `apply`, except `out/host/` (git-ignored):
-  `gtk3.css`, `gtk4.css`, `kvantum.kvconfig`, `brave-glass.css` depend on the running compositor (base fill 0.3 on the
-  solid_glass fork, `bar_opacity` over plain blur; `gtk_glass_fill` overrides), so each host renders its own; only `theme.py` links them.
 
 ## Launcher
 `SUPER+D` = `qs ipc call launcher toggle` (Raycast-style launcher, `config/quickshell/Launcher.qml`).

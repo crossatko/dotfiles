@@ -1,7 +1,12 @@
 local M = {}
 
 -- Colors come from ~/.config/theme (edit theme.toml there, run theme.py apply).
-local P = dofile(os.getenv("HOME") .. "/.config/theme/out/palette.lua")
+-- out/ is the per-machine render (git-ignored); default/ is the committed fallback, so a missing out/ never aborts the config.
+local theme_dir = os.getenv("HOME") .. "/.config/theme/"
+local ok, P = pcall(dofile, theme_dir .. "out/palette.lua")
+if not ok then
+	P = dofile(theme_dir .. "default/palette.lua")
+end
 
 -- which palette key tints the border glow; any key of out/palette.lua works
 M.selected = "accent"
