@@ -1,5 +1,9 @@
-# AeroSpace (macOS tiling WM), shortcuts only (no borders/bar/theme).
-# Read from ~/.config/aerospace/aerospace.toml (symlinked from the dotfiles repo).
+# Skyland (AeroSpace fork), window-manager part only: dwindle tiling + smart gaps. Default config
+# path (~/.config/aerospace/aerospace.toml -> this file), so no --config-path is needed. Binds are
+# generated: `python3 -I config/karabiner/generate.py --aerospace` prints the [mode.main.binding] lines.
+# No bar, borders, animations, overview, lock, wallpaper or scripting addition.
+# The plain AeroSpace config this replaced is in git history (before the Skyland switch).
+# Reload: `skyland reload-config`.
 # Mirrors the Hyprland binds (config/hypr/hyprland/binds.lua): left Option = SUPER, right Cmd = ALT
 # (Karabiner, config/karabiner/generate.py, emits the combos bound below).
 # Full table: AGENTS.md, "macOS" section. Reload: `aerospace reload-config`.
@@ -8,12 +12,22 @@ config-version = 2
 
 after-startup-command = []
 
-# Per-user setting of this app: only this macOS account starts it at login.
-start-at-login = true
+# false: the login item cannot pass --config-path, and without it Skyland would read the AeroSpace config.
+start-at-login = true   # Skyland's own login item (per user)
 auto-reload-config = false
 
+# Dwindle: a new window splits the focused one along its longest side. Smart split (new window on
+# the side of the cursor) is off: keyboard-driven use.
+dwindle = true
+dwindle-smart-split = false
+mouse-modifier = 'alt'   # left Option (SUPER) + left drag moves, + right drag resizes (any window area)
+# One tiled window on a workspace: no gaps.
+smart-gaps = true
+smart-border = true   # no border on a workspace's single tiled window (floating windows keep it)
+
 enable-normalization-flatten-containers = true
-enable-normalization-opposite-orientation-for-nested-containers = true
+# off: dwindle picks the orientation from the window aspect
+enable-normalization-opposite-orientation-for-nested-containers = false
 
 accordion-padding = 30
 default-root-container-layout = 'tiles'
@@ -34,6 +48,27 @@ gaps.outer.right = 10
 
 # Apps pinned to a workspace (Hyprland rules.lua: chat on 7, mail on 8, media on 11). By bundle id;
 # rules for apps that aren't installed just never match.
+# Skyland extras kept off (JankyBorders border, animations and effects need the scripting addition).
+[decoration]
+border-width = 2            # focused window only, solid theme accent (~/.cache/skyland/theme.css -> theme out/skyland.css)
+border-rotate-ms = 60000    # >0 = Skyland draws the border itself (0 would need JankyBorders); accent = highlight, so no visible rotation
+rounding = 16                # border corner radius to match macOS window corners (windows keep their native
+                            # rounding: changing it needs the scripting addition). Toolbar windows are rounder.
+inactive-opacity = 100
+shadow = 'off'
+
+[animations]
+enabled = false
+
+[gestures]
+workspace-swipe = true          # one switch per swipe (no payload needed)
+workspace-swipe-fingers = 3     # macOS three-finger horizontal swipe is off (trackpad defaults)
+workspace-swipe-distance = 120      # finger travel (trackpad points) of a whole switch, default 200
+workspace-swipe-cancel-ratio = 40   # switches after 40% of the distance (~48 pt), default 50 (100 pt)
+
+[wallpaper]
+dynamic-colors = false
+
 [[on-window-detected]]
 if.app-id = 'com.brave.Browser'
 run = 'move-node-to-workspace 3'
@@ -118,6 +153,7 @@ run = 'layout floating'
     cmd-ctrl-alt-enter = 'exec-and-forget /Applications/kitty.app/Contents/MacOS/kitty --single-instance'
     cmd-ctrl-alt-b = 'exec-and-forget open -na "Brave Browser" --args --new-window'
     cmd-ctrl-alt-e = 'exec-and-forget open -a Finder'
+    cmd-ctrl-alt-tab = 'mode overview'
     cmd-ctrl-alt-shift-q = 'close'
     cmd-ctrl-alt-f = 'fullscreen'
     cmd-ctrl-alt-v = 'layout floating tiling'
@@ -159,3 +195,18 @@ run = 'layout floating'
     ctrl-alt-shift-v = 'workspace 12'
     cmd-ctrl-shift-v = 'move-node-to-workspace 12'
 
+
+# Workspace overview (Hyprspace-like strip; no zoom animation without the scripting addition).
+# Opened with SUPER+Tab (left Option + Tab); plain keys inside, letters start a search.
+[mode.overview.binding]
+    esc = 'mode main'
+    enter = 'overview confirm'
+    cmd-ctrl-alt-tab = 'mode main'
+    left = 'workspace --wrap-around prev'
+    right = 'workspace --wrap-around next'
+    h = 'workspace --wrap-around prev'
+    l = 'workspace --wrap-around next'
+    j = 'overview next'
+    k = 'overview prev'
+    x = 'overview close'
+    slash = 'overview search'

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generate karabiner.json (stdlib only). Run: python3 -I config/karabiner/generate.py
-`--aerospace` prints the matching [mode.main.binding] lines for ../aerospace/aerospace.toml.
+`--aerospace` prints the matching [mode.main.binding] lines for ../aerospace/aerospace.toml (Skyland).
 
 Design: left Option = Hyprland SUPER, right Command = Hyprland ALT. No modifier is rewritten; every
 manipulator matches the PHYSICAL modifiers (side-specific mandatory names) and emits one unique combo
@@ -30,6 +30,7 @@ BINDS = [
     ("SUPER", "e", "e", "exec-and-forget open -a Finder"),
     # cmd None: no AeroSpace bind, the emitted combo goes to the app (Raycast hotkey set to ⌃⌥⌘D, toggles)
     ("SUPER", "d", "d", None),
+    ("SUPER", "tab", "tab", "mode overview"),
     ("SUPER+SHIFT", "q", "q", "close"),
     ("SUPER", "f", "f", "fullscreen"),
     ("SUPER", "v", "v", "layout floating tiling"),
@@ -97,6 +98,8 @@ if __name__ == "__main__":
         "complex_modifications": {"rules": rules()},
         "name": "Default profile",
         "selected": True,
+        # Kept here: Karabiner saves the keyboard type into this file, and a regenerate would drop it (popup)
+        "virtual_hid_keyboard": {"keyboard_type_v2": "iso"},  # Czech internal MacBook keyboard = ISO
         "simple_modifications": [{"from": {"key_code": "caps_lock"}, "to": [{"key_code": "left_control"}]}],
     }]}
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "karabiner.json")
