@@ -49,6 +49,8 @@ gaps.outer.right = 10
 # Park inactive workspaces by order: lower ones at the bottom-left corner, higher ones at the bottom-right (only a corner pixel stays visible); Mission Control with "Group windows by application" on follows the sides
 hidden-window-placement = 'directional-corner'
 hidden-window-sliver = 1   # visible part of parked windows in points: default 1, integers only (fractions make macOS pull windows ~40 pt back on screen), 0 untested
+# 5-8 always exist, so the built-in display shows 5 instead of an invented stub workspace (13) when all of them are empty
+persistent-workspaces = ['5', '6', '7', '8']
 [gestures]
 workspace-swipe = true
 workspace-swipe-fingers = 3
