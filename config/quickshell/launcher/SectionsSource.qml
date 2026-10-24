@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Source: native sub-menus ("sections") of the launcher: Sound output, Sound input, Power, Twitch (more below: network, jellyfin, tailscale / mullvad via VpnSource).
+// Source: native sub-menus ("sections") of the launcher: Sound output, Sound input, Power, Twitch (more below: network, jellyfin, tailscale / mullvad via VpnSource, vms via VmSource).
 // `items` = the root rows (kind "section"); Launcher.enterSection(name) calls enter(name) (starts loading) and
 // then asks rows(name) for the list. Async sections emit updated() when their data arrives.
 // Section rows are `transient` + `private` (never in usage.json / history.json). Mirrors the old menus:
@@ -32,6 +32,7 @@ QtObject {
     property var web: null                          // WebappSource (set by Launcher): the "webapp" section delegates enter / rows / headerSub to it
     property var vpn: null                          // VpnSource (set by Launcher): the "tailscale" / "mullvad" sections delegate enter / rows / headerSub to it
     property var net: null                          // NetSource (set by Launcher): the "network" / "bluetooth" sections delegate rows / headerSub to it
+    property var vm: null                           // VmSource (set by Launcher): the "vms" section delegates enter / header / glyph / headerSub (rows: Launcher -> vm.listFor)
 
     readonly property var sections: ({
         "sound-output": { title: "Sound output", header: "Audio output", glyph: "", sub: "Choose the default audio output",
@@ -52,6 +53,8 @@ QtObject {
                           aliases: ["ts", "tailnet"], words: ["vpn", "machines", "peers", "ssh", "magicdns", "ip", "node"] },
         "mullvad":      { title: "Mullvad", glyph: "\uf3ed", sub: "Switch Mullvad VPN and choose its location",
                           aliases: ["mv"], words: ["vpn", "location", "country", "city", "relay", "connect", "reconnect"] },
+        "vms":          { title: "Virtual machines", glyph: "\uf108", sub: "Start, stop and create quickemu VMs",
+                          aliases: ["vm", "vms", "qemu", "quickemu", "quickget"], words: ["virtual", "machine", "kvm", "linux", "windows", "snapshot", "iso"] },
         "webapp":       { title: "Install webapp", header: "Install web app", glyph: "\uf0ac", sub: "Brave app window for a site, with its own icon",
                           aliases: ["webapp", "web app", "pwa"], words: ["install", "brave", "app", "website", "shortcut"] },
         "screenshot":   { title: "Screenshot", glyph: "\uf030", sub: "Region, window or screen",
@@ -67,8 +70,8 @@ QtObject {
 
     function title(name) { return sections[name] ? sections[name].title : "" }
     // launcher header while inside the section (defaults to the title) and its icon (the root row glyph)
-    function header(name) { const s = sections[name]; if (name === "jellyfin" && jf) return jf.header(); if (name === "mullvad" && vpn && vpn.country !== "") return vpn.countryName(); return name === "twitch" && vodActive ? "Past broadcasts" : s ? (s.header || s.title) : "" }
-    function glyph(name) { if (name === "jellyfin" && jf) return jf.glyph(); if (name === "mullvad" && vpn && vpn.country !== "") return "\uf3c5"; return name === "twitch" && vodActive ? "\uf144" : sections[name] ? sections[name].glyph : "" }
+    function header(name) { const s = sections[name]; if (name === "jellyfin" && jf) return jf.header(); if (name === "vms" && vm) return vm.header(); if (name === "mullvad" && vpn && vpn.country !== "") return vpn.countryName(); return name === "twitch" && vodActive ? "Past broadcasts" : s ? (s.header || s.title) : "" }
+    function glyph(name) { if (name === "jellyfin" && jf) return jf.glyph(); if (name === "vms" && vm) return vm.glyph(); if (name === "mullvad" && vpn && vpn.country !== "") return "\uf3c5"; return name === "twitch" && vodActive ? "\uf144" : sections[name] ? sections[name].glyph : "" }
 
     // ---- state ---------------------------------------------------------------------------------------------
     property var outRows: []
@@ -100,6 +103,7 @@ QtObject {
         if (name === "jellyfin" && jf) jf.enter()
         if (name === "webapp" && web) web.enter()
         if ((name === "tailscale" || name === "mullvad") && vpn) vpn.enter(name)
+        if (name === "vms" && vm) vm.enter()
         if (name === "record") { Quickshell.execDetached(["mkdir", "-p", src.prefsDir]); prefs.reload(); recording = false; statusProc.running = false; statusProc.running = true }
         if (name === "sound-output") { outRows = []; outError = ""; outLoading = true; outProc.running = false; outProc.running = true }
         else if (name === "sound-input") { inRows = []; inError = ""; inLoading = true; inProc.running = false; inProc.running = true }
@@ -123,6 +127,7 @@ QtObject {
         if ((name === "network" || name === "bluetooth") && net) return net.rows(name)
         if (name === "webapp" && web) return web.rows()
         if ((name === "tailscale" || name === "mullvad") && vpn) return vpn.rows(name)
+        if (name === "vms" && vm) return vm.rows()
         if (name === "twitch") {
             if (vodActive) return vodList()
             if (twitchLoading) return [info("loading", "Loading followed channels...", "", "")]
@@ -146,6 +151,7 @@ QtObject {
         if ((name === "network" || name === "bluetooth") && net) return net.headerSub(name)
         if (name === "webapp" && web) return web.headerSub()
         if ((name === "tailscale" || name === "mullvad") && vpn) return vpn.headerSub(name)
+        if (name === "vms" && vm) return vm.headerSub()
         if (name === "twitch" && vodActive) return vodName
         return name === "twitch" && twProbed ? "Player: " + twitchPlayerLabel() : ""
     }

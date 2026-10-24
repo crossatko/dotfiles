@@ -15,7 +15,8 @@ import "launcher/js/Frecency.js" as Frecency
 // Items come from sources (launcher/*Source.qml): each has `items` (static array), optionally dynamic(query) and
 // run(item). To add a source: declare it below, add it to `sourceList`. Ranking and frecency: launcher/js/.
 // State: ~/.local/state/launcher/usage.json (usage map), history.json (last 20 queries);
-// optional ~/.config/launcher/config.json = { "aliases": { "<item id>": ["alias", ...] }, "screen": "<model substring>" }.
+// optional ~/.config/launcher/config.json = { "aliases": { "<item id>": ["alias", ...] }, "screen": "<model substring>", "vmDir": "~/VMs",
+// "isoDirs": ["~/Downloads", ...] }.
 ModalMenu {
     id: lc
 
@@ -27,6 +28,8 @@ ModalMenu {
     // host override: config.json { "screen": "<text>" } = case-insensitive substring of a screen's model or name (e.g. its
     // model "MPG271QX", not the connector, which can change); no match / unset = the screen at 0,0
     property string screenMatch: ""
+    property string vmDir: ""                       // config.json "vmDir": folder of the quickemu VMs (VmSource; default ~/VMs)
+    property var vmIsoDirs: []                      // config.json "isoDirs": where VmSource looks for local .iso files
     fixedScreen: {
         const m = screenMatch.toLowerCase()
         const byMatch = m === "" ? null : Quickshell.screens.find(s => (s.model || "").toLowerCase().includes(m) || (s.name || "").toLowerCase() === m)
@@ -106,8 +109,18 @@ ModalMenu {
         }
     }
     VpnSource { id: vpnSrc; sw: VpnSwitch; active: lc.shown; section: lc.section; onUpdated: lc.refreshKeep() }   // Tailscale / Mullvad sections
-    SectionsSource { id: secSrc; jf: jfSrc; vpn: vpnSrc; net: netSrc; web: waSrc; onUpdated: lc.refreshKeep() }
-    readonly property var sourceList: [appsSrc, winSrc, cmdSrc, secSrc, jfSrc, netSrc, vpnSrc, waSrc, scriptSrc, calcSrc, emojiSrc, fileSrc, clipSrc, webSrc]
+    VmSource {                                      // quickemu VMs section
+        id: vmSrc
+        active: lc.shown; section: lc.section; cfgDir: lc.vmDir; cfgIsoDirs: lc.vmIsoDirs
+        onUpdated: lc.refreshKeep()
+        onFinished: lc.close()                      // a VM from a local ISO was created and is booting
+        onSelect: id => {                           // the VM made with "Create only" appeared: select it
+            const i = lc.results.findIndex(r => r.id === id)
+            if (i >= 0) { lc.sel = i; if (i < lc.first) lc.first = i; else if (i >= lc.first + lc.numResults) lc.first = i - lc.numResults + 1 }
+        }
+    }
+    SectionsSource { id: secSrc; jf: jfSrc; vpn: vpnSrc; net: netSrc; web: waSrc; vm: vmSrc; onUpdated: lc.refreshKeep() }
+    readonly property var sourceList: [appsSrc, winSrc, cmdSrc, secSrc, jfSrc, netSrc, vpnSrc, vmSrc, waSrc, scriptSrc, calcSrc, emojiSrc, fileSrc, clipSrc, webSrc]
 
     readonly property var allItems: {
         const out = []
@@ -126,8 +139,8 @@ ModalMenu {
     function refresh(keep) {
         const q = argItem ? argQuery : query.trim()     // under a text prompt the field holds the argument, not a filter
         if (section !== "") {                           // inside a section: only its rows, filtered with the ranker (no usage)
-            let rows = section === "jellyfin" ? jfSrc.listFor(q) : secSrc.rows(section)   // jellyfin: nested level / server search, no usage ranking
-            if (q !== "" && section !== "jellyfin") rows = secSrc.extra(section, q).concat(Ranker.rank(rows, q, {}, Date.now(), { limit: 50 }).map(r => r.item))
+            let rows = section === "jellyfin" ? jfSrc.listFor(q) : section === "vms" ? vmSrc.listFor(q) : secSrc.rows(section)   // jellyfin: nested level / server search, no usage ranking
+            if (q !== "" && section !== "jellyfin" && !(section === "vms" && vmSrc.unranked(q))) rows = secSrc.extra(section, q).concat(Ranker.rank(rows, q, {}, Date.now(), { limit: 50 }).map(r => r.item))
             const prevId = keep && results[sel] ? results[sel].id : ""
             const hadStop = results.some(r => r.kind === "rec-stop")
             // a status block (Loading / error / Try again rows) that gets replaced hands the selection to the row now at its first position,
@@ -234,6 +247,15 @@ ModalMenu {
             if (i > 0) { sel = i; first = Math.max(0, i - numResults + 1) }
             return
         }
+        if (section === "vms" && vmSrc.depth > 0) {     // VMs: nested level (OS / release / edition / snapshots) -> its parent, row re-selected
+            const id = vmSrc.pop()
+            confirmId = ""; histPos = -1
+            input.text = ""
+            refresh()
+            const i = results.findIndex(r => r.id === id)
+            if (i > 0) { sel = i; first = Math.max(0, i - numResults + 1) }
+            return
+        }
         if (section === "twitch" && secSrc.vodActive) {  // nested "Past broadcasts" level -> the channel list, channel stays selected
             const id = "sec:twitch:" + secSrc.vodLogin
             secSrc.leaveVods()
@@ -286,7 +308,7 @@ ModalMenu {
     function keyRight() {
         if (actionsOpen || argItem || !current) return false
         const jfBrowse = jfSrc.rightHintFor(current)
-        const cities = current.kind === "vpn-country"     // Mullvad country -> its cities
+        const cities = current.kind === "vpn-country" || !!current.vmNav   // Mullvad country -> its cities, VMs: New VM / OS / release -> next level
         if (!jfBrowse && !cities && actions.length < 2) return false
         if (input.text !== "" && (input.cursorPosition !== input.text.length || input.selectionStart !== input.selectionEnd)) return false
         if (cities) runItem(current)
@@ -302,8 +324,8 @@ ModalMenu {
         return true
     }
     // footer hint for Right ("" = the selected row has no options)
-    readonly property string rightHint: actionsOpen || argItem || !current || (actions.length < 2 && !jfSrc.rightHintFor(current) && current.kind !== "vpn-country") ? ""
-        : current.kind === "vpn-country" ? "→ cities" : current.actions && current.actions.some(a => a.id === "twitch-vods") ? "→ broadcasts" : jfSrc.rightHintFor(current) ? "→ browse" : "→ options"
+    readonly property string rightHint: actionsOpen || argItem || !current || (actions.length < 2 && !jfSrc.rightHintFor(current) && current.kind !== "vpn-country" && !current.vmNav) ? ""
+        : current.kind === "vpn-country" ? "→ cities" : current.vmNav ? "→ open" : current.actions && current.actions.some(a => a.id === "twitch-vods") ? "→ broadcasts" : jfSrc.rightHintFor(current) ? "→ browse" : "→ options"
 
     // open with the search field prefilled (qs ipc call launcher query "v "); on an open launcher just sets the text
     property string preset: ""
@@ -345,6 +367,11 @@ ModalMenu {
             afterEnter()
             return
         }
+        if (item.vmNav) {                                // VMs: New VM / OS / release rows open the next level (not recorded, launcher stays open)
+            vmSrc.push(item)
+            afterEnter()
+            return
+        }
         if (item.kind === "rec-opt") {                   // recording options: toggle, save, stay open
             secSrc.run(item)
             refresh(true)
@@ -361,7 +388,7 @@ ModalMenu {
             input.cursorPosition = input.text.length
             return
         }
-        const inPlace = [netSrc, vpnSrc, waSrc].find(s => s.owns(item))
+        const inPlace = [netSrc, vpnSrc, waSrc, vmSrc].find(s => s.owns(item))
         if (inPlace) {                                  // Network / Bluetooth / Install webapp rows act in place: progress and errors show on the row
             const r = inPlace.activate(item, arg)
             if (typeof r === "string") { argNote = r; return }   // the prompt stays, with this note in the footer
@@ -427,6 +454,7 @@ ModalMenu {
                     const r = s.action(id, it)
                     if (r === "keep") { actionsOpen = false; refresh(true); return }   // stays open (e.g. clipboard delete)
                     if (r === "enter") { afterEnter(); return }   // pushed a nested level (Twitch past broadcasts, Jellyfin browse)
+                    if (r && typeof r === "object") { actionsOpen = false; runItem(r); return }   // an item to run now, e.g. a text prompt (VMs: type a RAM value)
                     if (r) { shown = false; return }
                 }
         }
@@ -488,6 +516,8 @@ ModalMenu {
                 const c = JSON.parse(text())
                 if (c && c.aliases && typeof c.aliases === "object") lc.aliases = c.aliases
                 if (c && typeof c.screen === "string") lc.screenMatch = c.screen
+                if (c && typeof c.vmDir === "string") lc.vmDir = c.vmDir
+                if (c && Array.isArray(c.isoDirs)) lc.vmIsoDirs = c.isoDirs.filter(d => typeof d === "string")
             } catch (e) {}
         }
     }

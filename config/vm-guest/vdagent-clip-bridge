@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# vdagent-clip-bridge: runs INSIDE a Linux VM guest whose desktop is Hyprland (or another Wayland compositor).
+#
+# Why: spice-vdagent (the host <-> guest clipboard agent) only speaks X11; it owns and reads XWayland's CLIPBOARD
+# from an invisible window. Hyprland only syncs the X and Wayland clipboards while an X window has keyboard focus
+# (xwayland/XWM.cpp: "denying access to write to clipboard because no X client is in focus" / "xwayland not in
+# focus"), so in a Wayland-only session the host clipboard never reaches Wayland apps and the other way round.
+# This script copies text between the two clipboards itself: X side with xclip (plain X11, no compositor in the
+# way), Wayland side with wl-clipboard (data-control protocol, needs no focus).
+#
+# Needs: wl-clipboard, xclip, clipnotify (all in Arch extra), spice-vdagent running in the same session (DISPLAY set).
+# Start once per session, e.g. Hyprland: exec-once = ~/.local/bin/vdagent-clip-bridge
+# Text only. Loop-safe: the last synced text is remembered, and echoes of our own copies are skipped.
+set -u
+if [ "${1:-}" = "--from-wayland" ]; then          # internal: wl-paste --watch hands the new Wayland text on stdin
+    t=$(cat)
+    [ -n "$t" ] && [ "$t" != "$(cat "$2" 2>/dev/null)" ] || exit 0
+    printf '%s' "$t" > "$2"
+    printf '%s' "$t" | xclip -selection clipboard -i >/dev/null 2>&1
+    exit 0
+fi
+
+for tool in wl-paste wl-copy xclip clipnotify; do
+    command -v "$tool" >/dev/null || { echo "vdagent-clip-bridge: $tool is missing" >&2; exit 1; }
+done
+[ -n "${DISPLAY:-}" ] && [ -n "${WAYLAND_DISPLAY:-}" ] || { echo "vdagent-clip-bridge: needs DISPLAY and WAYLAND_DISPLAY" >&2; exit 1; }
+last="${XDG_RUNTIME_DIR:-/tmp}/vdagent-clip-bridge.$$.last"
+: > "$last"
+# on exit: stop only our own children (the wl-paste watcher, a waiting clipnotify), never the session's process group
+trap 'rm -f "$last"; kill $(jobs -p) 2>/dev/null' EXIT
+trap 'exit 0' INT TERM HUP
+
+# Wayland -> X (guest copy -> spice-vdagent -> host)
+wl-paste --no-newline --type text --watch "$0" --from-wayland "$last" &
+
+# X -> Wayland (host copy -> spice-vdagent owns the X CLIPBOARD -> guest Wayland apps)
+while :; do
+    clipnotify & wait $! || break                # in the background, so a TERM is handled at once
+    t=$(xclip -o -selection clipboard 2>/dev/null) || continue
+    [ -n "$t" ] && [ "$t" != "$(cat "$last" 2>/dev/null)" ] || continue
+    printf '%s' "$t" > "$last"
+    printf '%s' "$t" | wl-copy >/dev/null 2>&1
+done

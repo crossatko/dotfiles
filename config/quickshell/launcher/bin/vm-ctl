@@ -1,0 +1,669 @@
+#!/usr/bin/env python3
+"""quickemu helper for the launcher "vms" section (launcher/VmSource.qml).
+
+  vm-ctl list DIR                      JSON array of the VMs (*.conf in DIR): name, guest, running, pid, display, used, size, ssh, installed
+  vm-ctl oslist CACHE                  JSON array of quickget OSes (quickget --list-csv, cached in CACHE for a day)
+  vm-ctl start DIR NAME [gl|spice|headless]
+  vm-ctl focus DIR NAME                focus the VM window (Hyprland, by qemu PID, else the SPICE viewer), else reopen the viewer / toast
+  vm-ctl stop DIR NAME                 ACPI shutdown (quickemu --monitor-cmd system_powerdown); toast if it is still up after 90 s
+  vm-ctl kill DIR NAME                 quickemu --kill
+  vm-ctl snapshots DIR NAME            JSON {snapshots: [{tag, date, size}]} (qemu-img info -U, works while running)
+  vm-ctl snapshot DIR NAME create|apply|delete TAG   (VM must be stopped; quickemu --snapshot)
+  vm-ctl create-run DIR OS RELEASE [EDITION] [--ram R] [--cores N] [--disk S]
+                                       quickget in DIR (run inside a terminal: shows progress, toast at the end); after a
+                                       successful run the options are written into the conf quickget just made
+  vm-ctl host                          JSON {ram (GB, free --giga), threads, smt, autoRam, autoCores} = quickemu's auto values
+  vm-ctl resources DIR NAME RAM CORES  set ram= / cpu_cores= ("auto" removes the line); VM must be stopped
+  vm-ctl delete DIR NAME               move <name>.conf and the VM folder to the trash (gio trash); VM must be stopped
+  vm-ctl isos DIR...                   JSON [{path, name, dir, size, mtime}] of the *.iso files in DIRs (2 levels deep), newest first
+  vm-ctl isopath TEXT                  JSON {dir, dirs: [path], files: [{path, name, size, mtime}]}: entries of dirname(TEXT) starting with basename(TEXT)
+  vm-ctl create-local DIR NAME linux|windows|other SIZE ISO [RAM CORES]   write DIR/NAME.conf + DIR/NAME/ that boot ISO (in place)
+  vm-ctl attach DIR NAME ISO           not installed yet: iso= (the installer); installed: fixed_iso= (extra CD-ROM, e.g. virtio-win)
+  vm-ctl detach DIR NAME               remove fixed_iso= (else iso=)
+
+Every user-facing outcome is a notify-send toast (-a Launcher). VM names, tags and quickget arguments are validated and
+only ever passed as argv. $QS_QUICKEMU / $QS_QUICKGET replace the binaries (tests).
+"""
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+
+QUICKEMU = os.environ.get("QS_QUICKEMU") or "quickemu"
+QUICKGET = os.environ.get("QS_QUICKGET") or "quickget"
+NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,99}$")
+TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$")
+OS_RE = re.compile(r"^[a-z0-9][a-z0-9.+_-]{0,40}$")
+REL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,40}$")
+ED_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ()._+-]{0,60}$")
+CONF_LINE = re.compile(r"""^\s*([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s#]*))""")
+# quickget guests that are not plain "linux" (quickget make_vm_config): no virtio-gpu / VirGL for them
+NON_LINUX = {"batocera", "dragonflybsd", "freebsd", "ghostbsd", "haiku", "freedos", "kolibrios", "macos", "netbsd",
+             "openbsd", "openindiana", "reactos", "windows", "windows-server"}
+DISPLAYS = {"gl": "gtk", "spice": "spice", "headless": "none"}
+GTK_VDAGENT = ("-chardev qemu-vdagent,id=qsvdagent,name=vdagent,clipboard=on -device virtio-serial-pci,id=qsvserial "
+               "-device virtserialport,bus=qsvserial.0,chardev=qsvdagent,name=com.redhat.spice.0")
+SIZE_RE = re.compile(r"^[1-9][0-9]{0,4}[MGT]$")
+GUESTS = {"linux": "linux", "windows": "windows", "other": "other"}
+DISK_MIN_SIZE = 197632 * 8          # quickemu: a disk this small "looks unused" and still boots iso=
+
+
+def notify(title, body=""):
+    try:
+        subprocess.Popen(["notify-send", "-a", "Launcher", title, body], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        pass
+
+
+def die(msg, code=2):
+    print(msg, file=sys.stderr)
+    sys.exit(code)
+
+
+def read_conf(path):
+    conf = {}
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                m = CONF_LINE.match(line)
+                if m:
+                    conf[m.group(1)] = next(g for g in m.groups()[1:] if g is not None)
+    except OSError:
+        pass
+    return conf
+
+
+class Vm:
+    def __init__(self, d, name):
+        if not NAME_RE.match(name):
+            die("invalid VM name")
+        self.dir, self.name = d, name
+        self.conf_path = os.path.join(d, name + ".conf")
+        self.conf = read_conf(self.conf_path)
+        disk = self.conf.get("disk_img") or os.path.join(name, "disk." + (self.conf.get("disk_format") or "qcow2"))
+        self.disk = disk if os.path.isabs(disk) else os.path.join(d, disk)     # quickemu runs with cwd = DIR
+        self.vmdir = os.path.dirname(self.disk)
+
+    def exists(self):
+        return os.path.isfile(self.conf_path)
+
+    def file(self, ext):
+        return os.path.join(self.vmdir, self.name + ext)
+
+    # same test as quickemu: <vmdir>/<name>.pid holds a live PID (and it is a qemu process)
+    def pid(self):
+        try:
+            with open(self.file(".pid")) as f:
+                pid = int(f.readline().strip())
+            with open("/proc/%d/cmdline" % pid, "rb") as f:
+                cmd = f.read().split(b"\0")
+        except (OSError, ValueError):
+            return 0, []
+        return (pid, [c.decode(errors="replace") for c in cmd]) if cmd and b"qemu" in os.path.basename(cmd[0]) else (0, [])
+
+    def ports(self):
+        out = {}
+        try:
+            with open(self.file(".ports")) as f:
+                for line in f:
+                    p = line.strip().split(",")
+                    if len(p) >= 2 and p[1].isdigit():
+                        out[p[0]] = int(p[1])
+        except OSError:
+            pass
+        return out
+
+    def info(self):
+        pid, cmd = self.pid()
+        display = ""
+        if pid and "-display" in cmd:
+            v = cmd[cmd.index("-display") + 1] if cmd.index("-display") + 1 < len(cmd) else ""
+            display = "headless" if v.startswith("none") else "spice" if v.startswith("egl-headless") or (v == "" and "-spice" in cmd) else v.split(",")[0]
+        elif pid and "-spice" in cmd:
+            display = "spice"
+        try:
+            st = os.stat(self.disk)
+            used, installed = st.st_blocks * 512, True
+        except OSError:
+            used, installed = 0, False
+        guest = self.conf.get("guest_os", "linux")
+        iso, fixed = self.conf.get("iso", ""), self.conf.get("fixed_iso", "")
+        return {"ram": self.conf.get("ram", ""), "cores": self.conf.get("cpu_cores", ""), "name": self.name, "guest": guest, "accel": guest == "linux", "running": pid > 0, "pid": pid, "display": display,
+                "used": used, "size": self.conf.get("disk_size", "16G"), "installed": installed, "fresh": self.fresh(),
+                "iso": os.path.basename(iso), "isoMissing": bool(iso) and self.fresh() and not os.path.exists(self.path(iso)),
+                "fixedIso": os.path.basename(fixed),
+                "ssh": self.ports().get("ssh", 0) if pid else 0, "vmdir": self.vmdir, "conf": self.conf_path}
+
+    def path(self, p):
+        return p if os.path.isabs(p) else os.path.join(self.dir, p)
+
+    # quickemu boots iso= only while the disk is missing or "looks unused"; after that it drops iso=
+    def fresh(self):
+        try:
+            return os.stat(self.disk).st_size <= DISK_MIN_SIZE
+        except OSError:
+            return True
+
+    # replace (or with value None remove) KEY= lines; the conf is sourced by bash, values were validated by the caller
+    def set_conf(self, key, value):
+        with open(self.conf_path, encoding="utf-8", errors="replace") as f:
+            lines = [l for l in f.read().splitlines() if not re.match(r"^\s*%s=" % key, l)]
+        if value is not None:
+            lines.append('%s="%s"' % (key, value))
+        tmp = self.conf_path + ".tmp"
+        with open(tmp, "w") as f:
+            f.write("\n".join(lines) + "\n")
+        os.chmod(tmp, os.stat(self.conf_path).st_mode & 0o7777)
+        os.replace(tmp, self.conf_path)
+
+    def quickemu(self, *args, timeout=120):
+        """quickemu --vm <name>.conf ARGS with cwd = DIR; output to a file (qemu / swtpm / viewers inherit no pipe)"""
+        logdir = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "launcher-vm")
+        os.makedirs(logdir, mode=0o700, exist_ok=True)
+        log = os.path.join(logdir, self.name + ".log")
+        with open(log, "w") as f:
+            try:
+                p = subprocess.Popen([QUICKEMU, "--vm", self.name + ".conf"] + list(args), cwd=self.dir, stdin=subprocess.DEVNULL,
+                                     stdout=f, stderr=subprocess.STDOUT, start_new_session=True)
+                rc = p.wait(timeout=timeout)
+            except FileNotFoundError:
+                return 127, "quickemu is not installed"
+            except subprocess.TimeoutExpired:
+                return 124, "quickemu did not finish"
+        with open(log, errors="replace") as f:
+            return rc, f.read()
+
+
+def first_error(text, rc):
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    for l in lines:
+        if "ERROR" in l:
+            return re.sub(r"^.*?ERROR!?\s*", "", l)[:200]
+    return (lines[-1][:200] if lines else "") or "exit code %d" % rc
+
+
+# ---- commands ------------------------------------------------------------------------------------------------
+def cmd_list(d):
+    os.makedirs(d, exist_ok=True)
+    out = []
+    for f in sorted(os.listdir(d), key=str.lower):
+        name = f[:-5]
+        if not f.endswith(".conf") or not NAME_RE.match(name) or not os.path.isfile(os.path.join(d, f)):
+            continue
+        out.append(Vm(d, name).info())
+    print(json.dumps(out))
+
+
+def release_key(r):
+    m = re.match(r"^(\d+(?:\.\d+)*)", r)
+    return tuple(int(x) for x in m.group(1).split(".")) if m else None
+
+
+def cmd_oslist(cache):
+    text = None
+    try:
+        fresh = time.time() - os.stat(cache).st_mtime < 86400
+    except OSError:
+        fresh = False
+    if not fresh:
+        try:
+            p = subprocess.run([QUICKGET, "--list-csv"], capture_output=True, text=True, timeout=180, stdin=subprocess.DEVNULL)
+            if p.returncode == 0 and p.stdout.startswith("Display Name,"):
+                text = p.stdout
+                os.makedirs(os.path.dirname(cache), exist_ok=True)
+                tmp = cache + ".tmp"
+                with open(tmp, "w") as f:
+                    f.write(text)
+                os.replace(tmp, cache)
+            elif p.returncode != 0 and not os.path.exists(cache):
+                die(first_error(p.stderr or p.stdout, p.returncode), 1)
+        except FileNotFoundError:
+            die("quickget is not installed", 127)
+        except subprocess.TimeoutExpired:
+            pass
+    if text is None:
+        try:
+            with open(cache) as f:
+                text = f.read()
+        except OSError:
+            die("quickget --list-csv failed", 1)
+    oses = {}
+    for line in text.splitlines()[1:]:
+        p = line.split(",")
+        if len(p) != 7 or not OS_RE.match(p[1]) or not REL_RE.match(p[2]) or (p[3] and not ED_RE.match(p[3])):
+            continue
+        o = oses.setdefault(p[1], {"os": p[1], "name": p[0] or p[1], "accel": p[1] not in NON_LINUX, "releases": {}})
+        eds = o["releases"].setdefault(p[2], [])
+        if p[3] and p[3] not in eds:
+            eds.append(p[3])
+    out = []
+    for o in sorted(oses.values(), key=lambda x: x["name"].lower()):
+        rels = list(o["releases"].keys())
+        num = sorted([r for r in rels if release_key(r) is not None], key=release_key, reverse=True)
+        o["releases"] = [{"release": r, "editions": o["releases"][r]} for r in num + [r for r in rels if release_key(r) is None]]
+        out.append(o)
+    print(json.dumps(out))
+
+
+def need(vm):
+    if not vm.exists():
+        notify("VM not found", vm.name)
+        die("no such VM", 1)
+
+
+def cmd_start(vm, mode="gl"):
+    need(vm)
+    if mode not in DISPLAYS:
+        die("bad mode")
+    if vm.pid()[0]:
+        return cmd_focus(vm)
+    args = ["--display", DISPLAYS[mode]]
+    # quickemu wires the SPICE vdagent (clipboard) only for spice / spice-app / none; for the GTK display add QEMU's own
+    # vdagent (qemu-vdagent chardev, clipboard bridged to the GTK UI) on the same port name the guest's spice-vdagent opens.
+    # A conf extra_args replaces this --extra_args (quickemu sources the conf after parsing), so skip it then.
+    if mode == "gl" and not vm.conf.get("extra_args"):
+        args += ["--extra_args", GTK_VDAGENT]
+    rc, text = vm.quickemu(*args)
+    if rc != 0 or "ERROR" in text:
+        notify("Could not start " + vm.name, first_error(text, rc))
+        return 1
+    if mode == "headless":
+        port = vm.ports().get("ssh")
+        notify("Started " + vm.name + " headless", (("ssh -p %d user@localhost · " % port) if port else "") + "Enter on it in the launcher opens a SPICE viewer")
+    return 0
+
+
+def hypr_clients():
+    try:
+        return json.loads(subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, text=True, timeout=5).stdout)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return []
+
+
+def cmd_focus(vm):
+    need(vm)
+    pid, _ = vm.pid()
+    if not pid:
+        notify(vm.name + " is not running")
+        return 1
+    clients = hypr_clients()
+    win = next((c for c in clients if c.get("pid") == pid), None) \
+        or next((c for c in clients if c.get("title") == vm.name and "spic" in str(c.get("class", "")).lower()), None)
+    if win and re.match(r"^0x[0-9a-fA-F]+$", str(win.get("address", ""))):
+        subprocess.run(["hyprctl", "dispatch", 'hl.dsp.focus({window="address:%s"})' % win["address"]], capture_output=True, timeout=5)
+        return 0
+    try:
+        with open(vm.file(".spice")) as f:
+            spice = f.readline().strip()
+    except OSError:
+        spice = ""
+    if "/" in spice:                               # SPICE (unix socket) VM whose viewer was closed: quickemu reopens it
+        rc, text = vm.quickemu("--display", "spice")
+        if rc != 0:
+            notify("Could not open the viewer of " + vm.name, first_error(text, rc))
+        return rc
+    ssh = vm.ports().get("ssh")
+    if spice.isdigit() and shutil.which("spicy"):  # headless: SPICE on 127.0.0.1:<port> (quickemu's own call lacks the host)
+        subprocess.Popen(["spicy", "-h", "127.0.0.1", "-p", spice, "--title", vm.name], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        return 0
+    notify(vm.name + " runs headless", ("ssh -p %d user@localhost" % ssh) if ssh else "It has no window")
+    return 0
+
+
+def cmd_stop(vm):
+    need(vm)
+    pid = vm.pid()[0]
+    if not pid:
+        return 0
+    rc, text = vm.quickemu("--monitor-cmd", "system_powerdown")
+    if rc != 0 or "WARNING" in text:
+        notify("Could not shut down " + vm.name, first_error(text, rc))
+        return 1
+    for _ in range(180):                           # 90 s for the guest to power off
+        time.sleep(0.5)
+        if not os.path.exists("/proc/%d" % pid):
+            return 0
+    notify(vm.name + " is still running", "The guest ignored the shutdown request; Force stop is in the launcher (Ctrl+K)")
+    return 1
+
+
+def cmd_kill(vm):
+    need(vm)
+    rc, text = vm.quickemu("--kill")
+    if rc != 0 or "was not killed" in text:
+        notify("Could not stop " + vm.name, first_error(text, rc))
+        return 1
+    return 0
+
+
+def cmd_snapshots(vm):
+    need(vm)
+    if not os.path.exists(vm.disk):
+        print(json.dumps({"snapshots": [], "installed": False}))
+        return 0
+    p = subprocess.run(["qemu-img", "info", "-U", "--output=json", vm.disk], capture_output=True, text=True, timeout=30)
+    if p.returncode != 0:
+        die(first_error(p.stderr, p.returncode), 1)
+    snaps = json.loads(p.stdout).get("snapshots", [])
+    print(json.dumps({"installed": True, "snapshots": [{"tag": s.get("name", ""), "date": s.get("date-sec", 0),
+                                                       "size": s.get("vm-state-size", 0)} for s in snaps]}))
+    return 0
+
+
+def cmd_snapshot(vm, op, tag):
+    need(vm)
+    if op not in ("create", "apply", "delete") or not TAG_RE.match(tag):
+        die("bad snapshot arguments")
+    verb = {"create": "Snapshot", "apply": "Restore", "delete": "Delete snapshot"}[op]
+    if vm.pid()[0]:
+        notify(verb + " failed", vm.name + " is running; shut it down first")
+        return 1
+    rc, text = vm.quickemu("--snapshot", op, tag)
+    if rc != 0 or "ERROR" in text or "NOTE!" in text:
+        print(first_error(text, rc), file=sys.stderr)
+        notify(verb + " failed", vm.name + ": " + first_error(text, rc))
+        return 1
+    notify({"create": "Snapshot created", "apply": "Snapshot restored", "delete": "Snapshot deleted"}[op], vm.name + ": " + tag)
+    return 0
+
+
+# ---- RAM / CPU cores (quickemu configure_ram / configure_cpu) ----------------------------------------------------
+def host():
+    try:
+        ram = int(subprocess.run(["free", "--giga"], capture_output=True, text=True).stdout.split("\n")[1].split()[1])
+    except (OSError, ValueError, IndexError):
+        ram = 0
+    threads = os.cpu_count() or 1
+    try:
+        with open("/sys/devices/system/cpu/smt/control") as f:
+            smt = f.read().strip() == "on"
+    except OSError:
+        smt = False
+    auto_ram = "32G" if ram >= 128 else "16G" if ram >= 64 else "8G" if ram >= 16 else "4G" if ram >= 8 else "2G"
+    auto_cores = 16 if threads >= 32 else 8 if threads >= 16 else 4 if threads >= 8 else 2 if threads >= 4 else 1
+    return {"ram": ram, "threads": threads, "smt": smt, "autoRam": auto_ram, "autoCores": auto_cores}
+
+
+def ram_error(v, guest, h):
+    """None if v ("auto", "<n>G", "<n>M") is usable, else the reason"""
+    if v == "auto":
+        return None
+    m = re.match(r"^([1-9][0-9]{0,6})([GM])$", v)
+    if not m:
+        return "RAM like 8G or 4096M"
+    gb = int(m.group(1)) / (1 if m.group(2) == "G" else 1024)
+    if m.group(2) == "M" and guest in ("windows", "windows-server", "macos"):
+        return "Use whole GB (e.g. 8G) for this guest"     # quickemu compares ${RAM_VM//G/} as an integer for these
+    if gb < 1:
+        return "At least 1G"
+    if h["ram"] and gb > h["ram"] - 4:
+        return "At most %dG (host RAM minus 4G)" % (h["ram"] - 4)
+    return None
+
+
+def cores_error(v, h):
+    if v == "auto":
+        return None
+    if not re.match(r"^[1-9][0-9]{0,3}$", v):
+        return "Cores: a whole number"
+    n = int(v)
+    if n > h["threads"]:
+        return "At most %d (host threads)" % h["threads"]
+    if h["smt"] and n > 1 and n % 2:
+        return "Use 1 or an even number (quickemu pairs SMT threads)"
+    return None
+
+
+def apply_resources(vm, ram, cores, disk=None):
+    for key, v in (("ram", ram), ("cpu_cores", cores), ("disk_size", disk)):
+        if v is not None:
+            vm.set_conf(key, None if v == "auto" else v)
+
+
+def cmd_resources(vm, ram, cores):
+    need(vm)
+    h = host()
+    err = ram_error(ram, vm.conf.get("guest_os", "linux"), h) or cores_error(cores, h)
+    if err:
+        die(err)
+    if vm.pid()[0]:
+        notify("Resources not changed", vm.name + " is running; shut it down first")
+        return 1
+    apply_resources(vm, ram, cores)
+    notify("Resources of " + vm.name, "RAM %s  ·  CPU cores %s" % (ram, cores))
+    return 0
+
+
+def cmd_create_run(d, osid, rel, *rest):
+    rest, opts = list(rest), {}
+    while len(rest) >= 2 and rest[-2] in ("--ram", "--cores", "--disk"):
+        opts[rest[-2][2:]] = rest[-1]
+        rest = rest[:-2]
+    if len(rest) > 1:
+        die("bad quickget arguments")
+    ed = rest[0] if rest else ""
+    h = host()
+    guest = "windows" if osid.startswith("windows") else "macos" if osid == "macos" else "linux"
+    if not OS_RE.match(osid) or not REL_RE.match(rel) or (ed and not ED_RE.match(ed)) \
+            or ram_error(opts.get("ram", "auto"), guest, h) or cores_error(opts.get("cores", "auto"), h) \
+            or not (opts.get("disk", "auto") == "auto" or SIZE_RE.match(opts["disk"])):
+        die("bad quickget arguments")
+    os.makedirs(d, exist_ok=True)
+    before = {f for f in os.listdir(d) if f.endswith(".conf")}
+    label = " ".join(x for x in (osid, rel, ed) if x)
+    print("quickget %s   (in %s)\nThe download can take a while; Ctrl+C cancels.\n" % (label, d), flush=True)
+    try:
+        rc = subprocess.call([QUICKGET, osid, rel] + ([ed] if ed else []), cwd=d)
+    except FileNotFoundError:
+        rc = 127
+        print("quickget is not installed")
+    except KeyboardInterrupt:
+        rc = 130
+    new = sorted({f for f in os.listdir(d) if f.endswith(".conf")} - before)
+    if rc == 0:
+        name = new[0][:-5] if new else label
+        chosen = {k: v for k, v in opts.items() if v != "auto"}
+        if chosen and len(new) == 1 and NAME_RE.match(name):   # only a conf this run created; an existing one stays as it was
+            apply_resources(Vm(d, name), chosen.get("ram"), chosen.get("cores"), chosen.get("disk"))
+            print("Set in %s.conf: %s" % (name, ", ".join("%s=%s" % kv for kv in sorted(chosen.items()))), flush=True)
+        elif chosen:
+            print("Note: no new .conf appeared, so RAM / cores / disk were not changed.", flush=True)
+        notify("VM ready: " + name, "Start it from the launcher (VMs)")
+        print("\nDone: %s. Start it from the launcher (VMs). This window closes in 5 s." % name, flush=True)
+        time.sleep(5)
+        return 0
+    notify("quickget failed: " + label, "Cancelled" if rc == 130 else "exit code %d (see the terminal)" % rc)
+    try:
+        input("\nquickget failed (exit code %d). Press Enter to close. " % rc)
+    except (EOFError, KeyboardInterrupt):
+        pass
+    return rc
+
+
+def cmd_delete(vm):
+    need(vm)
+    if vm.pid()[0]:
+        notify("Delete failed", vm.name + " is running; shut it down first")
+        return 1
+    root = os.path.realpath(vm.dir)
+    vd = os.path.realpath(vm.vmdir)
+    targets = [vm.conf_path]
+    if os.path.isdir(vd):
+        if os.path.dirname(vd) != root:            # only a direct sub-folder of the VM folder, never DIR itself or anything outside
+            notify("Delete failed", vm.name + ": its disk is not in a folder of its own inside " + vm.dir)
+            return 1
+        targets.append(vd)
+    p = subprocess.run(["gio", "trash", "--"] + targets, capture_output=True, text=True, timeout=60)
+    if p.returncode != 0:
+        notify("Delete failed", vm.name + ": " + first_error(p.stderr, p.returncode))
+        return 1
+    notify("Moved to the trash", vm.name + " (config and VM folder)" if len(targets) > 1 else vm.name)
+    return 0
+
+
+# ---- local ISOs ----------------------------------------------------------------------------------------------
+def iso_ok(p):
+    """absolute existing *.iso whose path is safe inside a bash-sourced, double-quoted conf value and a qemu -drive file="""
+    return (os.path.isabs(p) and p.lower().endswith(".iso") and not re.search(r'["$`\\,\n\r]', p) and os.path.isfile(p))
+
+
+def iso_entry(p, st):
+    return {"path": p, "name": os.path.basename(p), "dir": os.path.dirname(p), "size": st.st_size, "mtime": int(st.st_mtime)}
+
+
+def cmd_isos(dirs):
+    seen, out = set(), []
+
+    def scan(d, depth):
+        try:
+            entries = sorted(os.scandir(d), key=lambda e: e.is_symlink())    # a real file wins over a link to it
+        except OSError:
+            return
+        for e in entries:
+            if e.name.startswith("."):
+                continue
+            try:
+                if e.is_dir(follow_symlinks=True):
+                    if depth < 2:
+                        scan(e.path, depth + 1)
+                elif e.name.lower().endswith(".iso") and e.is_file(follow_symlinks=True):
+                    rp = os.path.realpath(e.path)
+                    if rp not in seen and iso_ok(e.path):
+                        seen.add(rp)
+                        out.append(iso_entry(e.path, e.stat(follow_symlinks=True)))
+            except OSError:
+                pass
+    for d in dirs:
+        d = os.path.expanduser(d)
+        if os.path.isabs(d):
+            scan(d, 1)
+    out.sort(key=lambda x: -x["mtime"])
+    print(json.dumps(out[:500]))
+
+
+def cmd_isopath(text):
+    t = os.path.expanduser(text)
+    if not os.path.isabs(t):
+        die("not an absolute path")
+    d, base = os.path.split(t)
+    dirs, files = [], []
+    try:
+        entries = sorted(os.scandir(d or "/"), key=lambda e: e.name.lower())
+    except OSError:
+        entries = []
+    for e in entries:
+        if not e.name.startswith(base) or (e.name.startswith(".") and not base.startswith(".")) or "\n" in e.name:
+            continue
+        try:
+            if e.is_dir(follow_symlinks=True):
+                dirs.append(e.path)
+            elif e.name.lower().endswith(".iso") and iso_ok(e.path):
+                files.append(iso_entry(e.path, e.stat(follow_symlinks=True)))
+        except OSError:
+            pass
+    print(json.dumps({"dir": d, "dirs": dirs[:200], "files": files[:200]}))
+
+
+def cmd_create_local(d, name, guest, size, iso, ram="auto", cores="auto"):
+    if not NAME_RE.match(name) or guest not in GUESTS or not SIZE_RE.match(size):
+        die("Invalid name, guest type or disk size")
+    h = host()
+    err = ram_error(ram, guest, h) or cores_error(cores, h)
+    if err:
+        die(err)
+    if not iso_ok(iso):
+        die("Not a usable .iso path (absolute, no quotes, $, backquote, backslash or comma)")
+    os.makedirs(d, exist_ok=True)
+    conf, vmdir = os.path.join(d, name + ".conf"), os.path.join(d, name)
+    if os.path.exists(conf) or os.path.exists(vmdir):
+        die("A VM called %s already exists" % name, 1)
+    os.mkdir(vmdir)
+    lines = ["#!%s --vm" % (shutil.which("quickemu") or "/usr/bin/quickemu"), 'guest_os="%s"' % GUESTS[guest],
+             'disk_img="%s/disk.qcow2"' % name, 'iso="%s"' % iso, 'disk_size="%s"' % size]
+    if guest == "windows":          # like quickget for Windows 11: TPM via swtpm, secure boot off
+        lines += ['tpm="on"', 'secureboot="off"']
+    if ram != "auto":
+        lines.append('ram="%s"' % ram)
+    if cores != "auto":
+        lines.append('cpu_cores="%s"' % cores)
+    tmp = conf + ".tmp"
+    with open(tmp, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    os.chmod(tmp, 0o755)
+    os.replace(tmp, conf)
+    print(name)
+    return 0
+
+
+def cmd_attach(vm, iso):
+    need(vm)
+    if not iso_ok(iso):
+        notify("Attach ISO failed", "Not a usable .iso path")
+        die("bad iso path")
+    if vm.pid()[0]:
+        notify("Attach ISO failed", vm.name + " is running; shut it down first")
+        return 1
+    key = "iso" if vm.fresh() else "fixed_iso"
+    vm.set_conf(key, iso)
+    notify("ISO attached to " + vm.name, os.path.basename(iso) + (" (boots the installer)" if key == "iso" else " (extra CD-ROM)"))
+    return 0
+
+
+def cmd_detach(vm):
+    need(vm)
+    if vm.pid()[0]:
+        notify("Detach ISO failed", vm.name + " is running; shut it down first")
+        return 1
+    key = "fixed_iso" if vm.conf.get("fixed_iso") else "iso" if vm.conf.get("iso") else ""
+    if key:
+        vm.set_conf(key, None)
+        notify("ISO detached from " + vm.name, os.path.basename(vm.conf[key]))
+    return 0
+
+
+def main(argv):
+    if len(argv) < 2:
+        die(__doc__)
+    c, a = argv[1], argv[2:]
+    if c == "list" and len(a) == 1:
+        return cmd_list(a[0])
+    if c == "oslist" and len(a) == 1:
+        return cmd_oslist(a[0])
+    if c == "create-run" and 3 <= len(a) <= 10:
+        return cmd_create_run(*a)
+    if c == "host" and not a:
+        print(json.dumps(host()))
+        return 0
+    if c == "isos":
+        return cmd_isos(a)
+    if c == "isopath" and len(a) == 1:
+        return cmd_isopath(a[0])
+    if c == "create-local" and len(a) in (5, 7):
+        return cmd_create_local(*a)
+    if len(a) < 2:
+        die(__doc__)
+    vm = Vm(a[0], a[1])
+    if c == "start" and len(a) in (2, 3):
+        return cmd_start(vm, *a[2:])
+    if c == "snapshot" and len(a) == 4:
+        return cmd_snapshot(vm, a[2], a[3])
+    if c == "resources" and len(a) == 4:
+        return cmd_resources(vm, a[2], a[3])
+    if c == "attach" and len(a) == 3:
+        return cmd_attach(vm, a[2])
+    fn = {"detach": cmd_detach}.get(c)
+    if fn and len(a) == 2:
+        return fn(vm)
+    fn = {"focus": cmd_focus, "stop": cmd_stop, "kill": cmd_kill, "snapshots": cmd_snapshots, "delete": cmd_delete}.get(c)
+    if fn is None or len(a) != 2:
+        die(__doc__)
+    return fn(vm)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv) or 0)
