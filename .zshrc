@@ -1,11 +1,23 @@
+# macOS: Homebrew on PATH
+[[ $OSTYPE == darwin* && -x /opt/homebrew/bin/brew ]] && eval "$(/opt/homebrew/bin/brew shellenv)"
+
 # Oh My Zsh configuration
 export ZSH="$HOME/.oh-my-zsh"
 plugins=(git sudo)
-source $ZSH/oh-my-zsh.sh
+[[ -r $ZSH/oh-my-zsh.sh ]] && source $ZSH/oh-my-zsh.sh
+autoload -Uz add-zsh-hook
 
-# Arch Linux specific plugin paths for syntax highlighting and autosuggestions
-source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
-source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+# Plugin paths for syntax highlighting and autosuggestions (Arch: /usr/share/zsh/plugins, macOS: brew)
+if [[ $OSTYPE == darwin* ]]; then
+  _zsh_plugin_dir="${HOMEBREW_PREFIX:-/opt/homebrew}/share"
+else
+  _zsh_plugin_dir=/usr/share/zsh/plugins
+fi
+for _p in zsh-autosuggestions zsh-syntax-highlighting; do
+  _f="$_zsh_plugin_dir/$_p/$_p.zsh"
+  [[ -r $_f ]] && source "$_f"
+done
+unset _zsh_plugin_dir _p _f
 
 # Enable completions
 autoload -Uz compinit
@@ -38,6 +50,37 @@ function _zellij_tab_name_update() {
   fi
 }
 add-zsh-hook chpwd _zellij_tab_name_update
+
+# config.kdl and layouts/*.kdl use the claude-tabs plugin (linked into config/zellij/plugins by its package's
+# setup.sh, git-ignored). KDL has no conditionals, so where the plugin file is missing (fresh box, the Mac)
+# this wrapper falls back to the stock bar: layout compact / nvim-compact, and `options --default-layout
+# compact` for attach -c/-b. Only touches commands that can start a session; everything else passes through.
+function zellij() {
+  local plugin=${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}/plugins/claude-tabs/claude-tabs.wasm
+  if [[ -e $plugin ]]; then
+    command zellij "$@"
+    return
+  fi
+  local -a args=("$@")
+  local i has_layout=0
+  for ((i = 1; i <= $#args; i++)); do
+    case $args[i] in
+      -l|--layout)
+        has_layout=1
+        [[ $args[i+1] == nvim ]] && args[i+1]=nvim-compact ;;
+      --layout=nvim) has_layout=1; args[i]=--layout=nvim-compact ;;
+      --layout=*|--layout-string|--layout-string=*) has_layout=1 ;;
+    esac
+  done
+  if (( ! has_layout )); then
+    case ${args[1]:-} in
+      "" | -*) args=(--layout compact "${args[@]}") ;;
+      attach|a) [[ " ${args[*]} " == *" -c "* || " ${args[*]} " == *" -b "* || " ${args[*]} " == *" -cb "* || " ${args[*]} " == *" -bc "* ]] \
+        && args+=(options --default-layout compact) ;;
+    esac
+  fi
+  command zellij "${args[@]}"
+}
 # Also set on shell startup
 _zellij_tab_name_update
 
@@ -105,21 +148,21 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "/usr/share/nvm/bash_completion" ] && . "/usr/share/nvm/bash_completion"
 
 # Initialize Starship
-eval "$(starship init zsh)"
+(( $+commands[starship] )) && eval "$(starship init zsh)"
 
 # bun completions
-[ -s "/home/kreejzak/.bun/_bun" ] && source "/home/kreejzak/.bun/_bun"
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 # bun
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
 # Added by LM Studio CLI (lms)
-export PATH="$PATH:/home/kreejzak/.lmstudio/bin"
+export PATH="$PATH:$HOME/.lmstudio/bin"
 # End of LM Studio CLI section
 
 
-if [ -e /home/kreejzak/.nix-profile/etc/profile.d/nix.sh ]; then . /home/kreejzak/.nix-profile/etc/profile.d/nix.sh; fi
+if [ -e $HOME/.nix-profile/etc/profile.d/nix.sh ]; then . $HOME/.nix-profile/etc/profile.d/nix.sh; fi
 export PATH="$HOME/.local/bin:$PATH"
 
 
@@ -132,6 +175,10 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # Update system (yay) and flatpaks. Prompts for confirmation unless -y is passed.
 update() {
+  if [[ $OSTYPE == darwin* ]]; then
+    brew update && brew upgrade
+    return
+  fi
   if [[ "$1" != "-y" ]]; then
     read -k 1 "REPLY?Update system and flatpaks? [Y/n] "
     [[ "$REPLY" != $'\n' ]] && echo
@@ -141,12 +188,14 @@ update() {
 }
 # >>> Photon CLI >>>
 case ":$PATH:" in
-  *:'/home/kreejzak/.photon/bin':*) ;;
-  *) export PATH="$PATH":'/home/kreejzak/.photon/bin' ;;
+  *:"$HOME/.photon/bin":*) ;;
+  *) export PATH="$PATH:$HOME/.photon/bin" ;;
 esac
 # <<< Photon CLI <<<
-export ANDROID_HOME=/opt/android-sdk
-export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+if [[ -d /opt/android-sdk ]]; then
+  export ANDROID_HOME=/opt/android-sdk
+  export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+fi
 
 # zoxide must stay last: its doctor warns if anything after it touches the chpwd hooks.
 # Claude Code's shell snapshot keeps the `cd=z` alias but not the hook array, so mute the doctor there.

@@ -260,6 +260,7 @@ plugins {
     // setup.sh links plugins/claude-tabs here to that checkout (host-local, git-ignored) and adds the
     // Claude Code hooks. Docs: README.md in the package.
     // To go back to the stock bar: set default_layout "compact" below (and use compact-bar in layouts/nvim.kdl).
+    // Without the plugin file the `zellij` function in .zshrc does this per run (--layout compact, nvim -> layouts/nvim-compact.kdl).
     claude-tabs location="file:~/.config/zellij/plugins/claude-tabs/claude-tabs.wasm" {
         // package_dir: the package checkout, where the plugin finds play-phrase.sh / claude-agents.sh / sounds
         //   (default ~/.config/zellij/plugins/claude-tabs, the link setup.sh creates)

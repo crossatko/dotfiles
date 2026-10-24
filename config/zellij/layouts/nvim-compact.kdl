@@ -1,0 +1,9 @@
+// Stock tab bar variant of nvim.kdl, used by the `zellij` wrapper in .zshrc when the claude-tabs plugin is missing.
+layout {
+  pane command="bash" close_on_exit=true {
+    args "-c" "nvim; exec bash"
+  }
+  pane size=1 borderless=true {
+    plugin location="compact-bar"
+  }
+}
