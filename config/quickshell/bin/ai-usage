@@ -25,6 +25,7 @@ import glob
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -35,6 +36,8 @@ HOME = os.environ.get("QS_AI_HOME") or os.path.expanduser("~")
 REAL_HOME = os.path.expanduser("~")
 CACHE = os.environ.get("QS_AI_CACHE") or os.path.join(
     os.environ.get("XDG_CACHE_HOME") or os.path.join(REAL_HOME, ".cache"), "quickshell", "ai-usage")
+if sys.platform == "darwin" and not os.environ.get("QS_AI_CACHE"):
+    CACHE = os.path.join(REAL_HOME, "Library", "Caches", "ai-usage")
 MOCK = os.environ.get("QS_AI_MOCK") or ""
 ENDPOINT = "https://api.anthropic.com/api/oauth/usage"
 NOW = time.time()
@@ -314,6 +317,18 @@ def local_stats(cdir, cache_key):
 
 # ---- Claude profiles ------------------------------------------------------------------------------------
 
+def keychain_creds():
+    """macOS: Claude Code keeps the default profile's credentials in the login Keychain (same JSON as
+    .credentials.json) instead of a file. Read through /usr/bin/security, in memory only; {} when unavailable."""
+    try:
+        r = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+                           capture_output=True, text=True, timeout=10)
+        d = json.loads(r.stdout) if r.returncode == 0 else {}
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
 def claude_profiles(state):
     profiles = []
     for d in sorted(glob.glob(os.path.join(HOME, ".claude*"))):
@@ -330,6 +345,8 @@ def claude_profiles(state):
         if not (os.path.exists(creds_path) or os.path.exists(cfg_path) or has_logs):
             continue                                            # not a Claude Code config dir
         creds = load_json(creds_path, {}) or {}
+        if not creds and sys.platform == "darwin" and name == ".claude" and HOME == REAL_HOME and not MOCK:
+            creds = keychain_creds()
         cfg = load_json(cfg_path, {}) or {}
         oauth = creds.get("claudeAiOauth") if isinstance(creds.get("claudeAiOauth"), dict) else {}
         acct = cfg.get("oauthAccount") if isinstance(cfg.get("oauthAccount"), dict) else {}
@@ -350,6 +367,10 @@ def claude_profiles(state):
             "lastUsed": newest(glob.glob(os.path.join(d, "projects", "**", "*.jsonl"), recursive=True))[1]
                         or mtime(creds_path),
         }
+        if sys.platform == "darwin" and not p["lastUsed"]:
+            p["lastUsed"] = mtime(os.path.join(d, "projects"))
+        # no credentials file (Keychain): the token's expiry stands in for the file mtime in the retry guard
+        creds_stamp = mtime(creds_path) or (num(oauth.get("expiresAt")) or 0)
 
         st = state.setdefault(d, {})
         if token:
@@ -370,7 +391,7 @@ def claude_profiles(state):
                 st["status"] = "paused" if rexp > NOW else "expired"
             elif (NOW - (st.get("okAt") or 0) < MAX_AGE) or (NOW - (st.get("tried") or 0) < MAX_AGE) \
                     or NOW < (st.get("backoff") or 0) \
-                    or (st.get("status") in ("expired", "forbidden") and st.get("credsMtime") == mtime(creds_path)):
+                    or (st.get("status") in ("expired", "forbidden") and st.get("credsMtime") == creds_stamp):
                 pass                                            # recent enough / backing off: no request
             else:
                 st["tried"] = NOW
@@ -383,7 +404,7 @@ def claude_profiles(state):
                     st.pop("backoff", None)
                 elif code in (401, 403):
                     st["status"] = "expired" if code == 401 else "forbidden"
-                    st["credsMtime"] = mtime(creds_path)         # no retry until claude rewrites its credentials
+                    st["credsMtime"] = creds_stamp         # no retry until claude rewrites its credentials
                 elif code == 429:
                     st["status"] = "ratelimited"
                     st["backoff"] = NOW + (ra if ra and ra > 0 else BACKOFF_429)
