@@ -4321,4 +4321,6 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    if sys.platform == "darwin":  # Linux desktop only; macOS uses the committed out/ files as they are
+        sys.exit(0)
     main(sys.argv)

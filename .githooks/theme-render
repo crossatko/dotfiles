@@ -5,6 +5,8 @@
 # pulled range touched config/theme/ or the host outputs are missing. Never fails the git command.
 # Skip once with THEME_RENDER_SKIP=1 git pull.
 [ -n "${THEME_RENDER_SKIP:-}" ] && exit 0
+# macOS: no render (theme.py exits there too); it uses the committed outputs.
+[ "$(uname -s)" = Darwin ] && exit 0
 top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 theme="$top/config/theme/theme.py"
 [ -f "$theme" ] || exit 0
