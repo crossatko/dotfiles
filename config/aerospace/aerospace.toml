@@ -1,29 +1,22 @@
-# Skyland (AeroSpace fork), window-manager part only: dwindle tiling + smart gaps. Default config
-# path (~/.config/aerospace/aerospace.toml -> this file), so no --config-path is needed. Binds are
-# generated: `python3 -I config/karabiner/generate.py --aerospace` prints the [mode.main.binding] lines.
-# No bar, borders, animations, overview, lock, wallpaper or scripting addition.
-# The plain AeroSpace config this replaced is in git history (before the Skyland switch).
-# Reload: `skyland reload-config`.
+# AeroSpace (own fork: dwindle, swipe, focus follows mouse, clickable menu bar; built with
+# script/build-local-app.sh in the fork repo, installed as /Applications/AeroSpace.app).
+# Default config path (~/.config/aerospace/aerospace.toml -> this file). Binds are generated:
+# `python3 -I config/karabiner/generate.py --aerospace` prints the main binding lines.
 # Mirrors the Hyprland binds (config/hypr/hyprland/binds.lua): left Option = SUPER, right Cmd = ALT
 # (Karabiner, config/karabiner/generate.py, emits the combos bound below).
 # Full table: AGENTS.md, "macOS" section. Reload: `aerospace reload-config`.
+# Top-level keys must stay above the first table header (TOML puts later keys into that table).
 
 config-version = 2
 
 after-startup-command = []
 
-# false: the login item cannot pass --config-path, and without it Skyland would read the AeroSpace config.
-start-at-login = true   # Skyland's own login item (per user)
+start-at-login = true   # per-user login item (SMAppService)
 auto-reload-config = false
 
-# Dwindle: a new window splits the focused one along its longest side. Smart split (new window on
-# the side of the cursor) is off: keyboard-driven use.
+# Dwindle: a new window splits the focused one along its longest side.
 dwindle = true
-dwindle-smart-split = false
 mouse-modifier = 'alt'   # left Option (SUPER) + left drag moves, + right drag resizes (any window area)
-# One tiled window on a workspace: no gaps.
-smart-gaps = true
-smart-border = true   # no border on a workspace's single tiled window (floating windows keep it)
 
 enable-normalization-flatten-containers = true
 # off: dwindle picks the orientation from the window aspect
@@ -35,8 +28,13 @@ default-root-container-orientation = 'auto'
 
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
 automatically-unhide-macos-hidden-apps = false
-focus-follows-mouse.enabled = false
+# Focus the window under the cursor without raising it (replaces AutoFocus)
+focus-follows-mouse.mode = 'no-raise'
 key-mapping.preset = 'qwerty'
+
+# Menu bar item: click a workspace to switch, scroll over it = previous/next non-empty workspace
+menu-bar-clickable = true
+menu-bar-scroll-switch = true
 
 # Gaps: between windows (inner) and to the screen edges (outer)
 gaps.inner.horizontal = 10
@@ -46,51 +44,42 @@ gaps.outer.bottom = 10
 gaps.outer.top = 10
 gaps.outer.right = 10
 
-# Workspaces per display (Hyprland workspaces.lua): 1-4 and 9-12 on the main display, the top row 5-8
-# on the second one. First matching entry wins; 'secondary' only exists with exactly two displays,
-# so with one (or 3+) connected the top row falls back to main.
+# Three-finger trackpad swipe = previous/next workspace (replaces SwipeAeroSpace). The macOS
+# three-finger horizontal swipe is off (trackpad defaults, see AGENTS.md).
+# Park inactive workspaces by order: lower ones at the bottom-left corner, higher ones at the bottom-right (only a corner pixel stays visible); Mission Control with "Group windows by application" on follows the sides
+hidden-window-placement = 'directional-corner'
+hidden-window-sliver = 1   # visible part of parked windows in points: default 1, integers only (fractions make macOS pull windows ~40 pt back on screen), 0 untested
+[gestures]
+workspace-swipe = true
+workspace-swipe-fingers = 3
+# Percent of the trackpad width the fingers travel before it switches. 12 ~ 48 pt on the
+# ~402 pt wide trackpad, the distance the Skyland config switched at (120 pt x 40 %).
+workspace-swipe-threshold = 12
+workspace-swipe-natural = true     # fingers right = previous workspace (like macOS Spaces)
+workspace-swipe-skip-empty = true
+workspace-swipe-wrap = false
+
+# Workspaces per display, by display name (case-insensitive regex, first match wins):
+#   iPad (Sidecar) connected: q w e r (5-8) go to the iPad, the rest stays on the Mac.
+#   another display (any non-built-in, non-iPad): a s d f + z x c v (1-4, 9-12) go there,
+#   q w e r stays on the Mac. Nothing connected: all on the built-in display.
+# Check names with `aerospace list-monitors`.
 [workspace-to-monitor-force-assignment]
-1 = 'main'
-2 = 'main'
-3 = 'main'
-4 = 'main'
-5 = ['secondary', 'main']
-6 = ['secondary', 'main']
-7 = ['secondary', 'main']
-8 = ['secondary', 'main']
-9 = 'main'
-10 = 'main'
-11 = 'main'
-12 = 'main'
+1 = ['^(?!.*(built-in|ipad|sidecar))', 'built-in']
+2 = ['^(?!.*(built-in|ipad|sidecar))', 'built-in']
+3 = ['^(?!.*(built-in|ipad|sidecar))', 'built-in']
+4 = ['^(?!.*(built-in|ipad|sidecar))', 'built-in']
+5 = ['ipad|sidecar', 'built-in']
+6 = ['ipad|sidecar', 'built-in']
+7 = ['ipad|sidecar', 'built-in']
+8 = ['ipad|sidecar', 'built-in']
+9 = ['^(?!.*(built-in|ipad|sidecar))', 'built-in']
+10 = ['^(?!.*(built-in|ipad|sidecar))', 'built-in']
+11 = ['^(?!.*(built-in|ipad|sidecar))', 'built-in']
+12 = ['^(?!.*(built-in|ipad|sidecar))', 'built-in']
 
 # Apps pinned to a workspace (Hyprland rules.lua: chat on 7, mail on 8, media on 11). By bundle id;
 # rules for apps that aren't installed just never match.
-# Skyland extras kept off (JankyBorders border, animations and effects need the scripting addition).
-[decoration]
-border-width = 2            # focused window only, solid theme accent (~/.cache/skyland/theme.css -> theme out/skyland.css)
-border-rotate-ms = 60000    # >0 = Skyland draws the border itself (0 would need JankyBorders); accent = highlight, so no visible rotation
-rounding = 16                # border corner radius to match macOS window corners (windows keep their native
-                            # rounding: changing it needs the scripting addition). Toolbar windows are rounder.
-inactive-opacity = 100
-shadow = 'off'
-
-[animations]
-enabled = false
-
-[gestures]
-# OFF: SwipeAeroSpace does the three-finger swipe (it talks to Skyland through the
-# /tmp/bobko.aerospace-$USER.sock symlink, see launchd/swipe-socket-link.plist).
-# Reason: with the macOS three-finger swipe off, macOS mixes empty gesture events into
-# a swipe and gestures.swift follow() resets the swipe start on each one, so it never
-# switches. Keys below kept for when that is fixed upstream.
-workspace-swipe = false
-workspace-swipe-fingers = 3     # macOS three-finger horizontal swipe is off (trackpad defaults)
-workspace-swipe-distance = 120      # finger travel (trackpad points) of a whole switch, default 200
-workspace-swipe-cancel-ratio = 40   # switches after 40% of the distance (~48 pt), default 50 (100 pt)
-
-[wallpaper]
-dynamic-colors = false
-
 [[on-window-detected]]
 if.app-id = 'com.brave.Browser'
 run = 'move-node-to-workspace 3'
@@ -175,7 +164,6 @@ run = 'layout floating'
     cmd-ctrl-alt-enter = 'exec-and-forget /Applications/kitty.app/Contents/MacOS/kitty --single-instance'
     cmd-ctrl-alt-b = 'exec-and-forget open -na "Brave Browser" --args --new-window'
     cmd-ctrl-alt-e = 'exec-and-forget open -a Finder'
-    cmd-ctrl-alt-tab = 'mode overview'
     cmd-ctrl-alt-shift-q = 'close'
     cmd-ctrl-alt-f = 'fullscreen'
     cmd-ctrl-alt-v = 'layout floating tiling'
@@ -216,19 +204,3 @@ run = 'layout floating'
     cmd-ctrl-shift-c = 'move-node-to-workspace 11'
     ctrl-alt-shift-v = 'workspace 12'
     cmd-ctrl-shift-v = 'move-node-to-workspace 12'
-
-
-# Workspace overview (Hyprspace-like strip; no zoom animation without the scripting addition).
-# Opened with SUPER+Tab (left Option + Tab); plain keys inside, letters start a search.
-[mode.overview.binding]
-    esc = 'mode main'
-    enter = 'overview confirm'
-    cmd-ctrl-alt-tab = 'mode main'
-    left = 'workspace --wrap-around prev'
-    right = 'workspace --wrap-around next'
-    h = 'workspace --wrap-around prev'
-    l = 'workspace --wrap-around next'
-    j = 'overview next'
-    k = 'overview prev'
-    x = 'overview close'
-    slash = 'overview search'
