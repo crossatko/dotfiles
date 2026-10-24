@@ -1,0 +1,161 @@
+# AeroSpace (macOS tiling WM), shortcuts only (no borders/bar/theme).
+# Read from ~/.config/aerospace/aerospace.toml (symlinked from the dotfiles repo).
+# Mirrors the Hyprland binds (config/hypr/hyprland/binds.lua): left Option = SUPER, right Cmd = ALT
+# (Karabiner, config/karabiner/generate.py, emits the combos bound below).
+# Full table: AGENTS.md, "macOS" section. Reload: `aerospace reload-config`.
+
+config-version = 2
+
+after-startup-command = []
+
+# Per-user setting of this app: only this macOS account starts it at login.
+start-at-login = true
+auto-reload-config = false
+
+enable-normalization-flatten-containers = true
+enable-normalization-opposite-orientation-for-nested-containers = true
+
+accordion-padding = 30
+default-root-container-layout = 'tiles'
+default-root-container-orientation = 'auto'
+
+on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
+automatically-unhide-macos-hidden-apps = false
+focus-follows-mouse.enabled = false
+key-mapping.preset = 'qwerty'
+
+# Gaps: between windows (inner) and to the screen edges (outer)
+gaps.inner.horizontal = 10
+gaps.inner.vertical = 10
+gaps.outer.left = 10
+gaps.outer.bottom = 10
+gaps.outer.top = 10
+gaps.outer.right = 10
+
+# Apps pinned to a workspace (Hyprland rules.lua: chat on 7, mail on 8, media on 11). By bundle id;
+# rules for apps that aren't installed just never match.
+[[on-window-detected]]
+if.app-id = 'com.brave.Browser'
+run = 'move-node-to-workspace 3'
+
+[[on-window-detected]]
+if.app-id = 'net.kovidgoyal.kitty'
+run = 'move-node-to-workspace 4'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.mail'
+run = 'move-node-to-workspace 8'
+
+[[on-window-detected]]
+if.app-id = 'com.hnc.Discord'
+run = 'move-node-to-workspace 7'
+
+[[on-window-detected]]
+if.app-id = 'org.whispersystems.signal-desktop'
+run = 'move-node-to-workspace 7'
+
+[[on-window-detected]]
+if.app-id = 'net.whatsapp.WhatsApp'
+run = 'move-node-to-workspace 7'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.MobileSMS'
+run = 'move-node-to-workspace 7'
+
+[[on-window-detected]]
+if.app-id = 'org.mozilla.thunderbird'
+run = 'move-node-to-workspace 8'
+
+[[on-window-detected]]
+if.app-id = 'com.spotify.client'
+run = 'move-node-to-workspace 11'
+
+# Windows that should float (Hyprland: pavucontrol/blueman/portal dialogs float). By bundle id.
+[[on-window-detected]]
+if.app-id = 'com.apple.systempreferences'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.finder'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.calculator'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.ActivityMonitor'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.archiveutility'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.Passwords'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.1password.1password'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'org.pqrs.Karabiner-Elements.Settings'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'org.pqrs.Karabiner-EventViewer'
+run = 'layout floating'
+
+[mode.main.binding]
+    # Keys are the combos Karabiner emits (config/karabiner/generate.py; table in AGENTS.md):
+    #   Hyprland SUPER (left Option)          -> cmd-ctrl-alt-
+    #   SUPER+SHIFT                           -> cmd-ctrl-alt-shift-
+    #   Hyprland ALT (right Command)          -> ctrl-alt-shift-
+    #   SUPER+ALT                             -> cmd-ctrl-shift-
+    #   SUPER+ALT+SHIFT                       -> cmd-alt-shift-
+    # Regenerate this block with `python3 -I config/karabiner/generate.py --aerospace`.
+    cmd-ctrl-alt-enter = 'exec-and-forget /Applications/kitty.app/Contents/MacOS/kitty --single-instance'
+    cmd-ctrl-alt-b = 'exec-and-forget open -na "Brave Browser" --args --new-window'
+    cmd-ctrl-alt-e = 'exec-and-forget open -a Finder'
+    cmd-ctrl-alt-shift-q = 'close'
+    cmd-ctrl-alt-f = 'fullscreen'
+    cmd-ctrl-alt-v = 'layout floating tiling'
+    cmd-ctrl-alt-x = 'layout tiles horizontal vertical'
+    cmd-ctrl-alt-h = 'focus left'
+    cmd-ctrl-shift-h = 'move left'
+    cmd-alt-shift-h = 'resize width -50'
+    cmd-ctrl-alt-j = 'focus down'
+    cmd-ctrl-shift-j = 'move down'
+    cmd-alt-shift-j = 'resize height +50'
+    cmd-ctrl-alt-k = 'focus up'
+    cmd-ctrl-shift-k = 'move up'
+    cmd-alt-shift-k = 'resize height -50'
+    cmd-ctrl-alt-l = 'focus right'
+    cmd-ctrl-shift-l = 'move right'
+    cmd-alt-shift-l = 'resize width +50'
+    ctrl-alt-shift-a = 'workspace 1'
+    cmd-ctrl-shift-a = 'move-node-to-workspace 1'
+    ctrl-alt-shift-s = 'workspace 2'
+    cmd-ctrl-shift-s = 'move-node-to-workspace 2'
+    ctrl-alt-shift-d = 'workspace 3'
+    cmd-ctrl-shift-d = 'move-node-to-workspace 3'
+    ctrl-alt-shift-f = 'workspace 4'
+    cmd-ctrl-shift-f = 'move-node-to-workspace 4'
+    ctrl-alt-shift-q = 'workspace 5'
+    cmd-ctrl-shift-q = 'move-node-to-workspace 5'
+    ctrl-alt-shift-w = 'workspace 6'
+    cmd-ctrl-shift-w = 'move-node-to-workspace 6'
+    ctrl-alt-shift-e = 'workspace 7'
+    cmd-ctrl-shift-e = 'move-node-to-workspace 7'
+    ctrl-alt-shift-r = 'workspace 8'
+    cmd-ctrl-shift-r = 'move-node-to-workspace 8'
+    ctrl-alt-shift-z = 'workspace 9'
+    cmd-ctrl-shift-z = 'move-node-to-workspace 9'
+    ctrl-alt-shift-x = 'workspace 10'
+    cmd-ctrl-shift-x = 'move-node-to-workspace 10'
+    ctrl-alt-shift-c = 'workspace 11'
+    cmd-ctrl-shift-c = 'move-node-to-workspace 11'
+    ctrl-alt-shift-v = 'workspace 12'
+    cmd-ctrl-shift-v = 'move-node-to-workspace 12'
+
