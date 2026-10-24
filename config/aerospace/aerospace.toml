@@ -35,6 +35,8 @@ key-mapping.preset = 'qwerty'
 # Menu bar item: click a workspace to switch, scroll over it = previous/next non-empty workspace
 menu-bar-clickable = true
 menu-bar-scroll-switch = true
+# Pills show the key that switches to the workspace (from 'workspace N' bindings) instead of its number
+menu-bar-workspace-labels = 'binding'
 
 # Gaps: between windows (inner) and to the screen edges (outer)
 gaps.inner.horizontal = 10
