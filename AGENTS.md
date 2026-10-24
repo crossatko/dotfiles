@@ -231,6 +231,8 @@ Current state only. Shared laptop (own user account), macOS 26.6 arm64, Homebrew
 - **Linked** (`~/.config/<app>` -> `config/<app>`, like `install.sh`): kitty, nvim, zellij, herdr, theme, aerospace, karabiner, ghostty. `~/.zshrc` -> repo `.zshrc`, `~/.claude/CLAUDE.md` -> repo `CLAUDE.md`. Nothing runs the theme engine: `theme.py` exits 0 on darwin and `.githooks/theme-render` only seeds. The Mac shows the committed default theme: `bin/theme-seed` copies `config/theme/default/` into the git-ignored `config/theme/out/` (post-merge / post-checkout / post-rewrite hooks, or by hand) and follows later changes of `default/`.
 - **brew formulae**: neovim, zellij, herdr, ripgrep, fd, node, lazygit, starship, zoxide, imagemagick, tree-sitter-cli, zsh-autosuggestions, zsh-syntax-highlighting, swiftly, bash 5. **Casks**: kitty, ghostty, font-paper-mono, karabiner-elements, raycast, swiftbar. Oh My Zsh is a git clone in `~/.oh-my-zsh`.
 - **zsh**: `.zshrc` branches on `$OSTYPE`/file existence (brew shellenv, plugin dirs, `update()` = brew update+upgrade). Zellij's `copy_command "wl-copy"` works through the host-local symlink `~/.local/bin/wl-copy -> /usr/bin/pbcopy` (not in the repo).
+- **Terminal = Ghostty** (`/Applications/Ghostty.app`, bundle id `com.mitchellh.ghostty`; kitty stays installed as a fallback). `config/ghostty/config` is shared with Linux and holds no Mac-only keys. Ghostty keeps its default keybinds on the Mac (cmd+t, cmd+d, ... compete with zellij); Mac-only unbinds would go into `macos.conf` (below).
+  - Mac-only Ghostty overrides: `config/ghostty/macos.conf` (`font-size = 20`, `adjust-cell-height = 4`, `background-blur = 20`, `macos-titlebar-style = hidden`, `macos-option-as-alt = left`; the Liquid Glass values `macos-glass-*` turn opaque when the window is unfocused, so plain blur is used), linked as `~/Library/Application Support/com.mitchellh.ghostty/config` (read only on macOS, after the shared config). Background is pure black via the Mac's own `theme/out/ghostty` (`background = #000000`; out/ is per machine, not in git).
 - **kitty**: `kitty.conf` includes `${KITTY_OS}.conf`; `macos.conf` has option-as-alt, titlebar-only decorations and only copy/paste/font-size shortcuts (zellij does the rest). Fonts: Paper Mono; Font Awesome Pro is not installed (glyphs fall back);
 
 ### Window manager: own AeroSpace fork
@@ -243,11 +245,13 @@ Current state only. Shared laptop (own user account), macOS 26.6 arm64, Homebrew
 
 ### Keyboard (Karabiner)
 - `config/karabiner/karabiner.json` is GENERATED: edit the table in `config/karabiner/generate.py` and run `python3 -I config/karabiner/generate.py` (`--aerospace` prints the matching AeroSpace binding block). Hand edits via the Karabiner GUI are lost on regenerate.
-- Layers: left Option = Hyprland SUPER, right Cmd = ALT, emitted as unique modifier combos that `aerospace.toml` binds. Caps Lock = Ctrl, right Shift tap = Esc, left Cmd+hjkl = arrows (Corne layer 1 key), kitty only: right Cmd+hjkl etc. -> plain Alt for zellij.
+- Layers: left Option = Hyprland SUPER, right Cmd = ALT, emitted as unique modifier combos that `aerospace.toml` binds. Caps Lock = Ctrl, right Shift tap = Esc, left Cmd+hjkl = arrows (Corne layer 1 key), kitty and Ghostty only: right Cmd+hjkl etc. -> plain Alt for zellij.
+- SUPER+Return opens a new Ghostty window in the running instance (AppleScript `new window`, launches Ghostty if it is not running). AeroSpace pins kitty and Ghostty windows to workspace 4.
 - Raycast: SUPER+D and left Cmd+Space send its hotkey ⌃⌥⌘D.
 - Possible follow-up: the fork has sided-modifier bindings (`lalt-`/`rcmd-`), so the Karabiner layers could move into `aerospace.toml` (kitty needs right Option).
 
 ### Other
+- `~/.hushlogin` (empty file, not in the repo) silences the "Last login" line of login shells.
 - **SwiftBar AI usage**: PluginDirectory set to `config/swiftbar` (`defaults write com.ameba.SwiftBar PluginDirectory -string <repo>/config/swiftbar`), plugin `ai-usage.10m.py`; reads the Claude token from the Keychain (first read asks once, \"Always Allow\"). SwiftBar is a login item (added via System Events).
 - **Animations** shortened via defaults: `NSAutomaticWindowAnimationsEnabled 0`, `NSWindowResizeTime 0.05`, dock `launchanim 0`, `expose-animation-duration 0.1`.
 - **Trackpad**: macOS three-finger horizontal swipe is off (`TrackpadThreeFingerHorizSwipeGesture 0` in `com.apple.AppleMultitouchTrackpad` and `com.apple.driver.AppleBluetoothMultitouch.trackpad`, plus `defaults -currentHost write -g com.apple.trackpad.threeFingerHorizSwipeGesture -int 0`, then `killall Dock`) so the fork's swipe owns it.

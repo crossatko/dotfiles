@@ -13,12 +13,6 @@ config-file = ?~/.config/theme/out/ghostty
 
 # --- Window ---
 background-opacity = 0.8
-# Native Liquid Glass on macOS 26+ (refraction); on Linux this value means plain background blur
-background-blur = macos-glass-clear
-# No title bar on macOS (Linux ignores macos-* keys)
-macos-titlebar-style = hidden
-# Left option acts as alt (zellij Alt bindings); right option still types special characters
-macos-option-as-alt = left
 window-padding-x = 0
 window-padding-y = 0
 window-padding-balance = false
