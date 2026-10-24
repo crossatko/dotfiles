@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 
 // Colour strip (hue / saturation / colour temperature) for the Home Assistant popup. `colors` are the

@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 
@@ -265,7 +266,7 @@ Rectangle {
             spacing: 6
             readonly property real target: ent.localTemp > -999 ? ent.localTemp : (ent.a.temperature || 0)
             function step(dir) {
-                const t = Math.max(ent.a.min_temp || 7, Math.min(ent.a.max_temp || 35, target + dir * ent.tStep))
+                const t = Math.max(ent.a.min_temp ?? 7, Math.min(ent.a.max_temp ?? 35, target + dir * ent.tStep))
                 ent.localTemp = t
                 ent.later("climate", "set_temperature", { temperature: t })
             }

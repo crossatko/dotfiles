@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
@@ -139,9 +140,9 @@ PanelWindow {
         // whose solid_glass honours the layer's content alpha (the fork patch "glass alpha from layer content", see
         // AGENTS.md); on the current build the glass cannot fade, so its region shrinks away in the last part of the
         // motion instead (glassScale below, Theme.glassScaleAt).
-        // bar edge: past the bar (incl. a floating bar's gap) plus popupGap; other sides: `side` from the screen
+        // bar edge: past the bar (incl. a floating bar's CURRENT gap, so it follows the compact animation) plus popupGap; other sides: `side` from the screen
         // edge (docked keeps the old 8 px, floating lines up with the bar's gapOut)
-        readonly property real inset: (host.hasBar ? Theme.barReserve : 0) + Theme.popupGap
+        readonly property real inset: (host.hasBar ? Theme.barHeight + Popups.barGapOf(host.modelData.name) : 0) + Theme.popupGap
         readonly property real side: Theme.barFloating ? Theme.edgeGap : 8
 
         // target size; the card itself follows it with a Behavior while `morphing`

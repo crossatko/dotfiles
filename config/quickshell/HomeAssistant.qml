@@ -207,7 +207,7 @@ Singleton {
                 try { arr = JSON.parse(txt) } catch (e) { arr = null }
                 if (!Array.isArray(arr)) { fail("error", "Not a Home Assistant API reply", "Check that HA_URL points at Home Assistant itself (scheme, host, port)."); return }
                 apply(arr)
-                if (status !== "ok") console.log("homeassistant: connected [" + host + "], " + arr.length + " entities")
+                if (status !== "ok") console.log("homeassistant: connected")
                 status = "ok"; errorText = ""; errorHint = ""; retrying = false
             } else if (st === 401 || st === 403) {
                 fail("unauthorized", "Token rejected (HTTP " + st + ")", "Check HA_TOKEN in ~/.config/hypr/.secrets (a long-lived access token).")
@@ -227,7 +227,7 @@ Singleton {
     property bool retrying: false
     function fail(s, text, hint) {
         status = s; errorText = text; errorHint = hint; retrying = false
-        console.log("homeassistant: " + text + " [" + host + "]")
+        console.log("homeassistant: " + text)
         if (s !== "unreachable") base = url              // next attempt starts with the main URL again
     }
 
@@ -261,7 +261,7 @@ Singleton {
             ha.status = "unreachable"
             ha.errorText = "Home Assistant unreachable: " + why
             ha.errorHint = hint
-            console.log("homeassistant: " + ha.errorText + " [" + ha.host + "]")
+            console.log("homeassistant: " + ha.errorText)
             ha.base = ha.url
         }
     }

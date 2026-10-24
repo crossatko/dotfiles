@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -12,6 +13,7 @@ import Quickshell.Bluetooth
 
 // One glass bar on one screen. `atTop` picks the edge. Docked (Theme.barGap 0, radius 0): flush with the
 // screen edge, square. Floating: Theme.barGap away from the edge and both sides, corner radius Theme.barRadius.
+// With a fullscreen window on the monitor's workspace it animates to the docked look (compactState).
 PanelWindow {
     id: bar
 
@@ -20,11 +22,34 @@ PanelWindow {
     screen: modelData
 
     anchors { left: true; right: true; top: atTop; bottom: !atTop }
-    margins { left: Theme.barGap; right: Theme.barGap; top: atTop ? Theme.barGap : 0; bottom: atTop ? 0 : Theme.barGap }
-    implicitHeight: Theme.barHeight
+    // Always full width and tall enough for the floating gap: the visible bar (`frame`, below) moves inside the window,
+    // so compacting never resizes the layer surface. Only `frame` takes input.
+    implicitHeight: Theme.barHeight + Theme.barGap
+    mask: Region { item: frame }
     exclusiveZone: -1                  // full width even next to a reserved strip; BarReserve.qml reserves the space
     color: "transparent"
     WlrLayershell.namespace: "qs-bar"
+
+    // Compact: while this monitor's active workspace has a fullscreen window the bar animates to the docked look (floating
+    // gap and corner radius -> 0), like upstream's compactState. `hasfullscreen` is not a workspace property in quickshell
+    // 0.3, so it comes from lastIpcObject; a fullscreen event makes the shell refresh it. Layout space is not involved:
+    // BarReserve keeps its strip, so tiled windows never reflow. (A real fullscreen window covers this layer; the compact
+    // look is visible with fullscreen mode 1 (maximize-style) and over partly covering surfaces.)
+    readonly property var fsMonitor: Hyprland.monitorFor(bar.screen)
+    readonly property bool compact: fsMonitor?.activeWorkspace?.lastIpcObject?.hasfullscreen ?? false
+    property real compactState: compact ? 1 : 0
+    Behavior on compactState { NumberAnimation { duration: Theme.popupMoveMs; easing.type: Theme.popupEaseClose } }
+    readonly property real gapNow: Theme.barGap * (1 - compactState)
+    readonly property real radiusNow: Theme.barRadius * (1 - compactState)
+    onGapNowChanged: Popups.setBarGap(bar.screen.name, gapNow)
+    Connections {
+        target: Hyprland
+        function onRawEvent(ev) {
+            if (["fullscreen", "workspacev2", "focusedmonv2", "movewindowv2", "closewindow", "openwindow"].includes(ev.name))
+                fsRefresh.restart()
+        }
+    }
+    Timer { id: fsRefresh; interval: 30; onTriggered: Hyprland.refreshWorkspaces() }
 
     // glass shape: Glass.qml declares the bar container below (docked: full width, square; floating: the inset window,
     // Theme.barRadius corners) as the blur region. The window itself is already inset by the floating gap, so the
@@ -68,10 +93,10 @@ PanelWindow {
     // open a popup hung off `item` (a chip); toggles if it is already the open one
     // true while this bar's popup of that name is showing: the chip that opened it stays highlighted
     function isOpen(name) { return Popups.name === name && Popups.screen === bar.screen.name }
-    // Popups.center is the chip's centre x in SCREEN coordinates (this window is inset by Theme.barGap when floating)
+    // Popups.center is the chip's centre x in SCREEN coordinates (the window is full width, so window coordinates)
     property var chipItems: ({})
     function reg(name, item) { chipItems[name] = item }
-    function centerOf(item) { return Theme.barGap + item.mapToItem(null, 0, 0).x + item.width / 2 }
+    function centerOf(item) { return item.mapToItem(null, 0, 0).x + item.width / 2 }
     // -1 = chip unknown / hidden
     function chipCenter(name) {
         const it = chipItems[name]
@@ -81,7 +106,7 @@ PanelWindow {
         reg(name, item)
         Popups.toggle(name, bar.screen.name, centerOf(item))
     }
-    Component.onCompleted: Popups.barObjs[bar.screen.name] = bar
+    Component.onCompleted: { Popups.barObjs[bar.screen.name] = bar; Popups.setBarGap(bar.screen.name, gapNow) }
 
     // the playing MPRIS player wins; a paused one only shows while the Twitch app isn't playing
     readonly property var player: {
@@ -144,7 +169,7 @@ PanelWindow {
         return (h > 0 ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(ss).padStart(2, "0")
     }
     Timer {
-        interval: 1000; running: true; repeat: true
+        interval: 1000; running: BarWidgets.shown("recording"); repeat: true
         onTriggered: { recStateFile.reload(); if (bar.recState) recComm.reload(); bar.recClock = Date.now() }
     }
     FileView {
@@ -177,7 +202,7 @@ PanelWindow {
         return s.includes("blueman") || s.includes("nm-applet") || s.includes("networkmanager")
     }
 
-    function run(cmd) { runner.command = ["sh", "-c", cmd]; runner.startDetached() }
+    function run(argv) { runner.command = argv; runner.startDetached() }
     Process { id: runner }
 
     IdleInhibitor { window: bar; enabled: bar.inhibit }
@@ -187,7 +212,7 @@ PanelWindow {
     property real cpuPrevBusy: 0
     property real cpuPrevTot: 0
     Timer {
-        interval: 2000; running: true; repeat: true; triggeredOnStart: true
+        interval: 2000; running: BarWidgets.shown("cpu"); repeat: true; triggeredOnStart: true
         onTriggered: statFile.reload()
     }
     FileView {
@@ -208,7 +233,7 @@ PanelWindow {
         }
     }
     Timer {
-        interval: 3000; running: true; repeat: true; triggeredOnStart: true
+        interval: 3000; running: BarWidgets.shown("memory"); repeat: true; triggeredOnStart: true
         onTriggered: memFile.reload()
     }
     FileView {
@@ -233,22 +258,6 @@ PanelWindow {
     readonly property real volume: sink && sink.audio ? sink.audio.volume : 0
     readonly property bool muted: sink && sink.audio ? sink.audio.muted : false
 
-    // ---- visuals --------------------------------------------------------------
-    Rectangle {
-        anchors.fill: parent
-        readonly property bool isGlassItem: true
-        radius: Theme.barRadius
-        color: Theme.alpha(Theme.bg, Theme.barFill)
-        border.width: Theme.barBorder
-        border.color: Theme.alpha(Theme.overlay, 0.55)
-    }
-    // empty bar space (the popup scrim has the bar cut out of its input region): a click closes any open popup
-    MouseArea {
-        anchors.fill: parent
-        acceptedButtons: Qt.AllButtons
-        onPressed: if (Popups.anyOpen) Popups.closeAll()
-    }
-
     // workspaces widget: with a bar on every monitor each bar shows its own monitor's workspaces; with a
     // single bar it shows all of them (it is the only place to switch workspaces on the other monitors).
     readonly property bool soloBar: BarConfig.enabledCount <= 1
@@ -268,59 +277,86 @@ PanelWindow {
         tray: trayComp, clock: clockComp
     })
 
-    // a Repeater of Loaders over one section's id list (copied per section: an inline component here broke hot reload)
-    Row {
-        id: leftSec
-        anchors { left: parent.left; leftMargin: Theme.barPad; verticalCenter: parent.verticalCenter }
-        spacing: 4
-        Repeater {
-            model: bar.layout.left
-            Loader {
-                required property string modelData
-                sourceComponent: bar.widgetComps[modelData] || null
-                visible: item !== null && item.show !== false
-            }
+
+    // the bar proper: the window is always full width and barHeight + Theme.barGap tall (no layer-shell resize while
+    // animating); `frame` is the visible bar inside it, inset by `gapNow` from the edges (see compactState)
+    Item {
+        id: frame
+        x: bar.gapNow
+        width: bar.width - 2 * bar.gapNow
+        height: Theme.barHeight
+        y: bar.atTop ? bar.gapNow : bar.height - Theme.barHeight - bar.gapNow
+
+        // ---- visuals --------------------------------------------------------------
+        Rectangle {
+            anchors.fill: parent
+            readonly property bool isGlassItem: true
+            radius: bar.radiusNow
+            color: Theme.alpha(Theme.bg, Theme.barFill)
+            border.width: Theme.barBorder
+            border.color: Theme.alpha(Theme.overlay, 0.55)
         }
-    }
-    // truly centered on the bar; only pushed aside when it would run into the left / right section
-    Row {
-        id: centerSec
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: 4
-        x: {
-            const lo = leftSec.x + leftSec.width + (leftSec.width > 0 ? 8 : 0)
-            const hi = rightSec.x - (rightSec.width > 0 ? 8 : 0) - width
-            return Math.round(Math.max(lo, Math.min((bar.width - width) / 2, hi)))
-        }
-        Repeater {
-            model: bar.layout.center
-            Loader {
-                required property string modelData
-                sourceComponent: bar.widgetComps[modelData] || null
-                visible: item !== null && item.show !== false
-            }
-        }
-    }
-    Row {
-        id: rightSec
-        anchors { right: parent.right; rightMargin: Theme.barPad; verticalCenter: parent.verticalCenter }
-        spacing: 4
-        Repeater {
-            model: bar.layout.right
-            Loader {
-                required property string modelData
-                sourceComponent: bar.widgetComps[modelData] || null
-                visible: item !== null && item.show !== false
-            }
+        // empty bar space (the popup scrim has the bar cut out of its input region): a click closes any open popup
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.AllButtons
+            onPressed: if (Popups.anyOpen) Popups.closeAll()
         }
 
-        Chip {
-            id: bellChip               // always shown: it opens the control center, whose gear opens Settings
-            Component.onCompleted: bar.reg("center", bellChip)
-            active: bar.isOpen("center")
-            onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("center", bellChip)
-            BarIcon { text: Notifs.dnd ? "\uf1f6" : Notifs.count > 0 ? "\uf8fa" : "\uf0c9"; color: Notifs.dnd ? Theme.muted : Notifs.count > 0 ? Theme.accent : Theme.fg }
-            BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: Theme.accent; font.pixelSize: Theme.fontCaption }
+        // a Repeater of Loaders over one section's id list (copied per section: an inline component here broke hot reload)
+        Row {
+            id: leftSec
+            anchors { left: parent.left; leftMargin: Theme.barPad; verticalCenter: parent.verticalCenter }
+            spacing: 4
+            Repeater {
+                model: bar.layout.left
+                Loader {
+                    required property string modelData
+                    sourceComponent: bar.widgetComps[modelData] || null
+                    visible: item !== null && item.show !== false
+                }
+            }
+        }
+        // truly centered on the bar; only pushed aside when it would run into the left / right section
+        Row {
+            id: centerSec
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 4
+            x: {
+                const lo = leftSec.x + leftSec.width + (leftSec.width > 0 ? 8 : 0)
+                const hi = rightSec.x - (rightSec.width > 0 ? 8 : 0) - width
+                return Math.round(Math.max(lo, Math.min((frame.width - width) / 2, hi)))
+            }
+            Repeater {
+                model: bar.layout.center
+                Loader {
+                    required property string modelData
+                    sourceComponent: bar.widgetComps[modelData] || null
+                    visible: item !== null && item.show !== false
+                }
+            }
+        }
+        Row {
+            id: rightSec
+            anchors { right: parent.right; rightMargin: Theme.barPad; verticalCenter: parent.verticalCenter }
+            spacing: 4
+            Repeater {
+                model: bar.layout.right
+                Loader {
+                    required property string modelData
+                    sourceComponent: bar.widgetComps[modelData] || null
+                    visible: item !== null && item.show !== false
+                }
+            }
+
+            Chip {
+                id: bellChip               // always shown: it opens the control center, whose gear opens Settings
+                Component.onCompleted: bar.reg("center", bellChip)
+                active: bar.isOpen("center")
+                onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("center", bellChip)
+                BarIcon { text: Notifs.dnd ? "\uf1f6" : Notifs.count > 0 ? "\uf8fa" : "\uf0c9"; color: Notifs.dnd ? Theme.muted : Notifs.count > 0 ? Theme.accent : Theme.fg }
+                BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: Theme.accent; font.pixelSize: Theme.fontCaption }
+            }
         }
     }
 
@@ -336,7 +372,7 @@ PanelWindow {
                     visible: modelData.id > 0
                     active: modelData.focused
                     dim: !modelData.active && !modelData.focused
-                    onClicked: bar.run("hyprctl dispatch 'hl.dsp.focus({workspace=" + modelData.id + "})'")
+                    onClicked: bar.run(["hyprctl", "dispatch", "hl.dsp.focus({workspace=" + modelData.id + "})"])
                     BarIcon { text: String(bar.kana[modelData.id] || modelData.id); family: Theme.font; styleName: ""; pixelSize: Theme.fontSize; color: modelData.focused ? Theme.accent : Theme.fg }
                 }
             }
@@ -348,7 +384,7 @@ PanelWindow {
         id: recComp
         Chip {
             property bool show: bar.recording
-            onClicked: bar.run("'" + bar.recScript + "' stop")
+            onClicked: bar.run([bar.recScript, "stop"])
             Rectangle {
                 implicitWidth: 8; implicitHeight: 8; radius: 4
                 color: Theme.red
@@ -371,7 +407,7 @@ PanelWindow {
             active: bar.isOpen("media")
             onClicked: mouse => {
                 if (bar.player === null) {   // Twitch player: raise its window
-                    bar.run("hyprctl clients -j | jq -r '.[]|select(.class==\"org.quickshell\" and (.title|startswith(\"Twitch - \")))|.address' | head -n1 | xargs -I{} hyprctl dispatch 'hl.dsp.focus({window=\"address:{}\"})'")
+                    bar.run(["sh", "-c", "hyprctl clients -j | jq -r '.[]|select(.class==\"org.quickshell\" and (.title|startswith(\"Twitch - \")))|.address' | head -n1 | xargs -I{} hyprctl dispatch 'hl.dsp.focus({window=\"address:{}\"})'"])
                 } else if (mouse.button === Qt.MiddleButton) bar.player.togglePlaying()
                 else bar.pop("media", mediaChip)
             }
@@ -460,7 +496,7 @@ PanelWindow {
             dim: bar.muted
             // click: audio popup (volume, mic, devices) | middle: mute | right: pavucontrol | wheel: volume
             onClicked: mouse => {
-                if (mouse.button === Qt.RightButton) bar.run("pavucontrol")
+                if (mouse.button === Qt.RightButton) bar.run(["pavucontrol"])
                 else if (mouse.button === Qt.MiddleButton) { if (bar.sink && bar.sink.audio) bar.sink.audio.muted = !bar.sink.audio.muted }
                 else bar.pop("audio", audioChip)
             }
@@ -547,7 +583,7 @@ PanelWindow {
             id: clockChip
             Component.onCompleted: bar.reg("cal", clockChip)
             active: bar.isOpen("cal")
-            onClicked: mouse => mouse.button === Qt.RightButton ? bar.run("thunderbird --calendar") : bar.pop("cal", clockChip)
+            onClicked: mouse => mouse.button === Qt.RightButton ? bar.run(["thunderbird", "--calendar"]) : bar.pop("cal", clockChip)
             BarLabel { text: Qt.formatDateTime(clock.date, "yyyy-MM-dd HH:mm") }
         }
     }

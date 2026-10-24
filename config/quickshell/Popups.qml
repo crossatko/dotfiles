@@ -15,6 +15,10 @@ Singleton {
     property real center: 1e6
     // set by each Bar: {"DP-5": <Bar>, ...}, so a popup opened without a click (IPC, control-center shortcuts) can find its chip
     property var barObjs: ({})
+    // each Bar's current (compact-animated) gap to the screen edge, {"DP-5": 14, ...}; reassigned on change so bindings follow
+    property var barGaps: ({})
+    function setBarGap(scr, g) { const o = Object.assign({}, barGaps); o[scr] = g; barGaps = o }
+    function barGapOf(scr) { return barGaps[scr] ?? Theme.barGap }
     // set by shell.qml: {"DP-5": "bottom", ...}, so a popup knows which edge the bar is on
     property var bars: ({})
 

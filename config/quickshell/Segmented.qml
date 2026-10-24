@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 
 // Segmented choice: a row of Btns 2 px apart, the one whose value equals `current` is `active`.

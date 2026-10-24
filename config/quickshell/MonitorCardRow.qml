@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 
 // The row of monitor cards of Settings > Bar and > Wallpaper & theme, with a MonitorLinkButton between each pair of

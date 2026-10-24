@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -119,7 +120,7 @@ ModalMenu {
             if (i >= 0) { lc.sel = i; if (i < lc.first) lc.first = i; else if (i >= lc.first + lc.numResults) lc.first = i - lc.numResults + 1 }
         }
     }
-    SectionsSource { id: secSrc; jf: jfSrc; vpn: vpnSrc; net: netSrc; web: waSrc; vm: vmSrc; onUpdated: lc.refreshKeep() }
+    SectionsSource { id: secSrc; binds: Binds; jf: jfSrc; vpn: vpnSrc; net: netSrc; web: waSrc; vm: vmSrc; onUpdated: lc.refreshKeep() }
     readonly property var sourceList: [appsSrc, winSrc, cmdSrc, secSrc, jfSrc, netSrc, vpnSrc, vmSrc, waSrc, scriptSrc, calcSrc, emojiSrc, fileSrc, clipSrc, webSrc]
 
     readonly property var allItems: {
@@ -346,7 +347,7 @@ ModalMenu {
     // ---- running -----------------------------------------------------------------------------------------
     function runItem(item, arg) {
         if (!item) { close(); return }
-        if (item.kind === "info") return                 // loading / error rows in a section
+        if (item.kind === "info" || item.kind === "bind") return   // loading / error rows in a section
         if (item.descend !== undefined) {                // file browser: a folder row descends (query = its path + "/"), nothing recorded
             input.text = item.descend; input.cursorPosition = input.text.length
             return
@@ -643,7 +644,7 @@ ModalMenu {
                     rowH: lc.rowH
                     radius: Theme.radiusModal
                     readonly property string avatar: modelData.avatar || ""      // local image (twitch profile picture), drawn in the icon slot
-                    icon: iconPath === "" && avatar === "" ? (modelData.glyph || "") : ""
+                    icon: iconPath === "" && avatar === "" ? (modelData.glyph || (modelData.keys ? "" : "")) : ""
                     iconSize: 16
                     iconColor: modelData.iconColor === "red" ? Theme.red : modelData.iconColor === "green" ? Theme.green : sel ? Theme.accent : modelData.iconColor === "muted" ? Theme.muted : Theme.fgDim
                     outlined: sel
@@ -689,12 +690,18 @@ ModalMenu {
                         }
                     }
                     RowText { title: row.modelData.name; sub: row.modelData.subtitle || "" }
+                    Row {                                    // keybinds section: the key combination instead of source label / number badge
+                        visible: !!row.modelData.keys
+                        spacing: 4
+                        Repeater { model: row.modelData.keys || []; KeyBadge { required property string modelData; text: modelData; sel: row.sel } }
+                    }
                     Label {
+                        visible: !row.modelData.keys
                         text: (lc.usage[row.modelData.id] && lc.usage[row.modelData.id].pinned ? "• " : "") + row.modelData.source
                         color: Theme.muted
                         font.pixelSize: Theme.fontCaption
                     }
-                    KeyBadge { visible: row.index < 9; text: String(row.index + 1); sel: row.sel }
+                    KeyBadge { visible: row.index < 9 && !row.modelData.keys; text: String(row.index + 1); sel: row.sel }
                 }
             }
         }
@@ -756,6 +763,7 @@ ModalMenu {
         wrapMode: Text.WordWrap
         text: lc.argItem ? (lc.argNote !== "" ? lc.argNote + " · " : "") + "Enter " + (lc.argItem.argVerb || "run") + " · Esc cancel"
             : lc.actionsOpen ? "↑↓ select · Enter do · ← / Esc back"
+            : lc.section === "binds" ? "↑↓ scroll · type to filter (key or name) · ← / Backspace back · Esc " + (lc.sectionDirect ? "close" : "back")
             : lc.section !== "" ? "↑↓ select · Enter run · " + (lc.rightHint ? lc.rightHint + " · " : "") + "← / Backspace back · Esc " + (lc.sectionDirect ? "close" : "back")
             : "↑↓ select · Enter run · " + (lc.rightHint ? lc.rightHint + " · " : "") + "Ctrl+1-9 quick run · Esc close"
         color: lc.argNote !== "" ? Theme.red : Theme.muted

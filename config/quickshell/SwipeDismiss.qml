@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 
 // Swipe-to-dismiss for a card (notification toasts and the notification center list): press and drag the card to

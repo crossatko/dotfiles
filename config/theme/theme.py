@@ -461,11 +461,10 @@ def monitor_entries(st=None, mons=None):
 
 
 def monitor_extras():
-    """Template vars for templates/hyprpaper.conf: extra preload lines and per-monitor blocks ('' without entries)."""
+    """Template vars for templates/hyprpaper.conf: the per-monitor blocks ('' without entries; hyprpaper 0.8 needs no preload)."""
     ents = monitor_entries()
-    return {"monitor_preloads": "".join(f"\npreload={p}" for p in dict.fromkeys(p for _, _, p in ents)),
-            "monitor_blocks": "".join(
-                f"\n\nwallpaper {{\n    monitor = {s}\n    path = {p}\n    fit_mode = cover\n}}" for s, _, p in ents)}
+    return {"monitor_blocks": "".join(
+                f"\n\nwallpaper {{\n    monitor = {s}\n    path = {tilde(p)}\n    fit_mode = cover\n}}" for s, _, p in ents)}
 
 
 def restart_hyprpaper():
@@ -3310,6 +3309,7 @@ def render_all(pal, cfg):
     extra["tb_vars"] = render((ROOT / "tb-vars.css").read_text(), pal, extra)
     # per-monitor wallpapers (empty strings without entries, so the output is unchanged): see monitor_entries()
     extra.update(monitor_extras())
+    extra.update(wallpaper_t=tilde(wp), tv_wallpaper_t=tilde(extra["tv_wallpaper"]))   # hyprpaper expands ~
     for tpl in sorted((ROOT / "templates").iterdir()):
         dest = (HOST_OUT if tpl.name in HOST_TEMPLATES else OUT) / tpl.name
         write_atomic(dest, render(tpl.read_text(), pal, extra))
@@ -4138,6 +4138,7 @@ def write_hyprpaper(cfg):
     if not os.path.exists(os.path.expanduser(extra.get("tv_wallpaper", ""))):
         extra["tv_wallpaper"] = extra["wallpaper"]
     extra.update(monitor_extras())
+    extra.update(wallpaper_t=tilde(extra["wallpaper"]), tv_wallpaper_t=tilde(extra["tv_wallpaper"]))
     write_atomic(OUT / "hyprpaper.conf", render((ROOT / "templates/hyprpaper.conf").read_text(), {}, extra))
 
 

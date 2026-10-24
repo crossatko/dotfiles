@@ -27,6 +27,8 @@ QtObject {
     id: src
 
     signal updated()
+    property var binds: null                        // Binds singleton (set by Launcher): the "binds" section lists its items (rows are not filtered by the ranker with an empty query)
+    property var bindsConn: Connections { target: src.binds; function onRefreshed() { src.updated() } }
 
     property var jf: null                           // JellyfinSource (set by Launcher): the "jellyfin" section delegates header / glyph / enter to it
     property var web: null                          // WebappSource (set by Launcher): the "webapp" section delegates enter / rows / headerSub to it
@@ -55,6 +57,8 @@ QtObject {
                           aliases: ["mv"], words: ["vpn", "location", "country", "city", "relay", "connect", "reconnect"] },
         "vms":          { title: "Virtual machines", glyph: "\uf108", sub: "Start, stop and create quickemu VMs",
                           aliases: ["vm", "vms", "qemu", "quickemu", "quickget"], words: ["virtual", "machine", "kvm", "linux", "windows", "snapshot", "iso"] },
+        "binds":        { title: "Keybinds", glyph: "\uf11c", sub: "Keyboard shortcuts from the Hyprland config",
+                          aliases: ["keys", "keybinds", "shortcuts", "bindings", "hotkeys", "cheatsheet"], words: ["keyboard", "bind", "shortcut", "key", "cheat", "sheet", "super", "help"] },
         "webapp":       { title: "Install webapp", header: "Install web app", glyph: "\uf0ac", sub: "Brave app window for a site, with its own icon",
                           aliases: ["webapp", "web app", "pwa"], words: ["install", "brave", "app", "website", "shortcut"] },
         "screenshot":   { title: "Screenshot", glyph: "\uf030", sub: "Region, window or screen",
@@ -104,6 +108,7 @@ QtObject {
         if (name === "webapp" && web) web.enter()
         if ((name === "tailscale" || name === "mullvad") && vpn) vpn.enter(name)
         if (name === "vms" && vm) vm.enter()
+        if (name === "binds") if (binds) binds.load()
         if (name === "record") { Quickshell.execDetached(["mkdir", "-p", src.prefsDir]); prefs.reload(); recording = false; statusProc.running = false; statusProc.running = true }
         if (name === "sound-output") { outRows = []; outError = ""; outLoading = true; outProc.running = false; outProc.running = true }
         else if (name === "sound-input") { inRows = []; inError = ""; inLoading = true; inProc.running = false; inProc.running = true }
@@ -123,6 +128,7 @@ QtObject {
         if (name === "sound-input") return audioRows(inLoading, inError, inRows, "No input devices found")
         if (name === "power") return powerRows
         if (name === "screenshot") return shotRows
+        if (name === "binds") return binds && binds.loaded ? binds.items : [info("loading", "Loading keybinds...", "", "")]
         if (name === "record") return recordRows()
         if ((name === "network" || name === "bluetooth") && net) return net.rows(name)
         if (name === "webapp" && web) return web.rows()

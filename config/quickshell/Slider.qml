@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 
 // Horizontal slider, 0..1. `value` is the real state; dragging emits moved(v) and never sets `value`

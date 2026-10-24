@@ -43,7 +43,7 @@ PACKAGES=(
   zsh-autosuggestions zsh-syntax-highlighting libqalculate
 
   # Hyprland Ecosystem
-  quickshell imagemagick hyprland hyprpaper hypridle hyprlock hyprpolkitagent wf-recorder slurp
+  quickshell imagemagick hyprland hyprpaper hypridle hyprlock hyprpolkitagent wf-recorder slurp grim
   xdg-desktop-portal-hyprland xdg-desktop-portal-gtk xdg-desktop-portal-gnome
   bibata-cursor-theme
 

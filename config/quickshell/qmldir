@@ -1,6 +1,7 @@
 singleton Theme 1.0 Theme.qml
 singleton Appearance 1.0 Appearance.qml
 singleton Motion 1.0 Motion.qml
+singleton Binds 1.0 Binds.qml
 Chip 1.0 Chip.qml
 Label 1.0 Label.qml
 Bar 1.0 Bar.qml

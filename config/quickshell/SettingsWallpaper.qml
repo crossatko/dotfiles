@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -449,10 +450,12 @@ ColumnLayout {
     Process {
         id: scan
         // images from wallpaper_dirs, then videos from video_dirs (missing folders are fine)
-        command: ["sh", "-c", "{ find -L " + page.dirs.map(d => "'" + d + "'").join(" ")
-            + " -maxdepth 2 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \\) | sort; "
-            + "find -L " + page.videoDirs.map(d => "'" + d + "'").join(" ")
-            + " -maxdepth 2 -type f \\( -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' \\) | sort; } 2>/dev/null"]
+        // folders are positional args ($1 = number of image folders), never spliced into the script
+        command: ["sh", "-c",
+            "n=$1; shift\n"
+            + "{ i=0; for d; do i=$((i+1)); [ $i -le $n ] && find -L \"$d\" -maxdepth 2 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \\); done | sort\n"
+            + "  i=0; for d; do i=$((i+1)); [ $i -gt $n ] && find -L \"$d\" -maxdepth 2 -type f \\( -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' \\); done | sort; } 2>/dev/null",
+            "sh", String(page.dirs.length)].concat(page.dirs, page.videoDirs)
         stdout: StdioCollector {
             onStreamFinished: {
                 page.files = text.split("\n").filter(l => l.length > 0)
