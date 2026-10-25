@@ -96,7 +96,7 @@ FloatingWindow {
         readonly property bool isGlassItem: true
         anchors.fill: parent
         radius: Theme.radius
-        color: Theme.alpha(Theme.bg, Theme.glass ? 0.3 : 0.85)   // glass behind it (Glass.qml); without solid_glass: blurred by the qs-modal window rule
+        color: Theme.alpha(Theme.bg, Theme.glass ? Theme.cardFill : 0.85)   // glass behind it (Glass.qml); without solid_glass: blurred by the qs-modal window rule
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
 

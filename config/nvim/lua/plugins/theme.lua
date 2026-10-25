@@ -77,6 +77,16 @@ return {
           end,
         })
         require("catppuccin").compile()
+        -- light / dark mode of the theme (theme.py mode): the palette's bg is pale in light mode
+        local function lum(hex)
+          local c = {}
+          for i = 2, 6, 2 do
+            local v = tonumber(hex:sub(i, i + 1), 16) / 255
+            c[#c + 1] = v <= 0.03928 and v / 12.92 or ((v + 0.055) / 1.055) ^ 2.4
+          end
+          return 0.2126 * c[1] + 0.7152 * c[2] + 0.0722 * c[3]
+        end
+        vim.o.background = lum(P.bg) > 0.4 and "light" or "dark"
         vim.cmd.colorscheme("catppuccin")
       end
 

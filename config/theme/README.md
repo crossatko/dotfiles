@@ -16,7 +16,8 @@ overrides ──┘                      │   (out/ is git-ignored; default/ is
 | `theme.py render` | re-render after editing `theme.toml`, `theme.local.toml` or a template (no re-analysis) |
 | `theme.py default` | (committer) regenerate the tracked default theme in `default/` from `default/wallpaper.jpg` and `theme.toml` |
 | `bin/theme-seed` (`theme.py seed`) | fill a missing `out/` from `default/` (done by install.sh, the git hooks, theme.py) |
-| `theme.py show` | print the resolved palette |
+| `theme.py mode [get\|dark\|light\|toggle]` | switch the light / dark mode (also: Settings > Wallpaper & theme > Color mode): saves it, re-renders from the cached wallpaper analysis and reloads every app, leaves hyprpaper running |
+| `theme.py show` | print the resolved palette (current mode) |
 | `python3 -I selftest.py` | run the extractor against 20 nasty synthetic wallpapers |
 
 ## Editing
@@ -53,9 +54,21 @@ overrides ──┘                      │   (out/ is git-ignored; default/ is
   (Hyprland `theme.lua` and nvim: `default/palette.lua`; ghostty `config-file = ?`).
 * **Other machines pulling the change that introduced this:** see AGENTS.md (Theme system) for `adopt-legacy`.
 
+## Light / dark mode
+The chosen mode lives in `~/.local/state/theme/mode` (`dark` default; missing / unreadable = dark; `THEME_MODE` overrides it for one run, not for `theme.py mode`; `theme.py default` is always dark). `theme.py mode light|dark|toggle` writes it and runs an apply without re-extracting; every other `apply` / `render` uses the saved mode. Theme-writing commands (render / apply / mode / per-monitor wallpaper) take `~/.local/state/theme/apply.lock`, so a wallpaper apply and a mode switch run one after the other. `out/palette.json` carries `mode`, so the shell follows instantly.
+* **Palette** (`build_palette(base, cfg, mode)`): same wallpaper analysis, mirrored. Light bg = pale low-chroma tint of the image's light side, fg = a soft deep tint of its dark side (not pure black), accent vivid then darkened only as far as contrast needs, ANSI darker and more saturated (`ansi_lightness_light`, `ansi_saturation_light`; also `light_bg_lightness`, `light_fg_lightness`), all forced to readable contrast, `muted` higher than in dark. The ramp keeps its meaning (bg -> bg_alt/surface/surface2/overlay -> fg); `bg_alt` is lighter than bg in light mode (views, like libadwaita), the others darker. ANSI black/white and bright_* swap sides. `[overrides_light]` pins colours for light mode only; `[overrides]` pins of neutral-ramp keys (bg, fg, greys) are ignored in light mode. `python3 -I selftest.py` checks both modes.
+* **Per-mode template values** (`mode_extras`): libadwaita shade alphas, the Qt Light/Midlight/Dark roles, `color_scheme` (Thunderbird). Everything else in `templates/` is palette-keyed and follows by itself.
+* **Glass settings are per mode** (each tweakable, remembered, never leaking into the other mode):
+  * theme.toml glass knobs (`GLASS_KEYS` in theme.py: `card_fill`, `plain_fill_min`, `bar_opacity`, `gtk_glass*`, `brave_glass_alpha`): dark = `[settings]`, light = `[settings_light]` only (missing keys: theme.py `LIGHT_GLASS_DEFAULTS`); `mode_cfg()` resolves them, `palette.json` carries the active mode's `card_fill` / `plain_fill_min` / `bar_opacity` for Quickshell (`Theme.cardFill` / `barFill`). Machine-local edits go into the same sections of `theme.local.toml`; apply with `theme.py render`.
+  * Settings > Glass (Hyprland solid_glass options, `~/.local/state/quickshell/glass.json`): top-level keys = dark, a `"light"` object = light; the page edits the active mode's set and swaps sets on a mode switch (`GlassTuneCtl.qml`); `hypr/hyprland/managed.lua` applies the active set (mode read from palette.lua's bg luminance), unset keys = settings.lua's values, light tint / darkening default to the dark settings.lua glass mirrored. `tint_from_bg` (per mode, "Tint colour" toggle; light default on): tint colour = palette bg, alpha kept. theme.py splits an old single-set glass.json once (`migrate_glass_modes`): the existing values stay the dark set, light starts from a copy with the tint mirrored to a pale one and darkening off.
+* **Bar on the wallpaper:** a bar without backdrop (Settings > Bar "transparent when flush") draws its text on the wallpaper. In light mode `palette.json` also carries `dark` (the dark palette's text colours) and `wall_ink` (`wall_inks()`: per monitor connector and bar edge, which palette's fg reads better on the wallpaper strip under the bar); `Bar.qml` `ink` / `Theme.inkOn()` pick it, `Chip` / `BarIcon` / `BarLabel` follow their chip's `ink`. Per-monitor wallpaper changes refresh `wall_ink` (`refresh_wall_ink`).
+* **Apps:** freedesktop `color-scheme` (`prefer-dark` / `prefer-light`, gsettings -> Settings portal: running Chromium / Electron / libadwaita apps flip live), `gtk-application-prefer-dark-theme`, the GTK 3 theme `Wall` (stock light or dark stylesheet recoloured; GTK 4 imports `Adwaita.css` / `Adwaita-dark.css`), KDE `LookAndFeelPackage` (Breeze / Breeze Dark), Brave (`color_scheme2`, applied at its next start; the shim exports `GTK_THEME=Wall[-Glass]` with `:dark` only in dark mode), nvim (`background` from the palette), Thunderbird `color-scheme`. Autostart (`hypr/hyprland/autostart.lua`) sets `color-scheme` from the state file before the browsers start.
+* **Kvantum:** colours with alpha are written as `#RRGGBBAA`, which is what Kvantum parses (`getFromRGBA`; stock themes use it).
+* Known limits: GTK 4 / libadwaita windows already open keep their colours until reopened (the portal flip reaches apps that listen for it); Brave and Thunderbird switch at their next start. `wall_ink` judges a video wallpaper by its still and assumes a 16:9 cover crop; dark mode does not use it (light text on a bright wallpaper stays as it was). Settings > Glass shows its own built-in defaults (not settings.lua's) for keys the active mode's set does not contain.
+
 ## How the extractor picks colors
 Background/foreground come from the darkest third / lightest quarter of the image,
-clamped so the theme is always dark with readable text. The **accent is the most
+clamped so the dark theme is dark with readable text (light mode: see above). The **accent is the most
 chromatic region**, not the most common color, so art that is mostly greyscale with one
 red streak (like drakengard.jpg) still gets its red. Greyscale images fall back to the
 foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI ≥ 4.5:1.
@@ -74,7 +87,7 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 | notifications | quickshell `Notifs.qml` server + toasts + notification center | instant, palette-driven |
 | launcher / menus | quickshell `Launcher.qml` | instant, palette-driven |
 | Qt / KDE apps (Dolphin, Ark, ...) | KDE platform theme (`QT_QPA_PLATFORMTHEME=kde` in `hyprland/env.lua`) reading `~/.config/kdeglobals`: color scheme `Wall`/`WallB` + accent, fonts, icons (`Wall-Adwaita-Qt`), widget style (`qt_style`: Kvantum `Wall`) | backgrounds, text and icons live; selection highlight on next window |
-| GTK 3 apps, Brave dialogs | named theme `Wall` (`~/.local/share/themes/Wall`): GTK's dark stylesheet re-colored by `recolor_gtk_css`; Brave gets `GTK_THEME=Wall:dark` from its shim | GTK 3 apps reload on theme change; Brave on restart |
+| GTK 3 apps, Brave dialogs | named theme `Wall` (`~/.local/share/themes/Wall`): GTK's stylesheet (dark or light, by mode) re-colored by `recolor_gtk_css`; Brave gets `GTK_THEME=Wall:dark` (`Wall` in light mode) from its shim | GTK 3 apps reload on theme change; Brave on restart |
 | GTK 4 / libadwaita apps, nautilus | `~/.config/gtk-4.0/gtk.css` -> `out/host/gtk4.css` (= `out/gtk.css` + translucent backgrounds and a compositor blur request, `gtk_glass*` in theme.toml); `gtk-3.0` -> `out/host/gtk3.css` (= `out/gtk.css` + the same glass for client-side-decorated GTK3 windows only; Firefox / Thunderbird and SSD windows stay opaque) | **after the app restarts** (see below) |
 | Adwaita icons | generated hue-rotated copy `Wall-Adwaita` (see below) | new windows / apps that reload icons |
 | Brave | seed-color theme written into its Preferences by the `~/.local/bin/brave` launcher shim | at next start (Brave rewrites Preferences on exit, so it can't be edited while running) |

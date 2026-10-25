@@ -14,7 +14,10 @@ import QtQuick.Layouts
 Item {
     id: icon
     property string text
-    property color color: Theme.fg
+    // qmllint disable missing-property
+    property var ink: parent?.parent?.ink ?? Theme   // colour set of the enclosing Chip (see BarLabel)
+    // qmllint enable missing-property
+    property color color: ink.fg
     property string family: Theme.iconFont
     property string styleName: "Regular"
     property int pixelSize: Theme.iconSize

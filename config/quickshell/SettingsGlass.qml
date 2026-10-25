@@ -4,6 +4,7 @@ import QtQuick.Layouts
 
 // Settings -> Glass: the decoration:blur:solid_glass:* options of the Hyprland fork, grouped as Lens / Light /
 // Material, plus the tint (A / R / G / B). Only listed while Theme.glass is on (Settings.qml).
+// The values are those of the active light / dark mode; each mode keeps its own (GlassTuneCtl, glass.json).
 // Everything goes through the GlassTuneCtl singleton: a drag is applied live (throttled `hyprctl eval`) and saved
 // (debounced) in glass.json, which hypr/hyprland/managed.lua applies at every config load on top of settings.lua.
 Item {
@@ -27,6 +28,7 @@ Item {
     function setTint(shift, v) {
         dragHold.restart()
         const t = Math.round(tune.values.tint) >>> 0
+        if (shift !== 24 && tune.tintFromBg) tune.setTintFromBg(false)   // a colour of its own
         tune.set("tint", ((t & ~(255 << shift)) | (Math.round(v) << shift)) >>> 0)
     }
     readonly property color tintColor: Qt.rgba(tintChannel(16) / 255, tintChannel(8) / 255, tintChannel(0) / 255, tintChannel(24) / 255)
@@ -93,6 +95,21 @@ Item {
                             outerRadius: Theme.radius; inset: 12
                             enabledLook: pg.tune.isChanged("tint")
                             onClicked: pg.tune.reset("tint")
+                        }
+                    }
+                    SettingRow {
+                        visible: grp.modelData === "Material"
+                        title: "Tint colour"
+                        titleWidth: pg.titleW
+                        Label {
+                            Layout.fillWidth: true
+                            text: pg.tune.tintFromBg ? "from the theme background (" + Theme.mode + " mode)" : "own colour (Red / Green / Blue)"
+                            color: Theme.fgDim; font.pixelSize: Theme.fontSmall
+                        }
+                        Toggle {
+                            objectName: "toggle-tint-from-bg"
+                            checked: pg.tune.tintFromBg
+                            onToggled: want => pg.tune.setTintFromBg(want)
                         }
                     }
                     Repeater {

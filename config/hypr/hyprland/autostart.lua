@@ -12,6 +12,11 @@ hl.on("hyprland.start", function()
 	hl.exec_cmd(
 		"systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE XDG_RUNTIME_DIR"
 	)
+	-- freedesktop color-scheme from the chosen light/dark mode (state file of theme.py, default dark), set before
+	-- 1Password / browsers start; theme.py apply / `theme.py mode` keep it too.
+	hl.exec_cmd(
+		[[sh -c 'm=$(cat "${XDG_STATE_HOME:-$HOME/.local/state}/theme/mode" 2>/dev/null); if [ "$m" = light ]; then s=prefer-light; else s=prefer-dark; fi; gsettings set org.gnome.desktop.interface color-scheme $s']]
+	)
 	hl.exec_cmd("systemctl --user start hyprpolkitagent")
 	-- Not a bare `hyprpaper`: started 2 s after the compositor it raced the monitor setup and left every
 	-- output black. The script waits for the outputs and retries once (scripts/start-hyprpaper.sh).

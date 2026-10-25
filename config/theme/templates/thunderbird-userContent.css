@@ -5,7 +5,7 @@
    sender's colours and stays readable. */
 @-moz-document url-prefix("about:") {
   :root {
-    color-scheme: dark !important;
+    color-scheme: {{color_scheme}} !important;
 {{tb_vars}}
   }
   :root, button, input, textarea, select { font-family: var(--tb-font) !important; }

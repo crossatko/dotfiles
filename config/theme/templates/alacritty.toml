@@ -2,7 +2,7 @@
 [colors.primary]
 background = "{{bg}}"
 foreground = "{{fg}}"
-bright_foreground = "{{bright_white}}"
+bright_foreground = "{{fg}}"
 
 [colors.cursor]
 text = "{{bg}}"

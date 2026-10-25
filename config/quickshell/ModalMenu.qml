@@ -115,7 +115,7 @@ PanelWindow {
             Translate { y: win.animated ? -(1 - win.t) * Theme.popupSlidePx : 0 }
         ]
         radius: Theme.radius
-        color: Theme.alpha(Theme.bg, Theme.glass ? 0.3 : 0.85)   // glass behind it (Glass.qml); without solid_glass: blurred by the qs-.* layer rule
+        color: Theme.alpha(Theme.bg, Theme.glass ? Theme.cardFill : 0.85)   // glass behind it (Glass.qml); without solid_glass: blurred by the qs-.* layer rule
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
 

@@ -36,6 +36,7 @@
 -- GLASS_FILE), a flat object of numbers written only by Quickshell (GlassTuneCtl.qml):
 --   {"version":1,"refraction":48,"bulb":57,"clarity":0.4,"aberration":0,"tint":0,"depth":2,"edge_curve":1.3,
 --    "light_angle":0,"specular_intensity":0,"specular_power":1,"sheen":0,"saturation":1.35,"frost":0,"darkening":0.8}
+-- Per colour mode: those top-level keys are the dark set, a "light" object the light set (see M.split_glass).
 -- Every PRESENT, valid key is applied to decoration.blur.solid_glass.<key> at load, after settings.lua, so
 -- it wins; the solid_glass block in settings.lua is therefore the default for keys Settings never touched.
 -- Values are clamped to the option ranges (tint: AARRGGBB integer). On a Hyprland without the solid_glass
@@ -393,8 +394,34 @@ function M.glass_path()
 	return (M.state_path():match("^(.*)/[^/]*$") or ".") .. "/glass.json"
 end
 
--- Pure: text of glass.json -> {key = number} with ONLY the keys that are set and valid (clamped; tint is
--- rounded to an integer). Never raises; anything odd (garbage, > 4 KiB, null, strings, NaN) is "not set".
+-- Per colour mode (theme.py mode): glass.json's top-level keys are the DARK values; a "light" object holds the light
+-- ones, {"version":1, <dark keys>, "light": {<light keys>}}. Each mode only ever reads its own keys, so tuning one
+-- never changes the other. A key a mode does not set is the hand-written settings.lua value (M.glass_base), except in
+-- light mode for tint / darkening, which then default to the dark settings.lua glass mirrored (M.light_default):
+-- darkening off, tint of the palette bg with the combined absorption 1 - (1 - tint alpha) * (1 - darkening).
+-- tint_from_bg (true / false, per mode; light default true): the tint keeps its alpha but takes its colour from the
+-- palette bg, so it follows the wallpaper. Which mode is active is read from the palette itself (bg luminance, like
+-- nvim), so it can never disagree with the colours Hyprland / Quickshell show.
+
+-- Pure: glass.json text -> dark text, light object text (nil when there is none)
+function M.split_glass(text)
+	if type(text) ~= "string" then
+		return text, nil
+	end
+	local s, e = text:find('"light"%s*:%s*{')
+	if s == nil then
+		return text, nil
+	end
+	local obj = text:match("^%b{}", e)
+	if obj == nil then
+		return text:sub(1, s - 1) .. "}", nil
+	end
+	return text:sub(1, s - 1) .. text:sub(e + #obj), obj
+end
+
+-- Pure: text of ONE mode's glass object -> {key = number} with ONLY the keys that are set and valid (clamped; tint
+-- is rounded to an integer), plus tint_from_bg (boolean) when set. Never raises; anything odd (garbage, > 4 KiB,
+-- null, strings, NaN) is "not set". Nested objects (the "light" one) must be split off first (M.split_glass).
 function M.parse_glass(text)
 	local g = {}
 	if type(text) ~= "string" or #text > M.MAX_BYTES then
@@ -415,15 +442,98 @@ function M.parse_glass(text)
 			g[key] = v
 		end
 	end
+	local fb = last_token(body, "tint_from_bg")
+	if fb == "true" or fb == "false" then
+		g.tint_from_bg = fb == "true"
+	end
 	return g
 end
 
+local function srgb_lin(c)
+	c = c / 255
+	return c <= 0.03928 and c / 12.92 or ((c + 0.055) / 1.055) ^ 2.4
+end
+
+-- palette bg "#rrggbb" -> r, g, b (0-255) and whether it is a light palette (luminance > 0.4)
+function M.parse_bg(hex)
+	if type(hex) ~= "string" then
+		return nil
+	end
+	local r, g, b = hex:match("^#(%x%x)(%x%x)(%x%x)$")
+	if r == nil then
+		return nil
+	end
+	r, g, b = tonumber(r, 16), tonumber(g, 16), tonumber(b, 16)
+	return r, g, b, 0.2126 * srgb_lin(r) + 0.7152 * srgb_lin(g) + 0.0722 * srgb_lin(b) > 0.4
+end
+
+-- Pure: light mode's tint / darkening when glass.json's light object does not set them: the dark hand-written
+-- values (`base`) mirrored (see above); the tint colour is replaced later when tint_from_bg is on
+function M.light_default(base)
+	local tint = math.tointeger(tonumber(base.tint) or 0) or 0
+	local dark = math.max(0, math.min(1, tonumber(base.darkening) or 0))
+	local a = ((tint >> 24) & 0xFF) / 255
+	local alpha = math.max(0, math.min(255, math.floor((1 - (1 - a) * (1 - dark)) * 255 + 0.5)))
+	return (alpha << 24) | 0xFFFFFF, 0
+end
+
+-- Pure: one mode's parsed glass object -> the option table to apply. light: palette is light; r, g, b: palette bg.
+function M.glass_options(g, base, light, r, gr, b)
+	local t = {}
+	for key in pairs(M.GLASS_LIMITS) do
+		if type(g[key]) == "number" then
+			t[key] = g[key]
+		end
+	end
+	local from_bg = g.tint_from_bg
+	if light then
+		local dt, dd = M.light_default(base or {})
+		t.tint = t.tint or dt
+		t.darkening = t.darkening or dd
+		if from_bg == nil then
+			from_bg = true
+		end
+	end
+	if from_bg and r ~= nil then
+		local tint = t.tint or math.tointeger(tonumber((base or {}).tint) or 0) or 0
+		t.tint = (tint & 0xFF000000) | (r << 16) | (gr << 8) | b
+	end
+	return t
+end
+
+-- M.glass_base: every solid_glass option as settings.lua left it, read at load before glass.json is applied (the
+-- per-mode fallback for keys a mode does not set; a runtime M.apply() must not read back its own output).
+function M.capture_glass_base()
+	if M.glass_base ~= nil or not M.glass_supported() then
+		return
+	end
+	local base = {}
+	for key in pairs(M.GLASS_LIMITS) do
+		local ok, v = pcall(hl.get_config, "decoration.blur.solid_glass." .. key)
+		if ok and tonumber(v) ~= nil then
+			base[key] = tonumber(v)
+		end
+	end
+	M.glass_base = base
+end
+
+local function palette_bg()
+	local ok, theme = pcall(require, "hyprland.theme")
+	return ok and type(theme) == "table" and type(theme.colors) == "table" and theme.colors.bg or nil
+end
+
+-- -> the active mode's glass object (parsed), plus whether the palette is light and its bg r, g, b
 function M.read_glass()
+	local r, gr, b, light = M.parse_bg(palette_bg())
 	local ok, g = pcall(function()
 		local text = M.read_small_file(M.glass_path())
-		return text and M.parse_glass(text) or {}
+		if not text then
+			return {}
+		end
+		local dark_text, light_text = M.split_glass(text)
+		return M.parse_glass((light and light_text or (not light and dark_text)) or "{}")
 	end)
-	return ok and type(g) == "table" and g or {}
+	return ok and type(g) == "table" and g or {}, light == true, r, gr, b
 end
 
 -- Does this Hyprland have decoration:blur:solid_glass:*? (stock builds do not)
@@ -432,20 +542,21 @@ function M.glass_supported()
 	return ok and v ~= nil
 end
 
--- {key = number} -> writes the keys; nothing at all when the option does not exist.
--- -> true, or false plus a reason.
-function M.apply_glass(g)
+-- (glass object, light, r, g, b) as M.read_glass returns them -> writes the options; nothing at all when the option
+-- does not exist. Every key a mode does not set is written back to its settings.lua value, so a runtime re-apply
+-- after a mode switch cannot keep the other mode's value. -> true, or false plus a reason.
+function M.apply_glass(g, light, r, gr, b)
 	g = type(g) == "table" and g or {}
-	if next(g) == nil then
+	if next(g) == nil and not light then
 		return true
 	end
 	if not M.glass_supported() then
 		return false, "no solid_glass options"
 	end
-	local t = {}
-	for key in pairs(M.GLASS_LIMITS) do
-		if type(g[key]) == "number" then
-			t[key] = g[key]
+	local t = M.glass_options(g, M.glass_base or {}, light, r, gr, b)
+	for key, v in pairs(M.glass_base or {}) do
+		if t[key] == nil then
+			t[key] = v
 		end
 	end
 	return pcall(hl.config, { decoration = { blur = { solid_glass = t } } })
@@ -1066,6 +1177,7 @@ end
 local initial = M.read()
 
 pcall(M.capture_baseline)
+pcall(M.capture_glass_base)
 pcall(M.apply_options, initial)
 pcall(function()
 	M.apply_glass(M.read_glass())

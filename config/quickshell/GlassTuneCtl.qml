@@ -10,6 +10,10 @@ import Quickshell.Hyprland
 // Lua snippet.
 //   qs ipc call glasstune set <key> <value> | get <key> | reset <key|all> | copy changed|all | reload | dump
 //
+// Per colour mode: glass.json's top-level keys are the dark values, its "light" object the light ones (format and
+// fallbacks: hypr/hyprland/managed.lua). This page edits the ACTIVE mode's set (Theme.mode); a mode switch saves any
+// pending edit to the mode it was made in and loads the other set. tint_from_bg (tintFromBg): the tint keeps its alpha
+// but takes its colour from the palette bg (default on in light mode, off in dark); moving a colour channel turns it off.
 // Persistence: the values the user changed are saved (debounced) in glass.json next to appearance.json
 // (${XDG_STATE_HOME:-~/.local/state}/quickshell/glass.json, QS_GLASS_FILE overrides the path). Hyprland reads it
 // at config load in hypr/hyprland/managed.lua, after settings.lua, so it wins over the hand-written
@@ -68,6 +72,23 @@ Singleton {
     function isChanged(key) { return Math.abs(values[key] - defOf(key)) > 1e-6 }
     readonly property var changedKeys: keys.filter(k => Math.abs(values[k] - defOf(k)) > 1e-6)
 
+    // the mode `overrides` / `tintFromBg` belong to (glass.json section), and the tint colour source of that mode
+    property string loadedMode: ""
+    property var tintFromBgSet: undefined           // explicit tint_from_bg of loadedMode, undefined = the mode's default
+    readonly property bool tintFromBg: tintFromBgSet !== undefined ? tintFromBgSet : loadedMode === "light"
+    function setTintFromBg(on) {
+        if (!ready) return
+        tintFromBgSet = on
+        dirty.tint = true
+        throttle.start()
+        saver.restart()
+    }
+    // the tint as sent: with tintFromBg its colour is the palette bg (alpha kept)
+    function sentTint(t) {
+        if (!tintFromBg) return t
+        const bg = Theme.bg
+        return ((t >>> 24) & 255) * 16777216 + Math.round(bg.r * 255) * 65536 + Math.round(bg.g * 255) * 256 + Math.round(bg.b * 255)
+    }
     // pending: keys not yet sent
     property var dirty: ({})
     // keys changed by the user (value saved in glass.json); all of them are applied by managed.lua at config load
@@ -177,7 +198,7 @@ Singleton {
         const ks = Object.keys(dirty)
         if (ks.length === 0) return
         dirty = ({})
-        const body = ks.map(k => k + "=" + fmt(k, values[k])).join(",")
+        const body = ks.map(k => k + "=" + fmt(k, k === "tint" ? sentTint(values[k]) : values[k])).join(",")
         applyProc.command = ["hyprctl", "eval", "hl.config({decoration={blur={solid_glass={" + body + "}}}})"]
         applyProc.running = true
     }
@@ -206,22 +227,57 @@ Singleton {
         return env ? String(env) : Appearance.dir + "/glass.json"
     }
     Timer { id: saver; interval: 500; onTriggered: ctl.save() }
+    // writes loadedMode's section and keeps the other mode's as it is in the file
     function save() {
-        const o = { version: 1 }
+        let file = {}
+        try { file = JSON.parse(store.text()) } catch (e) {}
+        if (typeof file !== "object" || file === null || Array.isArray(file)) file = {}
+        const o = {}
         for (const k of keys) if (overrides[k] !== undefined) o[k] = overrides[k]
+        if (tintFromBgSet !== undefined) o.tint_from_bg = tintFromBgSet
+        let out
+        if (loadedMode === "light") {
+            out = Object.assign({}, file, { version: 1, light: o })
+        } else {
+            out = { version: 1 }
+            Object.assign(out, o)
+            if (typeof file.light === "object" && file.light !== null) out.light = file.light
+        }
         const dir = stateFile.substring(0, stateFile.lastIndexOf("/")) || "/"
         Quickshell.execDetached(["mkdir", "-p", dir])
-        store.setText(JSON.stringify(o) + "\n")
+        store.setText(JSON.stringify(out) + "\n")
     }
-    FileView { id: store; path: ctl.stateFile; printErrors: false; blockLoading: true }
-    // the saved overrides (what managed.lua applies), read once; the page shows live values from getoption
+    FileView {
+        id: store; path: ctl.stateFile; printErrors: false; blockLoading: true
+        watchChanges: true
+        onFileChanged: reload()   // theme.py writes the light section once (migration)
+    }
+    // the saved overrides of the active mode (what managed.lua applies); the page shows live values from getoption
     function loadSaved() {
         const o = {}
+        let fb = undefined
         try {
-            const p = JSON.parse(store.text())
+            const f = JSON.parse(store.text())
+            const p = Theme.mode === "light" ? (f.light || {}) : f
             for (const k of keys) if (typeof p[k] === "number" && isFinite(p[k])) o[k] = clamp(k, p[k])
+            if (typeof p.tint_from_bg === "boolean") fb = p.tint_from_bg
         } catch (e) {}
         overrides = o
+        tintFromBgSet = fb
+        loadedMode = Theme.mode
+        values = Object.assign({}, values, o)
+    }
+    // light / dark switch: a pending edit goes to the mode it was made in, then the other mode's set is loaded (the
+    // live values follow with the config reload theme.py runs)
+    Connections {
+        target: Theme
+        function onModeChanged() {
+            if (Theme.mode === ctl.loadedMode) return
+            if (saver.running) { saver.stop(); ctl.save() }
+            throttle.stop()
+            ctl.dirty = ({})
+            ctl.loadSaved()
+        }
     }
 
     // A config reload (also the one Settings -> Appearance triggers) re-applies glass.json: read the values
@@ -232,6 +288,7 @@ Singleton {
             if (event.name !== "configreloaded" || !ctl.ready) return
             if (saver.running || throttle.running || applyProc.running) {
                 for (const k of Object.keys(ctl.overrides)) ctl.dirty[k] = true
+                if (ctl.tintFromBgSet !== undefined) ctl.dirty.tint = true
                 throttle.restart()
             } else ctl.load()
         }

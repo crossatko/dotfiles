@@ -60,6 +60,17 @@ with tempfile.TemporaryDirectory() as d:
             "bg dark": theme.luminance(bg) < 0.03,
             "all hex": all(len(v) == 7 and v[0] == "#" for v in pal.values()),
         }
+        lp = theme.build_palette(base, {}, "light")   # the light palette must read just as well
+        lbg = lp["bg"]
+        checks.update({
+            "light fg>=9": theme.contrast(lp["fg"], lbg) >= 9,
+            "light accent>=4.5": theme.contrast(lp["accent"], lbg) >= 4.5,
+            "light muted>=4.1": theme.contrast(lp["muted"], lbg) >= 4.1,
+            "light subtle>=4.4": theme.contrast(lp["subtle"], lbg) >= 4.4,
+            "light ansi>=4.5": all(theme.contrast(lp[c], lbg) >= 4.5 for c in ("red", "green", "yellow", "blue", "cyan", "magenta")),
+            "light bg light": theme.luminance(lbg) > 0.7,
+            "light all hex": all(len(v) == 7 and v[0] == "#" for v in lp.values()),
+        })
         bad = [k for k, ok in checks.items() if not ok]
         status = "ok  " if not bad else "FAIL"
         fails += bool(bad)

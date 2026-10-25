@@ -12,6 +12,7 @@ Rectangle {
     property bool active: false
     property bool dim: false
     property bool show: true   // read by the section Loaders in Bar.qml: false hides the widget (media without player, empty tray)
+    property var ink: Theme    // colour set: Theme, or Theme.darkInk on a light-mode bar without backdrop (Bar.qml ink)
     property int padX: Theme.chipPadX
     readonly property real contentW: row.implicitWidth
     readonly property bool iconOnly: contentW <= Theme.chipIcon
@@ -23,11 +24,11 @@ Rectangle {
     implicitHeight: Theme.chipHeight
     implicitWidth: Math.max(Theme.chipHeight, iconOnly ? Theme.chipHeight : Math.ceil(row.implicitWidth) + 2 * padX)   // never narrower than tall (min 1:1)
     radius: Theme.radiusChip   // inset barPad inside the bar
-    color: active ? Theme.alpha(Theme.accent, 0.28)
-         : hover.containsMouse ? Theme.alpha(Theme.fg, 0.10)
-         : Theme.alpha(Theme.bg, Theme.glass ? 0.10 : 0.35)
+    color: active ? Theme.alpha(ink.accent, 0.28)
+         : hover.containsMouse ? Theme.alpha(ink.fg, 0.10)
+         : Theme.alpha(ink.bg, Theme.glass ? 0.10 : 0.35)
     border.width: active ? 1 : 0
-    border.color: Theme.alpha(Theme.accent, 0.8)
+    border.color: Theme.alpha(ink.accent, 0.8)
     opacity: dim ? 0.55 : 1
 
     Behavior on color { ColorAnimation { duration: 120 } }

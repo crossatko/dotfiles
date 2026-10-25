@@ -45,6 +45,10 @@ border_size = 2          # quickshell default for the window border shown in Set
 bar_floating = false     # default bar mode: false = docked, true = floating (margins = gap, radius = rounding)
 smart_gaps = true        # quickshell default of the lone-window toggle (the rules live in hypr/hyprland/managed.lua, on unless overridden)
 bar_border = 0           # px width of the bar outline
+# Glass knobs (this block down to brave_glass_alpha, plus card_fill / plain_fill_min) are per colour mode: these are
+# the DARK values; light mode reads its own from [settings_light] below and never these (theme.py GLASS_KEYS).
+card_fill = 0.3          # base fill of shell cards and GTK / Qt windows on a solid_glass host (the compositor glass does the rest)
+plain_fill_min = 0       # without solid_glass: floor of the bar / card / window fill
 bar_opacity = 0.55       # quickshell bar background alpha; hyprland blur shows through; keep above ignore_alpha (0.1) in hypr/hyprland/rules.lua
 # GTK glass (templates/gtk4.css: libadwaita / all GTK4 apps; templates/gtk3.css: client-side-decorated GTK3 windows).
 # Tint, darkening, saturation etc. come from Settings > Glass: the compositor applies them to the glass behind GTK
@@ -66,6 +70,21 @@ gtk_glass_control = 0.07  # pathbar, entries, buttons in bars: fg at this alpha 
 # Pin any palette color by name; everything else follows the wallpaper.
 # Keys: bg bg_alt surface surface2 overlay muted subtle fg_dim fg accent accent2 accent_soft
 #       red orange yellow green cyan blue magenta black white bright_<name> error warn ok info
+# Light mode's glass knobs (same keys and meaning as the glass block in [settings]); a key missing here falls back to
+# theme.py's light default, never to the dark value. Machine-local edits: [settings_light] in theme.local.toml.
+[settings_light]
+card_fill = 0.72         # pale cards over any wallpaper need much more fill than dark ones to keep dark text readable
+plain_fill_min = 0.88    # plain blur: nothing lightens the backdrop, so the pale fill has to cover it
+bar_opacity = 0.55
+gtk_glass = true
+gtk_glass_chrome = 0.0
+gtk_glass_header = 0.05
+gtk_glass_sidebar = 0.05
+gtk_glass_view = 0.15
+gtk_glass_popover = 0.5
+gtk_glass_dialog = 0.55
+gtk_glass_control = 0.07
+
 [overrides]
 # accent = "#c0392b"
 

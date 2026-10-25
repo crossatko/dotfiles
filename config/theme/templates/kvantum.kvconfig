@@ -4,7 +4,7 @@
 # translucent (WA_TranslucentBackground) and Hyprland draws the glass behind them (tint / darkening from
 # Settings > Glass); Kvantum's own blur is off. Window background = the base fill (theme.toml gtk_glass_fill,
 # gtk_glass_* like GTK: reduce_window_opacity = 100 - base fill), menus = gtk_glass_popover.
-# Colours with alpha are Qt's #AARRGGBB.
+# Colours with alpha are Kvantum's #RRGGBBAA (not Qt's #AARRGGBB): see kv_base_color in theme.py render_all.
 [%General]
 translucent_windows=true
 blurring=false
@@ -48,12 +48,12 @@ opaque=kaffeine,kmplayer,subtitlecomposer,kdenlive,vlc,smplayer,smplayer2,avidem
 
 [GeneralColors]
 window.color={{bg}}
-base.color=#{{kv_view_alpha}}{{bg_alt.bare}}
-alt.base.color=#{{kv_view_alpha}}{{surface.bare}}
-button.color=#{{kv_control_alpha}}{{fg.bare}}
-light.color={{overlay}}
-mid.light.color={{surface2}}
-dark.color={{bg}}
+base.color={{kv_base_color}}
+alt.base.color={{kv_alt_base_color}}
+button.color={{kv_button_color}}
+light.color={{kv_light}}
+mid.light.color={{kv_midlight}}
+dark.color={{kv_dark}}
 mid.color={{surface2}}
 highlight.color={{accent}}
 inactive.highlight.color={{accent_soft}}

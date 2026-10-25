@@ -31,6 +31,8 @@ Singleton {
     readonly property color cyan: p.cyan
     readonly property color orange: p.orange
     readonly property string wallpaper: p.wallpaper
+    readonly property string mode: p.mode === "light" ? "light" : "dark"   // light / dark theme (theme.py mode, Settings > Wallpaper & theme)
+    readonly property bool light: mode === "light"
     readonly property var wallpaperDirs: p.wallpaper_dirs
     readonly property var videoDirs: p.video_dirs && p.video_dirs.length > 0 ? p.video_dirs : [home + "/Videos/wallpapers"]   // video wallpapers (mp4/webm/mkv), see SettingsWallpaper.qml
     readonly property real barOpacity: p.bar_opacity
@@ -46,9 +48,36 @@ Singleton {
     // vanish in one frame (measured 2026-10-21); glassScaleAt() then shrinks the glass instead in the last part.
     property bool glassFades: false
     // fill alpha of glass cards (popups, OSD, toasts): low enough for the lens / rim to show; else the original fill
-    readonly property real cardFill: glass ? 0.3 : Math.min(1, barOpacity + 0.3)
+    // Per colour mode (theme.toml [settings] = dark, [settings_light] = light; palette.json carries the active mode's):
+    // card_fill on solid_glass (light: a pale card needs a much stronger fill to keep its dark text readable; theme.py
+    // uses the same value for GTK / Qt windows), plain_fill_min = floor of every fill without solid_glass
+    readonly property real cardFill: glass ? p.card_fill : Math.max(Math.min(1, barOpacity + 0.3), p.plain_fill_min)
     // fill alpha of the bar container: like the cards on glass, else the bar_opacity setting over the plain blur
-    readonly property real barFill: glass ? cardFill : barOpacity
+    readonly property real barFill: glass ? cardFill : Math.max(barOpacity, p.plain_fill_min)
+
+    // Text drawn straight on the wallpaper (a bar without backdrop, Settings > Bar "transparent when flush"): the
+    // wallpaper is the same in both modes, so light mode's dark text would vanish on a dark wallpaper. In light mode
+    // palette.json carries the dark palette's colours ("dark") and, per monitor and edge, which palette reads on the
+    // wallpaper strip under the bar ("wall_ink", theme.py wall_inks). inkOn() -> Theme itself or darkInk; both have
+    // the colour properties the bar uses (bg fg fgDim muted accent accent2 red green yellow overlay).
+    readonly property QtObject darkInk: QtObject {
+        readonly property color bg: p.dark?.bg ?? root.bg
+        readonly property color fg: p.dark?.fg ?? root.fg
+        readonly property color fgDim: p.dark?.fg_dim ?? root.fgDim
+        readonly property color muted: p.dark?.muted ?? root.muted
+        readonly property color accent: p.dark?.accent ?? root.accent
+        readonly property color accent2: p.dark?.accent2 ?? root.accent2
+        readonly property color red: p.dark?.red ?? root.red
+        readonly property color green: p.dark?.green ?? root.green
+        readonly property color yellow: p.dark?.yellow ?? root.yellow
+        readonly property color overlay: p.dark?.overlay ?? root.overlay
+    }
+    function inkOn(screenName, atTop) {
+        if (!light) return root
+        const w = p.wall_ink ?? {}
+        const e = w[screenName] ?? w["*"] ?? {}
+        return (atTop ? e.top : e.bottom) === "light" ? root : darkInk
+    }
     function checkGlass() { glassProbe.running = true }
     Process {
         id: glassProbe
@@ -79,6 +108,7 @@ Singleton {
     readonly property int fontCaption: 11   // sub lines under a row title, captions, hints, section heads
     readonly property int fontTiny: 10      // badges and footnotes
     readonly property string iconFont: "Font Awesome 7 Sharp"   // Pro desktop font, installed in ~/.local/share/fonts (not in this repo)
+    readonly property string iconFontPro: "Font Awesome 7 Pro"   // Pro desktop font (Solid for filled glyphs), installed in ~/.local/share/fonts
     readonly property string brandFont: "Font Awesome 7 Brands" // brand logos (system package)
     readonly property int iconSize: 15      // FA glyphs are far larger than the old Nerd Font ones
     readonly property int barHeight: 40
@@ -194,9 +224,14 @@ Singleton {
         property string cyan: "#80c6c6"
         property string orange: "#c69980"
         property string wallpaper: ""
+        property string mode: "dark"
         property var wallpaper_dirs: []
         property var video_dirs: []
         property real bar_opacity: 0.55
+        property real card_fill: 0.3
+        property real plain_fill_min: 0
+        property var dark: ({})        // light mode only: the dark palette's text colours (darkInk)
+        property var wall_ink: ({})    // light mode only: {"*" | connector: {top, bottom: "light" | "dark"}} (inkOn)
         property int bar_border: 0
         property var rounding: 0
         property var gap: 0

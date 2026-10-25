@@ -6,7 +6,7 @@
    set in the managed block of user.js). Selectors/variables are Thunderbird 15x; they may need a touch after major updates. */
 
 :root, :host {
-  color-scheme: dark !important;
+  color-scheme: {{color_scheme}} !important;
 {{tb_vars}}
 }
 

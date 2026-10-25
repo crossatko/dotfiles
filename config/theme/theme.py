@@ -32,6 +32,42 @@ LOCAL_TOML = ROOT / "theme.local.toml"   # git-ignored per-machine selection, me
 MARKER = ".default"               # out/.default: out/ holds the seeded default (bin/theme-seed), not a real render
 DEFAULT_MODE = False              # True while `theme.py default` renders into DEFAULT_DIR: home-independent output
 HOME = Path.home()
+MODES = ("dark", "light")
+MODE_FILE = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "theme" / "mode"   # the chosen mode (per machine, outside the repo)
+
+
+def get_mode():
+    """"dark" (default) or "light": THEME_MODE, else the state file MODE_FILE. The committed default/ is always dark."""
+    if DEFAULT_MODE:
+        return "dark"
+    if os.environ.get("THEME_MODE") in MODES:
+        return os.environ["THEME_MODE"]
+    try:
+        m = MODE_FILE.read_text().strip()
+    except OSError:
+        return "dark"
+    return m if m in MODES else "dark"
+
+
+def set_mode(m):
+    MODE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    write_atomic(MODE_FILE, m + "\n")
+
+
+_LOCK = []
+
+
+def apply_lock():
+    """Serialise the commands that write the theme (render / apply / mode / per-monitor wallpaper): a wallpaper apply
+    racing a light / dark switch could otherwise finish last with the other mode's or the old wallpaper's palette.
+    Waits for a running one; held until this process exits."""
+    if _LOCK:
+        return
+    import fcntl
+    MODE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    f = open(MODE_FILE.parent / "apply.lock", "w")
+    fcntl.flock(f, fcntl.LOCK_EX)
+    _LOCK.append(f)
 
 
 # ---------------------------------------------------------------- color utils
@@ -69,8 +105,13 @@ def contrast(a, b):
 
 
 def ensure_contrast(color, bg, ratio):
-    """Lighten `color` (keeping hue/saturation) until it reads on `bg`."""
+    """Lighten `color` (keeping hue/saturation) until it reads on `bg`; on a light `bg` darken it instead."""
     h, l, s = to_hls(color)
+    if luminance(bg) > 0.4:
+        while contrast(color, bg) < ratio and l > 0.03:
+            l -= 0.02
+            color = hls(h, l, s)
+        return color
     while contrast(color, bg) < ratio and l < 0.97:
         l += 0.02
         color = hls(h, l, s)
@@ -155,40 +196,69 @@ def hue_dist(a, b):
     return min(d, 1.0 - d)
 
 
-def build_palette(base, cfg):
-    s = cfg.get("settings", {})
-    bg = base["bg"]
-    # keep the wallpaper's tint but force a dark, low-chroma base
-    bh, bl, bs = to_hls(bg)
-    bg = hls(bh, min(bl, s.get("bg_max_lightness", 0.075)), min(bs, 0.15))
-    fh, fl, fs = to_hls(base["fg"])
-    fg = hls(fh, max(fl, 0.78), min(fs, 0.25))
+# the neutral ramp: values that only make sense for one mode ([overrides] pins of these are ignored in light mode)
+NEUTRAL_KEYS = {"bg", "bg_alt", "surface", "surface2", "overlay", "muted", "subtle", "fg_dim", "fg",
+                "black", "white", "bright_black", "bright_white"}
 
-    fg = ensure_contrast(fg, bg, 9.0)
+
+def build_palette(base, cfg, mode="dark"):
+    """The palette for `mode`. Dark: near-black tinted bg, light fg. Light: the same wallpaper-derived hues the other
+    way round (a pale tint of the image's light side for bg, a deep tint of its dark side for fg); every ramp step
+    (bg_alt .. overlay, muted .. fg_dim) keeps its meaning, so templates need no per-mode colour logic."""
+    light = mode == "light"
+    s = cfg.get("settings", {})
+    if light:
+        # pale, low-chroma base from the lightest part of the image; text a deep tint of its darkest part: a soft
+        # near-black (about 12.5:1), not pure black, which glares on a pale page
+        lh, _, ls = to_hls(base["fg"])
+        bg = hls(lh, s.get("light_bg_lightness", 0.955), min(ls, 0.30))
+        dh, _, ds = to_hls(base["bg"])
+        fg = hls(dh, s.get("light_fg_lightness", 0.22), min(ds, 0.30))
+        fg = ensure_contrast(fg, bg, 12.5)
+    else:
+        # keep the wallpaper's tint but force a dark, low-chroma base
+        bh, bl, bs = to_hls(base["bg"])
+        bg = hls(bh, min(bl, s.get("bg_max_lightness", 0.075)), min(bs, 0.15))
+        fh, fl, fs = to_hls(base["fg"])
+        fg = hls(fh, max(fl, 0.78), min(fs, 0.25))
+        fg = ensure_contrast(fg, bg, 9.0)
 
     accent = base["accent"]
     if accent is None:
         accent = fg  # no color in the image: the foreground doubles as the accent
     else:
         ah, al, as_ = to_hls(accent)
-        accent = hls(ah, max(0.42, min(al, 0.62)), max(as_, 0.55))
+        if light:   # vivid, then only as dark as the pale bg needs (a dark image accent would turn brown / maroon)
+            accent = hls(ah, max(0.40, min(al, 0.50)), max(as_, 0.65))
+        else:
+            accent = hls(ah, max(0.42, min(al, 0.62)), max(as_, 0.55))
         accent = ensure_contrast(accent, bg, 4.6)  # also lands in an ANSI slot
     ah, _, _ = to_hls(accent)
 
     p = {"bg": bg, "fg": fg, "accent": accent}
-    p["bg_alt"] = mix(bg, fg, 0.03)
-    p["surface"] = mix(bg, fg, 0.07)
-    p["surface2"] = mix(bg, fg, 0.13)
-    p["overlay"] = mix(bg, fg, 0.28)
-    p["muted"] = ensure_contrast(mix(bg, fg, 0.52), bg, 3.0)
+    if light:
+        p["bg_alt"] = mix(bg, "#ffffff", 0.5)   # views sit lighter than the window (libadwaita light)
+        p["surface"] = mix(bg, fg, 0.05)
+        p["surface2"] = mix(bg, fg, 0.11)
+        p["overlay"] = mix(bg, fg, 0.26)
+    else:
+        p["bg_alt"] = mix(bg, fg, 0.03)
+        p["surface"] = mix(bg, fg, 0.07)
+        p["surface2"] = mix(bg, fg, 0.13)
+        p["overlay"] = mix(bg, fg, 0.28)
+    p["muted"] = ensure_contrast(mix(bg, fg, 0.52), bg, 4.2 if light else 3.0)   # light: hints sit on translucent glass cards, which costs contrast
     p["subtle"] = ensure_contrast(mix(bg, fg, 0.55), bg, 4.5)  # dim but always legible: line numbers, hints
     p["fg_dim"] = mix(bg, fg, 0.75)
     p["accent_soft"] = mix(bg, accent, 0.45)
 
     # ANSI: fixed hues, saturation capped so they sit quietly next to the
     # artwork; whichever hue is nearest the accent snaps to it exactly.
-    sat = s.get("ansi_saturation", 0.38)
-    light = s.get("ansi_lightness", 0.64)
+    if light:   # darker and more saturated: readable on the pale bg (contrast >= 4.5 enforced below) without going muddy
+        sat = s.get("ansi_saturation_light", 0.62)
+        lightness = s.get("ansi_lightness_light", 0.40)
+    else:
+        sat = s.get("ansi_saturation", 0.38)
+        lightness = s.get("ansi_lightness", 0.64)
     nearest = min(ANSI_HUES, key=lambda k: hue_dist(ANSI_HUES[k], ah))
     for name, h in ANSI_HUES.items():
         # snap only on a near-exact hue match, so e.g. an orange accent can't
@@ -196,23 +266,36 @@ def build_palette(base, cfg):
         if name == nearest and hue_dist(h, ah) < 0.05 and to_hls(accent)[2] > 0.2:
             p[name] = accent
         else:
-            p[name] = hls(h, light, sat)
-    p["orange"] = hls((ANSI_HUES["red"] + ANSI_HUES["yellow"]) / 2, light, sat)
+            p[name] = hls(h, lightness, sat)
+    p["orange"] = hls((ANSI_HUES["red"] + ANSI_HUES["yellow"]) / 2, lightness, sat)
+    if light:
+        for name in (*ANSI_HUES, "orange"):
+            p[name] = ensure_contrast(p[name], bg, 4.5)
     p["accent2"] = p["blue"] if nearest != "blue" else p["cyan"]
 
-    p["black"] = p["surface2"]
-    p["white"] = p["fg_dim"]
+    step = -0.09 if light else 0.09   # bright = further from the bg
+    if light:   # ANSI "black" / "white" keep their meaning: a dark and a light grey
+        p["black"] = p["fg_dim"]
+        p["white"] = p["surface2"]
+    else:
+        p["black"] = p["surface2"]
+        p["white"] = p["fg_dim"]
     for name in ("black", "white", *ANSI_HUES):
         h, l, sa = to_hls(p[name])
-        p["bright_" + name] = hls(h, l + 0.09, sa)
+        p["bright_" + name] = hls(h, l + step, sa)
     p["bright_black"] = p["muted"]
-    p["bright_white"] = fg
+    p["bright_white"] = p["bg_alt"] if light else fg
 
     # error/warn/ok semantic aliases so templates don't hard-pick ANSI names
     p["error"], p["warn"], p["ok"], p["info"] = p["red"], p["yellow"], p["green"], p["blue"]
 
     for k, v in cfg.get("overrides", {}).items():
+        if light and k in NEUTRAL_KEYS:   # a dark-mode bg / fg / grey pin would wreck the light ramp: [overrides_light]
+            continue
         p[k] = v
+    if light:   # per-mode pins: [overrides_light] in theme.toml / theme.local.toml
+        for k, v in cfg.get("overrides_light", {}).items():
+            p[k] = v
     return p
 
 
@@ -255,6 +338,24 @@ def write_atomic(path, text):
 # live, through the compositor. libadwaita paints sidebars, views and headerbars ON TOP of the window background
 # (chrome), so each layer's own alpha is what is left to reach its target: 1 - (1 - effective) / (1 - chrome).
 GTK_GLASS_DEFAULTS = {"chrome": 0.0, "header": 0.05, "sidebar": 0.05, "view": 0.15, "popover": 0.5, "dialog": 0.55}
+# Glass knobs kept per light / dark mode: dark reads them from [settings], light ONLY from [settings_light] (never from
+# [settings]), so tweaking one mode never changes the other. Missing light keys fall back to LIGHT_GLASS_DEFAULTS.
+#   card_fill       base fill of shell cards / GTK / Qt windows on a solid_glass host (Theme.qml cardFill)
+#   plain_fill_min  without solid_glass: floor of the bar / card / window fill (nothing lightens a plain blur)
+GLASS_KEYS = ("card_fill", "plain_fill_min", "bar_opacity", "gtk_glass", "gtk_glass_fill", "gtk_glass_chrome",
+              "gtk_glass_header", "gtk_glass_sidebar", "gtk_glass_view", "gtk_glass_popover", "gtk_glass_dialog",
+              "gtk_glass_control", "brave_glass_alpha")
+LIGHT_GLASS_DEFAULTS = {"card_fill": 0.72, "plain_fill_min": 0.88}
+
+
+def mode_cfg(cfg, mode):
+    """cfg with [settings] resolved for `mode` (GLASS_KEYS from [settings] in dark, from [settings_light] in light)."""
+    if mode != "light":
+        return cfg
+    s = {k: v for k, v in cfg.get("settings", {}).items() if k not in GLASS_KEYS}
+    s.update(LIGHT_GLASS_DEFAULTS)
+    s.update({k: v for k, v in cfg.get("settings_light", {}).items() if k in GLASS_KEYS})
+    return {**cfg, "settings": s}
 GTK_GLASS_CONTROL = 0.07   # pathbar / entries / buttons in bars: fg at this alpha, like the shell's Btn (hover x2)
 
 
@@ -270,7 +371,7 @@ def hypr_solid_glass():
         return False
 
 
-def gtk_glass_alphas(s, glass=None):
+def gtk_glass_alphas(s, glass=None, mode=None):
     clamp = lambda x: min(1.0, max(0.0, float(x)))
     if glass is None:
         glass = hypr_solid_glass()
@@ -281,7 +382,10 @@ def gtk_glass_alphas(s, glass=None):
     if "gtk_glass_fill" in s:
         card = clamp(s["gtk_glass_fill"])
     else:
-        card = 0.3 if glass else clamp(s.get("bar_opacity", 0.55))
+        if glass:   # `s` is already resolved for the mode (mode_cfg): card_fill is that mode's
+            card = clamp(s.get("card_fill", 0.3))
+        else:   # plain_fill_min: light mode's floor (no glass tint lightens a plain blur, the pale fill has to cover it)
+            card = max(clamp(s.get("bar_opacity", 0.55)), clamp(s.get("plain_fill_min", 0)))
     eff = {k: clamp(card + float(s.get(f"gtk_glass_{k}", d))) for k, d in GTK_GLASS_DEFAULTS.items()}
     on = bool(s.get("gtk_glass", True))
     if not on:
@@ -3307,7 +3411,119 @@ def video_command(args):
         sys.exit("theme: video start|stop|restart|sync [key] | replay <connector> | optimize [on|off] | thumb <file> | thumbs <file>... | status")
 
 
-def render_all(pal, cfg):
+# ---- light mode: bar text straight on the wallpaper ----
+# A bar without a backdrop (Settings > Bar "transparent when flush") draws its text on the wallpaper, which the mode does
+# not change: dark text from the light palette is unreadable on a dark wallpaper. palette.json (light mode) therefore
+# carries the dark palette's text colours ("dark", INK_KEYS) and, per monitor and bar edge, which of the two reads
+# better on the wallpaper strip under the bar ("wall_ink": "light" = the light palette, "dark" = the dark one).
+INK_KEYS = ("bg", "fg", "fg_dim", "muted", "accent", "accent2", "red", "green", "yellow", "overlay")
+INK_STRIP = 0.035   # strip height under a bar, as a fraction of the screen height (a 40 px bar on 1440 px is 2.8 %)
+
+
+def strip_inks(path, pal, dark):
+    """{"top": ink, "bottom": ink} for one wallpaper (cover-cropped to 16:9, like hyprpaper's fit_mode = cover): the
+    palette whose fg keeps the better contrast over the darkest / brightest tenth of the strip ("light" or "dark")."""
+    w, h = 320, 180
+    rows = max(2, round(h * INK_STRIP))
+    try:
+        raw = subprocess.run(["magick", f"{path}[0]", "-auto-orient", "-background", "black", "-alpha", "remove",
+                              "-colorspace", "sRGB", "-resize", f"{w}x{h}^", "-gravity", "center", "-extent", f"{w}x{h}",
+                              "-depth", "8", "rgb:-"], check=True, capture_output=True, timeout=30).stdout
+    except (subprocess.SubprocessError, OSError):
+        return {"top": "dark", "bottom": "dark"}
+    if len(raw) < w * h * 3:
+        return {"top": "dark", "bottom": "dark"}
+    lin = lambda c: c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    lut = [lin(i / 255) for i in range(256)]
+
+    def lums(y0, y1):
+        b = raw[y0 * w * 3:y1 * w * 3]
+        return [0.2126 * lut[b[i]] + 0.7152 * lut[b[i + 1]] + 0.0722 * lut[b[i + 2]] for i in range(0, len(b) - 2, 3)]
+
+    def pick(ls):
+        ls.sort()
+        q = lambda f: ls[min(len(ls) - 1, int(len(ls) * f))]
+        ratio = lambda fg, l: (max(luminance(fg), l) + 0.05) / (min(luminance(fg), l) + 0.05)
+        # light ink (dark text) suffers on the darkest pixels, dark ink (light text) on the brightest
+        return "light" if ratio(pal["fg"], q(0.1)) >= ratio(dark["fg"], q(0.9)) else "dark"
+    return {"top": pick(lums(0, rows)), "bottom": pick(lums(h - rows, h))}
+
+
+def wall_inks(wp, pal, dark):
+    """{"*": inks of the primary wallpaper, "<connector>": inks of a monitor with its own wallpaper} (strip_inks).
+    A video wallpaper is judged by its still."""
+    res = {"*": strip_inks(wp, pal, dark)}
+    try:
+        ents = monitor_entries()
+    except Exception:   # no state / no hyprctl: the primary is all there is
+        ents = []
+    for _, conn, path in ents:
+        if conn:
+            res[conn] = strip_inks(path, pal, dark)
+    return res
+
+
+def glass_file():
+    """Settings > Glass state (Quickshell GlassTuneCtl, read by hypr/hyprland/managed.lua)."""
+    if os.environ.get("GLASS_FILE"):
+        return Path(os.environ["GLASS_FILE"])
+    return Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "quickshell" / "glass.json"
+
+
+def migrate_glass_modes():
+    """One-time split of glass.json into per-mode sets (managed.lua: top-level = dark, "light" object = light). The
+    existing values stay the dark ones untouched; the light set starts as a copy of them, except tint / darkening:
+    darkening off and the tint mirrored (alpha = 1 - (1 - tint alpha) * (1 - darkening), colour from the palette bg via
+    tint_from_bg). Without both tint and darkening saved, those two are left to managed.lua's light default."""
+    f = glass_file()
+    try:
+        d = json.loads(f.read_text())
+    except (OSError, ValueError):
+        return
+    if not isinstance(d, dict) or "light" in d:
+        return
+    light = {k: v for k, v in d.items() if k not in ("version", "tint", "darkening", "tint_from_bg")
+             and isinstance(v, (int, float)) and not isinstance(v, bool)}
+    tint, dk = d.get("tint"), d.get("darkening")
+    if isinstance(tint, (int, float)) and isinstance(dk, (int, float)):
+        a = ((int(tint) >> 24) & 0xFF) / 255
+        alpha = max(0, min(255, round((1 - (1 - a) * (1 - max(0.0, min(1.0, dk)))) * 255)))
+        light.update(tint=(alpha << 24) | 0xFFFFFF, darkening=0, tint_from_bg=True)
+    d["light"] = light
+    write_atomic(f, json.dumps(d, separators=(",", ":")) + "\n")
+
+
+def refresh_wall_ink():
+    """Re-judge palette.json's wall_ink (light mode only) after a per-monitor wallpaper change that skips the render."""
+    try:
+        d = json.loads((OUT / "palette.json").read_text())
+    except (OSError, ValueError):
+        return
+    if d.get("mode") != "light" or not isinstance(d.get("dark"), dict):
+        return
+    d["wall_ink"] = wall_inks(d["wallpaper"], d, d["dark"])
+    write_atomic(OUT / "palette.json", json.dumps(d, indent=2) + "\n")
+
+
+# per-mode template values: libadwaita shade alphas, the Qt palette's Light / Midlight / Dark roles (lighter / darker than
+# the window, so they swap), the color-scheme names apps understand
+def mode_extras(pal, mode):
+    if mode == "light":
+        e = {"shade_a": "0.07", "shade_dark_a": "0.2", "popover_shade_a": "0.07", "scrollbar_outline": "rgba(255, 255, 255, 0.5)",
+             "kv_light": pal["bg_alt"], "kv_midlight": pal["bg_alt"], "kv_dark": pal["overlay"]}
+    else:
+        e = {"shade_a": "0.36", "shade_dark_a": "0.9", "popover_shade_a": "0.25", "scrollbar_outline": "rgba(0, 0, 0, 0.5)",
+             "kv_light": pal["overlay"], "kv_midlight": pal["surface2"], "kv_dark": pal["bg"]}
+    for k in ("kv_light", "kv_midlight", "kv_dark"):
+        e[k + "_bare"] = e[k].lstrip("#")
+    e["color_scheme"] = mode
+    return e
+
+
+def render_all(pal, cfg, mode=None, dark=None):
+    """dark: the dark palette of the same wallpaper (light mode only): palette.json then also carries its text colours
+    and the wallpaper ink (wall_inks) for the bar while it has no backdrop."""
+    mode = mode or get_mode()
     OUT.mkdir(parents=True, exist_ok=True)
     if not DEFAULT_MODE:
         HOST_OUT.mkdir(exist_ok=True)
@@ -3315,7 +3531,8 @@ def render_all(pal, cfg):
     if DEFAULT_MODE:   # committed: no absolute home path (bin/theme-seed expands ~/ when it copies into out/)
         wp = tilde(wp)
     extra = {"wallpaper": wp, "home": str(HOME), "out": str(OUT),
-             **gtk_glass_alphas(cfg.get("settings", {})), **{k: v for k, v in cfg.get("vars", {}).items()}}
+             **gtk_glass_alphas(cfg.get("settings", {}), mode=mode), **{k: v for k, v in cfg.get("vars", {}).items()},
+             **mode_extras(pal, mode)}
     # Brave GTK mode: active tab title and toolbar icons share one GTK colour (label); brave_tab_text picks it
     extra["brave_label"] = pal["accent"] if cfg.get("settings", {}).get("brave_tab_text", "fg") == "accent" else pal["fg"]
     # a host without the TV wallpaper (it is not in the repo) falls back to the main one instead of a black output
@@ -3323,6 +3540,12 @@ def render_all(pal, cfg):
     if not tv or not os.path.exists(tv):
         extra["tv_wallpaper"] = wp
     # Thunderbird: the shared variable block (tb-vars.css) is rendered once and pasted into userChrome / userContent as {{tb_vars}}
+    # Kvantum colours with alpha (kvantum.kvconfig base / alt base / button): Kvantum parses #RRGGBBAA (its own
+    # getFromRGBA; the stock themes write e.g. #000000c8), not Qt's #AARRGGBB
+    kva = lambda alpha, col: f"#{col.lstrip('#')}{alpha}"
+    extra["kv_base_color"] = kva(extra["kv_view_alpha"], pal["bg_alt"])
+    extra["kv_alt_base_color"] = kva(extra["kv_view_alpha"], pal["surface"])
+    extra["kv_button_color"] = kva(extra["kv_control_alpha"], pal["fg"])
     extra["tb_radius"] = int(cfg.get("settings", {}).get("thunderbird_radius", cfg.get("settings", {}).get("rounding", 0)))
     extra["tb_vars"] = render((ROOT / "tb-vars.css").read_text(), pal, extra)
     # per-monitor wallpapers (empty strings without entries, so the output is unchanged): see monitor_entries()
@@ -3346,8 +3569,12 @@ def render_all(pal, cfg):
           "border_size": int(s.get("border_size", 2)),
           "bar_floating": bool(s.get("bar_floating", False)),
           "smart_gaps": bool(s.get("smart_gaps", True)),
-          "bar_border": s.get("bar_border", 0), "bar_opacity": s.get("bar_opacity", 0.55)}
-    write_atomic(OUT / "palette.json", json.dumps({"wallpaper": wp, "wallpaper_dirs": dirs, "video_dirs": [tilde(d) for d in video_dirs(cfg)] if DEFAULT_MODE else video_dirs(cfg), **ui, **pal}, indent=2) + "\n")
+          "bar_border": s.get("bar_border", 0), "bar_opacity": s.get("bar_opacity", 0.55),
+          "card_fill": s.get("card_fill", 0.3), "plain_fill_min": s.get("plain_fill_min", 0)}
+    light = {}
+    if mode == "light" and dark and not DEFAULT_MODE:
+        light = {"dark": {k: dark[k] for k in INK_KEYS}, "wall_ink": wall_inks(wp, pal, dark)}
+    write_atomic(OUT / "palette.json", json.dumps({"wallpaper": wp, "wallpaper_dirs": dirs, "video_dirs": [tilde(d) for d in video_dirs(cfg)] if DEFAULT_MODE else video_dirs(cfg), "mode": mode, **ui, **pal, **light}, indent=2) + "\n")
     lua = "return {\n" + f'  wallpaper = "{wp}",\n  rounding = {ui["rounding"]},\n' + "".join(f'  {k} = "{v}",\n' for k, v in pal.items()) + "}\n"
     write_atomic(OUT / "palette.lua", lua)
 
@@ -3378,20 +3605,28 @@ def inject(dest, text, name="theme", cm="#"):
 
 
 GTK3_DARK_BLUE_HUE = 0.59   # Adwaita's #15539e family: selection, focus rings, suggested-action buttons
+GTK3_LIGHT_BLUE_L = 0.55    # the light stylesheet's #3584e4
 
 
-def recolor_gtk_css(css, pal):
-    """Re-theme GTK's compiled Adwaita dark stylesheet. Its colors are inlined in the rules (only a few
-    refer to @named colors), so overriding @define-color alone recolors almost nothing. Greys are
+def recolor_gtk_css(css, pal, mode="dark"):
+    """Re-theme GTK's compiled Adwaita stylesheet (dark or light, per `mode`). Its colors are inlined in the rules
+    (only a few refer to @named colors), so overriding @define-color alone recolors almost nothing. Greys are
     mapped through anchor points onto the palette's neutral ramp, the blue family follows the accent
     hue, and every other hue (warning/error/success) is left alone."""
+    light = mode == "light"
     L = lambda c: to_hls(c)[1]
     bg_h, _, bg_s = to_hls(pal["bg"])
-    anchors = [
-        (0.0, 0.0), (0.106, L(pal["bg"]) * 0.55), (0.176, L(pal["bg"])), (0.208, L(pal["surface"])),
-        (0.29, L(pal["surface2"])), (0.57, L(pal["muted"])), (0.80, L(pal["fg_dim"])),
-        (0.93, L(pal["fg"])), (1.0, min(1.0, L(pal["fg"]) + 0.08)),
-    ]
+    if light:   # stock light greys: text .20, mid .58, borders .72-.82, bars .93, window .96, base 1.0
+        anchors = [
+            (0.0, L(pal["fg"]) * 0.5), (0.20, L(pal["fg"])), (0.58, L(pal["muted"])), (0.72, L(pal["overlay"])),
+            (0.82, L(pal["surface2"])), (0.93, L(pal["surface"])), (0.96, L(pal["bg"])), (1.0, L(pal["bg_alt"])),
+        ]
+    else:
+        anchors = [
+            (0.0, 0.0), (0.106, L(pal["bg"]) * 0.55), (0.176, L(pal["bg"])), (0.208, L(pal["surface"])),
+            (0.29, L(pal["surface2"])), (0.57, L(pal["muted"])), (0.80, L(pal["fg_dim"])),
+            (0.93, L(pal["fg"])), (1.0, min(1.0, L(pal["fg"]) + 0.08)),
+        ]
 
     def grey(l):
         for (x0, y0), (x1, y1) in zip(anchors, anchors[1:]):
@@ -3399,7 +3634,7 @@ def recolor_gtk_css(css, pal):
                 return y0 + (y1 - y0) * (l - x0) / (x1 - x0 or 1)
         return anchors[-1][1]
 
-    ah, _, asat = to_hls(pal["accent"])
+    ah, al, asat = to_hls(pal["accent"])
     sat_scale = 0.9 * max(0.0, min(1.0, asat / 0.6))  # a greyscale wallpaper gives greyscale selections
 
     def sub(m):
@@ -3410,34 +3645,37 @@ def recolor_gtk_css(css, pal):
         if s < 0.12:                                   # neutral
             return hls(bg_h, grey(l), min(bg_s, 0.15))
         if hue_dist(h, GTK3_DARK_BLUE_HUE) <= 0.12:    # accent family
-            return hls(ah + (h - GTK3_DARK_BLUE_HUE), min(0.7, l + 0.15), s * sat_scale)
+            nl = max(0.05, min(0.95, l + (al - GTK3_LIGHT_BLUE_L))) if light else min(0.7, l + 0.15)
+            return hls(ah + (h - GTK3_DARK_BLUE_HUE), nl, s * sat_scale)
         return m.group(0)
 
     return re.sub(r"#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b", sub, css)
 
 
-def write_gtk_theme(pal):
+def write_gtk_theme(pal, mode="dark"):
     """A real, named GTK theme. Chromium (Brave's file dialogs) loads the theme by name (GTK_THEME) and
     never applies ~/.config/gtk-3.0/gtk.css, so a user-CSS-only palette left those dialogs in stock
-    Adwaita blue/grey. This theme is GTK's own dark stylesheet recolored with the palette."""
+    Adwaita blue/grey. This theme is GTK's own stylesheet (dark or light, per `mode`) recolored with the palette."""
+    light = mode == "light"
+    variant = "" if light else "-dark"   # Adwaita-dark.css / gtk-contained-dark.css
     root = Path.home() / ".local/share/themes/Wall"
     (root / "gtk-3.0").mkdir(parents=True, exist_ok=True)
     (root / "gtk-4.0").mkdir(parents=True, exist_ok=True)
     stock = subprocess.run(
-        ["gresource", "extract", "/usr/lib/libgtk-3.so.0", "/org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css"],
+        ["gresource", "extract", "/usr/lib/libgtk-3.so.0", f"/org/gtk/libgtk/theme/Adwaita/gtk-contained{variant}.css"],
         capture_output=True, text=True,
     ).stdout
     if stock:
-        css3 = recolor_gtk_css(stock, pal) + f'\n@import url("file://{OUT}/gtk.css");\n'
+        css3 = recolor_gtk_css(stock, pal, mode) + f'\n@import url("file://{OUT}/gtk.css");\n'
     else:  # no gresource tool: fall back to the named-colors-only version
-        css3 = (f'@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");\n'
+        css3 = (f'@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained{variant}.css");\n'
                 f'@import url("file://{OUT}/gtk.css");\n')
     write_atomic(root / "gtk-3.0/gtk.css", css3)
     write_atomic(root / "gtk-4.0/gtk.css",
-                 f'@import url("resource:///org/gtk/libgtk/theme/Adwaita/Adwaita-dark.css");\n@import url("file://{OUT}/gtk.css");\n')
+                 f'@import url("resource:///org/gtk/libgtk/theme/Adwaita/Adwaita{variant}.css");\n@import url("file://{OUT}/gtk.css");\n')
     (root / "index.theme").write_text(
         "[Desktop Entry]\nType=X-GNOME-Metatheme\nName=Wall\n"
-        "Comment=GTK dark theme recolored with the wallpaper palette (generated by theme.py)\n\n"
+        f"Comment=GTK {mode} theme recolored with the wallpaper palette (generated by theme.py)\n\n"
         "[X-GNOME-Metatheme]\nGtkTheme=Wall\n"
     )
     # Wall-Glass: Wall + translucent header bars, only for Brave in GTK mode (bin/brave shim, brave_mode = "gtk")
@@ -3452,6 +3690,8 @@ def write_gtk_theme(pal):
     )
     for f in ("gtk-3.0", "gtk-4.0"):
         _sub_file(f"~/.config/{f}/settings.ini", r"^gtk-theme-name=.*$", "gtk-theme-name=Wall")
+        _sub_file(f"~/.config/{f}/settings.ini", r"^gtk-application-prefer-dark-theme=.*$",
+                  f"gtk-application-prefer-dark-theme={'false' if light else 'true'}")
         # stock images on buttons/menus are the old GTK look (and pull in legacy icons); Adwaita has none
         for key in ("gtk-button-images", "gtk-menu-images"):
             _sub_file(f"~/.config/{f}/settings.ini", rf"^{key}=.*$", f"{key}=false")
@@ -3463,6 +3703,16 @@ def write_gtk_theme(pal):
     if subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
                       capture_output=True, text=True).stdout.strip("'\n ") != "Wall":
         sh("gsettings set org.gnome.desktop.interface gtk-theme Wall")
+    set_color_scheme(mode)
+
+
+def set_color_scheme(mode):
+    """freedesktop color-scheme (gsettings -> the Settings portal): Chromium / Electron / GTK4 / libadwaita apps follow it
+    (running ones flip live); "default" would mean no preference and they start light."""
+    want = "prefer-light" if mode == "light" else "prefer-dark"
+    if subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                      capture_output=True, text=True).stdout.strip("'\n ") != want:
+        sh(f"gsettings set org.gnome.desktop.interface color-scheme {want}")
 
 
 KVANTUM_DIR = Path("/usr/share/Kvantum")   # base themes (theme.toml kvantum_base), recoloured to the palette
@@ -3494,7 +3744,7 @@ def kv_recolor(hexc, pal):
 
 def cfg_settings():
     try:
-        return load_cfg().get("settings", {})
+        return mode_cfg(load_cfg(), get_mode()).get("settings", {})
     except Exception:
         return {}
 
@@ -3515,7 +3765,7 @@ def qt_style(cfg):
     return style
 
 
-def write_kvantum_theme(pal, root=None, base="KvFlat"):
+def write_kvantum_theme(pal, root=None, base="KvFlat", mode=None):
     """Kvantum theme "Wall" (Qt / KDE apps when the widget style is kvantum, theme.toml qt_style): KvFlat's
     SVG and kvconfig recoloured to the palette, with out/host/kvantum.kvconfig (translucent windows at the glass
     card fill, colours) on top; ~/.config/Kvantum/kvantum.kvconfig selects it."""
@@ -3531,7 +3781,7 @@ def write_kvantum_theme(pal, root=None, base="KvFlat"):
     if str(ROOT) not in sys.path:   # python3 -I leaves the script dir off sys.path
         sys.path.insert(0, str(ROOT))
     import kvantum_svg
-    a = gtk_glass_alphas(cfg_settings())
+    a = gtk_glass_alphas(cfg_settings(), mode=mode)
     gen = kvantum_svg.build(pal, float(a["gtk_a_view"]), float(a["gtk_a_popover"]))
     drawn = {p.split('id="')[1].split('"')[0] for p in gen.parts if 'id="' in p}
     drawn |= {d + "-" + e for d in list(drawn) for e in ("top", "bottom", "left", "right", "topleft", "topright",
@@ -3589,22 +3839,23 @@ def write_kvantum_theme(pal, root=None, base="KvFlat"):
     return True
 
 
-def purge_oxygen():
+def purge_oxygen(mode="dark"):
     """KDE leftovers: Plasma's look-and-feel was Oxygen, and ~/.config/kdedefaults supplies the
     fallback for any key kdeglobals doesn't set. Move them all to Breeze Dark / Fusion / our
-    scheme. (Cursor themes are a separate choice and are left alone.)"""
-    laf = Path("/usr/share/plasma/look-and-feel/org.kde.breezedark.desktop")
+    scheme (Breeze Dark / Breeze look-and-feel by mode). (Cursor themes are a separate choice and are left alone.)"""
+    laf_name = "org.kde.breeze.desktop" if mode == "light" else "org.kde.breezedark.desktop"
+    laf = Path("/usr/share/plasma/look-and-feel") / laf_name
     cfg = Path.home() / ".config"
 
     def kw(file, group, key, val):
         sh(f"kwriteconfig6 --file '{cfg / file}' --group '{group}' --key {key} '{val}'")
 
     if laf.exists():
-        kw("kdeglobals", "KDE", "LookAndFeelPackage", "org.kde.breezedark.desktop")
+        kw("kdeglobals", "KDE", "LookAndFeelPackage", laf_name)
         (cfg / "kdedefaults").mkdir(exist_ok=True)
         pkg = cfg / "kdedefaults/package"
         if pkg.exists() and "oxygen" in pkg.read_text().lower():
-            pkg.write_text("org.kde.breezedark.desktop")
+            pkg.write_text(laf_name)
         kw("kdedefaults/ksplashrc", "KSplash", "Theme", "org.kde.breeze.desktop")
     kw("kdedefaults/kdeglobals", "General", "ColorScheme", "Wall")
     kw("kdedefaults/kdeglobals", "Icons", "Theme", "Adwaita")
@@ -3693,7 +3944,8 @@ def deploy_herdr():
     write_atomic(dest, new)
 
 
-def deploy(cfg, pal):
+def deploy(cfg, pal, mode=None):
+    mode = mode or get_mode()
     link("~/.config/gtk-3.0/gtk.css", HOST_OUT / "gtk3.css")  # gtk.css + glass for CSD GTK3 windows (Gecko excluded)
     link("~/.config/gtk-4.0/gtk.css", HOST_OUT / "gtk4.css")  # gtk.css + translucent libadwaita (gtk_glass_*)
 
@@ -3726,10 +3978,10 @@ def deploy(cfg, pal):
 
     clear_app_color_overrides()
     apply_fonts(cfg)
-    write_gtk_theme(pal)
-    write_kvantum_theme(pal, base=cfg.get("settings", {}).get("kvantum_base", "KvFlat"))
+    write_gtk_theme(pal, mode)
+    write_kvantum_theme(pal, base=cfg.get("settings", {}).get("kvantum_base", "KvFlat"), mode=mode)
     apply_qt_layout(cfg)
-    purge_oxygen()
+    purge_oxygen(mode)
 
     deploy_herdr()
 
@@ -3742,7 +3994,7 @@ def brave_running():
     return subprocess.run(["pgrep", "-x", "brave"], capture_output=True).returncode == 0
 
 
-def apply_brave(cfg, pal):
+def apply_brave(cfg, pal, mode=None):
     """Brave's "Use GTK theme" ignores our gtk.css (Chromium resolves GTK colors in its
     own context), so use its own seed-color theme instead: write the seed into the
     profile Preferences. A running Brave rewrites that file on exit and would discard
@@ -3751,6 +4003,7 @@ def apply_brave(cfg, pal):
     s = cfg.get("settings", {})
     if not s.get("brave", True) or not BRAVE_DIR.is_dir() or brave_running():
         return False
+    scheme = 1 if (mode or get_mode()) == "light" else 2   # Chromium color_scheme2: 1 light, 2 dark
     gtk_mode = s.get("brave_mode", "seed") == "gtk"   # GTK mode: frame colours from Wall-Glass (the shim's GTK_THEME)
     seed = pal.get(s.get("brave_seed", "accent_soft"), pal["accent_soft"]).lstrip("#")
     argb = (0xFF << 24) | int(seed, 16)
@@ -3783,7 +4036,7 @@ def apply_brave(cfg, pal):
                 gv = (0xFF << 24) | int(pal.get(gseed, pal["accent"]).lstrip("#"), 16)
                 gv -= 1 << 32 if gv >= 1 << 31 else 0
                 new_th.update({"user_color2": gv, "color_variant2": s.get("brave_gtk_variant", 3),
-                               "color_scheme2": 2, "follows_system_colors": False})
+                               "color_scheme2": scheme, "follows_system_colors": False})
             if frame_ok and ext_theme.get("system_theme") == 1 and new_th == th:
                 done = True
                 continue
@@ -3795,7 +4048,7 @@ def apply_brave(cfg, pal):
         ext_theme["system_theme"] = 0  # seed mode: leave "GTK" mode, it can't follow our colors
         th = d.setdefault("browser", {}).setdefault("theme", {})
         th.update({"user_color2": argb, "color_variant2": s.get("brave_variant", 2),
-                   "color_scheme2": 2, "follows_system_colors": False})
+                   "color_scheme2": scheme, "follows_system_colors": False})
         write_atomic(prefs, json.dumps(d, separators=(",", ":")))
         done = True
     return done
@@ -4150,12 +4403,13 @@ def refresh_nautilus():
         sh("nautilus -q")
 
 
-def reload_apps(cfg):
+def reload_apps(cfg, mode_only=False):
+    """mode_only (light / dark switch): the wallpaper did not change, so hyprpaper is left running."""
     from concurrent.futures import ThreadPoolExecutor
 
     def hypr():
         sh("hyprctl reload")
-        if cfg.get("settings", {}).get("restart_hyprpaper", True):
+        if cfg.get("settings", {}).get("restart_hyprpaper", True) and not mode_only:
             restart_hyprpaper()
 
     def quit_apps():
@@ -4484,17 +4738,34 @@ def main(argv):
         return default_command()
     if cmd == "seed":
         return seed_out(force=True)
+    if cmd == "mode":   # theme.py mode [get|dark|light|toggle]: persist the mode, then re-render + reload everything
+        want = args[0] if args else "get"
+        if want == "get":
+            print(get_mode())
+            return
+        if want not in (*MODES, "toggle"):
+            sys.exit("theme: mode [get|dark|light|toggle]")
+        apply_lock()   # before reading / writing the mode: a running apply finishes with the mode it started with
+        os.environ.pop("THEME_MODE", None)   # the saved mode is what this run renders
+        want = ("light" if get_mode() == "dark" else "dark") if want == "toggle" else want
+        set_mode(want)
+        cmd, args = "mode-apply", []
+        argv = argv[:2]
     if cmd == "migrate-local":
         return migrate_local(args)
     if cmd == "adopt-legacy":
         adopt_legacy(args)
         cmd, args = "render", []
+    if cmd in ("apply", "clear", "primary", "link", "unlink", "render", "mode-apply"):
+        apply_lock()
+        migrate_glass_modes()   # before any reload: managed.lua reads the per-mode glass sets
     seed_out()
     o = {"mode": pop_opt(args, "--mode"),
          "play": pop_opt(args, "--play"), "wind": pop_opt(args, "--wind") or 0,   # no --play = full length
          "ease": pop_opt(args, "--ease")}   # replay transition seconds; absent = the theme.toml default
     if cmd in ("apply", "clear", "primary", "link", "unlink"):
         if monitor_command(cmd, args, o):
+            refresh_wall_ink()   # a monitor's own wallpaper changed: light mode's bar ink for it too
             return
         if cmd != "apply":
             cmd = "apply"
@@ -4510,12 +4781,13 @@ def main(argv):
             save_wp_state(st)
             video_optimize_poke()
         set_wallpaper(tilde(entry_image(ent)))
-    cfg = load_cfg()
+    mode = get_mode()
+    cfg = mode_cfg(load_cfg(), mode)   # the glass knobs of this mode
     wp = Path(os.path.expanduser(cfg["wallpaper"]))
     if cmd == "brave":  # used by the launcher in ~/.local/bin: cached palette, no rendering
         cache = OUT / "extracted.json"
         base = json.loads(cache.read_text()) if cache.exists() else extract(wp)
-        apply_brave(cfg, build_palette({k: base[k] for k in ("bg", "fg", "accent")}, cfg))
+        apply_brave(cfg, build_palette({k: base[k] for k in ("bg", "fg", "accent")}, cfg, mode), mode)
         return
     cache = OUT / "extracted.json"
     stale = True
@@ -4530,22 +4802,24 @@ def main(argv):
     else:
         base = json.loads(cache.read_text())
         base = {k: base[k] for k in ("bg", "fg", "accent")}
-    pal = build_palette(base, cfg)
+    pal = build_palette(base, cfg, mode)
+    dark = build_palette(base, cfg, "dark") if mode == "light" else None   # light mode: the bar's text on the wallpaper
     if cmd == "show":
         for k, v in pal.items():
             print(f"{k:16}{v}")
         return
     PAL[0] = pal
     drop_marker()
-    render_all(pal, cfg)
-    deploy(cfg, pal)
-    apply_brave(cfg, pal)
+    render_all(pal, cfg, mode, dark)
+    deploy(cfg, pal, mode)
+    apply_brave(cfg, pal, mode)
     apply_thunderbird(cfg)
+    if cmd in ("apply", "mode-apply"):
+        reload_apps(cfg, mode_only=cmd == "mode-apply")
     if cmd == "apply":
-        reload_apps(cfg)
         # a restarted hyprpaper brings the players back itself (restart_hyprpaper); otherwise just reconcile them
         video_sync(start=not cfg.get("settings", {}).get("restart_hyprpaper", True))
-    print(f"theme: {wp.name}  bg {pal['bg']}  fg {pal['fg']}  accent {pal['accent']}")
+    print(f"theme: {wp.name} ({mode})  bg {pal['bg']}  fg {pal['fg']}  accent {pal['accent']}")
 
 
 if __name__ == "__main__":

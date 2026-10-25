@@ -306,6 +306,19 @@ ColumnLayout {
     readonly property string playMode: shownVideo !== "" ? shownMode : newMode   // what the Playback row shows
     readonly property bool switchingMode: applying !== "" && applying === shownVideo && applyingMode !== shownMode
 
+    // ---- light / dark: one `theme.py mode <m>` call (state file, full re-render + reload); the switch shows the wanted
+    // value until palette.json reports it (Theme.mode), or for 20 s at most ----
+    property string colorWant: ""
+    function setColorMode(m) {
+        if (colorWant !== "" || m === Theme.mode) return   // one switch at a time
+        colorWant = m
+        colorGuard.restart()
+        // detached, not a Process: closing Settings (page unloaded) must not kill a half-done render
+        Quickshell.execDetached(["python3", "-I", Theme.themeDir + "/theme.py", "mode", m])
+    }
+    Connections { target: Theme; function onModeChanged() { if (Theme.mode === page.colorWant) page.colorWant = "" } }
+    Timer { id: colorGuard; interval: 20000; onTriggered: page.colorWant = "" }
+
     // ---- tabs: "images" | "videos". Default = what the edited monitor shows; a hand-picked tab wins for the session ----
     property var chosen: ({})                  // monitor key -> tab picked by hand
     readonly property string tab: chosen[target] !== undefined ? chosen[target] : (shownVideo !== "" ? "videos" : "images")
@@ -532,6 +545,22 @@ ColumnLayout {
                     }
                 }
             }
+        }
+    }
+
+    // ---- light / dark: theme.py mode re-renders every themed app from the same wallpaper ----
+    SectionHead {
+        title: "Color mode"
+        detail: page.colorWant !== "" ? "switching…" : "dark or light, from this wallpaper"
+        Segmented {
+            values: ["dark", "light"]
+            labels: ["Dark", "Light"]
+            objectNames: ["mode-dark", "mode-light"]
+            current: page.colorWant !== "" ? page.colorWant : Theme.mode
+            outerRadius: Theme.radiusPage; inset: 9
+            segHeight: 26
+            segWidth: 72
+            onPicked: v => page.setColorMode(v)
         }
     }
 

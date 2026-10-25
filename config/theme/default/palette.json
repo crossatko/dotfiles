@@ -6,6 +6,7 @@
   "video_dirs": [
     "~/Videos/wallpapers"
   ],
+  "mode": "dark",
   "rounding": 0,
   "gap": 0,
   "border_size": 2,
@@ -13,6 +14,8 @@
   "smart_gaps": true,
   "bar_border": 0,
   "bar_opacity": 0.55,
+  "card_fill": 0.3,
+  "plain_fill_min": 0,
   "bg": "#101416",
   "fg": "#b9cbd5",
   "accent": "#358bb6",
