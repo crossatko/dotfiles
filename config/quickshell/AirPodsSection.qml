@@ -3,13 +3,14 @@ import QtQuick
 import QtQuick.Layouts
 import "launcher/js/AirPods.js" as Pods
 
-// AirPods section of the Bluetooth popup (top, above the device list), shown while the AirPods are connected (state and
-// controls: AirPods singleton). Title = the model name (AirPods.title). Header toggle = Conversation awareness (the only on/off
-// feature); battery rings (left / right / case, BudRing + PodIcon; the case level is fetched on demand while the
-// section is on screen and greyed with its age when stale); listening mode as captioned icon tiles (ModeTiles,
-// only the modes the model reports) with the adaptive level slider while Adaptive is active; ear detection as a
-// three-way choice (its behaviour is not an on/off, so no toggle). Without the daemon (`AirPods.daemon` false) the
-// block is just the header and a setup notice, since there is no state to show or change.
+// AirPods section of the Bluetooth popup (top, above the device list), shown while the AirPods are connected (state
+// and controls: AirPods singleton). Title = the model name (AirPods.title) as a PanelHeader; below it a
+// Conversation awareness section head with its Toggle (the only on/off feature); battery rings (left / right /
+// case, BudRing + PodIcon; the case level is fetched on demand while the section is on screen and greyed with its
+// age when stale); listening mode as captioned icon tiles (ModeTiles, only the modes the model reports) with the
+// adaptive level slider while Adaptive is active; ear detection as a three-way choice (its behaviour is not an
+// on/off, so no toggle). Without the daemon (`AirPods.daemon` false) the block is just the header and a setup
+// notice, since there is no state to show or change.
 ColumnLayout {
     id: ap
     spacing: 10
@@ -27,16 +28,14 @@ ColumnLayout {
     }
     Timer { running: ap.visible && ap.live; interval: 30000; repeat: true; triggeredOnStart: true; onTriggered: ap.now = Date.now() / 1000 }
 
+    // title row like the popup's own ("Bluetooth" below); the on/off feature gets a section head with its toggle,
+    // the same way the network popup's Wireless / Tailscale heads carry theirs
+    PanelHeader { title: AirPods.title }
+
     SectionHead {
-        title: AirPods.title
-        Label {
-            visible: ap.live && AirPods.canAware
-            text: "Conversation awareness"
-            color: Theme.fgDim
-            font.pixelSize: Theme.fontCaption
-        }
+        visible: ap.live && AirPods.canAware
+        title: "Conversation awareness"
         Toggle {
-            visible: ap.live && AirPods.canAware
             checked: AirPods.aware
             onToggled: on => AirPods.setAware(on)
         }

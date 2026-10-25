@@ -1,0 +1,130 @@
+From c93439cfb7625bd82f0b5d87914f98d27570692d Mon Sep 17 00:00:00 2001
+From: Paul Cross <noreply@example.com>
+Date: Sun, 25 Oct 2026 02:45:33 +0100
+Subject: [PATCH 1/3] daemon: case:refresh ctl verb (one short BLE burst) and
+ case_seen_at in status
+
+---
+ daemon/main.cpp | 47 +++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 47 insertions(+)
+
+diff --git a/daemon/main.cpp b/daemon/main.cpp
+index cb4e56f..5ad0428 100644
+--- a/daemon/main.cpp
++++ b/daemon/main.cpp
+@@ -22,6 +22,8 @@
+ #include <QLoggingCategory>
+ #include <QThread>
+ #include <QTimer>
++#include <QElapsedTimer>
++#include <QDateTime>
+ #include <QProcess>
+ #include <QRegularExpression>
+ #include <QTranslator>
+@@ -131,6 +133,9 @@ public:
+         m_controlWatchdogTimer->start();
+ 
+         connect(m_bleManager, &BleManager::deviceFound, this, &AirPodsTrayApp::bleDeviceFound);
++        m_caseBurst.setSingleShot(true);
++        m_caseBurst.setInterval(caseBurstMs);
++        connect(&m_caseBurst, &QTimer::timeout, this, [this]() { endCaseBurst("timeout"); });
+         connect(m_deviceInfo->getBattery(), &Battery::primaryChanged, this, &AirPodsTrayApp::primaryChanged);
+         connect(m_systemSleepMonitor, &SystemSleepMonitor::systemGoingToSleep, this, &AirPodsTrayApp::onSystemGoingToSleep);
+         connect(m_systemSleepMonitor, &SystemSleepMonitor::systemWakingUp, this, &AirPodsTrayApp::onSystemWakingUp);
+@@ -232,6 +237,23 @@ public:
+     QString phoneMacStatus() const { return m_phoneMacStatus; }
+     bool hearingAidEnabled() const { return m_deviceInfo->hearingAidEnabled(); }
+ 
++    // On-demand case refresh (`case:refresh`, sent by a panel while it is open). Discovery stays off while the
++    // control link is up (issue 26 crackle), so the case level only arrives over AAP while a pod is docked and the
++    // lid state never does. This runs ONE short BLE discovery burst: it ends on the first advertisement that
++    // matches our IRK (case battery in 10 % steps, lid state when the broadcasting pod is docked) or after
++    // caseBurstMs, whichever comes first. A second request while a burst or a normal scan runs is a no-op.
++    static constexpr int caseBurstMs = 4000;
++    void refreshCase()
++    {
++        if (!areAirpodsConnected() || isModelHeadset(m_deviceInfo->model())) return;
++        if (m_caseBurst.isActive() || m_bleManager->isScanning()) return;
++        m_caseBurstClock.start();
++        m_bleManager->startScan();
++        m_caseBurst.start();
++        LOG_INFO("Case refresh: BLE burst started");
++    }
++    qint64 caseSeenAt() const { return m_caseSeenAt; }
++
+ private:
+     bool debugMode;
+     bool isConnectedLocally = false;
+@@ -859,6 +881,8 @@ private slots:
+ 
+         // Clear the device name and model
+         m_deviceInfo->reset();
++        m_caseSeenAt = 0;
++        m_caseBurst.stop();
+         m_bleManager->startScan();
+         emit airPodsStatusChanged();
+ 
+@@ -1323,6 +1347,10 @@ private slots:
+         else if ((data.size() == 22 || data.size() == 12) && data.startsWith(AirPodsPackets::Parse::BATTERY_STATUS))
+         {
+             m_deviceInfo->getBattery()->parsePacket(data);
++            // [6] = component count, then 5 bytes each: type, 0x01, level, status, 0x01 (0x08 = case, 0x04 = gone)
++            for (int i = 7; i + 4 < data.size(); i += 5)
++                if (static_cast<quint8>(data[i]) == 0x08 && static_cast<quint8>(data[i + 3]) != 0x04)
++                    m_caseSeenAt = QDateTime::currentSecsSinceEpoch();
+             m_deviceInfo->updateBatteryStatus();
+             LOG_INFO("Battery status: " << m_deviceInfo->batteryStatus());
+         }
+@@ -1515,9 +1543,21 @@ private slots:
+             }
+             m_deviceInfo->getEarDetection()->overrideEarDetectionStatus(device.isPrimaryInEar, device.isSecondaryInEar);
+             m_lidState = device.lidState;
++            if (device.caseBattery >= 0) m_caseSeenAt = QDateTime::currentSecsSinceEpoch();
++            endCaseBurst("advertisement");
+         }
+     }
+ 
++    // Stops the refresh burst (no-op when none runs). Leaves discovery alone when the pods dropped meanwhile:
++    // the disconnect path restarts the normal scan then.
++    void endCaseBurst(const char *why)
++    {
++        if (!m_caseBurst.isActive()) return;
++        m_caseBurst.stop();
++        if (areAirpodsConnected()) m_bleManager->stopScan();
++        LOG_INFO("Case refresh: BLE burst ended (" << why << ") after " << m_caseBurstClock.elapsed() << " ms");
++    }
++
+ public:
+     void handleMediaStateChange(MediaController::MediaState state) {
+         // Grabbing the pods off whatever holds them is the cross-device feature, not a
+@@ -1769,6 +1809,8 @@ public:
+         status.insert("ear_detection_behavior", earDetectionBehavior());
+         // 0 = open, 1 = closed, 2 = unknown (matches BleInfo::LidState).
+         status.insert("lid_state", lidState());
++        // Unix seconds of the last live case reading (AAP packet or BLE advertisement), 0 = none this connection.
++        status.insert("case_seen_at", caseSeenAt());
+         return status;
+     }
+ 
+@@ -1809,6 +1851,9 @@ private:
+     QByteArray m_lastState;
+     // Lid only moves on a BLE advertisement, so this stays UNKNOWN until one arrives.
+     BleInfo::LidState m_lidState = BleInfo::LidState::UNKNOWN;
++    QTimer m_caseBurst;
++    QElapsedTimer m_caseBurstClock;
++    qint64 m_caseSeenAt = 0;
+     DeviceInfo *m_deviceInfo;
+     BleManager *m_bleManager;
+     SystemSleepMonitor *m_systemSleepMonitor = nullptr;
+@@ -2110,6 +2155,8 @@ int main(int argc, char *argv[]) {
+                 trayAppPtr->disconnectAirPods();
+             } else if (msg == "connect") {
+                 trayAppPtr->connectAirPods();
++            } else if (msg == "case:refresh") {
++                trayAppPtr->refreshCase();
+             } else if (msg == "onebud:on") {
+                 trayAppPtr->setOneBudANCMode(true);
+             } else if (msg == "onebud:off") {
+-- 
+2.56.0
+

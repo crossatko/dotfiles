@@ -1,0 +1,197 @@
+From 5d451e0e9c84017f3173480a1b20999115e52e7b Mon Sep 17 00:00:00 2001
+From: Paul Cross <noreply@example.com>
+Date: Sun, 25 Oct 2026 02:56:44 +0100
+Subject: [PATCH 3/3] daemon: start A2DP activation when the bluez card appears
+ and make the AirPods the default output
+
+---
+ daemon/media/mediacontroller.cpp      | 55 +++++++++++++++++++++++++++
+ daemon/media/mediacontroller.h        |  4 ++
+ daemon/media/pulseaudiocontroller.cpp | 24 +++++++++++-
+ daemon/media/pulseaudiocontroller.h   |  5 +++
+ 4 files changed, 86 insertions(+), 2 deletions(-)
+
+diff --git a/daemon/media/mediacontroller.cpp b/daemon/media/mediacontroller.cpp
+index 481d64e..7e209ec 100644
+--- a/daemon/media/mediacontroller.cpp
++++ b/daemon/media/mediacontroller.cpp
+@@ -24,6 +24,21 @@ MediaController::MediaController(QObject *parent) : QObject(parent) {
+   {
+     LOG_ERROR("Failed to initialize PulseAudio controller");
+   }
++
++  // The card can appear (and WirePlumber restore a stale `off` profile on it) long after the retry ladder
++  // gave up, so a new card for the connected device starts a fresh chain once WirePlumber has settled.
++  connect(m_pulseAudio, &PulseAudioController::bluezCardAppeared, this,
++          [this](const QString &cardName) {
++            if (connectedDeviceMacAddress.isEmpty() || !cardName.contains(connectedDeviceMacAddress)) return;
++            const QString mac = connectedDeviceMacAddress;
++            LOG_INFO("Bluetooth card appeared for the connected device, activating A2DP");
++            QTimer::singleShot(1000, this, [this, mac]() {
++              if (connectedDeviceMacAddress != mac) return;
++              m_switchDefaultNext = true;
++              activateA2dpProfileWithRetry(mac);
++              m_switchDefaultNext = false;
++            });
++          }, Qt::QueuedConnection);
+ }
+ 
+ void MediaController::handleEarDetection(EarDetection *earDetection)
+@@ -303,6 +318,7 @@ void MediaController::activateA2dpProfileWithRetry(const QString &macAddress) {
+   // A fresh generation supersedes any chain still in flight, so only the newest request acts.
+   const quint64 generation = ++m_a2dpRetryGeneration;
+   m_wirePlumberRestartedThisChain = false;
++  m_defaultSwitchGeneration = m_switchDefaultNext ? generation : 0;
+   attemptA2dpActivation(macAddress, generation, 0);
+ }
+ 
+@@ -341,6 +357,11 @@ void MediaController::attemptA2dpActivation(const QString &macAddress, quint64 g
+ 
+   if (activateA2dpProfile()) {
+     LOG_INFO("A2DP profile activated (attempt " << (attempt + 1) << ")");
++    // Only a chain started by a new card moves the default, so ear detection never overrides a manual choice.
++    if (m_defaultSwitchGeneration == generation) {
++      m_defaultSwitchGeneration = 0;
++      switchDefaultSinkToDevice(macAddress, generation, 0);
++    }
+     return;
+   }
+ 
+@@ -354,6 +375,40 @@ void MediaController::attemptA2dpActivation(const QString &macAddress, quint64 g
+   });
+ }
+ 
++void MediaController::switchDefaultSinkToDevice(const QString &macAddress, quint64 generation, int tries) {
++  static constexpr int kMaxTries = 20;
++  static constexpr int kDelayMs = 500;
++  if (generation != m_a2dpRetryGeneration) return;
++
++  // The sink follows the profile change asynchronously, so poll for it.
++  QProcess pactl;
++  pactl.start("pactl", QStringList() << "list" << "short" << "sinks");
++  QString sinkName;
++  if (pactl.waitForFinished(2000)) {
++    const QStringList lines = QString::fromUtf8(pactl.readAllStandardOutput()).split('\n');
++    for (const QString &line : lines) {
++      const QStringList cols = line.split('\t');
++      if (cols.size() > 1 && cols[1].startsWith("bluez_output") && cols[1].contains(macAddress)) {
++        sinkName = cols[1];
++        break;
++      }
++    }
++  }
++  if (sinkName.isEmpty()) {
++    if (tries + 1 >= kMaxTries) {
++      LOG_WARN("AirPods sink never appeared, leaving the default output alone");
++      return;
++    }
++    QTimer::singleShot(kDelayMs, this, [this, macAddress, generation, tries]() {
++      switchDefaultSinkToDevice(macAddress, generation, tries + 1);
++    });
++    return;
++  }
++  if (m_pulseAudio->getDefaultSink() == sinkName) return;
++  LOG_INFO("Making the AirPods the default output");
++  QProcess::execute("pactl", QStringList() << "set-default-sink" << sinkName);
++}
++
+ QString MediaController::getActiveProfile() {
+   if (m_deviceOutputName.isEmpty()) return QString();
+   return m_pulseAudio->getActiveCardProfile(m_deviceOutputName);
+diff --git a/daemon/media/mediacontroller.h b/daemon/media/mediacontroller.h
+index f1b6eb8..e6967c6 100644
+--- a/daemon/media/mediacontroller.h
++++ b/daemon/media/mediacontroller.h
+@@ -75,6 +75,10 @@ private:
+   // A queued retry compares its captured generation against this, so a superseded chain stops.
+   quint64 m_a2dpRetryGeneration = 0;
+   bool m_wirePlumberRestartedThisChain = false;
++  // Set for the chain a fresh bluez card starts, which also makes the AirPods the default output.
++  bool m_switchDefaultNext = false;
++  quint64 m_defaultSwitchGeneration = 0;
++  void switchDefaultSinkToDevice(const QString &macAddress, quint64 generation, int tries);
+ };
+ 
+ #endif // MEDIACONTROLLER_H
+diff --git a/daemon/media/pulseaudiocontroller.cpp b/daemon/media/pulseaudiocontroller.cpp
+index cecec30..235e28c 100644
+--- a/daemon/media/pulseaudiocontroller.cpp
++++ b/daemon/media/pulseaudiocontroller.cpp
+@@ -94,7 +94,7 @@ bool PulseAudioController::initialize()
+     // sink-input / source / card / etc. for the snap path.
+     pa_context_set_subscribe_callback(m_context, &PulseAudioController::subscribeCallback, this);
+     pa_operation *subOp = pa_context_subscribe(
+-        m_context, PA_SUBSCRIPTION_MASK_SINK, nullptr, nullptr);
++        m_context, static_cast<pa_subscription_mask_t>(PA_SUBSCRIPTION_MASK_SINK | PA_SUBSCRIPTION_MASK_CARD), nullptr, nullptr);
+     if (subOp) pa_operation_unref(subOp);
+ 
+     pa_threaded_mainloop_unlock(m_mainloop);
+@@ -230,7 +230,7 @@ void PulseAudioController::subscribeCallback(pa_context *c,
+                                              uint32_t idx, void *userdata)
+ {
+     PulseAudioController *self = static_cast<PulseAudioController*>(userdata);
+-    if (!self || self->m_snapSinkName.isEmpty()) return;
++    if (!self) return;
+ 
+     // Only handle sink-change events; new/remove fire on hotplug
+     // and don't carry the volume we care about. PA delivers
+@@ -240,6 +240,16 @@ void PulseAudioController::subscribeCallback(pa_context *c,
+         type & PA_SUBSCRIPTION_EVENT_FACILITY_MASK);
+     const auto event = static_cast<pa_subscription_event_type_t>(
+         type & PA_SUBSCRIPTION_EVENT_TYPE_MASK);
++    if (facility == PA_SUBSCRIPTION_EVENT_CARD) {
++        // A bluez card is (re)created on every connect, possibly well after the control link is up.
++        if (event == PA_SUBSCRIPTION_EVENT_NEW) {
++            pa_operation *cardOp = pa_context_get_card_info_by_index(
++                c, idx, &PulseAudioController::newCardInfoCallback, self);
++            if (cardOp) pa_operation_unref(cardOp);
++        }
++        return;
++    }
++    if (self->m_snapSinkName.isEmpty()) return;
+     if (facility != PA_SUBSCRIPTION_EVENT_SINK) return;
+     if (event != PA_SUBSCRIPTION_EVENT_CHANGE) return;
+ 
+@@ -252,6 +262,16 @@ void PulseAudioController::subscribeCallback(pa_context *c,
+     if (op) pa_operation_unref(op);
+ }
+ 
++void PulseAudioController::newCardInfoCallback(pa_context *, const pa_card_info *info,
++                                               int eol, void *userdata)
++{
++    if (eol != 0 || !info) return;
++    PulseAudioController *self = static_cast<PulseAudioController*>(userdata);
++    const QString name = QString::fromUtf8(info->name);
++    if (self && name.startsWith("bluez_card"))
++        emit self->bluezCardAppeared(name);
++}
++
+ void PulseAudioController::snapSinkInfoCallback(pa_context *c,
+                                                 const pa_sink_info *info,
+                                                 int eol, void *userdata)
+diff --git a/daemon/media/pulseaudiocontroller.h b/daemon/media/pulseaudiocontroller.h
+index 4f914f9..a80f8e0 100644
+--- a/daemon/media/pulseaudiocontroller.h
++++ b/daemon/media/pulseaudiocontroller.h
+@@ -22,6 +22,10 @@ class PulseAudioController : public QObject
+     // without the macro.
+     Q_DISABLE_COPY(PulseAudioController)
+ 
++signals:
++    // A new bluez card showed up (device connected); emitted from the PA thread, connect queued.
++    void bluezCardAppeared(const QString &cardName);
++
+ public:
+     explicit PulseAudioController(QObject *parent = nullptr);
+     ~PulseAudioController();
+@@ -82,6 +86,7 @@ private:
+     // snapSinkInfoCallback to fetch volume because subscribeCallback
+     // only gets event-type + sink-index, not the new volume.
+     static void subscribeCallback(pa_context *c, pa_subscription_event_type_t type, uint32_t idx, void *userdata);
++    static void newCardInfoCallback(pa_context *c, const pa_card_info *info, int eol, void *userdata);
+     static void snapSinkInfoCallback(pa_context *c, const pa_sink_info *info, int eol, void *userdata);
+ 
+     bool waitForOperation(pa_operation *op);
+-- 
+2.56.0
+

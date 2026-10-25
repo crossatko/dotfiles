@@ -327,6 +327,9 @@ create_brave_webapp "Linear" "https://linear.app"
 echo "Updating desktop database..."
 update-desktop-database ~/.local/share/applications 2>/dev/null || true
 
+# AirPods daemon: pinned upstream omarchy-pods + patches, built into ~/.local (config/librepods/README.md)
+bash "$CONFIG_DIR/librepods/build.sh" || echo "  librepods build failed (AirPods section stays off until it works)"
+
 # Clean up package cache to free up space
 echo "Cleaning up yay cache..."
 yay -Sc --noconfirm

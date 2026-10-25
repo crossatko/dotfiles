@@ -1,0 +1,53 @@
+From 6bb92b14f3c798854cb805c54fea0c348108f0ac Mon Sep 17 00:00:00 2001
+From: Paul Cross <noreply@example.com>
+Date: Sun, 25 Oct 2026 02:47:18 +0100
+Subject: [PATCH 2/3] daemon: case:refresh burst state flag (single-shot timer
+ is inactive inside its own timeout)
+
+---
+ daemon/main.cpp | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/daemon/main.cpp b/daemon/main.cpp
+index 5ad0428..9da05aa 100644
+--- a/daemon/main.cpp
++++ b/daemon/main.cpp
+@@ -246,7 +246,8 @@ public:
+     void refreshCase()
+     {
+         if (!areAirpodsConnected() || isModelHeadset(m_deviceInfo->model())) return;
+-        if (m_caseBurst.isActive() || m_bleManager->isScanning()) return;
++        if (m_caseBurstRunning || m_bleManager->isScanning()) return;
++        m_caseBurstRunning = true;
+         m_caseBurstClock.start();
+         m_bleManager->startScan();
+         m_caseBurst.start();
+@@ -882,6 +883,7 @@ private slots:
+         // Clear the device name and model
+         m_deviceInfo->reset();
+         m_caseSeenAt = 0;
++        m_caseBurstRunning = false;
+         m_caseBurst.stop();
+         m_bleManager->startScan();
+         emit airPodsStatusChanged();
+@@ -1552,7 +1554,8 @@ private slots:
+     // the disconnect path restarts the normal scan then.
+     void endCaseBurst(const char *why)
+     {
+-        if (!m_caseBurst.isActive()) return;
++        if (!m_caseBurstRunning) return;
++        m_caseBurstRunning = false;
+         m_caseBurst.stop();
+         if (areAirpodsConnected()) m_bleManager->stopScan();
+         LOG_INFO("Case refresh: BLE burst ended (" << why << ") after " << m_caseBurstClock.elapsed() << " ms");
+@@ -1852,6 +1855,7 @@ private:
+     // Lid only moves on a BLE advertisement, so this stays UNKNOWN until one arrives.
+     BleInfo::LidState m_lidState = BleInfo::LidState::UNKNOWN;
+     QTimer m_caseBurst;
++    bool m_caseBurstRunning = false;
+     QElapsedTimer m_caseBurstClock;
+     qint64 m_caseSeenAt = 0;
+     DeviceInfo *m_deviceInfo;
+-- 
+2.56.0
+
