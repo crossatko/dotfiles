@@ -15,10 +15,12 @@ GridLayout {
     // grid at the bottom; bar at the top -> grid on top, agenda below. Same rule as the control center.
     readonly property bool barBottom: Popups.edgeOf(Popups.screen) !== "top"
 
-    SystemClock { id: clock; precision: SystemClock.Minutes }
+    // Not SystemClock: it re-arms a QTimer with a negative interval during the repeated local hour at the end of DST (fires every 1 ms, ~2000 warnings/s, ~9% CPU)
+    property date clockNow: new Date()
+    Timer { interval: 5000; running: true; repeat: true; onTriggered: cal.clockNow = new Date() }
     property date shown: new Date()           // month on display
     property date selected: new Date()        // day whose agenda is listed
-    readonly property date today: clock.date
+    readonly property date today: clockNow
 
     property var dayMap: ({})                 // "YYYY-MM-DD" -> [event]
     property var uncached: []

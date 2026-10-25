@@ -99,9 +99,15 @@ function matchScore(item, tokens) {
     return total / tokens.length;
 }
 
+// natural order: digit runs compare as numbers ("workspace 2" < "workspace 10")
 function byName(a, b) {
-    var x = (a.name || "").toLowerCase(), y = (b.name || "").toLowerCase();
-    return x < y ? -1 : (x > y ? 1 : 0);
+    var ra = (a.name || "").toLowerCase().match(/\d+|\D+/g) || [], rb = (b.name || "").toLowerCase().match(/\d+|\D+/g) || [];
+    for (var i = 0; i < Math.min(ra.length, rb.length); i++) {
+        var d = /^\d/.test(ra[i]) && /^\d/.test(rb[i]) ? parseInt(ra[i], 10) - parseInt(rb[i], 10)
+                                                       : (ra[i] < rb[i] ? -1 : (ra[i] > rb[i] ? 1 : 0));
+        if (d !== 0) return d;
+    }
+    return ra.length - rb.length;
 }
 
 function rank(items, query, usage, now, opts) {

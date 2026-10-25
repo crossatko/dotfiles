@@ -69,8 +69,20 @@ QtObject {
                 _group: b.mouse ? 3 : b.locked ? 2 : ((b.modmask || 0) & 64) ? 0 : 1, _mods: mods.length, _key: key
             })
         })
-        rows.sort((a, c) => a._group - c._group || a._mods - c._mods || (a._key < c._key ? -1 : a._key > c._key ? 1 : 0))
+        rows.sort((a, c) => a._group - c._group || a._mods - c._mods || natCmp(a._key, c._key) || natCmp(a.name, c.name))
         return rows
+    }
+
+    // natural order: digit runs compare as numbers, so 2 < 10 and F2 < F10
+    function natCmp(a, b) {
+        const ra = String(a).match(/\d+|\D+/g) || [], rb = String(b).match(/\d+|\D+/g) || []
+        for (let i = 0; i < Math.min(ra.length, rb.length); i++) {
+            const na = /^\d/.test(ra[i]), nb = /^\d/.test(rb[i])
+            const d = na && nb ? parseInt(ra[i], 10) - parseInt(rb[i], 10)
+                               : (ra[i] < rb[i] ? -1 : ra[i] > rb[i] ? 1 : 0)
+            if (d !== 0) return d
+        }
+        return ra.length - rb.length
     }
 
     signal refreshed()

@@ -22,6 +22,11 @@ DevicePicker 1.0 DevicePicker.qml
 BtProfilePicker 1.0 BtProfilePicker.qml
 SectionHead 1.0 SectionHead.qml
 AudioSection 1.0 AudioSection.qml
+singleton AirPods 1.0 AirPods.qml
+PodIcon 1.0 PodIcon.qml
+BudRing 1.0 BudRing.qml
+ModeTiles 1.0 ModeTiles.qml
+AirPodsSection 1.0 AirPodsSection.qml
 AudioPanel 1.0 AudioPanel.qml
 singleton Brightness 1.0 Brightness.qml
 BrightnessSection 1.0 BrightnessSection.qml

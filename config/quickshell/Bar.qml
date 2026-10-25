@@ -259,7 +259,9 @@ PanelWindow {
             }
         }
     }
-    SystemClock { id: clock; precision: SystemClock.Minutes }
+    // Not SystemClock: it re-arms a QTimer with a negative interval during the repeated local hour at the end of DST (fires every 1 ms, ~2000 warnings/s, ~9% CPU)
+    property date clockNow: new Date()
+    Timer { interval: 5000; running: true; repeat: true; onTriggered: bar.clockNow = new Date() }
 
     PwObjectTracker { objects: [Pipewire.defaultAudioSink] }
     readonly property var sink: Pipewire.defaultAudioSink
@@ -588,7 +590,7 @@ PanelWindow {
             onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("notif", clockChip)
             BarIcon { visible: Notifs.dnd || Notifs.count > 0; text: Notifs.dnd ? "\uf1f6" : "\uf8fa"; color: Notifs.dnd ? Theme.muted : Theme.accent }
             BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: Theme.accent; font.pixelSize: Theme.fontCaption }
-            BarLabel { text: Qt.formatDateTime(clock.date, "yyyy-MM-dd HH:mm"); color: Notifs.dnd ? Theme.muted : Theme.fg }
+            BarLabel { text: Qt.formatDateTime(bar.clockNow, "yyyy-MM-dd HH:mm"); color: Notifs.dnd ? Theme.muted : Theme.fg }
         }
     }
 

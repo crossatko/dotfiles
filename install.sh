@@ -158,6 +158,7 @@ ln -sfn "$CONFIG_DIR/launcher/commands" "$HOME/.config/launcher/commands"
 mkdir -p "$HOME/.config/xdg-desktop-portal" "$HOME/.config/systemd/user"
 ln -sfn "$CONFIG_DIR/xdg-desktop-portal/portals.conf" "$HOME/.config/xdg-desktop-portal/portals.conf"
 ln -sfn "$CONFIG_DIR/systemd/user/xdg-desktop-portal-gnome.service" "$HOME/.config/systemd/user/xdg-desktop-portal-gnome.service"
+ln -sfn "$CONFIG_DIR/systemd/user/librepods.service" "$HOME/.config/systemd/user/librepods.service"
 
 # Launcher shim: applies the wallpaper theme to Brave's profile just before it starts
 mkdir -p "$HOME/.local/bin"
