@@ -22,7 +22,7 @@ Singleton {
 
     property bool daemon: false                    // status file present (daemon running)
     property var raw: Pods.parse("")
-    property var pend: ({})                        // optimistic overrides: {mode, adaptive, aware, ear}
+    property var pend: ({})                        // optimistic overrides: {mode, adaptive, ear}
     property string error: ""
 
     readonly property bool connected: daemon && raw.valid && raw.connected
@@ -35,10 +35,8 @@ Singleton {
     readonly property var box: raw.box
     readonly property var max: raw.max
     readonly property var modes: Pods.modes(raw)
-    readonly property bool canAware: raw.canAware
     readonly property int mode: pend.mode ?? raw.mode
     readonly property int adaptive: pend.adaptive ?? raw.adaptive
-    readonly property bool aware: pend.aware ?? raw.aware
     readonly property int ear: pend.ear ?? raw.ear
     // Case reading on demand: the daemon has no live case level while both pods are out of the case, so the
     // AirPods section asks for one short BLE burst (`case:refresh`) while it is on screen, never otherwise.
@@ -62,7 +60,6 @@ Singleton {
         _hold("adaptive", adaptiveTarget)
         adaptiveSend.restart()
     }
-    function setAware(on) { _want("aware", on, on ? "ca:on" : "ca:off") }
     function setEar(v) {
         const e = Pods.EAR.find(x => x.value === v)
         if (e) _want("ear", v, e.verb)

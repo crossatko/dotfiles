@@ -1,0 +1,25 @@
+From bdf6a8ff4a1113cf70f880cdf1947c01b4c6293a Mon Sep 17 00:00:00 2001
+From: dotfiles <noreply@example.com>
+Date: Sun, 25 Oct 2026 20:09:26 +0100
+Subject: [PATCH 4/6] daemon: CA speech flag 0x02 ducks like 0x01
+
+Per the AAP notes 01/02 both mean the wearer is speaking and 03 means stopped; 02 used to fall through to the voice-ended path.
+---
+ daemon/media/mediacontroller.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/daemon/media/mediacontroller.cpp b/daemon/media/mediacontroller.cpp
+index 7e209ec..d5e8f33 100644
+--- a/daemon/media/mediacontroller.cpp
++++ b/daemon/media/mediacontroller.cpp
+@@ -173,6 +173,7 @@ void MediaController::handleConversationalAwareness(const QByteArray &data) {
+ 
+     switch (flag) {
+     case 0x01:
++    case 0x02:
+         LOG_INFO("Conversational awareness event: voice detected");
+ 
+         if (initialVolume == -1 && isActiveOutputDeviceAirPods()) {
+-- 
+2.56.0
+

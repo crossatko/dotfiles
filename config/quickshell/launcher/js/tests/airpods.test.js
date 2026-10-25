@@ -5,8 +5,8 @@ const A = load("AirPods.js");
 
 const full = JSON.stringify({
     schema_version: 1, connected: true, device_name: "Test’s AirPods Pro", model_name: "AirPods Pro 3", is_pro_series: true,
-    noise_mode: 3, adaptive_noise_level: 40, conversational_awareness: true, ear_detection_behavior: 1,
-    supports_noise_control: true, supports_noise_off: false, supports_adaptive: true, supports_conversational_awareness: true,
+    noise_mode: 3, adaptive_noise_level: 40, ear_detection_behavior: 1,
+    supports_noise_control: true, supports_noise_off: false, supports_adaptive: true,
     left: { available: true, level: 79, charging: false, in_ear: true },
     right: { available: true, level: 100, charging: true, in_ear: false },
     case: { available: true, level: 55, charging: false },
@@ -31,7 +31,6 @@ test("unavailable part is unknown and its stale fields are dropped", () => {
 test("older daemon: capabilities fall back to is_pro_series", () => {
     const s = A.parse('{"schema_version":1,"connected":true,"is_pro_series":false}');
     assert.strictEqual(JSON.stringify(A.modes(s).map((m) => m.value)), JSON.stringify([0, 2, 1]));
-    assert.strictEqual(s.canAware, false);
 });
 test("no listening modes", () => {
     const s = A.parse('{"schema_version":1,"connected":true,"supports_noise_control":false}');

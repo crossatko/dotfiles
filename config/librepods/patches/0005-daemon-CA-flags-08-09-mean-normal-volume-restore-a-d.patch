@@ -1,0 +1,42 @@
+From de98bd03bcfa42f35091db5b2f13293f22baf1bd Mon Sep 17 00:00:00 2001
+From: dotfiles <noreply@example.com>
+Date: Sun, 25 Oct 2026 20:02:08 +0100
+Subject: [PATCH 5/6] daemon: CA flags 08/09 mean normal volume: restore a duck
+ in progress instead of dropping it
+
+The buds send 08/09 around listening-mode changes and when a bud is taken out; 08 used to forget the saved volume, which would leave the sink ducked if it arrived mid-conversation.
+---
+ daemon/media/mediacontroller.cpp | 16 +++++++++++-----
+ 1 file changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/daemon/media/mediacontroller.cpp b/daemon/media/mediacontroller.cpp
+index d5e8f33..506789f 100644
+--- a/daemon/media/mediacontroller.cpp
++++ b/daemon/media/mediacontroller.cpp
+@@ -195,12 +195,18 @@ void MediaController::handleConversationalAwareness(const QByteArray &data) {
+         break;
+ 
+     case 0x08:
+-        LOG_INFO("Conversational awareness disabled");
+-        initialVolume = -1;
+-        break;
+-
+     case 0x09:
+-        LOG_INFO("Conversational awareness enabled");
++        // Normal volume (08 = CA idle, e.g. one bud out or mode Off; 09 = CA armed). The buds also send
++        // these around listening-mode changes, so a duck in progress must be undone, not forgotten.
++        LOG_INFO("Conversational awareness " << (flag == 0x09 ? "armed" : "idle") << " (normal volume)");
++        if (initialVolume != -1) {
++            if (isActiveOutputDeviceAirPods()) {
++                QString sink = m_pulseAudio->getDefaultSink();
++                m_pulseAudio->setSinkVolume(sink, initialVolume);
++                LOG_INFO("Volume restored to " << initialVolume << "%");
++            }
++            initialVolume = -1;
++        }
+         break;
+ 
+     default:
+-- 
+2.56.0
+

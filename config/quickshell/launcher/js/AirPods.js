@@ -4,10 +4,10 @@
 // processes. Input is the librepods daemon's status file (`$XDG_STATE_HOME/librepods/status.json`, one JSON line,
 // written on every change, removed when the daemon stops). Keys used (schema_version 1): connected, device_name,
 // model_name, noise_mode (0 off, 1 anc, 2 transparency, 3 adaptive, -1 unknown), adaptive_noise_level (0-100),
-// conversational_awareness, ear_detection_behavior (0 pause when one is out, 1 both, 2 never), left / right
+// ear_detection_behavior (0 pause when one is out, 1 both, 2 never), left / right
 // {available, level, charging, in_ear}, case {available, level, charging}, headset (AirPods Max) with the same
-// shape, is_headset, and the capability flags supports_noise_control / _noise_off / _adaptive /
-// _conversational_awareness (absent = the older default: control and off true, the rest = is_pro_series), and
+// shape, is_headset, and the capability flags supports_noise_control / _noise_off / _adaptive
+// (absent = the older default: control and off true, adaptive = is_pro_series), and
 // case_seen_at (unix seconds of the last live case reading, 0 none yet; absent = a daemon without case:refresh).
 
 var UNKNOWN = -1;
@@ -34,8 +34,8 @@ function part(raw) {
 function empty() {
     return {
         valid: false, tooNew: false, connected: false, name: "", model: "", headset: false,
-        canControl: false, canOff: false, canAdaptive: false, canAware: false,
-        mode: UNKNOWN, adaptive: 0, aware: false, ear: 0,
+        canControl: false, canOff: false, canAdaptive: false,
+        mode: UNKNOWN, adaptive: 0, ear: 0,
         left: part(null), right: part(null), box: part(null), max: part(null), caseSeenAt: UNKNOWN
     };
 }
@@ -56,10 +56,8 @@ function parse(text) {
     s.canControl = flag(d.supports_noise_control, true);
     s.canOff = d.supports_noise_off !== false;
     s.canAdaptive = flag(d.supports_adaptive, pro);
-    s.canAware = flag(d.supports_conversational_awareness, pro);
     s.mode = num(d.noise_mode, UNKNOWN);
     s.adaptive = Math.max(0, Math.min(100, num(d.adaptive_noise_level, 0)));
-    s.aware = d.conversational_awareness === true;
     s.ear = num(d.ear_detection_behavior, 0);
     s.left = part(d.left);
     s.right = part(d.right);
