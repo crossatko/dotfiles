@@ -28,6 +28,7 @@ ShellRoot {
     Launcher { id: launcher }
     Toasts { bars: root.bars }
     Osd { id: osd; bars: root.bars }
+    BtNotifier {}
 
     // one popup host per screen; Popups.* says which is open
     Variants {
