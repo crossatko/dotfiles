@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Effects
+import Quickshell
+import "launcher/js/NotifGlyph.js" as Glyphs
 
 // Notification icon, Adwaita style: generic freedesktop names (dialog-information, mail-unread,
 // network-transmit, ...) have a *symbolic* Adwaita icon, which is drawn in a palette color.
@@ -16,8 +18,14 @@ Item {
     implicitWidth: size
     implicitHeight: size
 
-    readonly property bool direct: image !== "" || name.startsWith("/") || name.startsWith("file://") || name.startsWith("image://")
+    // a drawing of the shell's own assets/ (black on transparent, e.g. the AirPods icon of BtNotifier) is tinted like a symbolic icon
+    // matched on "/quickshell/assets/" so both the launch path (~/.config/quickshell) and the resolved repo path count
+    readonly property string assetPath: name.replace(/^file:\/\//, "")
+    readonly property bool asset: image === "" && (assetPath.startsWith(Quickshell.shellDir + "/assets/") || assetPath.indexOf("/quickshell/assets/") >= 0)
+    readonly property bool direct: !asset && (image !== "" || name.startsWith("/") || name.startsWith("file://") || name.startsWith("image://"))
     readonly property string base: name.replace(/-symbolic$/, "")
+    // a standard freedesktop name draws as a Font Awesome glyph (NotifGlyph.js); "" = app-specific / unknown
+    readonly property string glyph: direct || asset ? "" : Glyphs.glyph(name)
     readonly property string symPath: Icons.symbolic[base] || ""
 
     // 1. real image / explicit path: as is
@@ -32,12 +40,23 @@ Item {
         asynchronous: true
     }
 
-    // 2. symbolic variant, tinted
+    // 2a. Font Awesome glyph, same tint and box as the symbolic icon
+    Icon {
+        anchors.fill: parent
+        visible: ico.glyph !== ""
+        text: ico.glyph
+        color: ico.tint
+        font.pixelSize: Math.round(ico.size * 0.7)
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+    }
+
+    // 2b. symbolic variant, tinted
     Image {
         id: sym
         anchors.fill: parent
         visible: false
-        source: !ico.direct && ico.symPath !== "" ? "file://" + ico.symPath : ""
+        source: ico.asset ? "file://" + ico.assetPath : !ico.direct && ico.glyph === "" && ico.symPath !== "" ? "file://" + ico.symPath : ""
         sourceSize: Qt.size(ico.size * 2, ico.size * 2)
         fillMode: Image.PreserveAspectFit
     }
@@ -53,7 +72,7 @@ Item {
     // 3. no symbolic icon: the app's own icon
     Image {
         anchors.fill: parent
-        visible: !ico.direct && ico.symPath === ""
+        visible: !ico.direct && !ico.asset && ico.glyph === "" && ico.symPath === ""
         source: !ico.direct && ico.base !== "" ? "image://icon/" + ico.base : ""
         sourceSize: Qt.size(ico.size * 2, ico.size * 2)
         fillMode: Image.PreserveAspectFit

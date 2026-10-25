@@ -98,9 +98,22 @@ Item {
     // history behind the toasts) is closed at once. Only what is there when Clear is pressed: a notification arriving
     // meanwhile is not in the snapshot.
     readonly property int sweepMax: 8
+    // After Clear empties the list the center closes (once the last card has flown out); a notification arriving
+    // during the sweep keeps it open, and `clearing` lapses on its own.
+    property bool clearing: false
+    Timer { id: clearLapse; interval: 3000; onTriggered: stack.clearing = false }
+    Timer { id: clearClose; interval: Math.max(1, Theme.popupCloseMs); onTriggered: Popups.close() }
+    Connections {
+        target: Notifs
+        function onCountChanged() {
+            if (stack.clearing && Notifs.count === 0) { stack.clearing = false; clearLapse.stop(); clearClose.restart() }
+        }
+    }
     function clearAll() {
+        clearing = Popups.name === "notif"
+        if (clearing) clearLapse.restart()
         const animated = {}
-                let k = 0
+        let k = 0
         for (let i = first; i < rep.count && k < sweepMax; i++) {
             const it = rep.itemAt(i)
             if (!it || it.gone || !it.shown) continue

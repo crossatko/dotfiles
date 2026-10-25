@@ -224,6 +224,8 @@ gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
 gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark'
 gsettings set org.gnome.desktop.interface icon-theme 'Adwaita'
 gsettings set org.gnome.desktop.interface cursor-theme 'Bibata-Modern-Classic'
+# blueman's own connect/disconnect notifier is off: the shell's BtNotifier posts those (generic headphones icon otherwise)
+gsettings set org.blueman.general plugin-list "['!ConnectionNotifier']" 2>/dev/null || true
 
 # GTK bookmarks
 cat >"$HOME/.config/gtk-3.0/bookmarks" <<'EOF'

@@ -9,6 +9,7 @@ singleton Popups 1.0 Popups.qml
 singleton Notifs 1.0 Notifs.qml
 NotifCard 1.0 NotifCard.qml
 Toasts 1.0 Toasts.qml
+BtNotifier 1.0 BtNotifier.qml
 Btn 1.0 Btn.qml
 Osd 1.0 Osd.qml
 PopupHost 1.0 PopupHost.qml
