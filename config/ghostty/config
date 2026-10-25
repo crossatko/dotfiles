@@ -24,5 +24,19 @@ confirm-close-surface = false
 # Per-machine overrides (git-ignored, e.g. background-opacity on the battlestation, like kitty/host.py)
 config-file = ?~/.config/ghostty/host.local
 
+# --- Keybinds (Linux): no Ghostty shortcuts (tabs, splits, windows...), zellij manages everything. Only these stay,
+# like macos.conf on the Mac (it clears these and sets the super+ ones, loaded after this file).
+keybind = clear
+keybind = ctrl+shift+c=copy_to_clipboard:mixed
+keybind = ctrl+shift+v=paste_from_clipboard
+keybind = copy=copy_to_clipboard:mixed
+keybind = paste=paste_from_clipboard
+keybind = ctrl+==increase_font_size:1
+keybind = ctrl++=increase_font_size:1
+keybind = ctrl+-=decrease_font_size:1
+keybind = ctrl+0=reset_font_size
+keybind = ctrl+shift+q=quit
+keybind = ctrl+shift+,=reload_config
+
 # --- Scrollback ---
 scrollback-limit = 10000
