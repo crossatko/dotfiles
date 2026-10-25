@@ -66,12 +66,14 @@ Item {
         }
     }
 
-    // Toast timeout: sticky only when critical; apps asking for "never expire" get 7 s on screen. It runs only while
+    // Toast timeout: sticky only when critical; apps asking for "never expire" get 7 s on screen (`expireTimeout` is in
+    // milliseconds, -1 = the sender has no wish). A transient notification is closed for good when its toast times out
+    // (it never reaches the center's history). It runs only while
     // the toast stack is showing: hover / swipe give a fresh timeout on resume (as before), and the center being
     // open PAUSES it: the time already spent is kept (`remaining`) and the rest runs on after the center closes, so
     // looking at the history neither burns nor refunds the toast's time (with the center open no expiry could
     // remove a card from the list anyway, so the toasts are just waiting to be the stack again).
-    readonly property real fullMs: card.n && card.n.expireTimeout > 0 ? card.n.expireTimeout * 1000 : 7000
+    readonly property real fullMs: card.n && card.n.expireTimeout > 0 ? Math.max(1000, card.n.expireTimeout) : 7000
     readonly property bool counting: !card.critical && !card.hovered && !card.swiping && !slot.gone
     property real remaining: fullMs
     property double startedAt: 0
@@ -81,7 +83,10 @@ Item {
         interval: slot.remaining
         running: slot.counting && !slot.listMode
         onRunningChanged: if (running) slot.startedAt = Date.now()
-        onTriggered: Notifs.dismissPopup(card.n)
+        onTriggered: {
+            if (card.n.transient) slot.dismissing = true     // leaves, then is closed (see the exit animation)
+            Notifs.dismissPopup(card.n)
+        }
     }
     // the app withdrew it: it is being destroyed, so no exit animation
     Connections {

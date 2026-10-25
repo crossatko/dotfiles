@@ -71,9 +71,9 @@ function body(dev, pods, connected) {
     return dev && dev.batteryAvailable ? "Battery " + pct(dev.battery * 100) : "";
 }
 
-// argv for notify-send (never a shell string): low urgency, short timeout, own app name
+// argv for notify-send (never a shell string): low urgency, short timeout, own app name, transient (no history)
 function argv(dev, pods, connected, assetsDir) {
-    var a = ["notify-send", "-a", "Bluetooth", "-u", "low", "-t", connected ? "5000" : "4000",
+    var a = ["notify-send", "-a", "Bluetooth", "-u", "low", "-e", "-t", connected ? "5000" : "4000",
              "-i", icon(dev, pods, assetsDir), "--", title(dev, connected)];
     var b = body(dev, pods, connected);
     if (b !== "") a.push(b);

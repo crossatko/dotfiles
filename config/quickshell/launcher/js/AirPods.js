@@ -89,6 +89,17 @@ var EAR = [
     { value: 2, label: "Never", verb: "ear:off" }
 ];
 
+// Lowest battery of what is in use: both buds (or the Max headset); the case does not count. -1 = none known.
+function lowest(s) {
+    var levels = (s.headset ? [s.max.level] : [s.left.level, s.right.level]).filter(function (l) { return l >= 0; });
+    return levels.length ? Math.min.apply(null, levels) : UNKNOWN;
+}
+// the part behind lowest() is charging (a bud in the case: the percentage rises)
+function lowestCharging(s) {
+    if (s.headset) return s.max.charging;
+    var l = lowest(s);
+    return l >= 0 && [s.left, s.right].some(function (p) { return p.level === l && p.charging; });
+}
 // Age of a reading for display: "" while fresh (under a minute, or unknown), else "5m" / "3h" / "2d"
 function age(seenAt, now) {
     if (!(seenAt > 0) || !(now >= seenAt)) return "";

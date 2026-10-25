@@ -84,3 +84,4 @@ NotifHeader 1.0 NotifHeader.qml
 NotifStack 1.0 NotifStack.qml
 NotifSlot 1.0 NotifSlot.qml
 NotifEmpty 1.0 NotifEmpty.qml
+BatteryGlyph 1.0 BatteryGlyph.qml

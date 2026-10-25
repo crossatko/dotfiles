@@ -530,8 +530,20 @@ PanelWindow {
             active: bar.isOpen("bt")
             dim: !bar.btOn
             onClicked: bar.pop("bt", btChip)
-            BarIcon { text: "\uf293"; color: bar.btConnected > 0 ? Theme.accent : bar.btOn ? Theme.fg : Theme.muted }
-            BarLabel { visible: bar.btConnected > 0; text: bar.btConnected }
+            // while AirPods are connected: a filled battery (BatteryGlyph) + their lowest bud level instead of the device count
+            // (the count stays when something else is connected too); green while charging, red at 15 % and below
+            readonly property bool pods: AirPods.lowest >= 0
+            readonly property color podsColor: AirPods.lowestCharging ? Theme.green : AirPods.lowest <= 15 ? Theme.red : Theme.fgDim
+            BarIcon { text: "\uf293"; color: bar.btConnected > 0 || btChip.pods ? Theme.accent : bar.btOn ? Theme.fg : Theme.muted }
+            BarLabel { visible: bar.btConnected > (btChip.pods ? 1 : 0); text: bar.btConnected }
+            BatteryGlyph {
+                visible: btChip.pods
+                Layout.leftMargin: 2
+                level: AirPods.lowest
+                charging: AirPods.lowestCharging
+                color: btChip.podsColor
+            }
+            BarLabel { visible: btChip.pods; text: AirPods.lowest + "%"; color: btChip.podsColor }
         }
     }
     Component {
@@ -588,9 +600,9 @@ PanelWindow {
             Component.onCompleted: bar.reg("notif", clockChip)
             active: bar.isOpen("notif")
             onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("notif", clockChip)
-            BarIcon { visible: Notifs.dnd || Notifs.count > 0; text: Notifs.dnd ? "\uf1f6" : "\uf8fa"; color: Notifs.dnd ? Theme.muted : Theme.accent }
-            BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: Theme.accent; font.pixelSize: Theme.fontCaption }
             BarLabel { text: Qt.formatDateTime(bar.clockNow, "yyyy-MM-dd HH:mm"); color: Notifs.dnd ? Theme.muted : Theme.fg }
+            BarIcon { visible: Notifs.dnd || Notifs.count > 0; Layout.leftMargin: Theme.chipGap; text: Notifs.dnd ? "\uf1f6" : "\uf8fa"; color: Notifs.dnd ? Theme.muted : Theme.accent }
+            BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: Theme.accent; font.pixelSize: Theme.fontCaption }
         }
     }
 

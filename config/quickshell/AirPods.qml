@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Io
 import "launcher/js/AirPods.js" as Pods
 
-// AirPods state for the audio popup section. The librepods daemon (systemd user service) writes
+// AirPods state for the AirPods section of the Bluetooth popup and the Bluetooth bar chip. The librepods daemon (systemd user service) writes
 // `$XDG_STATE_HOME/librepods/status.json` on every change and removes it when it stops, so there is nothing to poll:
 // a watched FileView is the whole read side (parsing in launcher/js/AirPods.js). Writes go through the daemon's
 // `librepods-ctl <verb>` (one-shot Process, argv only). Controls are optimistic: a click shows the wanted value at
@@ -48,6 +48,9 @@ Singleton {
     function refreshCase() { if (canRefreshCase) run("case:refresh") }
 
     // does this Pipewire sink look like AirPods the daemon cannot confirm
+    // bar chip: lowest bud (or headset) level, -1 = none known; charging = that part is charging
+    readonly property int lowest: connected ? Pods.lowest(raw) : -1
+    readonly property bool lowestCharging: connected && Pods.lowestCharging(raw)
     function looksLike(sink) { return assumeOutput || !!sink && Pods.looksLikeAirPods(sink.description, sink.name) }
 
     function setMode(m) {

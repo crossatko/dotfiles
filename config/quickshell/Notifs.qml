@@ -36,8 +36,13 @@ Singleton {
             n.tracked = true
             // do-not-disturb silences toasts but still files them away; critical always shows. With the notification
             // center open the new one goes straight into its list (no toast of its own)
+            // A transient one (hint `transient`) is never kept: it is closed once its toast is over (NotifSlot), or at
+            // once when it gets no toast (do-not-disturb), or when the center closes if it arrived while the list was open.
             if (Popups.name === "notif") return
-            if (root.dnd && n.urgency !== NotificationUrgency.Critical) return
+            if (root.dnd && n.urgency !== NotificationUrgency.Critical) {
+                if (n.transient) Qt.callLater(() => root.closeNow(n))
+                return
+            }
             root.popups = [n].concat(root.popups.filter(p => p.id !== n.id)).slice(0, 5)
         }
     }
@@ -86,6 +91,23 @@ Singleton {
     function closeNow(n) {
         dismissPopup(n)
         try { n.dismiss() } catch (e) {}
+    }
+
+    // transient notifications that arrived while the center was open have no toast and no timer: they go with the list
+    Connections {
+        target: Popups
+        function onNameChanged() {
+            if (Popups.name === "notif") return
+            for (const n of root.all.values.slice())
+                if (n.transient && !root.popups.some(p => p.id === n.id)) closeLater.queue.push(n)
+            closeLater.restart()
+        }
+    }
+    Timer {
+        id: closeLater
+        property var queue: []
+        interval: Math.max(1, Theme.popupCloseMs) + 100       // after the list has slid out
+        onTriggered: { for (const n of queue) root.closeNow(n); queue = [] }
     }
 
     function setDnd(on) {

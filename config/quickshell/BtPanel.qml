@@ -2,12 +2,17 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell.Bluetooth
+import Quickshell.Services.Pipewire
 
-// Bluetooth: power, scan, and a device list (click = connect / disconnect / pair, right-click = forget).
+// Bluetooth: the AirPods section first while AirPods are connected, then the Bluetooth header (title, Scan, Power)
+// right above the device list (click = connect / disconnect / pair, right-click = forget). Without AirPods it is
+// just the header and the list.
 ColumnLayout {
     id: bt
     spacing: 8
-    implicitHeight: Math.min(460, 70 + Math.min(300, list.contentHeight) + 20)
+    // the list gives up a third of its room while the AirPods section shows, so the popup stays short-screen sized
+    readonly property int listMax: pods.visible ? 200 : 300
+    implicitHeight: Math.min(460, 70 + Math.min(listMax, list.contentHeight) + 20) + (pods.visible ? pods.implicitHeight + spacing + pods.Layout.topMargin + pods.Layout.bottomMargin : 0)
 
     readonly property var adapter: Bluetooth.defaultAdapter   // qmllint disable unresolved-type
     // scanning is manual (the Scan button): auto start/stop on open/close races BlueZ ("operation already in progress")
@@ -26,6 +31,14 @@ ColumnLayout {
         if (d.connected) d.disconnect()
         else if (d.paired) d.connect()
         else d.pair()
+    }
+
+    AirPodsSection {
+        id: pods
+        Layout.fillWidth: true
+        Layout.bottomMargin: 8
+        // connected AirPods, or (daemon down, so nothing is known) an AirPods-looking default output: then the notice
+        visible: AirPods.connected || (!AirPods.daemon && AirPods.looksLike(Pipewire.defaultAudioSink))
     }
 
     PanelHeader {
@@ -52,7 +65,7 @@ ColumnLayout {
         id: list
         visible: bt.adapter !== null && bt.adapter.enabled
         Layout.fillWidth: true
-        Layout.preferredHeight: Math.min(300, contentHeight)
+        Layout.preferredHeight: Math.min(bt.listMax, contentHeight)
         clip: true
         spacing: 4
         // connected first, then paired, then the rest (by name); skip nameless discovery noise

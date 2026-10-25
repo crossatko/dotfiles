@@ -72,3 +72,13 @@ test("modes carry a glyph and a name", () => {
     const m = A.modes(A.parse(full));
     assert.ok(m.every((x) => x.glyph && x.name));
 });
+test("lowest bud battery for the bar chip", () => {
+    const s = A.parse(full);
+    assert.strictEqual(A.lowest(s), 79);
+    assert.strictEqual(A.lowestCharging(s), false);           // right (100) charges, left (79) is the lowest
+    const d = JSON.parse(full); d.left = { available: false };
+    const t = A.parse(JSON.stringify(d));
+    assert.strictEqual(A.lowest(t), 100);
+    assert.strictEqual(A.lowestCharging(t), true);
+    assert.strictEqual(A.lowest(A.parse("")), -1);
+});

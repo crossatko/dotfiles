@@ -4,10 +4,11 @@ import Quickshell
 
 // THE notification stack: toasts and the notification center are this one item in two modes.
 //  - toast mode (`open: false`): one NotifSlot per active toast (Notifs.popups), newest on top.
-//  - list mode (`open: true`, the clock chip's popup `notif`): a header (title, count, Clear) opens above the cards and
-//    every tracked notification is wanted, newest first. The toasts that are already there stay (same rows, nothing
-//    is rebuilt: only the header pushes them down while it opens), the older ones slide in below them. Closing makes
-//    every row that is not an active toast leave again.
+//  - list mode (`open: true`, the clock chip's popup `notif`): every tracked notification is wanted, newest first. The
+//    toasts that are already there stay exactly where they are (same rows, nothing is rebuilt, nothing is pushed:
+//    the list has no header), the older ones slide in below them from the right, one after another, and a plain
+//    bottom row (count, scroll hint, Clear: NotifHeader.qml, historical name) slides in after the last card, under the
+//    last card that is shown. Closing makes every row that is not an active toast, then the bottom row, slide out.
 // The rows are a ListModel of notification ids (a JS-array model would rebuild every card on each change and replay
 // the entrance animation on all of them). A row leaves when its id is no longer wanted (clicked, expired, DND,
 // cleared, list closed), animates out, and only then leaves the model.
@@ -19,20 +20,40 @@ Item {
     id: stack
 
     property bool open: false
-    property real maxHeight: 600            // room for header + cards
+    property real maxHeight: 600            // room for the cards + the bottom row
     readonly property real cardWidth: 400
     signal cardAdded()                      // a card was created: the window refreshes its glass regions at once
 
     width: cardWidth
-    height: headBlock + view.height
+    height: footProgress > 0.001 ? foot.y + foot.implicitHeight : view.height
 
-    // 0..1 while the list mode fades / folds in and out
+    // 0..1 while the list mode slides in and out (the empty strip)
     property real progress: open ? 1 : 0
     Behavior on progress { NumberAnimation { duration: Theme.popupMoveMs; easing.type: Easing.OutCubic } }
-    // the header's room is reserved for as long as it is on screen (no unfolding: everything below sits at its final y
-    // from the first frame; the header only slides in x)
-    readonly property real headBlock: progress > 0.001 ? head.implicitHeight + 8 : 0
-    readonly property bool animating: progress > 0.001      // the header is still sliding: the window must stay up
+    // the bottom row: wanted while the list is open and has cards; it slides in after the last card has come in and out
+    // after the last one has left (`footDelay`, set just before the change by whoever knows how many cards move)
+    property real footProgress: 0
+    property bool footTarget: false
+    property real footDelay: 0
+    function syncFoot() {
+        const want = open && items.count > 0 && !clearing       // Clear: the row leaves first, then the cards sweep
+        if (want === footTarget) return
+        footTarget = want
+        footAnim.stop()
+        footTo.to = want ? 1 : 0
+        footPause.duration = footDelay
+        footDelay = 0
+        footAnim.start()
+    }
+    SequentialAnimation {
+        id: footAnim
+        PauseAnimation { id: footPause }
+        NumberAnimation { id: footTo; target: stack; property: "footProgress"; duration: Theme.popupMoveMs; easing.type: Easing.OutCubic }
+    }
+    Connections { target: items; function onCountChanged() { stack.syncFoot() } }
+    readonly property real footFull: foot.implicitHeight + 8
+    // the window must stay up while anything is still sliding
+    readonly property bool animating: progress > 0.001 || footProgress > 0.001
     // stagger between cards that enter / leave one after another (top down); Settings > Animations scales it
     readonly property real stagger: Theme.popupMs(Motion.baseMs * 0.2)
     // rows that are not on their way out (Clear and closing animations are still running for the others)
@@ -62,7 +83,33 @@ Item {
         return Math.max(0, rep.count - 1)
     }
     readonly property int first: Math.max(0, Math.min(scroll, maxFirst()))
-    onOpenChanged: { if (!open) scroll = 0; sync(open) }
+    // bottom of the last card that is shown (view coordinates): the bottom row sits right under it, not under hidden ones
+    readonly property real shownBottom: {
+        void column.height; void view.topY; void first; void items.count; void view.height
+        let b = 0
+        for (let i = 0; i < rep.count; i++) {
+            const it = rep.itemAt(i)
+            if (it && it.shown) b = Math.max(b, it.y + Math.max(0, it.height - 8) - view.topY)
+        }
+        return b
+    }
+    onOpenChanged: {
+        if (open) {
+            noEmptyStrip = false
+            footDelay = Math.min(Math.max(0, Notifs.all.values.length - items.count), sweepMax) * stagger
+        } else {
+            // rows that are about to slide out (not an active toast), top down, before the bottom row follows
+            let k = 0
+            for (let i = first; i < rep.count && k < sweepMax; i++) {
+                const it = rep.itemAt(i)
+                if (it && !it.gone && !Notifs.popups.some(p => p.id === it.nid)) k++
+            }
+            footDelay = k * stagger
+            scroll = 0
+        }
+        sync(open)
+        syncFoot()
+    }
 
     // --- model ---
     ListModel { id: items }
@@ -92,33 +139,37 @@ Item {
     Connections { target: Notifs.all; function onValuesChanged() { stack.sync(false) } }
     readonly property alias count: items.count
 
-    // Clear: the cards that are on screen now fly out one after another from the top one down (like a swipe-dismiss,
-    // the gap closing behind each), with a short stagger from the motion tokens (Settings > Animations scales it) and
+    // Clear: the cards that are on screen now fly out one after another from the BOTTOM one up, starting right above
+    // where the Clear button was (like a swipe-dismiss, the gap closing behind each), with a short stagger from the motion tokens (Settings > Animations scales it) and
     // at most `sweepMax` of them, so the whole thing stays brief; everything else (scrolled out, past the cap, the
     // history behind the toasts) is closed at once. Only what is there when Clear is pressed: a notification arriving
     // meanwhile is not in the snapshot.
     readonly property int sweepMax: 8
-    // After Clear empties the list the center closes (once the last card has flown out); a notification arriving
-    // during the sweep keeps it open, and `clearing` lapses on its own.
+    // After Clear empties the list the center closes as soon as the last card is gone, without the empty strip
+    // (`noEmptyStrip`); a notification arriving during the sweep keeps it open, and `clearing` lapses on its own.
     property bool clearing: false
-    Timer { id: clearLapse; interval: 3000; onTriggered: stack.clearing = false }
-    Timer { id: clearClose; interval: Math.max(1, Theme.popupCloseMs); onTriggered: Popups.close() }
+    property bool noEmptyStrip: false
+    onClearingChanged: syncFoot()
+    // while Clear is in progress the bottom row slides out first; the cards start once it has (mostly) gone
+    readonly property real sweepBase: clearing && footProgress > 0.001 ? Theme.popupMoveMs * 0.7 : 0
+    Timer { id: clearLapse; interval: 3000; onTriggered: { stack.clearing = false; stack.noEmptyStrip = false } }
     Connections {
-        target: Notifs
+        target: items
         function onCountChanged() {
-            if (stack.clearing && Notifs.count === 0) { stack.clearing = false; clearLapse.stop(); clearClose.restart() }
+            if (stack.clearing && items.count === 0) { stack.clearing = false; clearLapse.stop(); Popups.close() }
         }
     }
     function clearAll() {
         clearing = Popups.name === "notif"
         if (clearing) clearLapse.restart()
+        noEmptyStrip = clearing
         const animated = {}
         let k = 0
-        for (let i = first; i < rep.count && k < sweepMax; i++) {
+        for (let i = rep.count - 1; i >= first && k < sweepMax; i--) {      // bottom up
             const it = rep.itemAt(i)
             if (!it || it.gone || !it.shown) continue
             animated[it.nid] = true
-            it.sweep(k * stagger)
+            it.sweep(sweepBase + k * stagger)
             k++
         }
         for (const n of Notifs.all.values.slice())
@@ -126,31 +177,31 @@ Item {
     }
     Connections { target: Notifs; function onClearRequested() { stack.clearAll() } }
 
-    // --- header (list mode) ---
+    // --- bottom row (list mode): count, scroll hint, Clear; plain, no glass ---
     NotifHeader {
-        id: head
-        y: 0
-        x: (1 - stack.progress) * (stack.width + 40)  // slides in from / out to the right like the cards
+        id: foot
+        y: stack.shownBottom + 8
+        x: (1 - stack.footProgress) * (stack.width + 40)  // slides in from / out to the right like the cards
         width: stack.width
-        opacity: Math.min(1, stack.progress * 1.6)
-        visible: stack.animating
+        opacity: Math.min(1, stack.footProgress * 1.6)
+        visible: stack.footProgress > 0.001
         overflow: stack.overflow
     }
 
     // --- cards ---
     Item {
         id: view
-        y: stack.headBlock
+        y: 0                                  // the cards start where the toasts sit
         width: stack.width
-        // list mode: as tall as the cards, up to the room there is; toast mode: the toasts
-        height: stack.open ? Math.min(Math.max(column.height - stack.tail, emptyStrip.visible ? emptyStrip.implicitHeight : 0), Math.max(0, stack.maxHeight - head.implicitHeight - 8)) : column.height
+        // list mode: as tall as the cards, up to the room there is (less the bottom row); toast mode: the toasts
+        height: stack.open ? Math.min(Math.max(column.height - stack.tail, emptyStrip.visible ? emptyStrip.implicitHeight : 0), Math.max(0, stack.maxHeight - stack.footFull)) : column.height
         readonly property real topY: { void rep.count; const it = rep.itemAt(stack.first); return it ? it.y : 0 }
 
         NotifEmpty {
             id: emptyStrip
             width: view.width
-            x: (1 - stack.progress) * (view.width + 40)        // slides with the header
-            opacity: (stack.open || stack.animating) && stack.liveRows === 0 ? 1 : 0
+            x: (1 - stack.progress) * (view.width + 40)        // slides in from the right like the cards
+            opacity: (stack.open || stack.animating) && stack.liveRows === 0 && !stack.noEmptyStrip ? 1 : 0
             visible: opacity > 0.01
             Behavior on opacity { NumberAnimation { duration: 120 } }
         }
@@ -167,9 +218,12 @@ Item {
                     id: row
                     stackWidth: column.width
                     listMode: stack.open
-                    // whole cards only: the first one shown always, others when they fit completely
-                    shown: !stack.open || index === stack.first
-                        || (y >= view.topY - 1 && y + cardItem.implicitHeight <= view.topY + view.height + 1)
+                    // whole cards only: the first one shown always, others when they fit completely; closing keeps what
+                    // was shown (a row that was scrolled out of the list does not appear just to slide out)
+                    property bool wasShown: true
+                    onShownChanged: if (stack.open) wasShown = shown
+                    shown: stack.open ? (index === stack.first
+                        || (y >= view.topY - 1 && y + cardItem.implicitHeight <= view.topY + view.height + 1)) : wasShown
                     onRemoveRequested: items.remove(index)
                     onGoneChanged: stack.recount()
                     onFlyingChanged: stack.recount()

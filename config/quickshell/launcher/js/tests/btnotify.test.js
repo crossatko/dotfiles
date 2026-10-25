@@ -49,7 +49,7 @@ test("pods body: headset, nothing known", () => {
 
 test("argv is a plain array; body only when known", () => {
     const a = B.argv({ name: "Mouse", icon: "input-mouse" }, null, true, "/a");
-    assert.strictEqual(JSON.stringify(a), JSON.stringify(["notify-send", "-a", "Bluetooth", "-u", "low", "-t", "5000", "-i", "input-mouse", "--", "Mouse connected"]));
+    assert.strictEqual(JSON.stringify(a), JSON.stringify(["notify-send", "-a", "Bluetooth", "-u", "low", "-e", "-t", "5000", "-i", "input-mouse", "--", "Mouse connected"]));
     const b = B.argv({ name: "Test Buds" }, pods, true, "/a");
     assert.strictEqual(b[b.length - 1], "L 79% · R 100%");
 });

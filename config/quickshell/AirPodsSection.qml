@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import "launcher/js/AirPods.js" as Pods
 
-// AirPods section of the audio popup, below the volume rows, shown while the AirPods are connected (state and
+// AirPods section of the Bluetooth popup (top, above the device list), shown while the AirPods are connected (state and
 // controls: AirPods singleton). Title = the model name (AirPods.title). Header toggle = Conversation awareness (the only on/off
 // feature); battery rings (left / right / case, BudRing + PodIcon; the case level is fetched on demand while the
 // section is on screen and greyed with its age when stale); listening mode as captioned icon tiles (ModeTiles,
