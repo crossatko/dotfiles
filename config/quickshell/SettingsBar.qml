@@ -312,6 +312,20 @@ Item {
                 color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.fillWidth: true; elide: Text.ElideRight
             }
         }
+        SettingRow {
+            title: "Reserved area"
+            titleWidth: 120
+            opacity: ed.sel && BarConfig.enabled(ed.sel) ? 1 : 0.45
+            Toggle {
+                checked: ed.sel ? BarConfig.respectReserved(ed.sel) : false
+                enabledLook: ed.sel ? BarConfig.enabled(ed.sel) : false
+                onToggled: want => { if (ed.sel && BarConfig.enabled(ed.sel)) BarConfig.set(ed.sel, "respectReserved", want) }
+            }
+            Label {
+                text: "inside the reserved margins, not at the screen edge"
+                color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.fillWidth: true; elide: Text.ElideRight
+            }
+        }
         SectionHead {
             Layout.topMargin: 6
             title: "Backdrop · " + (ed.linkedGroup ? ed.groupScreens.map(s => ed.screenTitle(s)).join(" + ") : ed.sel ? ed.screenTitle(ed.sel) : "")

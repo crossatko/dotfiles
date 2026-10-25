@@ -145,9 +145,10 @@ end
 
 -- Esc closes an open Quickshell bar popup. The popup surface has no keyboard focus right after opening (it can't
 -- take Exclusive without breaking click-away / one-click chip switching), so catch Esc here. non_consuming: the
--- focused window still gets the key. The Lua check keeps it to a no-op unless a popup layer is mapped.
+-- focused window still gets the key. The Lua check keeps it to a no-op unless a popup layer is mapped (qs-toast is the
+-- notification stack, which is also the notification center: Popups.esc does nothing while no popup is open).
 bind("Escape", "Close the open bar popup", function()
-	if #hl.get_layers({ namespace = "qs-popup" }) > 0 then
+	if #hl.get_layers({ namespace = "qs-popup" }) > 0 or #hl.get_layers({ namespace = "qs-toast" }) > 0 then
 		hl.exec_cmd("qs ipc call popup esc")
 	end
 end, { non_consuming = true })

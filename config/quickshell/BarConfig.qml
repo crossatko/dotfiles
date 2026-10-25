@@ -40,6 +40,15 @@ Singleton {
     }
     function enabled(s) { return entry(s).enabled === true }
     function edge(s) { return entry(s).edge === "top" ? "top" : "bottom" }
+    // per bar: lay the bar (and what hangs off it: popups, notifications, OSD) out inside the monitor's reserved area and the
+    // other surfaces' exclusive zones instead of at the physical screen edge (today's look). bars.json `respectReserved`, default
+    // false. Mechanism: the compositor lays out zone-0 surfaces after every exclusive zone, so with the option the BAR itself is
+    // the exclusive surface (zone = reserveOf, BarReserve hides, no double count) and sits at the usable edge, while popups,
+    // toasts and the OSD (zone 0) start right behind it: their own window already begins at the bar's far edge, which
+    // `zoneOf` (what the bar consumed) lets them subtract from their usual "past the bar" offsets (`insetOf` = what is left).
+    function respectReserved(s) { return !!s && enabled(s) && entry(s).respectReserved === true }
+    function zoneOf(s) { return respectReserved(s) ? reserveOf(s) : 0 }
+    function insetOf(s) { return reserveOf(s) - zoneOf(s) }
     // per bar: docked or floating (Settings > Bar). bars.json `floating` (bool); absent = the default for bars without their own
     // value: Theme.barFloating (appearance.json `barFloating` if present, else theme.toml bar_floating), so old state looks the same.
     // Everything that used the global value reads these per-screen functions (the bar a screen has, or the default for screens without).
@@ -137,7 +146,7 @@ Singleton {
         const outside = Quickshell.screens.some(o => enabled(o) && g.indexOf(keyOf(o)) < 0)
         const on = src.enabled === true || !outside
         const d2 = JSON.parse(JSON.stringify(data))
-        for (const k of g) d2[k] = { enabled: on, edge: src.edge === "top" ? "top" : "bottom", transparentFlush: src.transparentFlush === true, flushPadding: src.flushPadding, floating: src.floating }
+        for (const k of g) d2[k] = { enabled: on, edge: src.edge === "top" ? "top" : "bottom", transparentFlush: src.transparentFlush === true, flushPadding: src.flushPadding, floating: src.floating, respectReserved: src.respectReserved }
         data = d2
         saver.restart()
     }

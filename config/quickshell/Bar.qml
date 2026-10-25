@@ -29,7 +29,8 @@ PanelWindow {
     readonly property real barGap: BarConfig.barGapOf(bar.screen)       // floating gap to the edges (0 docked), per bar
     implicitHeight: barH + barGap
     mask: Region { item: frame }
-    exclusiveZone: -1                  // full width even next to a reserved strip; BarReserve.qml reserves the space
+    // -1 = full width even next to a reserved strip (BarReserve.qml reserves the space); the bar's own height with "respect reserved area" (Settings > Bar; BarReserve then hides)
+    exclusiveZone: BarConfig.respectReserved(bar.screen) ? BarConfig.reserveOf(bar.screen) : -1
     color: "transparent"
     WlrLayershell.namespace: "qs-bar"
 

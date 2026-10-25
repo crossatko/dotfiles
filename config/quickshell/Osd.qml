@@ -24,12 +24,21 @@ PanelWindow {
     anchors { bottom: true }
     // above a (floating) bottom bar
     // qmllint disable missing-property
-    margins.bottom: 70 + (bars[(screen ? screen.name : "")] === "bottom" ? BarConfig.reserveOf(screen) : 0)
+    margins.bottom: 70 + (bars[(screen ? screen.name : "")] === "bottom" ? BarConfig.insetOf(screen) : 0)
     // qmllint enable missing-property
     implicitWidth: 320
     implicitHeight: 56
     color: "transparent"
-    exclusiveZone: -1                  // ignore the monitor's reserved area (the pinned-video strip), so it stays in the screen corner
+    // -1 = ignore the monitor's reserved area (the pinned-video strip), so it stays in the screen corner; 0 = follow the bar
+    // (Settings > Bar). This window hops between screens: a zone changed in the same tick as the screen was not applied to the
+    // re-created layer surface, so it is set a moment after the screen / the option changed.
+    readonly property bool respectReserved: BarConfig.respectReserved(screen)
+    property int zone: -1
+    onRespectReservedChanged: zoneTimer.restart()
+    onScreenChanged: zoneTimer.restart()
+    Component.onCompleted: zone = respectReserved ? 0 : -1
+    Timer { id: zoneTimer; interval: 80; onTriggered: osd.zone = osd.respectReserved ? 0 : -1 }
+    exclusiveZone: zone
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "qs-osd"
     BackgroundEffect.blurRegion: Region { regions: glass.instances }

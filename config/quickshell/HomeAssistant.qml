@@ -429,8 +429,13 @@ Singleton {
         return l.length ? l : (vacRooms[id] || [])
     }
     function fetchRooms(id) {
-        if (isSectionHidden("vacuum") || vacAsked[id] || attrRooms(id).length || !has("roborock.get_maps")) return
-        const asked = Object.assign({}, vacAsked); asked[id] = true; vacAsked = asked
+        // vacAsked[id]: true = rooms fetched; a number = time of the last failed/empty try (retried after 30 s,
+        // never while the vacuum is unavailable, so there is no call spam)
+        const ent = byId[id], last = vacAsked[id]
+        if (isSectionHidden("vacuum") || last === true || attrRooms(id).length || !has("roborock.get_maps")) return
+        if (!ent || ent.state === "unavailable" || ent.state === "unknown") return
+        if (typeof last === "number" && Date.now() - last < 30000) return
+        const asked = Object.assign({}, vacAsked); asked[id] = Date.now(); vacAsked = asked
         request("POST", "/api/services/roborock/get_maps?return_response", { entity_id: id }, (st, txt) => {
             if (st !== 200) return
             let maps = []
@@ -442,6 +447,7 @@ Singleton {
             const pick = maps.find(m => m.rooms && Object.keys(m.rooms).length) || null
             const l = pick ? roomList(pick.rooms) : []
             const vr = Object.assign({}, vacRooms); vr[id] = l; vacRooms = vr
+            if (l.length) { const a = Object.assign({}, vacAsked); a[id] = true; vacAsked = a }
         })
     }
     function repeatEntityOf(id) {

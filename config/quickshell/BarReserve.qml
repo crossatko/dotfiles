@@ -16,7 +16,7 @@ PanelWindow {
     // bar height, plus the floating bar's gap to the screen edge (Theme.barReserve); Hyprland then adds its
     // gaps_out beyond this, so the visible bar <-> window gap is gapOut, the same as at the other edges
     implicitHeight: BarConfig.reserveOf(strip.screen)
-    exclusiveZone: BarConfig.reserveOf(strip.screen)
+    exclusiveZone: BarConfig.respectReserved(strip.screen) ? 0 : BarConfig.reserveOf(strip.screen)    // 0 with "respect reserved area": the bar itself holds the zone
     exclusionMode: ExclusionMode.Normal
     color: "transparent"
     mask: Region {}

@@ -1,31 +1,25 @@
 import QtQuick
 import QtQuick.Layouts
 
-// Header strip of the notification center: a glass pill (the center itself has no background, so the title needs its
-// own surface to stay readable on any wallpaper): title, count (with a scroll hint) and Clear.
-Rectangle {
+// Header of the notification center: title, count (with a scroll hint) and Clear, plain on the desktop (no glass,
+// fill, border or blur region).
+Item {
     id: head
     property bool overflow: false      // more cards than fit: the list scrolls
-    property real popupScale: 1        // the popup's glass scale while it is in motion (NotifPanel)
 
-    readonly property bool isGlassItem: true
-    readonly property real glassScale: popupScale
-    implicitHeight: 46
-    radius: Theme.radius
-    color: Theme.alpha(Theme.bg, Theme.cardFill)
-    border.width: 1
-    border.color: Theme.alpha(Theme.overlay, 0.5)
+    implicitHeight: row.implicitHeight      // just the tallest child (Clear)
 
     RowLayout {
-        anchors { fill: parent; leftMargin: 16; rightMargin: 8 }
-        spacing: 8
+        id: row
+        anchors { left: parent.left; right: parent.right }   // flush with the cards' edges
+        spacing: Theme.controlGap
         Label { text: "Notifications"; font.pixelSize: 15; font.bold: true; Layout.fillWidth: true }
         Label {
-            visible: Notifs.count > 0
-            text: head.overflow ? Notifs.count + "  ·  scroll for more" : Notifs.count
+            visible: Notifs.liveCount > 0
+            text: head.overflow ? Notifs.liveCount + "  ·  scroll for more" : Notifs.liveCount
             color: Theme.fgDim
             font.pixelSize: Theme.fontSmall
         }
-        Btn { text: "Clear"; enabledLook: Notifs.count > 0; onClicked: Notifs.clearAll() }
+        Btn { text: "Clear"; enabledLook: Notifs.liveCount > 0; onClicked: Notifs.clearAll() }
     }
 }

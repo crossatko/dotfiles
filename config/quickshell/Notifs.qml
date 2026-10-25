@@ -16,6 +16,8 @@ Singleton {
     property real now: Date.now()           // refreshed by `ticker` so relative times stay current
     readonly property var all: server.trackedNotifications
     readonly property int count: server.trackedNotifications.values.length
+    // what the notification center shows: the ones already swept out (waiting in `pendingClose` to be closed) no longer count
+    readonly property int liveCount: Math.max(0, count - pendingClose.length)
 
     NotificationServer {
         id: server
@@ -27,11 +29,14 @@ Singleton {
         persistenceSupported: true
 
         onNotification: n => {
-            n.tracked = true
+            // looked up by the notification stack the moment it is tracked, so set before
             byId[n.id] = n
             times[n.id] = Date.now()        // a replacement (same id) counts as new
             root.now = Date.now()
-            // do-not-disturb silences toasts but still files them away; critical always shows
+            n.tracked = true
+            // do-not-disturb silences toasts but still files them away; critical always shows. With the notification
+            // center open the new one goes straight into its list (no toast of its own)
+            if (Popups.name === "notif") return
             if (root.dnd && n.urgency !== NotificationUrgency.Critical) return
             root.popups = [n].concat(root.popups.filter(p => p.id !== n.id)).slice(0, 5)
         }
@@ -63,7 +68,7 @@ Singleton {
     // Close the notification after its toast has slid out: closing destroys the object the card is
     // still drawing during the exit animation.
     property var pendingClose: []
-    function releaseLater(n) { pendingClose.push(n); closer.restart() }
+    function releaseLater(n) { pendingClose = pendingClose.concat([n]); closer.restart() }
     Timer {
         id: closer
         interval: 450
@@ -73,9 +78,14 @@ Singleton {
         }
     }
 
-    function clearAll() {
-        for (const n of server.trackedNotifications.values.slice()) n.dismiss()
-        popups = []
+    // Clear (button, IPC): the notification stack sweeps the cards one after another (NotifStack.clearAll) and closes
+    // the rest at once
+    signal clearRequested()
+    function clearAll() { clearRequested() }
+    // close a notification now (no animation): out of the toasts and out of the history
+    function closeNow(n) {
+        dismissPopup(n)
+        try { n.dismiss() } catch (e) {}
     }
 
     function setDnd(on) {

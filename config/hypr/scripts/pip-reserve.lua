@@ -83,6 +83,14 @@ local function bottom_offset(mon)
 	if bar_edge(mon) ~= "bottom" then
 		return 0
 	end
+	-- a bar that respects the reserved area (bars.json respectReserved, Settings > Bar) sits above the monitor's reserved strip,
+	-- which is where the box lives, so the box is not lifted over it
+	if managed ~= nil and type(managed.bar_state) == "function" then
+		local ok, _, _, _, _, respect = pcall(managed.bar_state, mon)
+		if ok and respect == true then
+			return 0
+		end
+	end
 	-- per bar: floating gap and the flush-mode height of THIS monitor's bar (managed.bar_reserve)
 	if managed ~= nil and type(managed.bar_reserve) == "function" then
 		local ok, r = pcall(managed.bar_reserve, mon)

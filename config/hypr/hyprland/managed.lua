@@ -884,7 +884,7 @@ local BAR_FALLBACK = { ["DP-5"] = "bottom", ["DP-3"] = "bottom", ["Virtual-1"] =
 -- Quickshell BarConfig (monitors are matched by model and serial inside the description; the file is tiny and flat).
 -- Never raises.
 function M.bar_state(mon)
-	local ok, edge, flush, pad, floating = pcall(function()
+	local ok, edge, flush, pad, floating, respect = pcall(function()
 		local text = M.read_small_file((os.getenv("HOME") or "") .. "/.local/state/quickshell/bars.json", 65536)
 		if text then
 			local desc = mon.description or ""
@@ -901,16 +901,17 @@ function M.bar_state(mon)
 					return body:match('"edge"%s*:%s*"(%a+)"') == "top" and "top" or "bottom",
 						body:find('"transparentFlush"%s*:%s*true') ~= nil,
 						tonumber(body:match('"flushPadding"%s*:%s*(%d+)')),
-						({ ["true"] = true, ["false"] = false })[body:match('"floating"%s*:%s*(%a+)') or ""]
+						({ ["true"] = true, ["false"] = false })[body:match('"floating"%s*:%s*(%a+)') or ""],
+						body:find('"respectReserved"%s*:%s*true') ~= nil
 				end
 			end
 		end
 		return BAR_FALLBACK[mon.name] or "none", false
 	end)
 	if ok then
-		return edge, flush == true, pad, floating
+		return edge, flush == true, pad, floating, respect == true
 	end
-	return "none", false, nil, nil
+	return "none", false, nil, nil, false
 end
 
 -- Is the bar on this monitor floating? Per bar (bars.json `floating`, Settings > Bar), else the global appearance.json

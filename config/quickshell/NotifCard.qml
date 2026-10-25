@@ -4,20 +4,20 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Services.Notifications
 
-// One notification, used for toasts (toast: true) and in the notification center.
+// One notification card of the notification stack (NotifStack): the same glass card as a toast and as a row of the
+// notification center. The owner (NotifSlot) animates it in and out and runs the actual dismissal.
 Rectangle {
-    // A standalone glass card: a toast, or a notification-center row (`glass: true`, same look as the toast). Without
-    // `glass` the card sits flat on a panel (nobody uses that any more, kept for panels with their own card).
-    readonly property bool isGlassItem: toast || glass
     id: card
+    // a standalone glass surface (Glass.qml gives it its own blur region)
+    readonly property bool isGlassItem: true
 
     required property var n
-    property bool toast: false
-    property bool glass: false
-    // the host popup's glass scale (PopupHost card in motion on a compositor whose glass cannot fade), see Glass.qml
-    property real hostGlassScale: 1
-    // Glass.qml: the card's own fade (swipe / leaving) shrinks the region too where the glass cannot fade
-    readonly property real glassScale: toast ? 1 : hostGlassScale * Theme.glassScaleAt(swipeFade * leaveFade)
+    property bool showTime: false       // the notification center shows the arrival time; a plain toast does not
+    // the owner's own fade (entering / leaving): multiplied into the opacity, and shrinks the glass region too where
+    // the glass itself cannot fade (Glass.qml)
+    property real fade: 1
+    // the card's own fade (swipe) times the owner's
+    readonly property real glassScale: Theme.glassScaleAt(fade * swipeFade)
     readonly property bool hovered: hover.hovered
     readonly property bool critical: n.urgency === NotificationUrgency.Critical
     // The server hands themed icon *names* over as "image://icon/<name>" in n.image (and leaves
@@ -32,45 +32,27 @@ Rectangle {
     }
 
     implicitHeight: content.implicitHeight + 24
-    radius: isGlassItem ? Theme.radius : Theme.radiusItem      // glass card = outer element; else an item inside a panel
-    color: isGlassItem ? Theme.alpha(Theme.bg, Theme.cardFill) : Theme.alpha(Theme.surface, 0.85)
+    radius: Theme.radius
+    color: Theme.alpha(Theme.bg, Theme.cardFill)
     border.width: 1
     border.color: critical ? Theme.alpha(Theme.red, 0.8) : Theme.alpha(Theme.overlay, 0.5)
 
-    // Notification center: slide out to the right, then let the row collapse (the parent reads `collapse`), then dismiss.
-    property real collapse: 1
-    property bool leaving: false
-    property real leaveFade: 1      // the slide-out fades the card (and with it its glass)
-    function leave() {
-        if (leaving) return
-        leaving = true
-        leaveAnim.start()
-    }
-    SequentialAnimation {
-        id: leaveAnim
-        // a swiped card is already off to the right: only the gap closes
-        ParallelAnimation {
-            NumberAnimation { target: card; property: "x"; to: card.width + 40; duration: card.swipedOut ? 0 : 200; easing.type: Easing.InCubic }
-            NumberAnimation { target: card; property: "leaveFade"; to: 0; duration: card.swipedOut ? 0 : 200; easing.type: Easing.InCubic }
-        }
-        NumberAnimation { target: card; property: "collapse"; to: 0; duration: Theme.popupMoveMs; easing.type: Theme.popupEaseClose }
-        ScriptAction { script: card.n.dismiss() }
-    }
-    // the one dismiss path (close button, right click, swipe): toast -> leaves the stack and is closed after its exit
-    // animation; notification center -> leave()
-    function dismiss() {
-        if (toast) { Notifs.dismissPopup(n); Notifs.releaseLater(n) }
-        else card.leave()
-    }
+    // the one dismiss path (close button, right click, swipe, click): the owner animates the card out and then closes
+    // the notification
+    signal dismissRequested()
+    function dismiss() { dismissRequested() }
+    // dismiss with the swipe's fly-out to the right (Clear sweeps the cards one by one); `dismissRequested` follows
+    // when it has flown off
+    function flyOut() { if (!swipe.busy) swipe.settle(true, 0) }
 
-    // Swipe to the right with the mouse to dismiss (SwipeDismiss). Translate, not x: Toasts drives x (slide-in) and
-    // leave() animates it. Owners that set their own opacity multiply in `swipeFade`.
+    // Swipe to the right with the mouse to dismiss (SwipeDismiss). Translate, not x: NotifSlot drives x (slide-in /
+    // slide-out).
     SwipeDismiss { id: swipe; onSwiped: card.dismiss() }
     transform: Translate { x: swipe.offset }
     readonly property real swipeFade: swipe.fade
     readonly property bool swiping: swipe.busy       // dragging / springing back / flying off: toasts pause their timeout
     readonly property bool swipedOut: swipe.gone
-    opacity: swipeFade * leaveFade
+    opacity: fade * swipeFade
 
     HoverHandler { id: hover }
     // Clicking a notification takes you to the app: run its default action (so the app can open the right
@@ -135,7 +117,7 @@ Rectangle {
                     Layout.fillWidth: true
                 }
                 Label {
-                    visible: !card.toast
+                    visible: card.showTime
                     text: Notifs.ago(card.n.id)
                     color: Theme.muted
                     font.pixelSize: Theme.fontCaption
@@ -163,7 +145,7 @@ Rectangle {
                 color: Theme.fgDim
                 font.pixelSize: Theme.fontSmall
                 wrapMode: Text.Wrap
-                maximumLineCount: card.toast ? 4 : 8
+                maximumLineCount: 4
                 elide: Text.ElideRight
             }
             Flow {
