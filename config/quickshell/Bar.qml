@@ -613,10 +613,14 @@ PanelWindow {
         id: clockComp
         Chip { ink: bar.ink;
             id: clockChip
-            // the clock opens the notification center; the calendar is its own chip (calComp)
+            // the clock opens the notification center (not when it would be empty, unless it is open or do-not-disturb is on);
+            // the calendar is its own chip (calComp)
             Component.onCompleted: bar.reg("notif", clockChip)
             active: bar.isOpen("notif")
-            onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("notif", clockChip)
+            onClicked: mouse => {
+                if (mouse.button === Qt.RightButton) Notifs.setDnd(!Notifs.dnd)
+                else if (Notifs.liveCount > 0 || Notifs.dnd || bar.isOpen("notif")) bar.pop("notif", clockChip)
+            }
             BarLabel { text: Qt.formatDateTime(bar.clockNow, "yyyy-MM-dd HH:mm"); color: Notifs.dnd ? bar.ink.muted : bar.ink.fg }
             BarIcon { visible: Notifs.dnd || Notifs.count > 0; Layout.leftMargin: Theme.chipGap; text: Notifs.dnd ? "\uf1f6" : "\uf8fa"; color: Notifs.dnd ? bar.ink.muted : bar.ink.accent }
             BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: bar.ink.accent; font.pixelSize: Theme.fontCaption }
