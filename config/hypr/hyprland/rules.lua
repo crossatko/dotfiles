@@ -298,15 +298,16 @@ hl.window_rule({
 	match = { class = "^(.blueman-manager-wrapped)$" },
 })
 
+-- Vesktop is the default Discord client (class `vesktop`); the official client (class `discord`) keeps the same rules
 hl.window_rule({
 	name = "discord",
 	workspace = "7",
-	match = { class = "discord" },
+	match = { class = "^(discord|vesktop)$" },
 })
 hl.window_rule({
 	name = "discord-popout-stream",
 	no_dim = true,
-	match = { class = "discord", initial_title = "^(Discord Popout)$" },
+	match = { class = "^(discord|vesktop)$", initial_title = "^(Discord Popout)$" },
 })
 hl.window_rule({ name = "geary", workspace = "8", match = { class = "^(org\\.gnome\\.Geary)$" } })
 hl.window_rule({ name = "whatsapp", workspace = "7", match = { class = "^(brave-web\\.whatsapp\\.com__-Default)$" } })

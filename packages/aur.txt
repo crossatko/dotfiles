@@ -4,6 +4,7 @@
 
 # --- browsers / apps
 brave-bin
+vesktop
 1password
 figma-linux-next-bin
 localsend-bin

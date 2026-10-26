@@ -7,14 +7,14 @@
 # Stages (run in this order):
 #   repos     (sudo) third-party Chaotic-AUR repo (prebuilt AUR packages); with --cachyos (opt-in) also the CachyOS repos
 #             (arch-optimised + [cachyos]). Runs before packages so the -Syu there syncs the new repos.
-#   packages  multilib, yay, packages/{pacman,aur,flatpak}.txt, plus opt-in bundles packages/optional/NAME.txt (--with NAME)
+#   packages  multilib, yay, packages/{pacman,aur,flatpak}.txt, omacal (pinned PKGBUILD, built locally), plus opt-in bundles packages/optional/NAME.txt (--with NAME)
 #   links     symlinks into $HOME, shell dotfiles, GTK seed, theme seed, web apps, librepods build
 #   system    (sudo) system/etc files, udev rules, /etc/environment host marker, services, ufw
 # Default: repos + packages + links. `system` is opt-in (--system, or --only). Skip the third-party repo with `--only links,packages`.
 # --cachyos (opt-in, needs the repos stage) also adds the CachyOS repos.
 #
 # Environment: CLAUDE_TABS_DIR (claude-tabs checkout), INSTALL_SKIP (space separated: librepods omz claude-tabs
-# cachyos-repo chaotic-repo), GPU_DRIVER (radeon|intel|virtio|swrast|none instead of GPU detection), PACMAN_CONF (pacman.conf to edit, default /etc/pacman.conf; for tests),
+# cachyos-repo chaotic-repo omacal), GPU_DRIVER (radeon|intel|virtio|swrast|none instead of GPU detection), PACMAN_CONF (pacman.conf to edit, default /etc/pacman.conf; for tests),
 # CACHYOS_LEVEL (force znver4|v4|v3|plain|none instead of CPU detection).
 set -euo pipefail
 
@@ -68,7 +68,8 @@ Stages:
             install the CachyOS kernel; they sit above [core]/[extra], so the next -Syu may swap in rebuilds).
             Runs before packages, whose -Syu syncs the new repo.
   packages  enable multilib, bootstrap yay, install packages/pacman.txt, packages/aur.txt, packages/flatpak.txt,
-            then the optional bundles chosen with --with
+            omacal (author's PKGBUILD from a pinned commit, sha256-checked,
+            built with makepkg as your user), then the optional bundles chosen with --with
   links     symlink config into $HOME (backs up real files once), shell dotfiles, GTK seed, theme seed,
             git hooks, web apps, librepods build
   system    (sudo) install system/etc files (udev rules, ...), /etc/environment host marker, enable services,
@@ -222,6 +223,25 @@ run() {
   else
     echo "    + $*"
     "$@"
+  fi
+}
+
+# default_handler DESKTOP MIME...: xdg-mime default, only when DESKTOP is installed and not already the default.
+default_handler() {
+  local desktop="$1" m todo=()
+  shift
+  command -v xdg-mime >/dev/null 2>&1 || return 0
+  if [ ! -f "/usr/share/applications/$desktop" ] && [ ! -f "$HOME/.local/share/applications/$desktop" ]; then
+    info "skip    xdg-mime $* -> $desktop (not installed)"
+    return 0
+  fi
+  for m in "$@"; do
+    [ "$(xdg-mime query default "$m" 2>/dev/null)" = "$desktop" ] || todo+=("$m")
+  done
+  if [ ${#todo[@]} -eq 0 ]; then
+    echo "    ok      xdg-mime $* -> $desktop"
+  else
+    run xdg-mime default "$desktop" "${todo[@]}"
   fi
 }
 
@@ -728,6 +748,9 @@ stage_packages() {
     fi
   fi
 
+  log "omacal"
+  install_omacal
+
   install_bundles
   flatpak_apps
 }
@@ -752,6 +775,51 @@ install_bundles() {
       fi
     fi
   done
+}
+
+# omacal (calendar for the bar popup) is neither in the repos nor in the AUR under the author's name (the AUR `omacal-bin` is a third-party,
+# older repackaging: not used). The author's own PKGBUILD (repackages the official release .deb, sha256 pinned inside it) is fetched from a PINNED
+# commit and must match OMACAL_PKGBUILD_SHA256 before makepkg runs, so a moved branch or a changed file is refused. makepkg runs as the normal user;
+# only the final `pacman -U` uses sudo. Skip with INSTALL_SKIP=omacal. To update: bump both pins after reviewing the new PKGBUILD.
+OMACAL_COMMIT=3578457aff6d4c95431176656928597250a2434d # x3me/omacal main, PKGBUILD pkgver 6.0.0
+OMACAL_PKGBUILD_SHA256=99c703793b4b10d126e47a3a712dffe7c921c7b56cd9ed3b4873eb53db9fdfe4
+OMACAL_PKGBUILD_URL="https://raw.githubusercontent.com/x3me/omacal/$OMACAL_COMMIT/packaging/aur/PKGBUILD"
+
+install_omacal() {
+  if skipped omacal; then
+    info "skipped omacal (INSTALL_SKIP)"
+    return 0
+  fi
+  if pacman -Qq omacal >/dev/null 2>&1; then
+    echo "    ok      omacal"
+    return 0
+  fi
+  changed
+  if [ "$DRY" = 1 ]; then
+    echo "    [dry-run] fetch $OMACAL_PKGBUILD_URL (sha256 $OMACAL_PKGBUILD_SHA256), makepkg -f --noconfirm, sudo pacman -U omacal-*.pkg.tar.*"
+    return 0
+  fi
+  if [ "$(uname -m)" != x86_64 ]; then
+    warn "omacal: the package is x86_64 only, skipped"
+    return 0
+  fi
+  local d pkg
+  d="$(mktmp)"
+  if ! curl -fsSL --proto '=https' -o "$d/PKGBUILD" "$OMACAL_PKGBUILD_URL"; then
+    warn "omacal: could not download the PKGBUILD, skipped (re-run, or install it by hand: github.com/x3me/omacal packaging/aur)"
+    return 0
+  fi
+  if [ "$(sha256sum "$d/PKGBUILD" | cut -d' ' -f1)" != "$OMACAL_PKGBUILD_SHA256" ]; then
+    warn "omacal: the downloaded PKGBUILD does not match the pinned sha256, refusing to build it"
+    return 0
+  fi
+  if ! (cd "$d" && PKGDEST="$d" makepkg -f --noconfirm); then
+    warn "omacal: makepkg failed, skipped"
+    return 0
+  fi
+  pkg="$(find "$d" -maxdepth 1 -name 'omacal-*.pkg.tar.*' ! -name '*.sig' | head -n1)"
+  [ -n "$pkg" ] || { warn "omacal: no package was built, skipped"; return 0; }
+  sudo pacman -U "${PAC_FLAGS[@]}" "$pkg"
 }
 
 flatpak_apps() {
@@ -836,6 +904,7 @@ stage_links() {
     link "$CONFIG_DIR/$app" "$HOME/.config/$app"
   done
   link "$CONFIG_DIR/brave-flags.conf" "$HOME/.config/brave-flags.conf"
+  link "$CONFIG_DIR/vesktop-flags.conf" "$HOME/.config/vesktop-flags.conf"
 
   log "Shell dotfiles"
   link "$CONFIG_DIR/shell/zshrc" "$HOME/.zshrc"
@@ -900,6 +969,11 @@ stage_links() {
       run xdg-mime default url-router.desktop x-scheme-handler/http x-scheme-handler/https
     fi
   fi
+
+  # Default handlers for the apps this setup uses (only when the app is installed; writes ~/.config/mimeapps.list)
+  default_handler org.gnome.Geary.desktop x-scheme-handler/mailto
+  default_handler omacal.desktop text/calendar
+  default_handler vesktop.desktop x-scheme-handler/discord
 
   log "Firefox translucent header"
   local ffdir="$HOME/.config/mozilla/firefox" ffp
@@ -1133,7 +1207,8 @@ if stage_on links || stage_on packages || stage_on repos; then
 Manual steps (not automated):
   - Hyprland fork (glass compositing; battlestation only): build/install from the fork repo. Stock `hyprland` works elsewhere.
   - Font Awesome 7 Pro (licensed) into ~/.local/share/fonts/FontAwesomePro/, and the Paper Mono font into ~/.local/share/fonts/.
-  - omacal (calendar for the bar popup; github.com/x3me/omacal, PKGBUILD in packaging/aur).
+  - omacal is built by the packages stage from the author's pinned PKGBUILD (skip: INSTALL_SKIP=omacal). It stores its Google sign-in in the Secret
+    Service: gnome-keyring is installed, but a keyring must be unlocked/created in your session (Seahorse or first sign-in prompt).
   - zellij claude-tabs: clone its repo to ~/code/crossatko/zellij-wc3cz-claude (or set CLAUDE_TABS_DIR), then re-run `--only links`.
   - Sign in: 1Password, Mullvad, `sudo tailscale up`, `jellyfin-qs login`, Brave/Firefox profiles.
   - Optional privacy deny-list for the pre-commit hook: ~/.config/dotfiles-private/denylist.

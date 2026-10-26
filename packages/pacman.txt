@@ -143,6 +143,7 @@ firefox
 mpv
 nautilus
 geary
+gnome-keyring
 gnome-disk-utility
 yt-dlp
 mpv-mpris
