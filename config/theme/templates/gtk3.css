@@ -181,3 +181,39 @@ window.csd combobox entry + button, window.csd .linked > entry + button.combo {
   font-weight: normal; min-height: 0; padding: 2px 6px;
 }
 window.csd treeview.view header button { border-radius: 0; background-color: transparent; }
+
+/* ---- Geary 46 (GTK3 + libhandy; selectors from its 46.0 UI files / geary.css, window class .geary-main-window) ----
+   Stock: every selection is a solid accent block (Wall's row:selected), our .sidebar fill above hides the folder
+   tree's selection, unread rows differ only by bold, all badges are #888. Here: calm accent-tint selection, an accent
+   edge + accent sender for unread conversations, read ones dimmed, starred in yellow, thread-count badges themed.
+   The folder tree is a GtkTreeView (no per-row nodes): only its selection is themable; its unread badges are drawn
+   with cairo in a fixed grey (CountBadge.UNREAD_BG_COLOR). Message bodies: templates/geary-user-style.css. */
+window.geary-main-window treeview.sidebar:selected,
+window.geary-main-window treeview.sidebar:selected:focus,
+window.geary-main-window treeview.sidebar:selected:backdrop { background-color: rgba({{accent.rgb}}, 0.22); color: {{fg}}; }
+
+/* conversation list (GtkListBox #conversation-list, rows row.conversation-list[.unread][.selected]) */
+window.geary-main-window row.conversation-list {
+  margin: 1px 6px; border-radius: 9px; background-image: none; box-shadow: none; color: {{fg}};
+  padding-left: 0.5em;
+}
+window.geary-main-window row.conversation-list:hover { background-color: rgba({{fg.rgb}}, 0.05); }
+window.geary-main-window row.conversation-list:selected,
+window.geary-main-window row.conversation-list.selected,
+window.geary-main-window row.conversation-list:selected:focus { background-color: rgba({{accent.rgb}}, 0.20); color: {{fg}}; }
+window.geary-main-window row.conversation-list:selected:backdrop { background-color: rgba({{accent.rgb}}, 0.14); color: {{fg}}; }
+/* read: sender / subject dimmed; unread: accent edge, accent sender, full-strength subject */
+window.geary-main-window row.conversation-list .participants,
+window.geary-main-window row.conversation-list .subject { color: {{fg_dim}}; }
+window.geary-main-window row.conversation-list .subject { font-size: 1em; }
+window.geary-main-window row.conversation-list .tertiary { opacity: 1; color: {{muted}}; font-size: 0.9em; }
+window.geary-main-window row.conversation-list.unread { box-shadow: inset 3px 0 0 {{accent}}; }
+window.geary-main-window row.conversation-list.unread .participants { color: {{accent}}; }
+window.geary-main-window row.conversation-list.unread .subject { color: {{fg}}; }
+window.geary-main-window row.conversation-list.unread .date { color: {{accent}}; }
+/* starred (the only image in a row) and the thread message count */
+window.geary-main-window row.conversation-list image, window.geary-main-window row.conversation-list:selected image { color: {{yellow}}; }
+window.geary-main-window row.conversation-list .count-badge { background: rgba({{fg.rgb}}, 0.15); color: {{fg}}; }
+window.geary-main-window row.conversation-list.unread .count-badge { background: {{accent}}; color: {{bg}}; }
+/* conversation view: search matches as an accent tint (stock: the solid selection colour) */
+window.geary-main-window .conversation-listbox *.geary-matched *.geary-match { background: rgba({{accent.rgb}}, 0.35); color: {{fg}}; }

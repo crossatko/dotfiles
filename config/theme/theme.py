@@ -4039,6 +4039,8 @@ def deploy(cfg, pal, mode=None):
     link_omarchy()
     link("~/.config/gtk-3.0/gtk.css", HOST_OUT / "gtk3.css")  # gtk.css + glass for CSD GTK3 windows (Gecko excluded)
     link("~/.config/gtk-4.0/gtk.css", HOST_OUT / "gtk4.css")  # gtk.css + translucent libadwaita (gtk_glass_*)
+    if (OUT / "geary-user-style.css").exists() and (shutil.which("geary") or Path("~/.config/geary").expanduser().is_dir()):
+        link("~/.config/geary/user-style.css", OUT / "geary-user-style.css")  # Geary message bodies (plain text), read at start
 
     # KDE/Dolphin: two scheme names so re-applying a changed palette is never a
     # no-op "already using this scheme" for plasma-apply-colorscheme.
