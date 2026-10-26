@@ -15,8 +15,10 @@ local monitor1 = {
 	cm = "srgb",
 	supports_hdr = 1,
 	supports_wide_color = 1,
-	sdrbrightness = 3,
-	sdrsaturation = 1.2,
+	sdrbrightness = 1,
+	sdrsaturation = 1.0,
+	sdr_min_luminance = 0.005,
+	sdr_max_luminance = 80,
 }
 
 local monitor2 = {

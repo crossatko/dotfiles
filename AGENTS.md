@@ -105,6 +105,7 @@ config/aerospace karabiner swiftbar  macOS only
   `PACMAN_CONF=<copy>` and PATH stubs (`sudo`, `pacman`, `lspci`); real runs happen on a clean Arch VM that the user drives. Say what stayed unverified.
 - **Packages:** repo names in `packages/pacman.txt`, AUR in `aur.txt`, Flatpaks in `flatpak.txt`; big/optional ones get `packages/optional/NAME.txt` (see Quickshell
   "Optional bundles"). Verify names with `pacman -Si` / the AUR RPC. Deliberately manual: docker group, GPU kernel drivers, Hyprland fork, licensed fonts.
+- **HDR (main OLED monitor, `hyprland/monitors.lua` monitor1):** auto HDR: `cm = "srgb"` + `render:cm_auto_hdr = 1`, 10-bit, `sdrbrightness = 1`, `sdrsaturation = 1.0`, `sdr_min_luminance = 0.005`, `sdr_max_luminance = 80`. HDR engages only for HDR content (native Wayland clients); the display blanks for a few seconds on each mode switch, which is why `cm = "hdr"` (always-on, SDR white ~250 nits via `sdr_max_luminance`) was tried and can be restored. The fork has no `max_luminance`/`min_luminance` monitor keys. Apply by editing and `hyprctl reload` (`hyprctl keyword` is refused under Lua). Avoid rapid cm changes while gamescope renders (DRM abort). Brave runs with WaylandWpColorManagerV1 disabled (`config/brave-flags.conf`).
 - **Reading:** grep/offset-limit the source instead of whole files; component headers and the READMEs named above are authoritative, this file is not.
 
 ## Theme (`config/theme`, details in its README)
