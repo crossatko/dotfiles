@@ -25,7 +25,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-# Generated per-machine theme (git-ignored). THEME_OUT_DIR (absolute, or relative to this folder) redirects it for tests.
+# Generated per-machine theme (git-ignored). THEME_OUT_DIR (absolute, or relative to this folder) redirects it for tests (render only: no links, no app reloads).
 OUT = ROOT / (os.environ.get("THEME_OUT_DIR") or "out")
 DEFAULT_DIR = ROOT / "default"    # tracked default theme (neutral wallpaper + its outputs), see `theme.py default`
 LOCAL_TOML = ROOT / "theme.local.toml"   # git-ignored per-machine selection, merged over theme.toml
@@ -4911,6 +4911,8 @@ def main(argv):
     PAL[0] = pal
     drop_marker()
     render_all(pal, cfg, mode, dark)
+    if os.environ.get("THEME_OUT_DIR"):   # a redirected out/ is a test render: never repoint the live ~/.config links or apps at it
+        return
     deploy(cfg, pal, mode)
     apply_brave(cfg, pal, mode)
     apply_thunderbird(cfg)
