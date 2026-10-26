@@ -3661,10 +3661,8 @@ def write_gtk_theme(pal, mode="dark"):
     root = Path.home() / ".local/share/themes/Wall"
     (root / "gtk-3.0").mkdir(parents=True, exist_ok=True)
     (root / "gtk-4.0").mkdir(parents=True, exist_ok=True)
-    stock = subprocess.run(
-        ["gresource", "extract", "/usr/lib/libgtk-3.so.0", f"/org/gtk/libgtk/theme/Adwaita/gtk-contained{variant}.css"],
-        capture_output=True, text=True,
-    ).stdout
+    stock = run_out(["gresource", "extract", "/usr/lib/libgtk-3.so.0",
+                     f"/org/gtk/libgtk/theme/Adwaita/gtk-contained{variant}.css"])  # glib2-devel + gtk3
     if stock:
         css3 = recolor_gtk_css(stock, pal, mode) + f'\n@import url("file://{OUT}/gtk.css");\n'
     else:  # no gresource tool: fall back to the named-colors-only version
@@ -3700,8 +3698,7 @@ def write_gtk_theme(pal, mode="dark"):
     _sub_file("~/.config/xsettingsd/xsettingsd.conf", r'^Net/ThemeName .*$', 'Net/ThemeName "Wall"')
     _sub_file("~/.config/xsettingsd/xsettingsd.conf", r"^Gtk/ButtonImages .*$", "Gtk/ButtonImages 0")
     _sub_file("~/.config/xsettingsd/xsettingsd.conf", r"^Gtk/MenuImages .*$", "Gtk/MenuImages 0")
-    if subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
-                      capture_output=True, text=True).stdout.strip("'\n ") != "Wall":
+    if run_out(["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"]).strip("'\n ") != "Wall":
         sh("gsettings set org.gnome.desktop.interface gtk-theme Wall")
     set_color_scheme(mode)
 
@@ -3710,8 +3707,7 @@ def set_color_scheme(mode):
     """freedesktop color-scheme (gsettings -> the Settings portal): Chromium / Electron / GTK4 / libadwaita apps follow it
     (running ones flip live); "default" would mean no preference and they start light."""
     want = "prefer-light" if mode == "light" else "prefer-dark"
-    if subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
-                      capture_output=True, text=True).stdout.strip("'\n ") != want:
+    if run_out(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"]).strip("'\n ") != want:
         sh(f"gsettings set org.gnome.desktop.interface color-scheme {want}")
 
 
@@ -3991,7 +3987,7 @@ BRAVE_DIR = Path.home() / ".config/BraveSoftware/Brave-Browser"
 
 
 def brave_running():
-    return subprocess.run(["pgrep", "-x", "brave"], capture_output=True).returncode == 0
+    return bool(run_out(["pgrep", "-x", "brave"]))
 
 
 def apply_brave(cfg, pal, mode=None):
@@ -4249,8 +4245,7 @@ def gen_qt_icons(pal, cfg, root=None):
 
 
 def current_icon_name():
-    r = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "icon-theme"], capture_output=True, text=True)
-    return r.stdout.strip().strip("'")
+    return run_out(["gsettings", "get", "org.gnome.desktop.interface", "icon-theme"]).strip().strip("'")
 
 
 def next_icon_name():
@@ -4305,6 +4300,15 @@ def apply_qt_layout(cfg):
 
 
 # --------------------------------------------------------------------- reload
+def run_out(cmd, timeout=15):
+    """stdout of a successful command, "" if it is missing, fails or hangs (minimal installs lack some tools)."""
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return r.stdout if r.returncode == 0 else ""
+
+
 def sh(cmd, timeout=10):
     try:
         subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout)
@@ -4348,8 +4352,7 @@ def reload_gtk():
     # GTK/libadwaita re-parse the user gtk.css when the color scheme / theme flips,
     # so blip both and put them straight back.
     def get(k):
-        r = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", k], capture_output=True, text=True)
-        return r.stdout.strip()
+        return run_out(["gsettings", "get", "org.gnome.desktop.interface", k]).strip()
 
     scheme, theme = get("color-scheme"), get("gtk-theme")
     if not scheme:
@@ -4389,9 +4392,9 @@ def refresh_nautilus():
     """A running Nautilus keeps its old icon theme for every new window, so the process
     itself must restart. Idle (no windows, just the background service): quit it, free.
     With windows open: leave them alone and say so."""
-    if subprocess.run(["pgrep", "-x", "nautilus"], capture_output=True).returncode != 0:
+    if not run_out(["pgrep", "-x", "nautilus"]):
         return
-    out = subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, text=True).stdout
+    out = run_out(["hyprctl", "clients", "-j"])
     try:
         wins = [c for c in json.loads(out) if c.get("class") == "org.gnome.Nautilus"]
     except ValueError:

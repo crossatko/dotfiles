@@ -13,6 +13,8 @@
 #   - Large or niche packages are opt-in bundles in packages/optional/*.txt (`./install.sh --with NAME`).
 
 # --- base / development
+# glib2-devel: `gresource`, theme.py extracts GTK3's stock stylesheet with it. libnotify: `notify-send` (screenshot/screenrec
+# scripts, bar). Both are also listed explicitly because nothing else guarantees them (libnotify only came via discord).
 git
 base-devel
 wget
@@ -44,6 +46,8 @@ socat
 gdb
 strace
 ncdu
+glib2-devel
+libnotify
 
 # --- hardware / services
 ddcutil
