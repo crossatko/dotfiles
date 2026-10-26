@@ -98,7 +98,6 @@ Item {
     onOpenChanged: {
         if (open) {
             sawRows = items.count > 0
-            noEmptyStrip = false
             footDelay = Math.min(Math.max(0, Notifs.all.values.length - items.count), sweepMax) * stagger
         } else {
             // rows that are about to slide out (not an active toast), top down, before the bottom row follows
@@ -162,14 +161,13 @@ Item {
     // history behind the toasts) is closed at once. Only what is there when Clear is pressed: a notification arriving
     // meanwhile is not in the snapshot.
     readonly property int sweepMax: 8
-    // After Clear empties the list the center closes as soon as the last card is gone, without the empty strip
-    // (`noEmptyStrip`); a notification arriving during the sweep keeps it open, and `clearing` lapses on its own.
+    // After Clear empties the list the center closes as soon as the last card is gone; a notification arriving during
+    // the sweep keeps it open, and `clearing` lapses on its own.
     property bool clearing: false
-    property bool noEmptyStrip: false
     onClearingChanged: syncFoot()
     // while Clear is in progress the bottom row slides out first; the cards start once it has (mostly) gone
     readonly property real sweepBase: clearing && footProgress > 0.001 ? Theme.popupMoveMs * 0.7 : 0
-    Timer { id: clearLapse; interval: 3000; onTriggered: { stack.clearing = false; stack.noEmptyStrip = false } }
+    Timer { id: clearLapse; interval: 3000; onTriggered: { stack.clearing = false } }
     Connections {
         target: items
         function onCountChanged() {
@@ -182,7 +180,6 @@ Item {
     function clearAll() {
         clearing = Popups.name === "notif"
         if (clearing) clearLapse.restart()
-        noEmptyStrip = clearing
         const animated = {}
         let k = 0
         for (let i = rep.count - 1; i >= first && k < sweepMax; i--) {      // bottom up
@@ -214,17 +211,8 @@ Item {
         y: 0                                  // the cards start where the toasts sit
         width: stack.width
         // list mode: as tall as the cards, up to the room there is (less the bottom row); toast mode: the toasts
-        height: stack.open ? Math.min(Math.max(column.height - stack.tail, emptyStrip.visible ? emptyStrip.implicitHeight : 0), Math.max(0, stack.maxHeight - stack.footFull)) : column.height
+        height: stack.open ? Math.min(Math.max(column.height - stack.tail, 0), Math.max(0, stack.maxHeight - stack.footFull)) : column.height
         readonly property real topY: { void rep.count; const it = rep.itemAt(stack.first); return it ? it.y : 0 }
-
-        NotifEmpty {
-            id: emptyStrip
-            width: view.width
-            x: (1 - stack.progress) * (view.width + 40)        // slides in from the right like the cards
-            opacity: (stack.open || stack.animating) && stack.liveRows === 0 && !stack.noEmptyStrip ? 1 : 0
-            visible: opacity > 0.01
-            Behavior on opacity { NumberAnimation { duration: 120 } }
-        }
 
         Column {
             id: column
