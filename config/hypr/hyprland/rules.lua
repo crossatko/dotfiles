@@ -362,5 +362,9 @@ hl.layer_rule({ match = { namespace = "qs-.*" }, ignore_alpha = 0.1 })
 -- Hyprland's own layer fade on map / unmap would run on top of it with the HYPRLAND speed and curve; off for them.
 -- (The launcher's equivalent is switched with its "Like popups" setting in managed.lua.)
 hl.layer_rule({ match = { namespace = "qs-popup" }, no_anim = true })
+-- Desktop clock (Quickshell DeskClock.qml, Settings > Desktop clock) sits on the bottom layer, like a video wallpaper's
+-- mpvpaper (-l bottom): within a layer a NEGATIVE order is drawn on top (Renderer sorts by order, highest first), so the
+-- clock stays above the wallpaper whichever maps last (a wallpaper change restarts mpvpaper). pcall: optional rule key.
+pcall(hl.layer_rule, { match = { namespace = "qs-deskclock" }, order = -1 })
 -- Fullscreen overlays with a card (Settings, ModalMenu kinds) are transparent around the card, so the 0.1 rule above
 -- blurs only the card.

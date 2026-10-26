@@ -51,7 +51,10 @@ PanelWindow {
     }
     function show(k, v, m) {
         focusScreen()
-        kind = k; value = Math.max(0, Math.min(1, v)); muted = m
+        const nv = Math.max(0, Math.min(1, v))
+        if (shown && (nv !== value || k !== kind)) lensHold.restart()
+        else if (!shown && !m) lensHold.restart()
+        kind = k; value = nv; muted = m
         shown = true
         hideTimer.restart()
     }
@@ -77,13 +80,44 @@ PanelWindow {
         if (n) osd.show("brightness", Brightness.percentOf(n) / 100, false)
     }
 
+    // while the level changes, a small glass lens rides on the end of the fill (GlassLens, Settings > Glass values); it
+    // grows on a change, stays while changes keep coming and shrinks `lensHold` after the last one (popup motion tokens;
+    // none = instant). Nothing of it exists at rest.
+    Timer { id: lensHold; interval: Motion.baseMs * 2 }
+    readonly property bool lensWanted: lensHold.running && shown && !muted
+    property real grow: 0
+    onLensWantedChanged: {
+        growAnim.stop()
+        growAnim.to = lensWanted ? 1 : 0
+        growAnim.easing.type = lensWanted ? Theme.popupEaseOpen : Theme.popupEaseClose
+        growAnim.duration = lensWanted ? Math.round(Theme.popupOpenMs * Math.max(0, Math.min(1, 1 - grow)))
+                                       : Math.round(Theme.popupCloseMs * Math.max(0, Math.min(1, grow)))
+        if (growAnim.duration <= 0) grow = growAnim.to
+        else growAnim.start()
+    }
+    NumberAnimation { id: growAnim; target: osd; property: "grow" }
+    readonly property real lensSize: 14 + 10 * grow
+    readonly property point lensC: {
+        void [meter.fillWidth, meter.x, meter.width, card.width, card.height]
+        return meter.mapToItem(card, meter.fillWidth, meter.height / 2)
+    }
+    GlassLens {
+        id: lens
+        host: osd.grow > 0.004 ? card : null
+        center: osd.lensC
+        size: osd.lensSize
+        amount: Math.max(0, Math.min(1, osd.grow * 3))
+    }
+
     Rectangle {
+        id: card
         readonly property bool isGlassItem: true
         anchors.fill: parent
         radius: Theme.radius
         color: Theme.alpha(Theme.bg, Theme.cardFill)
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
+        GlassEdge { anchors.fill: parent; radius: parent.radius }   // the rim without the compositor's glass
 
         RowLayout {
             anchors { fill: parent; leftMargin: 18; rightMargin: 18 }
@@ -94,6 +128,7 @@ PanelWindow {
                 text: osd.kind === "brightness" ? "\uf185" : Icons.volumeGlyph(osd.muted, osd.value)
             }
             Meter {
+                id: meter
                 Layout.fillWidth: true
                 radius: Math.min(height / 2, Theme.inner(Theme.radius, 18))
                 color: Theme.alpha(Theme.fg, 0.15)

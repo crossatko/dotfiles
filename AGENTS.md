@@ -172,6 +172,23 @@ config/aerospace karabiner swiftbar  macOS only
   the desktop is really on. Image/loop wallpapers show the still. Test hooks: `QS_LOCK_PAM_DIR`,
   `QS_LOCK_PAM_SERVICE`, `QS_LOCK_WALLPAPER`, `QS_LOCK_VIDEO`, `QS_LOCK_ARGS`, `QS_LOCK_CLOCK` (fixed clock text; several separated by spaces cycle every 3 s), `QS_WALLPAPERS_FILE`. Revert to hyprlock: point
   the two `lock_cmd`s and the bind back at `hyprlock` (`hyprlock.conf` is untouched).
+- **Shell glass** (all optics from Settings > Glass, `GlassTuneCtl.effective`): `GlassLens.qml` = the shared lens (`shaders/sliderlens.frag`,
+  refracts the shell's own card, same on stock), only alive while `amount` > 0 (Slider handle while dragged, Toggle knob while pressed /
+  sliding after a click, OSD level while it changes; `qs ipc call osd level volume|brightness <0-100>` shows the pill for tests).
+  Toggle's knob slide runs on the popup move tokens. `GlassEdge.qml` (inside every `isGlassItem` card) = 1 px rim lit from `light_angle`, only
+  without `Theme.glass`. Shell-only Glass keys (`shell: true` in `GlassTuneCtl.opts`, group "Shell", e.g. `edge`) are saved in glass.json
+  but never sent to Hyprland (managed.lua ignores unknown keys). Without solid_glass (stock) the Glass page is still listed and edits /
+  saves the values for the shell only (`GlassTuneCtl.editable`). Caveat: a workspace-switch lens on the bar was tried and dropped (on a flush
+  bar it refracts nothing but chip pixels: a grey squircle that blurs the active chip).
+- **Desktop clock** (opt-in, Settings > Desktop clock, `DeskClockPrefs` -> deskclock.json, `QS_DESKCLOCK_FILE`, `qs ipc call deskclock
+  get|set|unset|reset|hideOn|showOn`): `DeskClock.qml` = one bottom-layer window per shown monitor (`qs-deskclock`, empty blur region,
+  clock area only; `rules.lua` layer rule `order = -1` keeps it above mpvpaper, which is on the bottom layer too), `DeskClockView.qml` =
+  GlassText per character refracting what the desktop shows: the still / image (`LockWallpapers.stillFor`, cover crop like hyprpaper) or,
+  for a play-once video wallpaper, `DeskClockVideo.qml` = the same baked clip in QtMultimedia following the desktop player: parked on the
+  held frame (paused, no decode), the station file write (burst start, winddown.lua) plays the same burst from the same frame, a timer
+  re-aimed by each position report pauses at the burst end (measured in the nested session against mpv time-pos: within ~1 frame during
+  the burst, end within 0-2 frames; ~4 % CPU of one core while a burst plays, 0 at rest). Nothing is drawn behind the lettering.
+  `DeskClockPreview` = 16:9 Settings preview (still only). Without `Theme.glass` the lettering is GlassTextFlat (as the lock).
 - `Theme.edgeGap` is NOT the user's `edgeGap` key (that is `Theme.gapOut`).
 - Appearance (`appearance.json`) is written only by `Appearance.qml`; Hyprland side is `hypr/hyprland/managed.lua` (loaded last via `pcall(require)`, no
   hand-written settings there). Adding keys: deploy theme files, then Hyprland files, then Quickshell files (every intermediate state must load). Animation base

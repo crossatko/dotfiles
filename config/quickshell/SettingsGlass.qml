@@ -3,7 +3,9 @@ import QtQuick
 import QtQuick.Layouts
 
 // Settings -> Glass: the decoration:blur:solid_glass:* options of the Hyprland fork, grouped as Lens / Light /
-// Material, plus the tint (A / R / G / B). Only listed while Theme.glass is on (Settings.qml).
+// Material, plus the tint (A / R / G / B), and the shell-only options (group Shell, e.g. the flat card edge).
+// The shell's own glass (slider / toggle / OSD lenses, glass lettering, flat card edge) uses these values too, so the
+// page is also there without solid_glass (stock Hyprland): it then edits and saves them for the shell only.
 // The values are those of the active light / dark mode; each mode keeps its own (GlassTuneCtl, glass.json).
 // Everything goes through the GlassTuneCtl singleton: a drag is applied live (throttled `hyprctl eval`) and saved
 // (debounced) in glass.json, which hypr/hyprland/managed.lua applies at every config load on top of settings.lua.
@@ -43,19 +45,20 @@ Item {
             visible: !pg.tune.ready
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            color: pg.tune.guard === "error" ? Theme.red : Theme.muted
+            color: pg.tune.unsupported ? Theme.muted : pg.tune.guard === "error" ? Theme.red : Theme.muted
             font.pixelSize: Theme.fontSmall
-            text: pg.tune.guard === "error" ? "Disabled: " + pg.tune.guardError : "Checking the compositor instance..."
+            text: pg.tune.unsupported ? "This Hyprland draws no solid_glass: these values only shape the shell's own glass (lenses, glass lettering, flat card edge)."
+                : pg.tune.guard === "error" ? "Disabled: " + pg.tune.guardError : "Checking the compositor instance..."
         }
 
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 12
-            enabled: pg.tune.ready
-            opacity: pg.tune.ready ? 1 : 0.4
+            enabled: pg.tune.editable
+            opacity: pg.tune.editable ? 1 : 0.4
 
             Repeater {
-                model: ["Lens", "Light", "Material"]
+                model: ["Lens", "Light", "Material", "Shell"]
                 ColumnLayout {
                     id: grp
                     required property string modelData
@@ -63,7 +66,11 @@ Item {
                     Layout.fillWidth: true
                     spacing: 12
 
-                    SectionHead { title: grp.modelData; Layout.topMargin: grp.index > 0 ? 6 : 0 }
+                    SectionHead {
+                        title: grp.modelData
+                        detail: grp.modelData === "Shell" ? "drawn by the shell, never sent to Hyprland" : ""
+                        Layout.topMargin: grp.index > 0 ? 6 : 0
+                    }
                     Repeater {
                         model: pg.tune.opts.filter(o => o.group === grp.modelData)
                         delegate: optRow
@@ -144,8 +151,8 @@ Item {
                 Layout.fillWidth: true
                 Layout.topMargin: 6
                 spacing: 8
-                Btn { objectName: "btn-copy-changed"; text: "Copy changed as Lua"; inset: 18; implicitHeight: 26; onClicked: pg.tune.copy(true) }
-                Btn { objectName: "btn-copy-all"; text: "Copy all as Lua"; inset: 18; implicitHeight: 26; onClicked: pg.tune.copy(false) }
+                Btn { objectName: "btn-copy-changed"; visible: pg.tune.ready; text: "Copy changed as Lua"; inset: 18; implicitHeight: 26; onClicked: pg.tune.copy(true) }
+                Btn { objectName: "btn-copy-all"; visible: pg.tune.ready; text: "Copy all as Lua"; inset: 18; implicitHeight: 26; onClicked: pg.tune.copy(false) }
                 Btn { objectName: "btn-reset-all"; text: "Reset all"; inset: 18; implicitHeight: 26; enabledLook: pg.anyChanged; onClicked: pg.tune.reset("all") }
                 Item { Layout.fillWidth: true }
             }
@@ -156,7 +163,8 @@ Item {
                 font.pixelSize: Theme.fontCaption
                 text: (pg.tune.status ? pg.tune.status + "\n" : "")
                     + (pg.tune.nestedOnly ? "Applies to the nested dev instance only\n" : "")
-                    + "Changes apply to Hyprland while you drag and are saved in glass.json, which overrides the solid_glass block of settings.lua at every config load."
+                    + (pg.tune.ready ? "Changes apply to Hyprland while you drag and are saved in glass.json, which overrides the solid_glass block of settings.lua at every config load."
+                                     : "Changes apply to the shell at once and are saved in glass.json.")
             }
         }
     }

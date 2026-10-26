@@ -170,6 +170,7 @@ PanelWindow {
         color: Theme.alpha(Theme.bg, Theme.cardFill)
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
+        GlassEdge { anchors.fill: parent; radius: parent.radius }   // the rim without the compositor's glass
 
         opacity: Math.max(0, Math.min(1, host.t))
         // glass region scale (Glass.qml): 1, except the last part of the motion on a compositor whose glass cannot fade

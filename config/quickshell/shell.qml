@@ -30,6 +30,7 @@ ShellRoot {
     Osd { id: osd; bars: root.bars }
     BtNotifier {}
     Lock { id: lockService }
+    DeskClock {}       // opt-in glass clock on the desktop (Settings > Desktop clock)
 
     // one popup host per screen; Popups.* says which is open
     Variants {
@@ -71,9 +72,11 @@ ShellRoot {
     }
 
     // qs ipc call osd brightness   (shows the focused display's brightness)
+    // qs ipc call osd level volume|brightness <0-100>   (shows the pill with that level; tests / previews, changes nothing)
     IpcHandler {
         target: "osd"
         function brightness(): void { osd.brightness() }
+        function level(kind: string, percent: int): void { osd.show(kind === "brightness" ? "brightness" : "volume", percent / 100, false) }
     }
 
     // qs ipc call brightness step 5 | step -5 | set 60   (brightness keys; focused monitor, DDC/CI or backlight)

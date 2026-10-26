@@ -58,6 +58,7 @@ Rectangle {
     color: Theme.alpha(Theme.bg, Theme.cardFill)
     border.width: 1
     border.color: critical ? Theme.alpha(Theme.red, 0.8) : Theme.alpha(Theme.overlay, 0.5)
+    GlassEdge { anchors.fill: parent; radius: parent.radius }   // the rim without the compositor's glass
 
     // the one dismiss path (close button, right click, swipe, click): the owner animates the card out and then closes
     // the notification

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Lock screen video wallpaper info: `lock-video <connector>` prints one JSON line
-{"file", "bursts": [t0..tK], "idx", "cyc"} for the play-once video wallpaper (mpvpaper + theme/mpv/winddown.lua) of that
+{"file", "bursts": [t0..tK], "idx", "cyc", "station", "tag"} for the play-once video wallpaper (mpvpaper + theme/mpv/winddown.lua) of that
 output, or nothing (exit 1) when it has none (image / loop wallpaper, no baked file, player gone).
 While an ext-session-lock is held the compositor draws only the lock surfaces, so the lock plays the same baked clip
-itself (LockVideo.qml): `file` = the player's file, burst i = bursts[i]..bursts[i+1], `idx` = the NEXT burst (the held
+itself (LockVideo.qml; the desktop clock, DeskClockVideo.qml, follows the desktop player with the same info): `file` = the player's file, burst i = bursts[i]..bursts[i+1], `idx` = the NEXT burst (the held
 frame is bursts[idx]). Read-only: the state file written by theme.py ($XDG_RUNTIME_DIR/theme-video/<conn>.json), the
 player's /proc cmdline (script-opts winddown-bursts / -cyc / -station) and its station file."""
 import json
@@ -52,7 +52,8 @@ def main(conn):
             idx = int(n) % k
     except OSError:
         pass
-    print(json.dumps({"file": st["file"], "bursts": bursts, "idx": idx, "cyc": cyc}))
+    print(json.dumps({"file": st["file"], "bursts": bursts, "idx": idx, "cyc": cyc,
+                      "station": opts.get("winddown-station", ""), "tag": opts.get("winddown-tag", "")}))
     return 0
 
 

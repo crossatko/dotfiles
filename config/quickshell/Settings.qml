@@ -29,7 +29,8 @@ FloatingWindow {
         { id: "appearance", title: "Appearance", icon: "\uf53f", source: "SettingsAppearance.qml" },
         { id: "animations", title: "Animations", icon: "\uf008", source: "SettingsAnimations.qml" },
         { id: "lock", title: "Lock screen", icon: "\uf023", source: "SettingsLock.qml" },
-        { id: "glass", title: "Glass", icon: "\uf0d0", source: "SettingsGlass.qml", glassOnly: true }
+        { id: "deskclock", title: "Desktop clock", icon: "\uf017", source: "SettingsDeskClock.qml" },
+        { id: "glass", title: "Glass", icon: "\uf0d0", source: "SettingsGlass.qml" }
     ]
     readonly property var pages: allPages.filter(p => !p.glassOnly || Theme.glass)
     readonly property var glassCtl: GlassTuneCtl       // instantiates the controller (and its `glasstune` IPC target) with the shell
@@ -100,6 +101,7 @@ FloatingWindow {
         color: Theme.alpha(Theme.bg, Theme.glass ? Theme.cardFill : 0.85)   // glass behind it (Glass.qml); without solid_glass: blurred by the qs-modal window rule
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
+        GlassEdge { anchors.fill: parent; radius: parent.radius }   // the rim without the compositor's glass
 
         Keys.onEscapePressed: win.close()    // keys a focused page leaves unhandled bubble up to here
 

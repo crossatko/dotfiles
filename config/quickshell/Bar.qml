@@ -312,6 +312,7 @@ PanelWindow {
             color: Theme.alpha(Theme.bg, Theme.barFill)
             border.width: Theme.barBorder
             border.color: Theme.alpha(Theme.overlay, 0.55)
+            GlassEdge { anchors.fill: parent; radius: parent.radius }   // the rim without the compositor's glass
         }
         // empty bar space (the popup scrim has the bar cut out of its input region): a click closes any open popup
         MouseArea {

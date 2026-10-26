@@ -118,6 +118,7 @@ PanelWindow {
         color: Theme.alpha(Theme.bg, Theme.glass ? Theme.cardFill : 0.85)   // glass behind it (Glass.qml); without solid_glass: blurred by the qs-.* layer rule
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
+        GlassEdge { anchors.fill: parent; radius: parent.radius }   // the rim without the compositor's glass
 
         MouseArea { anchors.fill: parent }   // clicks on the card don't reach the close-scrim
 

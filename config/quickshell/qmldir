@@ -113,6 +113,14 @@ LockReveal 1.0 LockReveal.qml
 LockPreview 1.0 LockPreview.qml
 singleton LockPrefs 1.0 LockPrefs.qml
 singleton LockWallpapers 1.0 LockWallpapers.qml
+singleton DeskClockPrefs 1.0 DeskClockPrefs.qml
 PrefSlider 1.0 PrefSlider.qml
 PrefToggle 1.0 PrefToggle.qml
 SettingsLock 1.0 SettingsLock.qml
+GlassLens 1.0 GlassLens.qml
+GlassEdge 1.0 GlassEdge.qml
+DeskClock 1.0 DeskClock.qml
+DeskClockView 1.0 DeskClockView.qml
+DeskClockPreview 1.0 DeskClockPreview.qml
+SettingsDeskClock 1.0 SettingsDeskClock.qml
+DeskClockVideo 1.0 DeskClockVideo.qml

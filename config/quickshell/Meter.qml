@@ -11,12 +11,14 @@ Rectangle {
     property int animMs: 0
     property int easingType: Easing.OutCubic
     property bool animate: true
+    readonly property real fillWidth: fill.width     // the drawn fill (mid-animation too): where a lens sits (Osd)
 
     implicitHeight: 6
     radius: Math.min(height / 2, Theme.radius)
     color: Theme.alpha(Theme.fg, 0.14)
 
     Rectangle {
+        id: fill
         width: Math.max(0, Math.min(1, m.value)) * parent.width
         height: parent.height
         radius: parent.radius

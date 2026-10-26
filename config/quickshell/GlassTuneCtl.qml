@@ -24,6 +24,11 @@ import Quickshell.Hyprland
 // With `nestedOnly` (the dev copy) it refuses to run unless that signature is set, belongs to a compositor this
 // shell is a client of (wl_socket == WAYLAND_DISPLAY) and is NOT the live session (wl_socket "wayland-1").
 // The real config sets nestedOnly: false and talks to its own (current) instance.
+//
+// Shell-only options (`shell: true` in opts, group "Shell"): drawn by the shell alone (GlassEdge), never sent to or read
+// from Hyprland, saved in glass.json like the rest (managed.lua applies only the solid_glass keys it knows).
+// Without solid_glass (stock Hyprland: `unsupported`) the page still edits and saves every value: the shell's own glass
+// (GlassLens, GlassEdge, the glass lettering) uses them through `effective`; nothing goes to the compositor.
 Singleton {
     id: ctl
 
@@ -47,10 +52,13 @@ Singleton {
         { key: "clarity",            group: "Material", label: "Clarity",         min: 0,   max: 1,   def: 1,    dec: 2 },
         { key: "frost",              group: "Material", label: "Frost",           min: 0,   max: 16,  def: 3,    dec: 1, unit: "px" },
         { key: "darkening",          group: "Material", label: "Darkening",       min: 0,   max: 1,   def: 0.35, dec: 2 },
-        { key: "saturation",         group: "Material", label: "Saturation",      min: 0,   max: 3,   def: 1.25, dec: 2 }
+        { key: "saturation",         group: "Material", label: "Saturation",      min: 0,   max: 3,   def: 1.25, dec: 2 },
+        { key: "edge",               group: "Shell",    label: "Flat card edge",  min: 0,   max: 1,   def: 0.5,  dec: 2, shell: true }
     ]
     readonly property int tintDef: 0x14EEF5FF          // 0xAARRGGBB, alpha = absorption
-    readonly property var keys: opts.map(o => o.key).concat(["tint"])
+    readonly property var keys: opts.filter(o => !o.shell).map(o => o.key).concat(["tint"])   // solid_glass (Hyprland)
+    readonly property var shellKeys: opts.filter(o => o.shell).map(o => o.key)                // the shell's own
+    readonly property var allKeys: keys.concat(shellKeys)
 
     // current values; replaced as a whole so bindings update
     property var values: defaults()
@@ -70,14 +78,14 @@ Singleton {
     }
     function defOf(key) { return key === "tint" ? tintDef : spec(key).def }
     function isChanged(key) { return Math.abs(values[key] - defOf(key)) > 1e-6 }
-    readonly property var changedKeys: keys.filter(k => Math.abs(values[k] - defOf(k)) > 1e-6)
+    readonly property var changedKeys: allKeys.filter(k => Math.abs(values[k] - defOf(k)) > 1e-6)
 
     // the mode `overrides` / `tintFromBg` belong to (glass.json section), and the tint colour source of that mode
     property string loadedMode: ""
     property var tintFromBgSet: undefined           // explicit tint_from_bg of loadedMode, undefined = the mode's default
     readonly property bool tintFromBg: tintFromBgSet !== undefined ? tintFromBgSet : loadedMode === "light"
     function setTintFromBg(on) {
-        if (!ready) return
+        if (!editable) return
         tintFromBgSet = on
         dirty.tint = true
         throttle.start()
@@ -95,7 +103,7 @@ Singleton {
     property var overrides: ({})
     property string status: ""          // last result line, for the page
     function set(key, x) {
-        if (!ready || keys.indexOf(key) < 0 || typeof x !== "number" || isNaN(x)) return false
+        if (!editable || allKeys.indexOf(key) < 0 || typeof x !== "number" || isNaN(x)) return false
         const c = clamp(key, x)
         const v = Object.assign({}, values)
         v[key] = c
@@ -103,13 +111,15 @@ Singleton {
         const o = Object.assign({}, overrides)
         o[key] = c
         overrides = o
-        dirty[key] = true
-        throttle.start()
+        if (keys.indexOf(key) >= 0 && ready) {   // shell-only keys and a compositor without solid_glass: nothing to send
+            dirty[key] = true
+            throttle.start()
+        }
         saver.restart()
         return true
     }
     function reset(key) {
-        if (key === "all") { for (const k of keys) set(k, defOf(k)); return true }
+        if (key === "all") { for (const k of allKeys) set(k, defOf(k)); return true }
         return set(key, defOf(key))
     }
 
@@ -119,9 +129,12 @@ Singleton {
     property string guard: "checking"
     property string guardError: ""
     readonly property bool ready: guard === "ok"
-    // what shell-drawn glass (slider lens, lock screen) uses: the live values when the compositor has solid_glass,
-    // else the page's defaults; and the tint as a colour (alpha = absorption), from the theme bg when tintFromBg
-    readonly property var effective: Theme.glass && ready ? values : defaults()
+    // values can be edited (and are used by the shell's own glass): the compositor answered, or it has no solid_glass
+    readonly property bool editable: ready || unsupported
+    // what shell-drawn glass (lenses, glass lettering, flat card edge) uses: the live values when the compositor has
+    // solid_glass, the saved ones when it has none (stock), the page's defaults until that is known; and the tint as a
+    // colour (alpha = absorption), from the theme bg when tintFromBg
+    readonly property var effective: editable ? values : defaults()
     readonly property color effectiveTint: {
         const t = effective.tint
         const a = ((t >>> 24) & 255) / 255
@@ -242,7 +255,7 @@ Singleton {
         try { file = JSON.parse(store.text()) } catch (e) {}
         if (typeof file !== "object" || file === null || Array.isArray(file)) file = {}
         const o = {}
-        for (const k of keys) if (overrides[k] !== undefined) o[k] = overrides[k]
+        for (const k of allKeys) if (overrides[k] !== undefined) o[k] = overrides[k]
         if (tintFromBgSet !== undefined) o.tint_from_bg = tintFromBgSet
         let out
         if (loadedMode === "light") {
@@ -268,7 +281,7 @@ Singleton {
         try {
             const f = JSON.parse(store.text())
             const p = Theme.mode === "light" ? (f.light || {}) : f
-            for (const k of keys) if (typeof p[k] === "number" && isFinite(p[k])) o[k] = clamp(k, p[k])
+            for (const k of allKeys) if (typeof p[k] === "number" && isFinite(p[k])) o[k] = clamp(k, p[k])
             if (typeof p.tint_from_bg === "boolean") fb = p.tint_from_bg
         } catch (e) {}
         overrides = o
@@ -296,7 +309,7 @@ Singleton {
         function onRawEvent(event) {
             if (event.name !== "configreloaded" || !ctl.ready) return
             if (saver.running || throttle.running || applyProc.running) {
-                for (const k of Object.keys(ctl.overrides)) ctl.dirty[k] = true
+                for (const k of Object.keys(ctl.overrides)) if (ctl.keys.indexOf(k) >= 0) ctl.dirty[k] = true
                 if (ctl.tintFromBgSet !== undefined) ctl.dirty.tint = true
                 throttle.restart()
             } else ctl.load()

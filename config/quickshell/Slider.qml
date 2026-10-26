@@ -53,7 +53,7 @@ Item {
     property real grow: 0
     onDownChanged: {
         if (down)
-            host = findHost()
+            host = lens.findHost(sl)
         settling = !down && Theme.popupCloseMs > 0
         if (settling) settle.restart()
         held = down
@@ -71,10 +71,9 @@ Item {
     Timer { id: settle; interval: Math.max(1, Theme.popupCloseMs); onTriggered: sl.settling = false }
     readonly property bool lightBg: Theme.bg.hslLightness > 0.5
     // The lens needs a real GPU scene graph and the compiled shader. Software backend (QT_QUICK_BACKEND=software) or a
-    // shader that failed to load (`lensBroken`, set once by the effect): no lens, the handle itself grows to the lens
+    // shader that failed to load (GlassLens.broken, set once by the effect): no lens, the handle itself grows to the lens
     // size with the same animation instead, so a slider is never broken or invisible.
-    property bool lensBroken: false
-    readonly property bool lensUsable: GraphicsInfo.api !== GraphicsInfo.Software && !lensBroken
+    readonly property bool lensUsable: lens.usable
     readonly property bool lensOn: lensUsable && (down || grow > 0.004) && host !== null
 
     Rectangle {
@@ -97,78 +96,24 @@ Item {
 
     // the card to capture: nearest glass card (popup card, Settings card), else the item right under the window root
     property Item host: null
-    function findHost() {
-        let top = sl
-        // isGlassItem is a duck-typed marker (see Glass.qml), unknown to qmllint on Item
-        for (let a = sl.parent; a; a = a.parent) {
-            if (a.isGlassItem === true && a.parent)   // qmllint disable missing-property
-                return a
-            if (a.parent)
-                top = a
-        }
-        return top !== sl && top.parent ? top : null
-    }
     // lens geometry in host coordinates: 16 px (the handle) -> 28 px (1.75x), always square, centred on the handle
     readonly property real lensSize: Math.max(4, 16 + 12 * grow)
     readonly property point lensC: {
         void [shown, grow, handle.x, width, height, x, y, host ? host.width + host.height : 0]
         return host ? sl.mapToItem(host, handle.x + 8, sl.height / 2) : Qt.point(0, 0)
     }
-    // Settings > Glass: the live solid_glass values when the compositor has them (Theme.glass and GlassTuneCtl read
-    // them back); otherwise (stock Hyprland, other blur variant, not read yet) the page's built-in defaults. The lens is
-    // in-app, so it works without the compositor's glass either way.
-    readonly property var gv: GlassTuneCtl.effective
-
-    Loader {
-        active: sl.lensOn
-        parent: sl.host ? sl.host.parent : sl
-        z: 1000
-        sourceComponent: Component {
-            ShaderEffect {
-                id: fx
-                onStatusChanged: if (status === ShaderEffect.Error) { console.warn("Slider lens shader failed, lens disabled:", log); sl.lensBroken = true }
-                // the card plus a margin, so the lens and its shadow may overhang the card edge
-                readonly property real m: 24
-                x: sl.host.x - m; y: sl.host.y - m
-                width: sl.host.width + 2 * m; height: sl.host.height + 2 * m
-                opacity: sl.host.opacity
-                // in the visual tree (a zero-size child), not a parentless property value: a parentless source keeps a
-                // stale window when its window is hidden mid-animation (segfault in QQuickWindowPrivate::dirtyItem)
-                ShaderEffectSource {
-                    id: src
-                    width: 0; height: 0
-                    sourceItem: sl.host
-                    sourceRect: Qt.rect(-24, -24, sl.host.width + 48, sl.host.height + 48)
-                    // a shader that failed to load: the card stays drawn (and the lens is dropped, lensBroken)
-                    hideSource: fx.status !== ShaderEffect.Error
-                    live: true
-                    smooth: true
-                }
-                property var source: src
-                property size itemSize: Qt.size(width, height)
-                property point lensCenter: Qt.point(sl.lensC.x + m, sl.lensC.y + m)
-                property real lensHalf: sl.lensSize / 2
-                // handle corner radius -> fully round; corners: circular when the theme radius already makes the
-                // handle a circle (R >= 8), else a squircle
-                property real radius: Math.min(8, Theme.radius) * sl.lensSize / 16 + (sl.lensSize / 2 - Math.min(8, Theme.radius) * sl.lensSize / 16) * Math.max(0, Math.min(1, sl.grow))
-                property real power: Theme.radius >= 8 ? 2 : 4
-                property real amount: Math.max(0, Math.min(1, sl.grow * 3))
-                property real refraction: sl.gv.refraction
-                property real bulb: sl.gv.bulb
-                property real depth: sl.gv.depth
-                property real edgeCurve: sl.gv.edge_curve
-                property real aberration: sl.gv.aberration
-                property point lightDir: Qt.point(Math.cos(sl.gv.light_angle * Math.PI / 180), -Math.sin(sl.gv.light_angle * Math.PI / 180))
-                property real specular: sl.gv.specular_intensity
-                property real specPower: sl.gv.specular_power
-                property real sheen: sl.gv.sheen
-                property real frost: sl.gv.frost + (1 - sl.gv.clarity) * 3   // clarity < 1 mixes in the big blur there
-                property real mag: 1 + 0.35 * sl.gv.depth
-                // tint, darkening, saturation: not used (the card's compositor glass already applies them, see the shader)
-                property real shade: sl.lightBg ? 0.18 : 0.32
-                fragmentShader: Qt.resolvedUrl("shaders/sliderlens.frag.qsb")
-            }
-        }
+    // the lens itself (GlassLens: Settings > Glass values, in-app, so it works without the compositor's glass too)
+    GlassLens {
+        id: lens
+        host: sl.lensOn ? sl.host : null
+        center: sl.lensC
+        size: sl.lensSize
+        // handle corner radius -> fully round; corners: circular when the theme radius already makes the
+        // handle a circle (R >= 8), else a squircle
+        cornerRadius: Math.min(8, Theme.radius) * sl.lensSize / 16 + (sl.lensSize / 2 - Math.min(8, Theme.radius) * sl.lensSize / 16) * Math.max(0, Math.min(1, sl.grow))
+        power: Theme.radius >= 8 ? 2 : 4
+        amount: Math.max(0, Math.min(1, sl.grow * 3))
+        shade: sl.lightBg ? 0.18 : 0.32
     }
 
     MouseArea {
