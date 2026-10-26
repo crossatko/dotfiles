@@ -24,6 +24,8 @@ cat > "$T/bin/zellij" <<'EOF'
 #!/usr/bin/env bash
 case " $* " in
   *" list-sessions "*) cat "$T/sessions" ;;
+  *" query-tab-names "*) cat "$T/tabs" 2>/dev/null ;;
+  *" go-to-tab-name "*) echo "go-to $*" >> "$T/calls" ;;
   *" new-tab "*) printf '%s\0' "$@" > "$T/newtab"; echo "new-tab" >> "$T/calls" ;;
 esac
 EOF
@@ -81,6 +83,13 @@ run running "$F"
 mapfile -d '' -t a < "$T/newtab"
 want "plugin file tab" "${a[6]}" "layout { pane cwd=\"$P\" command=\"sh\" close_on_exit=true { args \"-c\" \"e=*\"sh\" \"$F\"; }; pane size=1 *"
 rm -rf "$T/zcfg"
+
+# a folder whose tab already exists is focused, not opened again (files always get a tab)
+printf 'other\nsub\n' > "$T/tabs"
+run running "$P/sub"; want "existing tab: focus" "$(head -1 <<<"$calls")" "go-to --session testsess action go-to-tab-name sub"
+want "existing tab: no new-tab" "$([ -e "$T/newtab" ] && echo yes || echo no)" "no"
+run running "$F"; want "file: still a new tab" "$(head -1 <<<"$calls")" "new-tab"
+rm -f "$T/tabs"
 
 # a name starting with "-" (relative path): absolute cwd / name as --opt=value, so zellij and the editor never read them as options
 mkdir -p "$T/proj/-d"; echo x > "$T/proj/-f.md"
