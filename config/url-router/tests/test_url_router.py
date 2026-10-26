@@ -191,6 +191,72 @@ class Units(unittest.TestCase):
         self.assertEqual(R.plan("-x", self.apps, cfg)[1], ["firefox", "--new-tab", "--", "-x"])
 
 
+class FigmaFocus(unittest.TestCase):
+    def test_pick_window(self):
+        c = lambda addr, cls="figma-linux-next", h=0, **k: dict(address=addr, **{"class": cls, "focusHistoryID": h}, **k)
+        self.assertEqual(R.pick_figma_window([c("0x1", h=5), c("0x2", h=1), c("0x3", h=-1)]), "0x2")
+        self.assertEqual(R.pick_figma_window([c("0x1", h=-1), c("0x3", h=-1)]), "0x1")
+        self.assertIsNone(R.pick_figma_window([c("0x1", cls="figma-linux-next-other"), c("0x2", cls="brave-x__"),
+                                               c("0x3", mapped=False), c("zz")]))
+        self.assertIsNone(R.pick_figma_window(None))
+        self.assertIsNone(R.pick_figma_window([]))
+
+    def test_command_and_signature(self):
+        self.assertEqual(R.figma_focus_cmd("0xab"), ["hyprctl", "dispatch", 'hl.dsp.focus({window="address:0xab"})'])
+        d = tempfile.mkdtemp()
+        try:
+            for n, t in (("old", 100), ("new", 200), ("dead", 300)):
+                os.makedirs(os.path.join(d, "hypr", n))
+                open(os.path.join(d, "hypr", n, ".socket.sock"), "w").close()
+                os.utime(os.path.join(d, "hypr", n), (t, t))
+            self.assertEqual(R.hypr_signature(d, lambda p: "dead" not in p), "new")
+            self.assertIsNone(R.hypr_signature(d, lambda p: False))
+            self.assertIsNone(R.hypr_signature(os.path.join(d, "none")))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_focus_waits_for_cold_start(self):
+        class H:
+            def __init__(s):
+                s.n, s.d, s.act = 0, [], None
+            ok = True
+            def clients(s):
+                s.n += 1
+                return [] if s.n < 3 else [{"address": "0xf", "class": "figma-linux-next", "focusHistoryID": 0}]
+            def dispatch(s, l):
+                s.d.append(l); s.act = "0xf"; return True
+            def active(s):
+                return s.act
+        h, t = H(), [0.0]
+        env = dict(os.environ, HYPRLAND_INSTANCE_SIGNATURE="x")
+        old = os.environ.copy()
+        os.environ.update(env)
+        try:
+            real = shutil.which
+            shutil.which = lambda n: "/bin/hyprctl"
+            st = R.figma_focus({}, hypr=h, sleep=lambda s: t.__setitem__(0, t[0] + s), clock=lambda: t[0], lock=False)
+        finally:
+            shutil.which = real
+            os.environ.clear(); os.environ.update(old)
+        self.assertEqual(st, "focused")
+        self.assertEqual(h.d, ['hl.dsp.focus({window="address:0xf"})'])
+
+    def test_dry_run_prints_focus_and_option_off(self):
+        e = Env()
+        try:
+            p = os.path.join(e.bin, "figma-linux-next")
+            open(p, "w").write(STUB); os.chmod(p, 0o755)
+            r = e.run("https://www.figma.com/design/K/F", URL_ROUTER_DRY_RUN="-")
+            self.assertEqual(json.loads(r.stdout)["focus"][:2], ["hyprctl", "dispatch"])
+            e.close(); e = Env(config="focus_figma = no\n")
+            p = os.path.join(e.bin, "figma-linux-next")
+            open(p, "w").write(STUB); os.chmod(p, 0o755)
+            r = e.run("https://www.figma.com/design/K/F", URL_ROUTER_DRY_RUN="-")
+            self.assertNotIn("focus", json.loads(r.stdout))
+        finally:
+            e.close()
+
+
 class Integration(unittest.TestCase):
     def setUp(self):
         self.e = Env()
@@ -225,6 +291,42 @@ class Integration(unittest.TestCase):
     def test_dash_argument_never_a_flag(self):
         self.e.run("--incognito")
         self.assertEqual(self.e.calls()[0][1:], ["--", "--incognito"])
+
+    def _figma_stub(self):
+        p = os.path.join(self.e.bin, "figma-linux-next")
+        with open(p, "w") as f:
+            f.write(STUB)
+        os.chmod(p, 0o755)
+
+    def test_figma_links_go_to_app_when_installed(self):
+        self._figma_stub()
+        ok = ["https://www.figma.com/design/K/F?node-id=1-2&t=x", "https://figma.com/file/K/x",
+              "https://www.figma.com/proto/K/x?page-id=0%3A1", "figma://file/K"]
+        no = ["https://www.figma.com/pricing", "https://www.notfigma.com/design/a",
+              "https://figma.com.evil.example/design/a", "https://www.figma.com@evil.example/design/a",
+              "https://evil.example/?u=figma.com/design/x", "https://sub.figma.com/design/a"]
+        for u in ok + no:
+            self.e.run(u)
+        got = sorted(self.e.calls(wait=2), key=lambda c: c[1:])
+        figma = [c[1:] for c in got if c[0].endswith("figma-linux-next")]
+        brave = [c[-1] for c in got if c[0].endswith("brave")]
+        self.assertEqual(sorted(figma), sorted([[u] for u in ok]))
+        self.assertEqual(sorted(brave), sorted(no))
+
+    def test_figma_links_fall_back_to_browser_when_not_installed(self):
+        tools = os.path.join(self.e.root, "tools")     # PATH without /usr/bin: the real app must not be found
+        os.makedirs(tools)
+        for t in ("sh", "python3"):
+            os.symlink(shutil.which(t), os.path.join(tools, t))
+        self.e.run("https://www.figma.com/design/K/F", PATH=self.e.bin + ":" + tools)
+        self.assertEqual(self.e.calls()[0][1:], ["--", "https://www.figma.com/design/K/F"])
+
+    def test_figma_disable(self):
+        self.e.close()
+        self.e = Env(config="disable = figma\n")
+        self._figma_stub()
+        self.e.run("https://www.figma.com/design/K/F")
+        self.assertEqual(self.e.calls()[0][1:], ["--", "https://www.figma.com/design/K/F"])
 
     def test_no_args_and_loop_guard(self):
         self.assertEqual(self.e.run().returncode, 1)

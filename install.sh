@@ -164,6 +164,7 @@ ln -sfn "$CONFIG_DIR/systemd/user/librepods.service" "$HOME/.config/systemd/user
 mkdir -p "$HOME/.local/bin"
 ln -sfn "$CONFIG_DIR/theme/bin/brave" "$HOME/.local/bin/brave"
 # Link router (config/url-router): http(s) links opened by native apps (xdg-open, the portal, Electron) go to the
+# Figma app (figma.com file links, when figma-linux-next is installed), the
 # matching Brave web app window, everything else to Brave as before. Roll back with:
 #   xdg-mime default brave-browser.desktop x-scheme-handler/http x-scheme-handler/https
 # Exec stays unquoted: xdg-open's own desktop-file parser does not strip quotes (so no spaces in $HOME).

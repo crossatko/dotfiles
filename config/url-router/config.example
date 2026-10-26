@@ -7,7 +7,7 @@
 #fallback = brave --
 
 # Web apps that never receive links (they still open normally from the launcher).
-#disable = design tracker
+#disable = design tracker   (the name "figma" turns off routing figma.com links to figma-linux-next)
 
 # Extra hosts for a web app (the start URL's host, with or without "www.", always matches).
 # "*.webapp.example" = webapp.example and any sub-domain of it.
@@ -20,3 +20,6 @@
 # (the most recently focused one is focused, made a group if it is not one, and the new window joins it).
 # "*" = every web app. Default: off.
 #group = design
+
+# Figma links: focus the Figma window (Hyprland) after handing it the link. "no" = leave focus alone. Default: yes.
+#focus_figma = no
