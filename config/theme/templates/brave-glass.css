@@ -13,14 +13,14 @@ headerbar, headerbar:backdrop, .titlebar, .titlebar:backdrop {
 }
 
 /* Brave GTK-mode colour mapping (measured 2026-10-21 with distinct test colours per node, Brave 155):
-   window.background background -> toolbar row AND active tab (one surface; alpha is dropped, so solid bg)
+   window.background background -> toolbar row AND active tab (one surface; alpha is dropped, so solid; brave_active = bg tinted with the accent, brave_active_tint)
    label color                  -> active tab title AND toolbar icons (one colour: theme.toml brave_tab_text,
                                    fg or accent; Chromium mutes it while the window is unfocused)
-   .titlebar / headerbar label  -> inactive tab titles on the glass (fg_dim)
+   .titlebar / headerbar label  -> inactive tab titles on the glass (brave_dim = bg/fg mix, brave_inactive_ink)
    .view / textview text bg     -> omnibox (address bar) pill  (surface = bg + ~7% fg, the shell's Btn fill)
    GtkEntry is NOT used for the omnibox. Everything with :backdrop too (unfocused window). */
-window.background, window.background:backdrop { background-color: {{bg}}; color: {{fg}}; }
+window.background, window.background:backdrop { background-color: {{brave_active}}; color: {{fg}}; }
 label, label:backdrop { color: {{brave_label}}; }
-headerbar label, headerbar label:backdrop, .titlebar label, .titlebar label:backdrop { color: {{fg_dim}}; }
+headerbar label, headerbar label:backdrop, .titlebar label, .titlebar label:backdrop { color: {{brave_dim}}; }
 headerbar button, headerbar button:backdrop { color: {{fg}}; }
 .view, .view:backdrop, textview text, textview text:backdrop { background-color: {{surface}}; color: {{fg}}; }

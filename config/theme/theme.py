@@ -3535,6 +3535,11 @@ def render_all(pal, cfg, mode=None, dark=None):
              **mode_extras(pal, mode)}
     # Brave GTK mode: active tab title and toolbar icons share one GTK colour (label); brave_tab_text picks it
     extra["brave_label"] = pal["accent"] if cfg.get("settings", {}).get("brave_tab_text", "fg") == "accent" else pal["fg"]
+    # Brave GTK mode: the active tab shares the toolbar surface (window.background, solid): a muted accent tint so it
+    # reads as selected; inactive tab titles get a dimmer ink than fg_dim
+    bs = cfg.get("settings", {})
+    extra["brave_active"] = mix(pal["bg"], pal["accent"], float(bs.get("brave_active_tint", 0.2)))
+    extra["brave_dim"] = mix(pal["bg"], pal["fg"], float(bs.get("brave_inactive_ink", 0.55)))
     # a host without the TV wallpaper (it is not in the repo) falls back to the main one instead of a black output
     tv = os.path.expanduser(extra.get("tv_wallpaper", ""))
     if not tv or not os.path.exists(tv):

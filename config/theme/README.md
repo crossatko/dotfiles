@@ -200,6 +200,13 @@ while Brave is closed) sets `extensions.theme.system_theme = 1` and `browser.cus
 title bar and borders" Chromium makes the window opaque and the strip is solid bg). `brave_mode = "seed"` restores the
 seed-colour theme on the next shim launch.
 
+Active tab: Chromium's GTK mode draws the selected tab with the toolbar surface (`window.background`, solid, one surface
+for tab + toolbar + bookmarks row; it cannot be set separately and CSS cannot reach Brave's native tab strip). That
+surface is `brave_active` = bg tinted with the accent (`brave_active_tint`, default 0.2), so the selected tab is a calm
+accent block and the toolbar shares it; the active title is fg, inactive titles `brave_dim` (`brave_inactive_ink`, 0.55
+fg share). Hover shading is Chromium's own and not configurable. Applies at Brave's next start (GTK theme is read at
+launch). Verified in a throwaway Brave in a nested Hyprland.
+
 ## Qt / KDE glass (Kvantum, `qt_style = "kvantum"`)
 
 `theme.py` generates the Kvantum theme `Wall` (`~/.config/Kvantum/Wall`): Kvantum's KvFlat recoloured to the palette,

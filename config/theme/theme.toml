@@ -34,6 +34,8 @@ brave_seed = "accent_soft"  # palette key used as the seed; brave_variant: 0 sys
 brave_variant = 2
 brave_mode = "gtk"       # "gtk": Brave in GTK mode with the Wall-Glass theme (glass tab strip; bin/brave exports GTK_THEME=Wall-Glass:dark); "seed": the seed-color theme above
 brave_tab_text = "fg"     # GTK mode: colour of the active tab title, which Chromium ties to the toolbar icons: "fg" or "accent" (both)
+brave_active_tint = 0.2   # GTK mode: accent share (0..1) of the active tab / toolbar surface (solid bg tinted with the accent)
+brave_inactive_ink = 0.55 # GTK mode: fg share of inactive tab titles (lower = dimmer)
 brave_gtk_seed = "accent"       # GTK mode: palette key seeding Chromium's accent (omnibox focus ring, toggles), e.g. "accent"; "" = leave Brave's own (blue)
 brave_gtk_variant = 3     # variant for that seed: 3 vibrant keeps it close to the colour (2 neutral mutes it to grey-red)
 quit_on_apply = []       # GTK4/libadwaita apps cannot restyle open windows; e.g. ["nautilus -q"] closes them so the next one is themed
