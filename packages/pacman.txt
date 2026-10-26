@@ -125,7 +125,12 @@ librsvg
 hyprshutdown
 
 # --- librepods build deps (config/librepods/build.sh)
+qt6-base
+qt6-declarative
 qt6-connectivity
+qt6-tools
+vulkan-headers
+openssl
 
 # --- apps
 discord

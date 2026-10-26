@@ -108,7 +108,7 @@ skipped() { case " $INSTALL_SKIP " in *" $1 "*) return 0 ;; esac; return 1; }
 cleanup() {
   local d
   if [ -n "$KEEPALIVE_PID" ]; then
-    pkill -P "$KEEPALIVE_PID" 2>/dev/null || true
+    # The loop's TERM trap kills its own sleep, so nothing is left behind and no "Terminated" job notice is printed.
     kill "$KEEPALIVE_PID" 2>/dev/null || true
     wait "$KEEPALIVE_PID" 2>/dev/null || true
     KEEPALIVE_PID=
@@ -648,11 +648,17 @@ start_sudo_keepalive() {
   for s in repos packages system; do stage_on "$s" && need=1; done
   [ "$need" = 1 ] || return 0
   sudo -v || die "sudo is needed"
-  while true; do
-    sudo -n true 2>/dev/null
-    sleep 50
-    kill -0 "$$" 2>/dev/null || exit 0
-  done &
+  (
+    nap=
+    trap '[ -z "$nap" ] || kill "$nap" 2>/dev/null; exit 0' TERM
+    while true; do
+      sudo -n true 2>/dev/null
+      sleep 50 &
+      nap=$!
+      wait "$nap" 2>/dev/null || true
+      kill -0 "$$" 2>/dev/null || exit 0
+    done
+  ) 2>/dev/null &
   KEEPALIVE_PID=$!
 }
 

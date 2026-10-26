@@ -14,7 +14,14 @@ missing=()
 command -v git >/dev/null || missing+=(git)
 command -v cmake >/dev/null || missing+=(cmake)
 command -v ninja >/dev/null || missing+=(ninja)
-pacman -Q qt6-connectivity >/dev/null 2>&1 || missing+=(qt6-connectivity)
+command -v pkg-config >/dev/null || missing+=(pkgconf)
+command -v g++ >/dev/null || missing+=(gcc)
+# Qt6 components + what they pull in: qt6-base (Core/Gui/Widgets/DBus/Network), qt6-declarative (Quick,
+# QuickControls2, qmltyperegistrar), qt6-connectivity (Bluetooth), qt6-tools (LinguistTools),
+# vulkan-headers (Qt6Gui's WrapVulkanHeaders), openssl, libpulse (pkg-config libpulse).
+for pkg in qt6-base qt6-declarative qt6-connectivity qt6-tools vulkan-headers openssl libpulse; do
+  [ -z "$(pacman -T "$pkg" 2>/dev/null)" ] || missing+=("$pkg")
+done
 if [ ${#missing[@]} -gt 0 ]; then
   echo "librepods: missing build dependencies: ${missing[*]}" >&2
   exit 1
@@ -53,7 +60,7 @@ fi
 build="$SRC/build-daemon"
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
-if ! { cmake -S daemon -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" &&
+if ! { cmake -S daemon -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX" -DBUILD_TESTING=OFF &&
   cmake --build "$build"; } >"$log" 2>&1; then
   tail -n 40 "$log" >&2
   echo "librepods: build failed" >&2

@@ -8,7 +8,9 @@ LibrePods, GPL-3.0). Only `daemon/` is built; the QML shell reads its `status.js
   branch `dotfiles-patches` at the pin, applies `patches/` with `git am`, builds out of tree (`build-daemon/`),
   installs to `~/.local`, removes the unit copy cmake installs (the unit is `config/systemd/user/librepods.service`,
   linked by `install.sh`), and restarts the service only when it is active and the binary changed. Re-running it
-  is a no-op. Needs `qt6-connectivity`, cmake, ninja (reports what is missing, installs nothing).
+  is a no-op. Needs git, cmake, ninja, gcc, pkgconf, `qt6-base`, `qt6-declarative`, `qt6-connectivity`, `qt6-tools` (LinguistTools),
+  `vulkan-headers` (Qt6Gui's WrapVulkanHeaders), `openssl`, `libpulse` (reports everything missing at once, installs
+  nothing; the packages stage of `install.sh` installs them first). The upstream unit tests are not built.
   `install.sh` runs it as an optional step.
 
 ## Patches
