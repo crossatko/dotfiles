@@ -237,10 +237,23 @@ html, body, #app-mount { background: transparent !important; }
 
 /* a few rules beyond the variables: flat, small radius, accent only on selection / unread / focus */
 ::selection { background: rgba(var(--wall-accent-rgb), 0.35); }
-[class*="unreadMentionsIndicator"], [class*="numberBadge"], [class*="lowerBadge"] [class*="numberBadge"] {
+[class*="numberBadge"], [class*="lowerBadge"] [class*="numberBadge"] {
   background-color: var(--wall-accent) !important; color: var(--wall-on-accent) !important;
 }
 code, [class*="markup"] code, [class*="hljs"] { border-color: var(--wall-line) !important; }
 [class*="markup"] pre { border: 1px solid var(--wall-line) !important; border-radius: var(--wall-radius) !important; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { border-radius: 4px; }
+
+/* floating surfaces sit over live content (no compositor blur between): near-opaque fill plus an in-page blur keeps them readable */
+[role="menu"], [role="listbox"], [class*="popout_"], [class*="tooltip_"] [class*="tooltipContent"] {
+  background: var(--wall-glass-float) !important;
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--wall-line);
+  border-radius: var(--wall-radius);
+}
+[role="dialog"] {
+  background: var(--wall-glass-dialog) !important;
+  backdrop-filter: blur(24px);
+  border-radius: var(--wall-radius);
+}
