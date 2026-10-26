@@ -45,9 +45,18 @@ Item {
         return top !== item && top && top.parent ? top : null
     }
 
+    // Hand-over at the end: destroying the effect while it hides the host left ONE frame in which neither drew (the card
+    // content blinked out as the lens vanished). So the effect first stops hiding the host and stops drawing in the same
+    // frame (`running` false), and is only unloaded a few frames later (`retiring`).
+    property bool retiring: false
+    // the host the effect works on: kept through `retiring` (callers drop `host` together with `amount`)
+    property Item h: null
+    onHostChanged: if (host) h = host
+    onRunningChanged: if (!running) { retiring = true; retire.restart() } else { retire.stop(); retiring = false }
+    Timer { id: retire; interval: 100; onTriggered: { gl.retiring = false; if (!gl.running && !gl.host) gl.h = null } }
     Loader {
-        active: gl.running
-        parent: gl.host ? gl.host.parent : gl
+        active: gl.running || gl.retiring
+        parent: gl.h ? gl.h.parent : gl
         z: 1000
         sourceComponent: Component {
             ShaderEffect {
@@ -55,19 +64,20 @@ Item {
                 onStatusChanged: if (status === ShaderEffect.Error) { console.warn("Glass lens shader failed, lens disabled:", log); gl.broken = true }
                 // the card plus a margin, so the lens and its shadow may overhang the card edge
                 readonly property real m: 24
-                x: gl.host.x - m; y: gl.host.y - m
-                width: gl.host.width + 2 * m; height: gl.host.height + 2 * m
-                opacity: gl.host.opacity
+                visible: gl.running
+                x: gl.h.x - m; y: gl.h.y - m
+                width: gl.h.width + 2 * m; height: gl.h.height + 2 * m
+                opacity: gl.h.opacity
                 // in the visual tree (a zero-size child), not a parentless property value: a parentless source keeps a
                 // stale window when its window is hidden mid-animation (segfault in QQuickWindowPrivate::dirtyItem)
                 ShaderEffectSource {
                     id: src
                     width: 0; height: 0
-                    sourceItem: gl.host
-                    sourceRect: Qt.rect(-fx.m, -fx.m, gl.host.width + 2 * fx.m, gl.host.height + 2 * fx.m)
+                    sourceItem: gl.h
+                    sourceRect: Qt.rect(-fx.m, -fx.m, gl.h.width + 2 * fx.m, gl.h.height + 2 * fx.m)
                     // a shader that failed to load: the card stays drawn (and the lens is dropped, broken)
-                    hideSource: fx.status !== ShaderEffect.Error
-                    live: true
+                    hideSource: gl.running && fx.status !== ShaderEffect.Error
+                    live: gl.running
                     smooth: true
                 }
                 property var source: src

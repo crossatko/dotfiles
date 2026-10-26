@@ -175,7 +175,8 @@ config/aerospace karabiner swiftbar  macOS only
 - **Shell glass** (all optics from Settings > Glass, `GlassTuneCtl.effective`): `GlassLens.qml` = the shared lens (`shaders/sliderlens.frag`,
   refracts the shell's own card, same on stock), only alive while `amount` > 0 (Slider handle while dragged, Toggle knob while pressed /
   sliding after a click, OSD level while it changes; `qs ipc call osd level volume|brightness <0-100>` shows the pill for tests).
-  Toggle's knob slide runs on the popup move tokens. `GlassEdge.qml` (inside every `isGlassItem` card) = 1 px rim lit from `light_angle`, only
+  Toggle's knob slide runs on the popup move tokens. The lens retires in two steps (stop hiding the host + stop drawing, unload
+  100 ms later): unloading the effect directly left one frame in which neither drew (the OSD content blinked). `GlassEdge.qml` (inside every `isGlassItem` card) = 1 px rim lit from `light_angle`, only
   without `Theme.glass`. Shell-only Glass keys (`shell: true` in `GlassTuneCtl.opts`, group "Shell", e.g. `edge`) are saved in glass.json
   but never sent to Hyprland (managed.lua ignores unknown keys). Without solid_glass (stock) the Glass page is still listed and edits /
   saves the values for the shell only (`GlassTuneCtl.editable`). Caveat: a workspace-switch lens on the bar was tried and dropped (on a flush

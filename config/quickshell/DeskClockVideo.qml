@@ -99,7 +99,7 @@ Item {
         // the end (a report-driven pause alone overshot by ~40 ms, a few frames of the wind-down)
         onPositionChanged: {
             if (!v.playing) return
-            const left = v.endMs - position
+            const left = v.endMs - player.position
             if (left <= 4) v.stopAt()
             else if (left < 120) { stopTimer.interval = Math.max(1, Math.round(left - 4)); stopTimer.restart() }
         }
