@@ -79,6 +79,7 @@ bind({ mod, "SHIFT", "S" }, "Sound output", exec("qs ipc call launcher section s
 bind({ mod, "SHIFT", "M" }, "Sound input", exec("qs ipc call launcher section sound-input"))
 bind({ mod, "SHIFT", "T" }, "Twitch", exec("qs ipc call launcher section twitch"))
 bind({ mod, "SHIFT", "J" }, "Jellyfin", exec("qs ipc call launcher section jellyfin"))
+bind({ mod, "SHIFT", "N" }, "Replay notifications", exec("qs ipc call notif replay"))
 
 local directions = {
 	h = "left",

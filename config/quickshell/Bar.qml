@@ -287,7 +287,7 @@ PanelWindow {
     readonly property var widgetComps: ({
         workspaces: wsComp, recording: recComp, media: mediaComp, caffeine: caffeineComp, cpu: cpuComp, memory: memComp,
         homeassistant: haComp, ai: aiComp, volume: volumeComp, network: netComp, bluetooth: btComp,
-        tray: trayComp, calendar: calComp, clock: clockComp, controlcenter: bellComp
+        tray: trayComp, dnd: dndComp, calendar: calComp, clock: clockComp, controlcenter: bellComp
     })
 
 
@@ -608,6 +608,16 @@ PanelWindow {
             BarLabel { text: Qt.formatDateTime(bar.clockNow, "yyyy-MM-dd HH:mm"); color: Notifs.dnd ? bar.ink.muted : bar.ink.fg }
             BarIcon { visible: Notifs.dnd || Notifs.count > 0; Layout.leftMargin: Theme.chipGap; text: Notifs.dnd ? "\uf1f6" : "\uf8fa"; color: Notifs.dnd ? bar.ink.muted : bar.ink.accent }
             BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: bar.ink.accent; font.pixelSize: Theme.fontCaption }
+        }
+    }
+
+    // do-not-disturb: only while it is on (Notifs.dnd is event-driven); click = turn it off
+    Component {
+        id: dndComp
+        Chip { ink: bar.ink;
+            show: Notifs.dnd
+            onClicked: Notifs.setDnd(false)
+            BarIcon { text: "\uf1f6"; color: bar.ink.muted }
         }
     }
 

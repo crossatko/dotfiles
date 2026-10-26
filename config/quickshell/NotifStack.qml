@@ -12,6 +12,7 @@ import Quickshell
 // The rows are a ListModel of notification ids (a JS-array model would rebuild every card on each change and replay
 // the entrance animation on all of them). A row leaves when its id is no longer wanted (clicked, expired, DND,
 // cleared, list closed), animates out, and only then leaves the model.
+// In the list, cards of one app are kept together (see sync): a repeated notification from an app joins that app's group.
 // The list scrolls by WHOLE cards (mouse wheel): Glass.qml cannot see into scrolling views or clip regions, so it is
 // not a ListView/Flickable but a Column that moves up; a card that does not fit completely is hidden (opacity 0), so no
 // half-visible glass is left behind. Nothing is clipped on purpose: a card that slides out fades out together with its
@@ -125,14 +126,28 @@ Item {
         for (const m of want) {
             if (have[m.id] || closing.indexOf(m.id) >= 0) continue
             const r = rank[m.id] ?? -1
+            // cards of one app sit together, ordered by arrival among themselves (a new one goes above its app's group); an
+            // app without a group yet goes by arrival, and never lands inside another app's group
             let at = 0
-            while (at < items.count) {
-                const o = rank[items.get(at).nid]
-                if (o !== undefined && o > r) break
-                at++
+            let firstSame = -1, lastSame = -1, above = -1
+            for (let i = 0; i < items.count; i++) {
+                if (items.get(i).app !== m.appName) continue
+                if (firstSame < 0) firstSame = i
+                lastSame = i
+                const o = rank[items.get(i).nid]
+                if (above < 0 && o !== undefined && o > r) above = i
+            }
+            if (open && firstSame >= 0) at = above >= 0 ? above : lastSame + 1
+            else {
+                while (at < items.count) {
+                    const o = rank[items.get(at).nid]
+                    if (o !== undefined && o > r) break
+                    at++
+                }
+                while (open && at > 0 && at < items.count && items.get(at - 1).app === items.get(at).app) at++
             }
             // opening the list: the rows slide in one after another from the top, already in their final place
-            items.insert(at, { nid: m.id, lead: bulk === true, enterDelay: bulk === true ? Math.min(k++, sweepMax) * stagger : 0 })
+            items.insert(at, { nid: m.id, app: m.appName, lead: bulk === true, enterDelay: bulk === true ? Math.min(k++, sweepMax) * stagger : 0 })
         }
     }
     Connections { target: Notifs; function onPopupsChanged() { stack.sync(false) } }

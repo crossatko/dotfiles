@@ -1,6 +1,8 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
+import Quickshell.Io
 import Quickshell.Networking
 
 // Wired status + Wi-Fi list + Tailscale machines + Mullvad (both VPN sections fold, see FoldSection). Wi-Fi password prompt appears inline for new secured networks.
@@ -63,6 +65,33 @@ ColumnLayout {
     PanelHeader {
         id: header
         title: "Network"
+    }
+
+    // Captive portal: NetworkManager says the link is up but a sign-in page is in the way. "Sign in" opens the URL NM
+    // probes (the portal redirects it to its login page) in the default browser.
+    readonly property bool portal: Networking.connectivity === NetworkConnectivity.Portal   // qmllint disable missing-property
+    Process {
+        id: portalUrl
+        command: ["busctl", "--system", "get-property", "org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager",
+            "org.freedesktop.NetworkManager", "ConnectivityCheckUri"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const m = /"(https?:\/\/[^"]+)"/.exec(text)
+                if (m) Quickshell.execDetached(["xdg-open", m[1]])
+            }
+        }
+    }
+    Notice {
+        visible: net.portal
+        padX: 8
+        padY: 8
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: "This network needs a sign-in."
+            font.pixelSize: Theme.fontSmall
+        }
+        Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Sign in"; active: true; onClicked: portalUrl.running = true }
     }
 
     Notice {

@@ -1,4 +1,5 @@
 pragma Singleton
+pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -13,6 +14,9 @@ Singleton {
     property var popups: []
     property var byId: ({})                 // id -> Notification, for the toast stack (ListModel holds ids)
     property var times: ({})                // id -> arrival time (ms), shown on the notification center cards
+    property var repeats: ({})              // id -> how many identical notifications it stands for (see dedupe in onNotification)
+    property var history: []                // the last `historyMax` notifications as plain data, newest first (also the ones do-not-disturb silenced); replay() shows them again
+    readonly property int historyMax: 10
     property real now: Date.now()           // refreshed by `ticker` so relative times stay current
     readonly property var all: server.trackedNotifications
     readonly property int count: server.trackedNotifications.values.length
@@ -32,6 +36,16 @@ Singleton {
             // looked up by the notification stack the moment it is tracked, so set before
             byId[n.id] = n
             times[n.id] = Date.now()        // a replacement (same id) counts as new
+            // an identical one (same app, summary and body) replaces the older card and counts up instead of stacking
+            const key = root.keyOf(n)
+            let reps = 1
+            for (const o of root.all.values.slice()) {
+                if (o.id === n.id || root.keyOf(o) !== key) continue
+                reps += root.repeats[o.id] ?? 1
+                root.closeNow(o)
+            }
+            root.repeats[n.id] = reps
+            root.record(n, key)
             root.now = Date.now()
             n.tracked = true
             // do-not-disturb silences toasts but still files them away; critical always shows. With the notification
@@ -68,12 +82,67 @@ Singleton {
         onTriggered: root.now = Date.now()
     }
 
+    function keyOf(n) { return [n.appName, n.summary, n.body].join("\u0001") }
+
+    // newest first, one entry per distinct notification; plain data, because a Notification object dies when it is closed
+    function record(n, key) {
+        const e = { key: key, appName: n.appName, summary: n.summary, body: n.body, appIcon: n.appIcon, urgency: n.urgency }
+        history = [e].concat(history.filter(h => h.key !== key)).slice(0, historyMax)
+    }
+
+    // Replay (IPC `notif replay`): the history comes back as toasts (up to the five a toast stack holds), do-not-disturb
+    // or not. They are stand-ins without actions: the app that sent them may be gone. Not tracked by the server, so
+    // they live only as long as their toast: NotifSlot hands one to releaseLater once its row has left and it is no
+    // longer a toast (expired, dismissed, pushed out, DND), which destroys it.
+    Component {
+        id: standIn
+        QtObject {
+            readonly property bool standIn: true
+            signal closed()                         // never emitted; NotifSlot listens for it on real notifications
+            property int id: 0
+            property string appName: ""
+            property string summary: ""
+            property string body: ""
+            property string appIcon: ""
+            property int urgency: NotificationUrgency.Normal
+            readonly property string image: ""
+            readonly property string desktopEntry: ""
+            readonly property var actions: []
+            readonly property var hints: ({})
+            readonly property int expireTimeout: -1
+            function dismiss() { root.dismissPopup(this) }
+        }
+    }
+    property int standInId: -1
+    function replay() {
+        if (Popups.name === "notif") return
+        const shown = []
+        for (const h of history.slice(0, 5)) {
+            const id = standInId--
+            const n = standIn.createObject(root, { id: id, appName: h.appName, summary: h.summary, body: h.body, appIcon: h.appIcon, urgency: h.urgency })
+            byId[id] = n
+            times[id] = Date.now()
+            shown.push(n)
+        }
+        root.now = Date.now()
+        popups = shown
+    }
+
     function dismissPopup(n) { popups = popups.filter(p => p !== n) }
 
     // Close the notification after its toast has slid out: closing destroys the object the card is
     // still drawing during the exit animation.
     property var pendingClose: []
-    function releaseLater(n) { pendingClose = pendingClose.concat([n]); closer.restart() }
+    function releaseLater(n) {
+        if (n && n.standIn === true) {          // a replayed stand-in: nothing to close, just let it go (not in pendingClose: liveCount counts tracked ones)
+            dismissPopup(n)
+            delete byId[n.id]
+            delete times[n.id]
+            n.destroy(closer.interval)
+            return
+        }
+        pendingClose = pendingClose.concat([n]); closer.restart()
+    }
     Timer {
         id: closer
         interval: 450

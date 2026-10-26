@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 
 // The notification center's bottom row (the file keeps its old name: it was the header, and a renamed type needs a
-// shell restart): a scroll hint (only while the list overflows) and Clear. Plain on the desktop (no glass, fill, border or blur region).
+// shell restart): a scroll hint (only while the list overflows), the do-not-disturb toggle and Clear. Plain on the desktop (no glass, fill, border or blur region).
 Item {
     id: row
     property bool overflow: false      // more cards than fit: the list scrolls
@@ -19,6 +19,7 @@ Item {
             color: Theme.fgDim
             font.pixelSize: Theme.fontSmall
         }
+        Btn { text: "Do not disturb"; active: Notifs.dnd; onClicked: Notifs.setDnd(!Notifs.dnd) }
         Btn { text: "Clear"; enabledLook: Notifs.liveCount > 0; onClicked: Notifs.clearAll() }
     }
 }

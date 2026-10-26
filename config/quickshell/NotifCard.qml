@@ -31,6 +31,28 @@ Rectangle {
         return null
     }
 
+    // What the text offers besides the app's own actions: a verification code to copy, a link to open. A code is only
+    // taken when the text talks about one (a bare 4-8 digit number is as likely a year or an amount); a link comes from
+    // an <a href> or a plain http(s) address.
+    readonly property string text: n.summary + " " + n.body
+    readonly property string code: {
+        if (!/code|otp|verif|passcode|passwort|password|2fa|one-time|token|kod\b|k\u00f3d/i.test(text)) return ""
+        const m = /(?:^|[^\d.,-])(\d{4,8})(?![\d.,]*\d)/.exec(text.replace(/<[^>]*>/g, " "))
+        return m ? m[1] : ""
+    }
+    readonly property string link: {
+        const m = /href="(https?:\/\/[^"]+)"/i.exec(n.body) || /(https?:\/\/[^\s<>"']+)/i.exec(n.body)
+        return m ? m[1].replace(/[.,;:!?)]+$/, "") : ""
+    }
+    readonly property string linkHost: link ? link.replace(/^https?:\/\//i, "").split(/[\/?#]/)[0] : ""
+    // buttons: the app's actions, then copy code, then open link
+    readonly property var buttons: {
+        const out = n.actions.filter(a => a.identifier !== "default").map(a => ({ text: a.text, run: () => a.invoke() }))
+        if (code) out.push({ text: "Copy " + code, run: () => Quickshell.execDetached(["wl-copy", "--", card.code]) })
+        if (link) out.push({ text: "Open " + linkHost, run: () => { Quickshell.execDetached(["xdg-open", card.link]); card.dismiss() } })
+        return out
+    }
+
     implicitHeight: content.implicitHeight + 24
     radius: Theme.radius
     color: Theme.alpha(Theme.bg, Theme.cardFill)
@@ -117,6 +139,12 @@ Rectangle {
                     Layout.fillWidth: true
                 }
                 Label {
+                    visible: (Notifs.repeats[card.n.id] ?? 1) > 1
+                    text: "\u00d7" + (Notifs.repeats[card.n.id] ?? 1)
+                    color: Theme.accent
+                    font.pixelSize: Theme.fontCaption
+                }
+                Label {
                     visible: card.showTime
                     text: Notifs.ago(card.n.id)
                     color: Theme.muted
@@ -151,10 +179,10 @@ Rectangle {
             Flow {
                 Layout.fillWidth: true
                 spacing: 6
-                visible: actions.count > 0
+                visible: card.buttons.length > 0
                 Repeater {
                     id: actions
-                    model: card.n.actions.filter(a => a.identifier !== "default")
+                    model: card.buttons
                     Rectangle {
                         id: actBtn
                         required property var modelData
@@ -162,9 +190,9 @@ Rectangle {
                         color: btnGlow.hovered ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.1)
                         implicitWidth: label.implicitWidth + 20
                         implicitHeight: 28
-                        Label { id: label; anchors.centerIn: parent; text: actBtn.modelData.text; font.pixelSize: Theme.fontSmall }
+                        Label { id: label; anchors.centerIn: parent; text: actBtn.modelData.text; elide: Text.ElideRight; width: Math.min(implicitWidth, card.width - 100); font.pixelSize: Theme.fontSmall }
                         HoverGlow { id: btnGlow; area: btn; radius: parent.radius }
-                        MouseArea { id: btn; anchors.fill: parent; hoverEnabled: true; onClicked: actBtn.modelData.invoke() }
+                        MouseArea { id: btn; anchors.fill: parent; hoverEnabled: true; onClicked: actBtn.modelData.run() }
                     }
                 }
             }

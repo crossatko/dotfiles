@@ -76,11 +76,12 @@ ShellRoot {
     // detect the displays once at start, so the control center's slider section doesn't pop in on first open
     Timer { interval: 4000; running: true; onTriggered: Brightness.refresh() }
 
-    // qs ipc call notif dnd | clear
+    // qs ipc call notif dnd | clear | replay   (replay = the last notifications as toasts again, also the ones DND silenced)
     IpcHandler {
         target: "notif"
         function dnd(): void { Notifs.setDnd(!Notifs.dnd) }
         function clear(): void { Notifs.clearAll() }
+        function replay(): void { Notifs.replay() }
     }
 
     // qs ipc call settings toggle | open | close | page bar|wallpaper|appearance   (focused monitor; "monitors" = bar)

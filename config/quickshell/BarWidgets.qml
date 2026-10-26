@@ -33,6 +33,7 @@ Singleton {
         { id: "network",    title: "Network",      icon: "\uf1eb", section: "right" },
         { id: "bluetooth",  title: "Bluetooth",    icon: "\uf293", section: "right" },
         { id: "tray",       title: "Tray",         icon: "\uf0c9", section: "right" },
+        { id: "dnd",        title: "Do not disturb", icon: "\uf1f6", section: "right", before: "clock" },   // visible only while do-not-disturb is on
         { id: "calendar",   title: "Calendar",     icon: "\uf073", section: "right", before: "clock" },   // icon-only chip; a layout file without it gets it right before the clock
         { id: "clock",      title: "Clock",        icon: "\uf017", section: "right" },   // opens the notification center
         { id: "controlcenter", title: "Control center", icon: "\uf0f3", section: "right" }   // last = rightmost by default; never hideable

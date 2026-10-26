@@ -125,7 +125,10 @@ Item {
             script: {
                 slot.removeRequested()
                 // a dismissed notification is closed after its row is gone: closing destroys the object the card draws
-                if (slot.dismissing) Notifs.releaseLater(slot.n)
+                // a replayed stand-in (Notifs.replay) is released once it is no longer a toast (expired, pushed out); only
+                // hidden by the open center, it stays and comes back as a toast when the center closes
+                const sn = slot.n
+                if (slot.dismissing || (sn && sn.standIn === true && Notifs.popups.indexOf(sn) < 0)) Notifs.releaseLater(sn)
             }
         }
     }
