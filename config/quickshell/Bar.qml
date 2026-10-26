@@ -285,7 +285,7 @@ PanelWindow {
     // hides, so a Row leaves no gap. The bell (control center) chip is a widget like the rest, but never hideable (BarWidgets.pinnedId).
     readonly property var layout: BarWidgets.layoutFor(BarWidgets.keyOf(bar.screen))
     readonly property var widgetComps: ({
-        workspaces: wsComp, recording: recComp, media: mediaComp, caffeine: caffeineComp, cpu: cpuComp, memory: memComp,
+        workspaces: wsComp, recording: recComp, vm: vmComp, media: mediaComp, caffeine: caffeineComp, cpu: cpuComp, memory: memComp,
         homeassistant: haComp, ai: aiComp, volume: volumeComp, network: netComp, bluetooth: btComp,
         tray: trayComp, dnd: dndComp, calendar: calComp, clock: clockComp, controlcenter: bellComp
     })
@@ -402,6 +402,18 @@ PanelWindow {
             }
             BarLabel { text: bar.recElapsed; color: bar.ink.red }
             BarIcon { visible: bar.recording && bar.recState.audio === "1"; text: "\uf028"; color: bar.ink.fgDim }
+        }
+    }
+    // virtual machines (VmService.qml): only while a VM runs or a VM download / install prep is in progress; icon + count of
+    // running VMs, while a job runs also a thin progress bar and the percentage (no name); click = the VM panel (VmPanel.qml)
+    Component {
+        id: vmComp
+        VmChip {
+            id: vmChip
+            ink: bar.ink
+            Component.onCompleted: bar.reg("vm", vmChip)
+            active: bar.isOpen("vm")
+            onClicked: bar.pop("vm", vmChip)
         }
     }
     Component {

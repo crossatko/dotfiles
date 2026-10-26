@@ -150,7 +150,7 @@ PanelWindow {
         readonly property real side: BarConfig.floating(host.modelData) ? BarConfig.edgeGapOf(host.modelData) : 8
 
         // target size; the card itself follows it with a Behavior while `morphing`
-        readonly property real targetW: host.content === "center" ? 420 : host.content === "cal" ? 390 : host.content === "ha" || host.content === "ai" ? 400 : 380
+        readonly property real targetW: host.content === "center" ? 420 : host.content === "cal" ? 390 : host.content === "ha" || host.content === "ai" ? 400 : host.content === "vm" ? 440 : 380
         readonly property real targetH: Math.min(host.height - inset - side, ((loader.item as Item)?.implicitHeight ?? 60) + 2 * pad)
         // x is computed from the TARGET width, so x and width animate together (same curve) instead of x chasing a
         // moving width. y hangs off the bar edge, so the card grows away from the bar.
@@ -202,7 +202,7 @@ PanelWindow {
                 source: ({
                     center: "CenterPanel.qml", net: "NetPanel.qml", bt: "BtPanel.qml",
                     cal: "CalPanel.qml", media: "MediaPanel.qml", audio: "AudioPanel.qml", ha: "HaPanel.qml",
-                    ai: "AiPanel.qml"
+                    ai: "AiPanel.qml", vm: "VmPanel.qml"
                 })[host.content] || ""
             }
         }

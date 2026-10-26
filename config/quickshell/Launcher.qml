@@ -68,10 +68,10 @@ ModalMenu {
     readonly property bool argSecret: !!(argItem && argItem.secret)   // masked prompt (Wi-Fi password): never kept in history
 
     property string section: ""                     // "" = main list; else the open sub-menu (SectionsSource: sound-output, sound-input, power, twitch, screenshot, record)
-    property bool sectionDirect: false              // section opened by IPC / keybind (openSection), not from the main list: Esc closes instead of going back
+    property bool sectionDirect: false              // section opened by IPC / keybind (openSection), not from the main list: Ctrl+C closes instead of going back
     property string confirmId: ""                   // section item waiting for a second Enter (destructive power actions)
 
-    // scroll / selection memory per view (main list, each section, nested levels): saved before leaving a view, restored when Esc / Left
+    // scroll / selection memory per view (main list, each section, nested levels): saved before leaving a view, restored when Left / Backspace / Ctrl+C
     // comes back to it; cleared whenever the launcher opens. Key = the view's identity (viewKey).
     property var viewMem: ({})
     readonly property string viewKey: section + "|" + jfSrc.depth + "|" + vpnSrc.country + "|" + vmSrc.depth + "|" + secSrc.vodActive
@@ -138,9 +138,13 @@ ModalMenu {
         }
     }
     VpnSource { id: vpnSrc; sw: VpnSwitch; active: lc.shown; section: lc.section; onUpdated: lc.refreshKeep() }   // Tailscale / Mullvad sections
+    Binding { target: VmService; property: "launcherOpen"; value: vmSrc.current }   // job progress polls at 1 s only while the VM section is shown
     VmSource {                                      // quickemu VMs section
         id: vmSrc
         active: lc.shown; section: lc.section; cfgDir: lc.vmDir; cfgIsoDirs: lc.vmIsoDirs
+        jobs: VmService.allJobs
+        onJobStart: (os, rel, ed, ram, cores, disk) => VmService.startJob(os, rel, ed, ram, cores, disk)
+        onJobCancel: id => VmService.cancel(id)
         onUpdated: lc.refreshKeep()
         onFinished: lc.close()                      // a VM from a local ISO was created and is booting
         onSelect: id => {                           // the VM made with "Create only" appeared: select it
@@ -264,7 +268,7 @@ ModalMenu {
         presetSection = name
         open()
     }
-    // Esc / Ctrl+C: one level back (section -> main list), at the root close
+    // Left / Ctrl+C: one level back (section -> main list), at the root close
     function back() {
         if (section === "") { close(); return }
         if (section === "jellyfin" && jfSrc.depth > 0) { backJellyfin(); return }
@@ -322,8 +326,9 @@ ModalMenu {
         refresh()
     }
     // Key handlers shared by the search field's Keys.onPressed.
-    // Esc / Ctrl+C: a section entered from the main list goes one level back, a section opened directly (keybind / IPC) closes
-    function keyEscape() {
+    // Esc always closes the launcher (Left goes back). Ctrl+C: a section entered from the main list goes one level back, a section
+    // opened directly (keybind / IPC) closes
+    function keyCancel() {
         if (section !== "" && !sectionDirect) back(); else close()
     }
     // Left = one level back: action panel -> list, nested level -> its parent list, section -> main list. Outside the panel only when
@@ -460,7 +465,7 @@ ModalMenu {
     // shortcut of a row, from the Hyprland binds (Binds.keysFor): a section row = `launcher section <name>`, a command row = its command
     function hintFor(it) {
         const k = Binds.cmdKeys                         // read for the binding: rows update when the binds arrive
-        if (it.kind === "app") { Binds.progKeys; return it.argv && it.argv.length ? Binds.keysForApp(it.argv) : [] }
+        if (it.kind === "app") return Binds.progKeys && it.argv && it.argv.length ? Binds.keysForApp(it.argv) : []   // progKeys read for the binding
         const cmd = it.kind === "section" ? "qs ipc call launcher section " + it.section
             : it.kind === "command" ? String(it.command).replace(/^sleep [0-9.]+; /, "") : ""
         return cmd !== "" && k[cmd] ? k[cmd] : []
@@ -622,14 +627,16 @@ ModalMenu {
                     const k = ev.key
                     ev.accepted = true
                     if (lc.argItem) {
-                        if (k === Qt.Key_Escape || (ctrl && k === Qt.Key_C)) { lc.argItem = null; lc.argNote = ""; text = lc.argQuery }
+                        if (k === Qt.Key_Escape) lc.close()
+                        else if (ctrl && k === Qt.Key_C) { lc.argItem = null; lc.argNote = ""; text = lc.argQuery }
                         else if (k === Qt.Key_Return || k === Qt.Key_Enter) lc.runItem(lc.argItem, text)
                         else ev.accepted = false
                         return
                     }
                     if (lc.actionsOpen) {
                         const n = lc.actions.length
-                        if (k === Qt.Key_Escape || (ctrl && k === Qt.Key_K)) lc.actionsOpen = false
+                        if (k === Qt.Key_Escape) lc.close()
+                        else if (ctrl && k === Qt.Key_K) lc.actionsOpen = false
                         else if (k === Qt.Key_Left) lc.keyLeft()
                         else if (k === Qt.Key_Return || k === Qt.Key_Enter) lc.doAction(lc.actions[lc.asel].id)
                         else if (k === Qt.Key_Down || k === Qt.Key_Tab || (ctrl && (k === Qt.Key_N || k === Qt.Key_J))) lc.asel = Math.min(n - 1, lc.asel + 1)
@@ -637,7 +644,8 @@ ModalMenu {
                         else ev.accepted = false
                         return
                     }
-                    if (k === Qt.Key_Escape || (ctrl && k === Qt.Key_C)) lc.keyEscape()
+                    if (k === Qt.Key_Escape) lc.close()
+                    else if (ctrl && k === Qt.Key_C) lc.keyCancel()
                     else if (k === Qt.Key_Left && !ctrl && !(ev.modifiers & Qt.ShiftModifier) && lc.keyLeft()) {}
                     else if (k === Qt.Key_Right && !ctrl && !(ev.modifiers & Qt.ShiftModifier) && lc.keyRight()) {}
                     else if (k === Qt.Key_Backspace && !ctrl && lc.keyBackspace()) {}
@@ -743,6 +751,13 @@ ModalMenu {
                         }
                     }
                     RowText { title: row.modelData.name; sub: row.modelData.subtitle || "" }
+                    Meter {                                  // progress rows (VM downloads): item.progress 0..1
+                        visible: row.modelData.progress !== undefined
+                        Layout.preferredWidth: 90; Layout.preferredHeight: 4; Layout.alignment: Qt.AlignVCenter
+                        implicitHeight: 4
+                        value: row.modelData.progress ?? 0
+                        animMs: 300
+                    }
                     Row {                                    // keybinds section: the key combination instead of source label / number badge
                         visible: !!row.modelData.keys
                         spacing: 4
@@ -821,10 +836,10 @@ ModalMenu {
         Layout.fillWidth: true
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
-        text: lc.argItem ? (lc.argNote !== "" ? lc.argNote + " · " : "") + "Enter " + (lc.argItem.argVerb || "run") + " · Esc cancel"
-            : lc.actionsOpen ? "↑↓ select · Enter do · ← / Esc back"
-            : lc.section === "binds" ? "↑↓ scroll · type to filter (key or name) · ← / Backspace back · Esc " + (lc.sectionDirect ? "close" : "back")
-            : lc.section !== "" ? "↑↓ select · Enter run · " + (lc.rightHint ? lc.rightHint + " · " : "") + "← / Backspace back · Esc " + (lc.sectionDirect ? "close" : "back")
+        text: lc.argItem ? (lc.argNote !== "" ? lc.argNote + " · " : "") + "Enter " + (lc.argItem.argVerb || "run") + " · Ctrl+C cancel · Esc close"
+            : lc.actionsOpen ? "↑↓ select · Enter do · ← back · Esc close"
+            : lc.section === "binds" ? "↑↓ scroll · type to filter (key or name) · ← / Backspace back · Esc close"
+            : lc.section !== "" ? "↑↓ select · Enter run · " + (lc.rightHint ? lc.rightHint + " · " : "") + "← / Backspace back · Esc close"
             : "↑↓ select · Enter run · " + (lc.altHint ? lc.altHint + " · " : "") + (lc.rightHint ? lc.rightHint + " · " : "") + "Ctrl+1-9 quick run · Esc close"
         color: lc.argNote !== "" ? Theme.red : Theme.muted
         font.pixelSize: Theme.fontCaption

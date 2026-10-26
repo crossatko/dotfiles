@@ -12,6 +12,13 @@
   vm-ctl create-run DIR OS RELEASE [EDITION] [--ram R] [--cores N] [--disk S]
                                        quickget in DIR (run inside a terminal: shows progress, toast at the end); after a
                                        successful run the options are written into the conf quickget just made
+  vm-ctl create-bg DIR OS RELEASE [EDITION] [--ram R] [--cores N] [--disk S]
+                                       same as create-run but headless: no terminal; progress goes to a job file in
+                                       $XDG_RUNTIME_DIR/launcher-vm/jobs/ (read by `status`), toast at the end; SIGTERM cancels
+  vm-ctl status DIR                    JSON {vms: [running VMs: pid, rss, cpu ticks, ram, cores, uptime, monitor], jobs: [...]} (bar chip / panel)
+  vm-ctl shot DIR NAME OUT.png         preview PNG of a running VM from QEMU's monitor `screendump` only (GL guests answer "no surface"); prints
+                                       "screendump <sha>", else the reason on stderr + exit 1 and the last good PNG stays
+  vm-ctl cancel JOBID                  cancel a running download job (SIGTERM to its runner), or remove a finished one
   vm-ctl host                          JSON {ram (GB, free --giga), threads, smt, autoRam, autoCores} = quickemu's auto values
   vm-ctl resources DIR NAME RAM CORES  set ram= / cpu_cores= ("auto" removes the line); VM must be stopped
   vm-ctl delete DIR NAME               move <name>.conf and the VM folder to the trash (gio trash); VM must be stopped
@@ -49,6 +56,11 @@ GTK_VDAGENT = ("-chardev qemu-vdagent,id=qsvdagent,name=vdagent,clipboard=on -de
 SIZE_RE = re.compile(r"^[1-9][0-9]{0,4}[MGT]$")
 GUESTS = {"linux": "linux", "windows": "windows", "other": "other"}
 DISK_MIN_SIZE = 197632 * 8          # quickemu: a disk this small "looks unused" and still boots iso=
+
+
+def state_dir(*sub):
+    base = os.environ.get("QS_VM_STATE") or os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "launcher-vm")
+    return os.path.join(base, *sub)
 
 
 def notify(title, body=""):
@@ -485,6 +497,399 @@ def cmd_create_run(d, osid, rel, *rest):
     return rc
 
 
+# ---- background creation (create-bg) and the status feed for the bar chip -------------------------------------
+JOB_RE = re.compile(r"^[0-9]{10,}-[0-9]+$")
+PCT_RE = re.compile(r"(?:^|\s|#)(\d{1,3}(?:\.\d+)?)%")
+JOB_KEEP = {"done": 6, "cancelled": 3, "failed": 90}      # seconds a finished job stays listed
+
+
+def job_path(jid):
+    return state_dir("jobs", jid + ".json")
+
+
+def write_job(job):
+    os.makedirs(state_dir("jobs"), mode=0o700, exist_ok=True)
+    tmp = job_path(job["id"]) + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(job, f)
+    os.replace(tmp, job_path(job["id"]))
+
+
+def pid_is(pid, needle):
+    try:
+        with open("/proc/%d/cmdline" % pid, "rb") as f:
+            return needle in f.read()
+    except OSError:
+        return False
+
+
+def growing_file(d, skip=()):
+    """size of the biggest file below DIR (own folder or a VM sub-folder) written to in the last few seconds = the running download;
+    works for resumed downloads too (the folder already existed). `skip` = sub-folders of VMs that existed before (a running VM
+    keeps writing its disk image there, which is not the download)"""
+    best, now = 0, time.time()
+    try:
+        for e in os.scandir(d):
+            if e.name in skip:
+                continue
+            try:
+                files = [e] if e.is_file(follow_symlinks=False) else list(os.scandir(e.path)) if e.is_dir(follow_symlinks=False) else []
+                for g in files:
+                    if g.is_file(follow_symlinks=False):
+                        st = g.stat()
+                        if now - st.st_mtime < 6 and st.st_size > best:
+                            best = st.st_size
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return best
+
+
+def cmd_create_bg(d, osid, rel, *rest):
+    import select
+    import signal
+    rest, opts = list(rest), {}
+    while len(rest) >= 2 and rest[-2] in ("--ram", "--cores", "--disk"):
+        opts[rest[-2][2:]] = rest[-1]
+        rest = rest[:-2]
+    if len(rest) > 1:
+        die("bad quickget arguments")
+    ed = rest[0] if rest else ""
+    h = host()
+    guest = "windows" if osid.startswith("windows") else "macos" if osid == "macos" else "linux"
+    if not OS_RE.match(osid) or not REL_RE.match(rel) or (ed and not ED_RE.match(ed)) \
+            or ram_error(opts.get("ram", "auto"), guest, h) or cores_error(opts.get("cores", "auto"), h) \
+            or not (opts.get("disk", "auto") == "auto" or SIZE_RE.match(opts["disk"])):
+        die("bad quickget arguments")
+    os.makedirs(d, exist_ok=True)
+    before = {f for f in os.listdir(d) if f.endswith(".conf")}
+    vm_dirs = {f[:-5] for f in before}                   # existing VMs' folders: not the download (growing_file)
+    label = " ".join(x for x in (osid, rel, ed) if x)
+    # one runner per target: quickget would write the same folder / file twice (two clicks, two entry points)
+    import fcntl
+    os.makedirs(state_dir("locks"), mode=0o700, exist_ok=True)
+    lock = open(os.path.join(state_dir("locks"), re.sub(r"[^A-Za-z0-9._-]", "_", label) + ".lock"), "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        notify("Already downloading " + label, "A download of it is running")
+        die("already downloading " + label, 3)
+    job = {"id": "%d-%d" % (time.time() * 1000, os.getpid()), "label": label, "dir": d, "pid": os.getpid(), "state": "running",
+           "phase": "Preparing", "pct": -1, "speed": 0, "eta": -1, "bytes": 0, "total": 0, "name": "", "error": "",
+           "started": int(time.time()), "ended": 0}
+    write_job(job)
+    cancelled = []
+    child = []
+
+    def on_term(signum, frame):
+        cancelled.append(1)
+        for c in child:
+            try:
+                os.killpg(c.pid, signal.SIGTERM)
+            except OSError:
+                pass
+    signal.signal(signal.SIGTERM, on_term)
+    signal.signal(signal.SIGHUP, on_term)
+    signal.signal(signal.SIGINT, on_term)
+
+    rc, tail, samples, lastw = 0, "", [], 0.0
+    try:
+        p = subprocess.Popen([QUICKGET, osid, rel] + ([ed] if ed else []), cwd=d, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, start_new_session=True)
+        child.append(p)
+        if cancelled:
+            on_term(0, None)
+        buf = b""
+        fd = p.stdout.fileno()
+        lines = []
+        while True:
+            r, _, _ = select.select([fd], [], [], 1.0)
+            if r:
+                try:
+                    chunk = os.read(fd, 4096)
+                except InterruptedError:
+                    continue
+                if not chunk:
+                    break
+                buf += chunk
+                parts = re.split(rb"[\r\n]", buf)
+                buf = parts.pop()
+                for seg in parts:
+                    t = seg.decode(errors="replace").strip()
+                    if not t:
+                        continue
+                    m = PCT_RE.search(t)
+                    if m and "ERROR" not in t:
+                        job["pct"] = max(job["pct"], min(100.0, float(m.group(1))))     # never backwards (a garbled partial line)
+                        job["phase"] = "Downloading" if job["pct"] < 100 else "Finishing"
+                    else:
+                        lines.append(t)
+                        lines = lines[-30:]
+                        if t.lower().startswith("downloading"):
+                            job["phase"] = "Downloading"
+                        elif "ERROR" not in t and job["pct"] < 0 and re.match(r"^[A-Za-z]", t):
+                            job["phase"] = t[:40]
+            now = time.time()
+            if now - lastw >= 0.8:
+                lastw = now
+                size = growing_file(d, vm_dirs)
+                samples = [x for x in samples + [(now, size)] if now - x[0] <= 6]
+                job["bytes"] = size
+                if job["pct"] > 1 and size:
+                    job["total"] = max(job["total"], int(size * 100 / job["pct"])) if job["total"] and abs(job["total"] - size * 100 / job["pct"]) < job["total"] * 0.3 else int(size * 100 / job["pct"])
+                if len(samples) >= 2 and samples[-1][0] - samples[0][0] >= 1.5:
+                    job["speed"] = max(0, int((samples[-1][1] - samples[0][1]) / (samples[-1][0] - samples[0][0])))
+                    job["eta"] = int((job["total"] - size) / job["speed"]) if job["speed"] > 0 and job["total"] > size else -1
+                write_job(job)
+        rc = p.wait()
+    except FileNotFoundError:
+        rc = 127
+        lines = ["quickget is not installed"]
+    finally:
+        for c in child:                                # no zombies / strays: the whole quickget group is gone before we leave
+            try:
+                os.killpg(c.pid, signal.SIGTERM)
+            except OSError:
+                pass
+            try:
+                c.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(c.pid, signal.SIGKILL)
+                    c.wait(timeout=5)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+    new = sorted({f for f in os.listdir(d) if f.endswith(".conf")} - before)
+    job["ended"] = int(time.time())
+    job["speed"], job["eta"] = 0, -1
+    if cancelled:
+        job["state"], job["phase"] = "cancelled", "Cancelled"
+        write_job(job)
+        notify("Download cancelled: " + label, "The partial download stays and resumes next time")
+        return 130
+    if rc == 0:
+        name = new[0][:-5] if new else label
+        chosen = {k: v for k, v in opts.items() if v != "auto"}
+        if chosen and len(new) == 1 and NAME_RE.match(name):
+            apply_resources(Vm(d, name), chosen.get("ram"), chosen.get("cores"), chosen.get("disk"))
+        job.update({"state": "done", "phase": "Ready", "pct": 100, "name": name})
+        write_job(job)
+        notify("VM ready: " + name, "Start it from the launcher (VMs)")
+        return 0
+    err = first_error("\n".join(lines), rc)
+    job.update({"state": "failed", "phase": "Failed", "error": err})
+    write_job(job)
+    notify("quickget failed: " + label, err)
+    return rc
+
+
+def cmd_cancel(jid):
+    import signal
+    if not JOB_RE.match(jid):
+        die("bad job id")
+    try:
+        with open(job_path(jid)) as f:
+            job = json.load(f)
+    except (OSError, ValueError):
+        return 0
+    if job.get("state") == "running" and pid_is(int(job.get("pid", 0)), b"vm-ctl"):
+        os.kill(int(job["pid"]), signal.SIGTERM)       # the runner kills quickget's group and writes "cancelled"
+    else:
+        try:
+            os.unlink(job_path(jid))
+        except OSError:
+            pass
+    return 0
+
+
+def proc_stats(pid, cmd):
+    """cpu ticks, rss (bytes), start time, configured RAM (bytes) / cores from the live qemu process"""
+    hz = os.sysconf("SC_CLK_TCK")
+    out = {"ticks": 0, "rss": 0, "uptime": 0, "ram": 0, "cores": 0, "hz": hz}
+    try:
+        with open("/proc/%d/stat" % pid) as f:
+            st = f.read().rsplit(")", 1)[1].split()
+        out["ticks"] = int(st[11]) + int(st[12])
+        with open("/proc/uptime") as f:
+            up = float(f.read().split()[0])
+        out["uptime"] = max(0, int(up - int(st[19]) / hz))
+        with open("/proc/%d/status" % pid) as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    out["rss"] = int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    if "-m" in cmd and cmd.index("-m") + 1 < len(cmd):
+        m = re.match(r"^(\d+)([KMGT]?)", cmd[cmd.index("-m") + 1].upper())
+        if m:
+            out["ram"] = int(m.group(1)) * {"": 1 << 20, "K": 1 << 10, "M": 1 << 20, "G": 1 << 30, "T": 1 << 40}[m.group(2)]
+    if "-smp" in cmd and cmd.index("-smp") + 1 < len(cmd):
+        smp = dict(kv.split("=", 1) for kv in cmd[cmd.index("-smp") + 1].split(",") if "=" in kv)
+        try:
+            out["cores"] = int(smp.get("cores", 1)) * int(smp.get("threads", 1)) * int(smp.get("sockets", 1))
+        except ValueError:
+            pass
+        if not out["cores"]:
+            m = re.match(r"^\d+", cmd[cmd.index("-smp") + 1])
+            out["cores"] = int(m.group(0)) if m else 0
+    return out
+
+
+def last_shot(name, now_start):
+    """mtime (epoch s) of the stored last good preview of a running VM, 0 = none. A frame older than the VM's current boot is a previous
+    run's: it is deleted (the preview is cleared when the VM is (re)started)."""
+    path = state_dir("shots", name + ".png")
+    try:
+        m = os.stat(path).st_mtime
+    except OSError:
+        return 0
+    if m < now_start - 1:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        return 0
+    return m
+
+
+def prune_shots(running):
+    """previews of VMs that are not running any more (stopped, deleted) go away"""
+    now = time.time()
+    try:
+        for f in os.listdir(state_dir("shots")):
+            p = state_dir("shots", f)
+            if f.endswith(".tmp.png"):                  # a `shot` writing right now; only a stale leftover goes
+                try:
+                    if now - os.stat(p).st_mtime > 60:
+                        os.unlink(p)
+                except OSError:
+                    pass
+            elif f.endswith(".png") and f[:-4] not in running:
+                os.unlink(p)
+    except OSError:
+        pass
+
+
+def cmd_status(d):
+    vms, jobs = [], []
+    running = set()
+    try:
+        names = sorted(f[:-5] for f in os.listdir(d) if f.endswith(".conf"))
+    except OSError:
+        names = []
+    for name in names:
+        if not NAME_RE.match(name):
+            continue
+        vm = Vm(d, name)
+        pid, cmd = vm.pid()
+        if not pid:
+            continue
+        i = vm.info()
+        e = {"name": name, "pid": pid, "guest": i["guest"], "display": i["display"], "ssh": i["ssh"],
+             "monitor": os.path.exists(vm.file("-monitor.socket"))}
+        e.update(proc_stats(pid, cmd))
+        e["shotAt"] = last_shot(name, now_start=time.time() - e["uptime"])
+        running.add(name)
+        vms.append(e)
+    prune_shots(running)
+    jd = state_dir("jobs")
+    now = time.time()
+    try:
+        files = os.listdir(jd)
+    except OSError:
+        files = []
+    for f in files:
+        if not f.endswith(".json") or not JOB_RE.match(f[:-5]):
+            continue
+        p = os.path.join(jd, f)
+        try:
+            with open(p) as fh:
+                job = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if job.get("state") == "running" and not pid_is(int(job.get("pid", 0)), b"vm-ctl"):
+            job.update({"state": "failed", "phase": "Failed", "error": "The download process vanished", "ended": int(now)})
+            try:
+                write_job(job)
+            except OSError:
+                pass
+        if job.get("state") != "running" and now - job.get("ended", 0) > JOB_KEEP.get(job.get("state"), 10):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+            continue
+        jobs.append(job)
+    jobs.sort(key=lambda j: j.get("started", 0))
+    print(json.dumps({"vms": vms, "jobs": jobs, "now": now}))
+    return 0
+
+
+def sha_of(path):
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()[:16]
+
+
+def hmp_screendump(vm, tmp):
+    """QEMU monitor `screendump` (quickemu's default `monitor=socket`). "" = written, else why not. A guest that scans out through
+    OpenGL (virtio-gpu-gl / VirGL, `-display gtk gl=on`) has no software surface: qemu answers "Error: no surface"."""
+    import socket
+    sock = vm.file("-monitor.socket")
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(4)
+    try:
+        os.chdir(os.path.dirname(sock))                         # sun_path is limited to ~107 bytes: connect by relative name
+        s.connect(os.path.basename(sock))
+        s.sendall(("screendump %s -f png\n" % tmp).encode())    # the monitor echoes it; its reply ends with a fresh "(qemu) " prompt
+        reply = b""
+        while b"\n(qemu)" not in reply.partition(b"-f png")[2]:       # past the echo of the command
+            c = s.recv(65536)
+            if not c:
+                break
+            reply += c
+    except (OSError, socket.timeout):
+        return "no monitor socket"
+    finally:
+        s.close()
+    text = reply.decode(errors="replace").partition("-f png")[2]
+    m = re.search(r"Error:?\s*([^\r\n\x1b]*)", text)
+    if m:
+        return m.group(1).strip() or "screendump failed"
+    return "" if os.path.exists(tmp) else "screendump wrote nothing"
+
+
+def cmd_shot(vm, out):
+    """Preview PNG of a running VM from QEMU's own monitor `screendump` (nothing on the Wayland side is ever captured), written atomically.
+    stdout "screendump <sha>"; on failure the reason on stderr and exit 1, and the previous PNG is left alone (it is the last good
+    frame; `status` reports its age and drops it when the VM was restarted)."""
+    if not re.match(r"^/[A-Za-z0-9_./-]+\.png$", out):
+        die("bad output path")
+    if not vm.pid()[0]:
+        return 1
+    os.makedirs(os.path.dirname(out), mode=0o700, exist_ok=True)
+    tmp = out[:-4] + ".tmp.png"
+    why = hmp_screendump(vm, tmp)
+    if why:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        print(why, file=sys.stderr)
+        return 1
+    try:
+        os.replace(tmp, out)
+    except OSError as e:
+        print("could not store the frame: %s" % e.strerror, file=sys.stderr)
+        return 1
+    print("screendump %s" % sha_of(out))
+    return 0
+
+
 def cmd_delete(vm):
     need(vm)
     if vm.pid()[0]:
@@ -636,6 +1041,12 @@ def main(argv):
         return cmd_oslist(a[0])
     if c == "create-run" and 3 <= len(a) <= 10:
         return cmd_create_run(*a)
+    if c == "create-bg" and 3 <= len(a) <= 10:
+        return cmd_create_bg(*a)
+    if c == "status" and len(a) == 1:
+        return cmd_status(a[0])
+    if c == "cancel" and len(a) == 1:
+        return cmd_cancel(a[0])
     if c == "host" and not a:
         print(json.dumps(host()))
         return 0
@@ -654,6 +1065,8 @@ def main(argv):
         return cmd_snapshot(vm, a[2], a[3])
     if c == "resources" and len(a) == 4:
         return cmd_resources(vm, a[2], a[3])
+    if c == "shot" and len(a) == 3:
+        return cmd_shot(vm, a[2])
     if c == "attach" and len(a) == 3:
         return cmd_attach(vm, a[2])
     fn = {"detach": cmd_detach}.get(c)

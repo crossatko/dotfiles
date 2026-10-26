@@ -13,7 +13,8 @@ import Quickshell.Io
 //               running = `vm-ctl focus` (Hyprland focus by qemu PID / SPICE viewer). Polled every 2 s while the section is shown.
 //   Ctrl+K:     stopped: SPICE viewer / headless start, Snapshots (nested level), Open VM folder, Edit config, Delete VM (confirm,
 //               gio trash); running: Shut down (ACPI), Force stop (confirm), Open VM folder, Edit config.
-//   picking an OS leaf opens the terminal running `vm-ctl create-run` (quickget in the VM folder, progress visible, toast at the end).
+//   picking an OS leaf -> form -> "Download and create" runs `vm-ctl create-bg` in the background (progress in the bar's VM chip, VmService.qml;
+//               toast at the end); Ctrl+K on that row: "Download in a terminal" (old `create-run`).
 //   "From local ISO..." (first row of New VM): *.iso in isoDirs ($LAUNCHER_ISO_DIRS, colon list; else config.json "isoDirs"; else
 //               ~/Downloads, ~/ISOs, the VM folder; 2 levels deep, newest first); typing "/..." or "~/..." browses paths instead
 //               (`vm-ctl isopath`, unranked; folder rows descend). Picking one opens a form level (name, guest type, disk size,
@@ -25,6 +26,39 @@ QtObject {
 
     signal updated()
     signal finished()                               // close the launcher (a VM was created and is booting)
+    // background downloads (the launcher folder cannot see the root singletons: Launcher.qml wires these to VmService.qml)
+    property var jobs: []                           // VmService.allJobs: {id, label (= "os release [edition]"), state, phase, pct, detail, error, name}
+    signal jobStart(string os, string rel, string ed, string ram, string cores, string disk)
+    signal jobCancel(string id)
+    property var startedKeys: ({})                  // targets started from the open form: when one is done the form closes and the VM is selected
+    function jobOf(key) {
+        let best = null
+        for (const j of jobs) if (j.label === key && (best === null || j.state === "running" || (best.state !== "running" && j.started >= best.started))) best = j
+        return best
+    }
+    function formKey(f) { return [f.os, f.rel, f.ed].filter(x => x).join(" ") }
+    onJobsChanged: {
+        for (const k in startedKeys) {
+            const j = jobOf(k)
+            if (j && j.state === "done" && form && form.mode === "quickget" && formKey(form) === k) {
+                const n = j.name
+                const s = Object.assign({}, startedKeys); delete s[k]; startedKeys = s
+                stack = []; form = null
+                selectAfter = nameRe.test(n) ? "vm:" + n : ""
+                poll()
+            } else if (j && j.state !== "running") { const s = Object.assign({}, startedKeys); delete s[k]; startedKeys = s }
+        }
+        changed()
+    }
+    function jobRow(j, id, title) {
+        const run = j.state === "running"
+        const sub = j.state === "failed" ? (j.error || "Failed") : run && j.pct >= 0 ? j.phase + "  ·  " + j.detail : j.detail
+        return { id: id, name: (run ? "Downloading " : j.state === "failed" ? "Failed: " : "") + (title || j.label), subtitle: sub, kind: "vm-job", jobId: j.id, source: "",
+                 glyph: "\uf019", iconColor: j.state === "failed" ? "red" : "", transient: true, private: true, vmNav: false,
+                 progress: run ? Math.max(0, j.pct) / 100 : undefined, runLabel: "",
+                 actions: [run ? act("vm-job-cancel", "Cancel download", "", "Stops quickget; the partial file is kept and resumes next time")
+                               : act("vm-job-cancel", "Dismiss", "", "")] }
+    }
     signal select(string id)                        // select this row once it is listed (a VM created with "Create only")
 
     property bool active: false                     // launcher shown
@@ -121,7 +155,7 @@ QtObject {
     property string sig: ""
     function changed() {
         const s = JSON.stringify([vms, error, pending, loaded, osLoading, osError, oses.length, stack, snaps, snapLoading, snapError, snapBusy,
-                                  isos, isoLoading, pathRes, form, formBusy, formError, hostInfo])
+                                  isos, isoLoading, pathRes, form, formBusy, formError, hostInfo, jobs])
         if (s !== sig) { sig = s; rev++; updated() }
     }
 
@@ -222,6 +256,7 @@ QtObject {
         const t = top
         if (!t) {
             const out = [newRow]
+            for (const j of jobs) out.push(jobRow(j, "vm:job:" + j.label))
             if (error !== "") out.push(info("error", "Could not list VMs", error, "", "red"))
             else if (!loaded) out.push(info("load", "Loading...", ""))
             for (const v of vms) out.push(vmRow(v))
@@ -363,8 +398,9 @@ QtObject {
     }
 
     // in-place rows (Launcher.runItem: the launcher stays open, progress shows on the list): snapshot create / restore
-    function owns(item) { return !!item && (item.kind === "vm-snap-new" || item.kind === "vm-snap" || /^vm-form-/.test(item.kind || "")) }
+    function owns(item) { return !!item && (item.kind === "vm-job" || item.kind === "vm-snap-new" || item.kind === "vm-snap" || /^vm-form-/.test(item.kind || "")) }
     function activate(item, arg) {
+        if (item.kind === "vm-job") return true
         if (/^vm-form-/.test(item.kind)) return formActivate(item, arg)
         if (item.kind === "vm-snap-new") {
             const tag = String(arg || "").trim()
@@ -497,6 +533,8 @@ QtObject {
         if (!f) return []
         const out = []
         if (formBusy !== "") out.push(info("form-busy", formBusy, "", ""))
+        const job = f.mode === "quickget" ? jobOf(formKey(f)) : null
+        if (job && job.state === "failed") out.push(info("form-job-error", "Download failed", job.error || "Failed", "", "red"))
         if (formError !== "") out.push(info("form-error", f.mode === "res" ? "Could not save" : "Could not create the VM", formError, "", "red"))
         const row = (id, name, sub, kind, glyph, extra) => Object.assign({ id: "vm:form:" + id, name: name, subtitle: sub, kind: kind, source: "", glyph: glyph,
                                                                            iconColor: "", transient: true, private: true }, extra || {})
@@ -514,8 +552,10 @@ QtObject {
             out.push(ramRow, coreRow)
             out.push(row("size", "Disk size:  " + (f.size === "auto" ? "auto (quickget's default)" : f.size), "Grows as it fills (qcow2)  ·  Enter to change",
                          "vm-form-size", "", { argument: "Disk size (e.g. 64G, or auto)", argInit: f.size === "auto" ? "" : f.size, argVerb: "set the size", runLabel: "Change size" }))
-            out.push(row("download", "Download and create", "quickget " + [f.os, f.rel, f.ed].filter(x => x).join(" ") + " in a terminal, then sets these values",
-                         "vm-form-download", "", { runLabel: "Download" }))
+            if (job && job.state === "running") out.push(Object.assign(jobRow(job, "vm:form:download", f.label), { vmNav: false }))
+            else out.push(row("download", "Download and create", "quickget " + [f.os, f.rel, f.ed].filter(x => x).join(" ") + " in the background (progress in the bar), then sets these values",
+                         "vm-form-download", "", { runLabel: "Download",
+                           actions: [act("vm-form-download-term", "Download in a terminal", "", "quickget in a terminal window instead of the background")] }))
             out.push(info("form-qg", "Name: " + [f.os, f.rel, f.ed].filter(x => x).join("-").replace(/ /g, "-").replace(/[()]/g, "") + " (set by quickget)",
                           f.guest === "linux" ? "GPU accelerated (VirGL)" : noAccel, ""))
             return out
@@ -571,13 +611,25 @@ QtObject {
             const e = coresError(v)
             if (e !== "") return e
             form = Object.assign({}, f, { cores: v })
-        } else if (k === "vm-form-download") {
-            const args = [helper, "create-run", dir, f.os, f.rel].concat(f.ed ? [f.ed] : [])
-            for (const [opt, v] of [["--ram", f.ram], ["--cores", f.cores], ["--disk", f.size]]) if (v !== "auto") args.push(opt, v)
-            Quickshell.execDetached(["ghostty", "--title=New VM: " + f.label, "--working-directory=" + dir, "-e"].concat(args))
-            stack = []; form = null
-            changed(); finished()
-            return true
+        } else if (k === "vm-job") {
+            return true                                  // Enter on a progress row: nothing (Ctrl+K: Cancel download)
+        } else if (k === "vm-form-download" || k === "vm-form-download-term") {
+            // background job (no terminal): `vm-ctl create-bg` writes its progress to a job file that VmService polls; the row
+            // below turns into a progress row at once (VmService lists the job as "Starting" before its file exists)
+            const term = k === "vm-form-download-term"
+            const key = formKey(f)
+            if (term) {
+                const args = [helper, "create-run", dir, f.os, f.rel].concat(f.ed ? [f.ed] : [])
+                for (const [opt, v] of [["--ram", f.ram], ["--cores", f.cores], ["--disk", f.size]]) if (v !== "auto") args.push(opt, v)
+                Quickshell.execDetached(["ghostty", "--title=New VM: " + f.label, "--working-directory=" + dir, "-e"].concat(args))
+                stack = []; form = null
+                changed(); finished()
+                return true
+            }
+            const cur = jobOf(key)
+            if (cur && cur.state === "running") return "Already downloading " + f.label
+            const st = Object.assign({}, startedKeys); st[key] = true; startedKeys = st
+            jobStart(f.os, f.rel, f.ed, f.ram, f.cores, f.size)
         } else if (k === "vm-form-save") {
             formError = ""; formBusy = "Saving..."; formOp = "res"
             createProc.command = [helper, "resources", dir, f.vm, f.ram, f.cores]
@@ -631,6 +683,8 @@ QtObject {
             return Object.assign({}, item, { kind: item.kind + "-set", argument: ram ? "RAM, e.g. 12G or auto" : "CPU cores, e.g. 6 or auto",
                                              argInit: cur === "auto" ? (ram ? hostInfo.autoRam : String(hostInfo.autoCores)) : cur, argVerb: "set it" })
         }
+        if (item.kind === "vm-job" && id === "vm-job-cancel") { jobCancel(item.jobId); return "keep" }
+        if (id === "vm-form-download-term" && item.kind === "vm-form-download") return formActivate(Object.assign({}, item, { kind: "vm-form-download-term" }), "")
         if (item.kind === "vm-snap" && id === "vm-snap-delete") {
             snapOp(item.vm, "delete", item.tag, "Deleting snapshot " + item.tag + "...")
             return "keep"

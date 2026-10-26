@@ -84,3 +84,6 @@ NotifHeader 1.0 NotifHeader.qml
 NotifStack 1.0 NotifStack.qml
 NotifSlot 1.0 NotifSlot.qml
 NotifEmpty 1.0 NotifEmpty.qml
+singleton VmService 1.0 VmService.qml
+VmChip 1.0 VmChip.qml
+VmPanel 1.0 VmPanel.qml

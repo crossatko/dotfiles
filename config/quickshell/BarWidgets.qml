@@ -23,6 +23,7 @@ Singleton {
     readonly property var widgets: [
         { id: "workspaces", title: "Workspaces",   icon: "\uf00a", section: "left" },
         { id: "recording",  title: "Screen recording", icon: "\uf03d", section: "right" },   // visible only while recording
+        { id: "vm",         title: "Virtual machines", icon: "\uf108", section: "right", before: "media" },   // visible only while a VM runs or a VM download is in progress
         { id: "media",      title: "Now playing",  icon: "\uf001", section: "right" },
         { id: "caffeine",   title: "Keep awake",   icon: "\uf0f4", section: "right" },
         { id: "cpu",        title: "CPU",          icon: "\uf2db", section: "right" },
