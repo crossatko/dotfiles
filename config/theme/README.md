@@ -45,7 +45,7 @@ overrides ──┘                      │   (out/ is git-ignored; default/ is
   `theme.local.toml` (this machine's `wallpaper`, written by `apply` / the picker; optional local `[settings]`,
   `[overrides]`, `[vars]` `tv_wallpaper` and `static_blocks` = this machine's hyprpaper per-monitor blocks, merged over
   `theme.toml`) and `out/` (what every app reads, incl. `out/host/`: `gtk3.css`, `gtk4.css`, `kvantum.kvconfig`,
-  `brave-glass.css`, which depend on the running compositor; only `theme.py` links them).
+  `brave-glass.css`, `vesktop-theme.css`, which depend on the running compositor; only `theme.py` links them).
 * **Seeding:** `bin/theme-seed` (POSIX sh) copies `default/` into a missing `out/` (leading `~/` becomes `$HOME/`) and writes
   `out/.default`. install.sh, `theme.py` and the git hooks (`post-merge`, `post-rewrite`, `post-checkout` -> `theme-render`) call it, so a
   fresh clone and the Mac (the engine never runs there) have working files; while the marker exists `out/` follows changes
@@ -93,6 +93,7 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 | GTK 3 apps, Brave dialogs | named theme `Wall` (`~/.local/share/themes/Wall`): GTK's stylesheet (dark or light, by mode) re-colored by `recolor_gtk_css`; Brave gets `GTK_THEME=Wall:dark` (`Wall` in light mode) from its shim | GTK 3 apps reload on theme change; Brave on restart |
 | GTK 4 / libadwaita apps, nautilus | `~/.config/gtk-4.0/gtk.css` -> `out/host/gtk4.css` (= `out/gtk.css` + translucent backgrounds and a compositor blur request, `gtk_glass*` in theme.toml); `gtk-3.0` -> `out/host/gtk3.css` (= `out/gtk.css` + the same glass for client-side-decorated GTK3 windows only; Firefox and SSD windows stay opaque) | **after the app restarts** (see below) |
 | Adwaita icons | generated hue-rotated copy `Wall-Adwaita` (see below) | new windows / apps that reload icons |
+| Vesktop (Vencord) | `templates/vesktop-theme.css` -> `out/host/vesktop-theme.css` (Discord CSS variables remapped, glass via the `gtk_eff_*` alphas) -> copied atomically to `~/.config/vesktop/themes/wall.theme.css` when vesktop is installed (`vesktop = false` in `[settings]` skips) | Vencord watches `themes/` and re-applies live; first enabling: see Vesktop below |
 | Brave | seed-color theme written into its Preferences by the `~/.local/bin/brave` launcher shim | at next start (Brave rewrites Preferences on exit, so it can't be edited while running) |
 | Geary 46 (GTK3 + libhandy) | window chrome: Geary block in `templates/gtk3.css` (scoped to `window.geary-main-window`: accent-tint selection, unread = accent edge + accent sender, read dimmed, starred yellow, thread badges, in-app toast `box.app-notification` restyled like a Quickshell notification card); plain-text bodies: `out/geary-user-style.css` linked as `~/.config/geary/user-style.css` (`deploy()`, only when Geary is installed) | at next start |
 
@@ -115,7 +116,8 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
   quits it when it has no windows; with windows open it just prints a hint. Close them or `nautilus -q`.
 * **Blur**: the quickshell bar opts in to Hyprland's own blur via the `qs-bar` layer rule in
   `hypr/hyprland/rules.lua`; tune with `bar_opacity`.
-* Not themed: Discord, web page contents.
+* Not themed: web page contents.
+* **Vesktop**: the file is a real copy (a symlink target change would not fire Vencord's folder watch). `theme.py` writes `enabledThemes` + `transparent` in `~/.config/vesktop/settings/settings.json` (read-modify-write, other keys kept) ONLY while Vesktop is closed, else it prints the manual step (Settings > Vencord > Themes > Wall; Vencord settings > transparent window; restart). The transparent window needs no flag; Hyprland's default blur already covers it (no window rule). Radius is a fixed 6 px. Verified: login page + a mock pane layout using the variables in a nested Hyprland (isolated profile; glass and accent seen); NOT verified: the real logged-in UI (variable coverage; Discord can rename variables, recheck after big UI changes). Login art keeps Discord's own background.
 * **Geary limits** (46): HTML mails keep their own white page (only `div.plaintext` bodies are recoloured; forcing a
   dark page breaks mails that set dark text). The folder tree is a GtkTreeView: no per-folder colours or hover, and
   its unread badges are cairo-drawn `#888` (`CountBadge`), not CSS. Selectors come from Geary 46.0's UI files and

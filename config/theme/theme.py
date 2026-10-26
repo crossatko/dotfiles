@@ -396,6 +396,7 @@ def gtk_glass_alphas(s, glass=None, mode=None):
          "view": layer(eff["view"]), "popover": eff["popover"], "dialog": eff["dialog"]}
     out = {f"gtk_a_{k}": f"{v:.3f}" for k, v in a.items()}
     out["gtk_eff_header"] = f"{eff['header']:.3f}"   # single layer (Brave's frame in Wall-Glass)
+    out.update({f"gtk_eff_{k}": f"{v:.3f}" for k, v in eff.items() if k != "header"})   # unstacked panes (Vesktop theme)
     # Brave's tab strip (Wall-Glass headerbar): the effective header alpha; theme.toml brave_glass_alpha overrides.
     out["brave_frame_alpha"] = out["gtk_eff_header"]
     if on and "brave_glass_alpha" in s:
@@ -417,7 +418,7 @@ def gtk_glass_alphas(s, glass=None, mode=None):
 # They go to out/host/ (git-ignored), not out/: committed, a render on the glass host (card fill 0.3) reached the other
 # hosts with every pull and left GTK / Qt windows nearly see-through over plain blur until the next local render.
 HOST_OUT = OUT / "host"
-HOST_TEMPLATES = {"gtk3.css", "gtk4.css", "kvantum.kvconfig", "brave-glass.css"}
+HOST_TEMPLATES = {"gtk3.css", "gtk4.css", "kvantum.kvconfig", "brave-glass.css", "vesktop-theme.css"}
 
 
 # ------------------------------------------------------- per-monitor wallpapers
@@ -4030,6 +4031,46 @@ def deploy_herdr():
     write_atomic(dest, new)
 
 
+VESKTOP_DIR = Path.home() / ".config/vesktop"
+VESKTOP_THEME = "wall.theme.css"
+
+
+def apply_vesktop(cfg):
+    """Vesktop (Vencord): copy out/host/vesktop-theme.css into its themes/ folder (a real file, replaced atomically: Vencord
+    watches the folder and re-applies the theme live; a symlink would not trigger the watch). Only when Vesktop is installed
+    or has a config dir. The one-time enabling (`enabledThemes` + `transparent` in settings/settings.json) is a
+    read-modify-write of that file and is only done while Vesktop is closed (it rewrites the file on exit); otherwise the
+    manual step is printed. Nothing else in the file (and nothing of the login) is touched."""
+    src = HOST_OUT / "vesktop-theme.css"
+    if not cfg.get("settings", {}).get("vesktop", True) or not src.exists():
+        return
+    if not (shutil.which("vesktop") or VESKTOP_DIR.is_dir()):
+        return
+    themes = VESKTOP_DIR / "themes"
+    themes.mkdir(parents=True, exist_ok=True)
+    dest = themes / VESKTOP_THEME
+    text = src.read_text()
+    if not dest.exists() or dest.read_text() != text:
+        write_atomic(dest, text)
+    sf = VESKTOP_DIR / "settings/settings.json"
+    try:
+        d = json.loads(sf.read_text()) if sf.exists() else {}
+        if not isinstance(d, dict):
+            return
+    except (OSError, ValueError):
+        return
+    want = {"enabledThemes": sorted(set(d.get("enabledThemes", [])) | {VESKTOP_THEME}), "transparent": True}
+    if all(d.get(k) == v for k, v in want.items()):
+        return
+    if run_out(["pgrep", "-x", "vesktop"]).strip():
+        print("vesktop is running: enable the theme once in Vesktop > Settings > Vencord > Themes (Wall) and turn on "
+              "the transparent window option (Vencord settings), then restart it (or close it and re-run theme.py render)")
+        return
+    d.update(want)
+    sf.parent.mkdir(parents=True, exist_ok=True)
+    write_atomic(sf, json.dumps(d, indent=4) + "\n")
+
+
 def deploy(cfg, pal, mode=None):
     mode = mode or get_mode()
     link_omarchy()
@@ -4037,6 +4078,8 @@ def deploy(cfg, pal, mode=None):
     link("~/.config/gtk-4.0/gtk.css", HOST_OUT / "gtk4.css")  # gtk.css + translucent libadwaita (gtk_glass_*)
     if (OUT / "geary-user-style.css").exists() and (shutil.which("geary") or Path("~/.config/geary").expanduser().is_dir()):
         link("~/.config/geary/user-style.css", OUT / "geary-user-style.css")  # Geary message bodies (plain text), read at start
+
+    apply_vesktop(cfg)
 
     # KDE/Dolphin: two scheme names so re-applying a changed palette is never a
     # no-op "already using this scheme" for plasma-apply-colorscheme.
