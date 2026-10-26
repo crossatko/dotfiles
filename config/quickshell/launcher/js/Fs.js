@@ -56,8 +56,9 @@ function parseFolder(text, dir) {
 
 // Project rule (a few shell globs, no deep walk): a first-level folder with a .git is a project; one without that holds git
 // repos is a group whose repos (second level) are the projects; one with neither is a project itself. Hidden folders,
-// node_modules and anything deeper than two levels are never looked at. NUL-separated absolute paths.
-var PROJECT_SCRIPT = "root=$1; for d in \"$root\"/*/; do d=${d%/}; [ \"${d##*/}\" = node_modules ] && continue; " +
+// node_modules and anything deeper than two levels are never looked at (an unmatched glob, empty or missing root, yields nothing).
+// NUL-separated absolute paths.
+var PROJECT_SCRIPT = "root=$1; for d in \"$root\"/*/; do d=${d%/}; [ -d \"$d\" ] || continue; [ \"${d##*/}\" = node_modules ] && continue; " +
     "if [ -e \"$d/.git\" ]; then printf '%s\\0' \"$d\"; continue; fi; n=0; " +
     "for s in \"$d\"/*/; do s=${s%/}; [ -e \"$s/.git\" ] && { printf '%s\\0' \"$s\"; n=1; }; done; [ $n = 0 ] && printf '%s\\0' \"$d\"; done";
 function projectArgv(root) { return ["timeout", "3", "sh", "-c", PROJECT_SCRIPT, "sh", root]; }

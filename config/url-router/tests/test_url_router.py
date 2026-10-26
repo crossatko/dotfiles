@@ -76,7 +76,8 @@ class Env:
         e = {"HOME": self.home, "PATH": self.bin + ":/usr/bin:/bin", "XDG_DATA_HOME": self.data,
              "XDG_CONFIG_HOME": self.conf, "XDG_DATA_DIRS": os.path.join(self.root, "nodata"),
              "XDG_CONFIG_DIRS": os.path.join(self.root, "noconf"), "STUB_LOG": self.log,
-             "BROWSER": os.path.join(self.bin, "leak-browser"), "XDG_CURRENT_DESKTOP": "X-Generic", "LANG": "C.UTF-8"}
+             "BROWSER": os.path.join(self.bin, "leak-browser"), "XDG_CURRENT_DESKTOP": "X-Generic", "LANG": "C.UTF-8",
+             "XDG_RUNTIME_DIR": os.path.join(self.root, "run")}     # no Hyprland socket in there: the focus helper never reaches the live desktop
         e.update(extra)
         return e
 
@@ -320,6 +321,18 @@ class Integration(unittest.TestCase):
             os.symlink(shutil.which(t), os.path.join(tools, t))
         self.e.run("https://www.figma.com/design/K/F", PATH=self.e.bin + ":" + tools)
         self.assertEqual(self.e.calls()[0][1:], ["--", "https://www.figma.com/design/K/F"])
+
+    def test_figma_link_with_group_all_still_opens(self):
+        # `group = *` must not capture the native-app plan (no web app of that name exists: the link was dropped)
+        self.e.close()
+        self.e = Env(config="group = *\n")
+        self._figma_stub()
+        with open(os.path.join(self.e.bin, "hyprctl"), "w") as f:
+            f.write("#!/bin/sh\necho '[]'\n")
+        os.chmod(os.path.join(self.e.bin, "hyprctl"), 0o755)
+        self.e.run("https://www.figma.com/design/K/F", HYPRLAND_INSTANCE_SIGNATURE="x")
+        calls = self.e.calls(wait=3)
+        self.assertEqual([c[1:] for c in calls], [["https://www.figma.com/design/K/F"]])
 
     def test_figma_disable(self):
         self.e.close()

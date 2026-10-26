@@ -42,7 +42,7 @@ Rectangle {
     }
     readonly property string link: {
         const m = /href="(https?:\/\/[^"]+)"/i.exec(n.body) || /(https?:\/\/[^\s<>"']+)/i.exec(n.body)
-        return m ? m[1].replace(/[.,;:!?)]+$/, "") : ""
+        return m ? m[1].replace(/&amp;/g, "&").replace(/[.,;:!?)]+$/, "") : ""      // the body is markup: & arrives as &amp;
     }
     readonly property string linkHost: link ? link.replace(/^https?:\/\//i, "").split(/[\/?#]/)[0] : ""
     // buttons: the app's actions, then copy code, then open link

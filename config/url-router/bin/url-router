@@ -577,8 +577,9 @@ def main(args):
     want_focus = False
     for i, (slug, argv) in enumerate(plans):
         log(("web app %s" % slug) if slug else "fallback browser")
+        native = slug == "figma" and argv[0] == FIGMA_APP     # not a webapp_figma.desktop entry
         try:
-            if group_enabled(slug, cfg):
+            if not native and group_enabled(slug, cfg):
                 hypr = hypr or Hypr()
                 if hypr.ok:
                     if detach():
@@ -588,7 +589,7 @@ def main(args):
                             log("group %s failed (%s)" % (slug, type(e).__name__))
                         os._exit(0)
                     continue
-            if slug == "figma":     # first start keeps running: never exec (the caller would wait for the app)
+            if native:              # first start keeps running: never exec (the caller would wait for the app)
                 subprocess.Popen(argv, start_new_session=True, stdin=subprocess.DEVNULL)
                 want_focus = cfg["focus_figma"]
                 continue

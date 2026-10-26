@@ -108,6 +108,19 @@ test("project heuristic on a fake tree, rows open in zellij", () => {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+test("project lister: an empty or missing root lists nothing (no literal glob row)", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fs-test-"));
+    try {
+        for (const r of [root, root + "/missing"]) {
+            const argv = F.projectArgv(r), out = spawnSync(argv[0], argv.slice(1), { encoding: "utf8" });
+            eq(F.parseProjects(out.stdout, r), []);
+        }
+        fs.mkdirSync(path.join(root, "grp/empty"), { recursive: true });   // a group folder whose only child has no repo
+        const argv = F.projectArgv(root), out = spawnSync(argv[0], argv.slice(1), { encoding: "utf8" });
+        eq(F.parseProjects(out.stdout, root).map(p => p.rel), ["grp"]);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test("every mode is complete", () => {
     for (const [name, m] of Object.entries(F.MODES)) {
         assert.ok(m.title && m.glyph && m.match && m.argv && m.rows, name);

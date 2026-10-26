@@ -18,6 +18,8 @@ if [ "$1" = --match ]; then   # unit tests: code-open --match <session> <title> 
 fi
 target=${1:-$HOME}
 [ "$target" = / ] || target=${target%/}
+[ "$target" = . ] && target=$PWD
+case $target in /*) ;; *) target=$PWD/$target ;; esac   # absolute: a relative -name must not reach --cwd or the editor as an option
 file=
 if [ -d "$target" ]; then dir=$target
 elif [ -f "$target" ]; then file=$target; dir=$(dirname -- "$target")
@@ -28,14 +30,14 @@ command -v zellij >/dev/null || fail "zellij is not installed"
 sess=${QS_CODE_SESSION:-code}
 term=${CODE_TERM:-ghostty}                                   # the dotfiles' default terminal (hypr/hyprland/apps.lua)
 
-line=$(zellij list-sessions --no-formatting 2>/dev/null | awk -v n="$sess" '$1 == n { print; exit }')
+line=$(timeout 10 zellij list-sessions --no-formatting 2>/dev/null | awk -v n="$sess" '$1 == n { print; exit }')
 # the tab's initial command for a file (none for a folder)
 edit=()
 [ -n "$file" ] && edit=(--close-on-exit -- sh -c 'e=${VISUAL:-${EDITOR:-nvim}}
 if command -v "${e%% *}" >/dev/null 2>&1; then $e "$1"; else echo "No editor found (VISUAL / EDITOR unset, no nvim): $1"; fi
 exec "${SHELL:-sh}"' sh "$file")
 what="tab $dir${file:+ edit $file}"           # for DRY
-tab() { zellij --session "$sess" action new-tab --cwd "$dir" --name "$name" "${edit[@]}" >/dev/null 2>&1 || fail "Could not open a tab in zellij session $sess"; }
+tab() { timeout 10 zellij --session "$sess" action new-tab --cwd="$dir" --name="$name" "${edit[@]}" >/dev/null 2>&1 || fail "Could not open a tab in zellij session $sess"; }
 spawn() { command -v "$term" >/dev/null || fail "$term not found"; exec "$term" "$@"; }
 # a terminal attaches (creating / resurrecting the session), then the tab is added once the session runs
 attach_then_tab() {
@@ -43,7 +45,7 @@ attach_then_tab() {
   "$term" --working-directory="$dir" -e zellij attach "$@" "$sess" >/dev/null 2>&1 &
   for _ in $(seq 1 50); do
     sleep 0.2
-    zellij list-sessions --no-formatting 2>/dev/null | awk -v n="$sess" '$1 == n && !/EXITED/ { f = 1 } END { exit !f }' && { tab; exit 0; }
+    timeout 10 zellij list-sessions --no-formatting 2>/dev/null | awk -v n="$sess" '$1 == n && !/EXITED/ { f = 1 } END { exit !f }' && { tab; exit 0; }
   done
   fail "Session $sess did not start"
 }
