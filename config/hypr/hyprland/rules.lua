@@ -308,7 +308,7 @@ hl.window_rule({
 	no_dim = true,
 	match = { class = "discord", initial_title = "^(Discord Popout)$" },
 })
-hl.window_rule({ name = "thunderbird", workspace = "8", match = { class = "thunderbird" } })
+hl.window_rule({ name = "geary", workspace = "8", match = { class = "^(org\\.gnome\\.Geary)$" } })
 hl.window_rule({ name = "whatsapp", workspace = "7", match = { class = "^(brave-web\\.whatsapp\\.com__-Default)$" } })
 hl.window_rule({ name = "messages", workspace = "7", match = { class = "^(brave-messages\\.google\\.com__-Default)$" } })
 hl.window_rule({ name = "signal", workspace = "7", match = { class = "^(org\\.signal\\.Signal)$" } })

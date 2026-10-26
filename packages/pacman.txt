@@ -7,6 +7,7 @@
 #   - Hyprland fork (glass compositing, battlestation only): `hyprland` below is the stock build,
 #     the workstation uses it as is. Fork build/install steps live in the fork repo.
 #   - Font Awesome 7 Pro (licensed): ~/.local/share/fonts/FontAwesomePro/. Brands/Free come from otf-font-awesome.
+#   - omacal (calendar, bar calendar popup): github.com/x3me/omacal, `packaging/aur` PKGBUILD (not in the repos or AUR under that name).
 #   - Paper Mono (UI/terminal font): ~/.local/share/fonts/ (no package).
 #   - GPU drivers and CPU microcode: chosen per machine by install.sh (install_gpu_drivers), not listed here.
 #   - multilib is enabled by install.sh (32-bit libs for the GPU stack; steam in the gaming bundle needs it).
@@ -141,6 +142,7 @@ discord
 firefox
 mpv
 nautilus
+geary
 gnome-disk-utility
 yt-dlp
 mpv-mpris

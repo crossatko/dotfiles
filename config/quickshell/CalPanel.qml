@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 
-// Month calendar (Monday first) with events from Thunderbird's local calendar cache
+// Month calendar (Monday first) with events from omacal
 // (bin/calendar-events). Event dots on the grid, click a day to see its agenda below.
 GridLayout {
     id: cal
@@ -23,10 +23,9 @@ GridLayout {
     readonly property date today: clockNow
 
     property var dayMap: ({})                 // "YYYY-MM-DD" -> [event]
-    property var uncached: []
     property bool loaded: false
     property var writable: []                 // calendars events can be added to (omacal only)
-    property string source: ""                // "omacal" | "thunderbird" (calendar-events); events can only be added with omacal
+    property string source: ""                // "omacal" (calendar-events); events can only be added with omacal
 
     function two(n) { return n < 10 ? "0" + n : "" + n }
     function key(d) { return d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate()) }
@@ -63,7 +62,6 @@ GridLayout {
             onStreamFinished: {
                 try {
                     const d = JSON.parse(text)
-                    cal.uncached = d.uncached || []
                     cal.source = d.source || ""
                     cal.writable = d.writable || []
                     cal.index(d.events || [])
@@ -74,7 +72,7 @@ GridLayout {
     }
     onShownChanged: reload()
     Component.onCompleted: reload()
-    Timer { interval: 300000; running: true; repeat: true; onTriggered: cal.reload() }   // pick up Thunderbird's syncs
+    Timer { interval: 300000; running: true; repeat: true; onTriggered: cal.reload() }   // pick up omacal's syncs
 
     function eventsOn(d) { return dayMap[key(d)] || [] }
     function dots(d) {
@@ -287,19 +285,5 @@ GridLayout {
             }
         }
 
-    }
-
-    Label {
-        visible: cal.uncached.length > 0
-        Layout.fillWidth: true
-        Layout.preferredWidth: 1                      // don't let the text widen the popup
-        Layout.row: 2
-        wrapMode: Text.WordWrap
-        maximumLineCount: 3
-        elide: Text.ElideRight
-        // these CalDAV calendars have no local copy, so their events can't be shown here
-        text: "Not shown: " + cal.uncached.join(", ") + " (enable Offline support in Thunderbird)"
-        color: Theme.muted
-        font.pixelSize: Theme.fontTiny
     }
 }

@@ -1,76 +1,19 @@
 #!/usr/bin/env python3
-"""Events for the bar's calendar popup, as JSON. Prefers omacal; falls back to Thunderbird's local cache.
+"""Events for the bar's calendar popup, as JSON, from omacal.
 
     calendar-events <from YYYY-MM-DD> <to YYYY-MM-DD>     (to is exclusive)
 
 If `omacal` is on PATH and `omacal calendars --json` lists a calendar, events come from `omacal events list`
-(read-only CLI, already expanded for recurrence; its --to is inclusive, ours is exclusive). Any failure or
-timeout there falls through to Thunderbird below.
+(read-only CLI, already expanded for recurrence; its --to is inclusive, ours is exclusive). When omacal is missing,
+has no calendars or fails, the output is empty with an "error" string.
 
-Thunderbird path: reads <profile>/calendar-data/cache.sqlite READ-ONLY from a private copy (Thunderbird keeps it open in
-WAL mode). Only calendars with "Offline support" enabled in Thunderbird have a local copy; the others
-(calendar.registry.<id>.cache.enabled = false) are fetched live from the server and are invisible here:
-the list of those is returned under "uncached" so the UI can say so. No network, no credentials.
-
-Output: {"source": "omacal"|"thunderbird", "events": [{title, start, end, allDay, calendar, color, location}], "calendars": [...], "writable": [{id, name, color, primary}] (omacal only), "uncached": [...]}
+Output: {"source": "omacal", "events": [{title, start, end, allDay, calendar, color, location}], "calendars": [...], "writable": [{id, name, color, primary}], "error"?: str}
 start/end are local "YYYY-MM-DD HH:MM" strings; for all-day events `end` is the (exclusive) last date.
 """
-import configparser, datetime as dt, glob, json, os, re, shutil, sqlite3, subprocess, sys, tempfile
-from zoneinfo import ZoneInfo
+import datetime as dt, json, shutil, subprocess, sys
 
-try:
-    from dateutil import rrule
-except ImportError:
-    rrule = None
-
-HOME = os.path.expanduser("~")
 LOCAL = dt.datetime.now().astimezone().tzinfo
 
-
-def profile_dir():
-    ini = configparser.ConfigParser()
-    ini.read(os.path.join(HOME, ".thunderbird/profiles.ini"))
-    cands = []
-    for s in ini.sections():
-        if s.startswith("Install") and ini.has_option(s, "Default"):
-            cands.append(ini.get(s, "Default"))
-    for s in ini.sections():
-        if s.startswith("Profile") and ini.has_option(s, "Path"):
-            cands.append(ini.get(s, "Path"))
-    for c in cands:
-        d = c if os.path.isabs(c) else os.path.join(HOME, ".thunderbird", c)
-        if os.path.exists(os.path.join(d, "calendar-data", "cache.sqlite")):
-            return d
-    return None
-
-
-def registry(prefs):
-    t = open(prefs, encoding="utf-8", errors="replace").read()
-    cals = {}
-    for m in re.finditer(r'user_pref\("calendar\.registry\.([0-9a-f-]{36})\.([\w.-]+)",\s*(.*?)\);', t):
-        cid, key, val = m.groups()
-        val = val.strip()
-        if val.startswith('"') and val.endswith('"'):
-            val = val[1:-1]
-        cals.setdefault(cid, {})[key] = val
-    return cals
-
-
-EPOCH = dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
-
-
-def to_us(occ):
-    """datetime -> microseconds since the epoch, the way Thunderbird stores them (naive = floating, read as UTC)."""
-    aware = occ.astimezone(dt.timezone.utc) if occ.tzinfo else occ.replace(tzinfo=dt.timezone.utc)
-    return int((aware - EPOCH).total_seconds() * 1_000_000)
-
-
-def to_local(us, tzname):
-    """Stored microseconds -> aware local datetime. 'floating' means 'the same wall clock anywhere'."""
-    d = dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc) + dt.timedelta(microseconds=us)
-    if tzname in (None, "", "floating"):
-        return d.replace(tzinfo=None)            # naive wall clock
-    return d.astimezone(LOCAL)
 
 
 def omacal_json(*args):
@@ -82,7 +25,7 @@ def omacal_json(*args):
 
 
 def from_omacal(lo, hi):
-    """Output dict from omacal, or None when it is missing, empty or failing (caller falls back)."""
+    """Output dict from omacal, or None when it is missing, empty or failing (caller reports an error)."""
     if not shutil.which("omacal"):
         return None
     try:
@@ -115,7 +58,7 @@ def from_omacal(lo, hi):
         writable = [{"id": c["id"], "name": c.get("label_override") or c.get("summary") or str(c["id"]), "color": color[c["id"]],
                      "primary": bool(c.get("is_primary"))}
                     for c in cals if c.get("selected", True) and c.get("access_role") in ("owner", "writer")]
-        return {"source": "omacal", "events": events, "calendars": out_cals, "writable": writable, "uncached": []}
+        return {"source": "omacal", "events": events, "calendars": out_cals, "writable": writable}
     except Exception:
         return None
 
@@ -129,83 +72,6 @@ def main():
     if res is not None:
         print(json.dumps(res, ensure_ascii=False))
         return
-    prof = profile_dir()
-    if not prof:
-        print(json.dumps({"source": "thunderbird", "events": [], "calendars": [], "uncached": [], "error": "no Thunderbird calendar cache found"}))
-        return
-    reg = registry(os.path.join(prof, "prefs.js"))
-    tmp = tempfile.mkdtemp(prefix="calev.")
-    try:
-        for f in glob.glob(os.path.join(prof, "calendar-data", "cache.sqlite*")):
-            shutil.copy(f, tmp)
-        con = sqlite3.connect("file:%s?mode=ro" % os.path.join(tmp, "cache.sqlite"), uri=True)
-        con.row_factory = sqlite3.Row
-        rows = con.execute(
-            "select cal_id,id,title,ical_status,event_start,event_end,event_start_tz,event_end_tz,recurrence_id,flags "
-            "from cal_events").fetchall()
-        rec = {}
-        for r in con.execute("select item_id,cal_id,icalString from cal_recurrence"):
-            rec.setdefault((r["cal_id"], r["item_id"]), []).append(r["icalString"].strip())
-        loc = {}
-        for r in con.execute("select item_id,cal_id,value from cal_properties where key='LOCATION'"):
-            loc[(r["cal_id"], r["item_id"])] = r["value"]
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-
-    cached = {r["cal_id"] for r in rows}
-    out_cals = [{"id": c, "name": reg.get(c, {}).get("name", c), "color": reg.get(c, {}).get("color", "#888888")} for c in sorted(cached)]
-    uncached = [v.get("name", k) for k, v in reg.items()
-                if v.get("type") == "caldav" and v.get("cache.enabled") == "false" and v.get("name")]
-
-    events = []
-    overridden = set()       # (cal, id, original occurrence start us) replaced or cancelled by an exception row
-    for r in rows:
-        if r["recurrence_id"] is not None:
-            overridden.add((r["cal_id"], r["id"], r["recurrence_id"]))
-
-    def emit(r, start, end):
-        allday = start.tzinfo is None and start.hour == 0 and start.minute == 0 and end.hour == 0 and end.minute == 0 and end > start
-        s_cmp = start.replace(tzinfo=None) if start.tzinfo else start
-        e_cmp = end.replace(tzinfo=None) if end.tzinfo else end
-        if e_cmp <= lo and not (s_cmp == e_cmp == lo) or s_cmp >= hi:
-            return
-        cal = reg.get(r["cal_id"], {})
-        events.append({
-            "title": r["title"] or "(no title)",
-            "start": s_cmp.strftime("%Y-%m-%d %H:%M"),
-            "end": e_cmp.strftime("%Y-%m-%d %H:%M"),
-            "allDay": allday,
-            "calendar": cal.get("name", ""),
-            "color": cal.get("color", "#888888"),
-            "location": loc.get((r["cal_id"], r["id"]), ""),
-        })
-
-    for r in rows:
-        if (r["ical_status"] or "").upper() == "CANCELLED" or r["event_start"] is None:
-            continue
-        start = to_local(r["event_start"], r["event_start_tz"])
-        end = to_local(r["event_end"] if r["event_end"] is not None else r["event_start"], r["event_end_tz"])
-        key = (r["cal_id"], r["id"])
-        if r["recurrence_id"] is None and key in rec and rrule is not None:
-            lines = [l for l in rec[key] if l]
-            span = end - start
-            try:
-                rs = rrule.rrulestr("\n".join(lines), dtstart=start, forceset=True)
-            except Exception:
-                rs = None
-            if rs is not None:
-                look_lo = lo - span - dt.timedelta(days=1)
-                for occ in rs.between(look_lo if start.tzinfo is None else look_lo.replace(tzinfo=LOCAL),
-                                      hi if start.tzinfo is None else hi.replace(tzinfo=LOCAL), inc=True):
-                    us = to_us(occ)
-                    if (r["cal_id"], r["id"], us) in overridden:
-                        continue
-                    emit(r, occ, occ + span)
-                continue
-        emit(r, start, end)
-
-    events.sort(key=lambda e: (e["start"], e["title"]))
-    print(json.dumps({"source": "thunderbird", "events": events, "calendars": out_cals, "uncached": uncached}, ensure_ascii=False))
-
+    print(json.dumps({"source": "omacal", "events": [], "calendars": [], "error": "omacal not installed"}))
 
 main()

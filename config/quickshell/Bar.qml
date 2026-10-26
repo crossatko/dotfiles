@@ -646,7 +646,7 @@ PanelWindow {
             id: calChip
             Component.onCompleted: bar.reg("cal", calChip)
             active: bar.isOpen("cal")
-            onClicked: mouse => mouse.button === Qt.RightButton ? bar.run(["sh", "-c", "command -v omacal >/dev/null && exec omacal || exec thunderbird --calendar"]) : bar.pop("cal", calChip)
+            onClicked: mouse => mouse.button === Qt.RightButton ? bar.run(["sh", "-c", "command -v omacal >/dev/null && exec omacal || notify-send omacal \"omacal is not installed\""]) : bar.pop("cal", calChip)
             BarIcon { text: "\uf073"; color: bar.ink.fg }
         }
     }

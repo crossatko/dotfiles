@@ -1133,6 +1133,7 @@ if stage_on links || stage_on packages || stage_on repos; then
 Manual steps (not automated):
   - Hyprland fork (glass compositing; battlestation only): build/install from the fork repo. Stock `hyprland` works elsewhere.
   - Font Awesome 7 Pro (licensed) into ~/.local/share/fonts/FontAwesomePro/, and the Paper Mono font into ~/.local/share/fonts/.
+  - omacal (calendar for the bar popup; github.com/x3me/omacal, PKGBUILD in packaging/aur).
   - zellij claude-tabs: clone its repo to ~/code/crossatko/zellij-wc3cz-claude (or set CLAUDE_TABS_DIR), then re-run `--only links`.
   - Sign in: 1Password, Mullvad, `sudo tailscale up`, `jellyfin-qs login`, Brave/Firefox profiles.
   - Optional privacy deny-list for the pre-commit hook: ~/.config/dotfiles-private/denylist.

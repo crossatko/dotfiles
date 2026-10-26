@@ -6,7 +6,7 @@ return {
 	messages = "brave --app='https://messages.google.com'",
 	discord = "discord",
 	signal = "flatpak run org.signal.Signal",
-	mail = "thunderbird",
+	mail = "geary",
 	filemanager = "nautilus --new-window",
 	jellyfin = "flatpak run org.jellyfin.JellyfinDesktop",
 }

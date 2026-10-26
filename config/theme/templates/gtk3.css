@@ -5,7 +5,7 @@
    Hyprland blurs any GTK3 window with alpha by default (like kitty); nothing to request here.
 
    Scope: ONLY real client-side-decorated GTK3 windows (window.csd and their descendants; every GTK3 toplevel on
-   Wayland). Gecko (Firefox, Thunderbird) reads its system colours from orphan style contexts (a bare
+   Wayland). Gecko (Firefox) reads its system colours from orphan style contexts (a bare
    "window.background" path with no .csd ancestor), so they keep the opaque colours. Chromium / Brave / Electron
    never read this file (they use the named theme Wall = opaque out/gtk.css). Menus / popups (window.popup) and
    tooltips stay opaque. GTK3's Adwaita inlines its colours, so explicit rules are needed, not @define-color; user
