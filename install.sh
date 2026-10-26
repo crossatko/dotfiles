@@ -2,7 +2,7 @@
 # Arch Linux installer for these dotfiles. Idempotent: every step checks the current state first and a second
 # run changes nothing. Never run it as root (it calls sudo itself where needed).
 #
-#   ./install.sh [--dry-run] [--only STAGE[,STAGE...]] [--repos] [--system] [--chsh] [-h|--help]
+#   ./install.sh [--dry-run] [--yes] [--only STAGE[,STAGE...]] [--repos] [--system] [--chsh] [-h|--help]
 #
 # Stages (run in this order):
 #   repos     (sudo, opt-in) third-party repos on top of Arch: CachyOS (arch-optimised + [cachyos]) and Chaotic-AUR
@@ -12,7 +12,7 @@
 # Default: packages + links. `repos` and `system` are opt-in: --repos / --system, or --only (e.g. `--only repos,packages,links`).
 #
 # Environment: CLAUDE_TABS_DIR (claude-tabs checkout), INSTALL_SKIP (space separated: librepods omz claude-tabs
-# cachyos-repo chaotic-repo), PACMAN_CONF (pacman.conf to edit, default /etc/pacman.conf; for tests),
+# cachyos-repo chaotic-repo), GPU_DRIVER (radeon|intel|virtio|swrast|none instead of GPU detection), PACMAN_CONF (pacman.conf to edit, default /etc/pacman.conf; for tests),
 # CACHYOS_LEVEL (force znver4|v4|v3|plain|none instead of CPU detection).
 set -euo pipefail
 
@@ -23,6 +23,7 @@ PACMAN_CONF="${PACMAN_CONF:-/etc/pacman.conf}"
 SYS_DIR="$DOTFILES_DIR/system/etc"
 
 DRY=0
+YES=0
 CHSH=0
 WANT_SYSTEM=0
 WANT_REPOS=0
@@ -32,10 +33,11 @@ FONTS_DIRTY=0
 STAMP="$(date +%Y%m%d-%H%M%S)"
 INSTALL_SKIP="${INSTALL_SKIP:-}"
 TMP_DIRS=()
+KEEPALIVE_PID=
 
 usage() {
   cat <<'EOF'
-Usage: ./install.sh [--dry-run] [--only STAGE[,STAGE...]] [--repos] [--system] [--chsh] [-h|--help]
+Usage: ./install.sh [--dry-run] [--yes] [--only STAGE[,STAGE...]] [--repos] [--system] [--chsh] [-h|--help]
 
 Arch Linux only. Idempotent; never run as root.
 
@@ -52,11 +54,21 @@ Stages:
 
 Options:
   --dry-run        print every action, change nothing, do not call sudo
+  --yes            pass --noconfirm to pacman/yay (no questions; default: pacman asks, unless stdin is not a terminal)
   --only STAGES    comma separated subset of: repos,packages,links,system
   --repos          also run the repos stage (default stages: packages,links)
   --system         also run the system stage
   --chsh           change the login shell to zsh (asks for your password)
   -h, --help       this text
+
+Environment:
+  GPU_DRIVER=radeon|intel|virtio|swrast|none
+                   GPU stack for the packages stage (mesa, Vulkan driver, lib32 variants; Intel adds
+                   intel-media-driver) instead of detecting it with lspci. Detected: AMD -> radeon, Intel ->
+                   intel, QEMU/virtio -> virtio, anything else (VMware, VirtualBox, NVIDIA, unknown) ->
+                   swrast; several GPUs install all matching. NVIDIA is not supported by this installer.
+                   none = no GPU driver. amd-ucode/intel-ucode is added on bare metal (not with none).
+  INSTALL_SKIP, CLAUDE_TABS_DIR, PACMAN_CONF, CACHYOS_LEVEL   see the header of install.sh
 EOF
 }
 
@@ -69,9 +81,17 @@ skipped() { case " $INSTALL_SKIP " in *" $1 "*) return 0 ;; esac; return 1; }
 
 cleanup() {
   local d
+  if [ -n "$KEEPALIVE_PID" ]; then
+    pkill -P "$KEEPALIVE_PID" 2>/dev/null || true
+    kill "$KEEPALIVE_PID" 2>/dev/null || true
+    wait "$KEEPALIVE_PID" 2>/dev/null || true
+    KEEPALIVE_PID=
+  fi
   for d in ${TMP_DIRS[@]+"${TMP_DIRS[@]}"}; do rm -rf "$d"; done
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 mktmp() {
   local d
@@ -84,6 +104,7 @@ mktmp() {
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY=1 ;;
+    --yes | -y) YES=1 ;;
     --only)
       [ $# -ge 2 ] || die "--only needs a value"
       ONLY="$2"
@@ -240,7 +261,7 @@ read_list() {
 }
 
 PAC_FLAGS=(--needed)
-[ -t 0 ] || PAC_FLAGS+=(--noconfirm)
+{ [ -t 0 ] && [ "$YES" = 0 ]; } || PAC_FLAGS+=(--noconfirm)
 
 # ================================================================= stage: repos
 # Third-party repos on top of plain Arch, following the official procedures:
@@ -469,6 +490,112 @@ enable_multilib() {
   return 0
 }
 
+# gpu_ids: sets GPU_IDS to the PCI vendor id of every GPU (lspci -nn, else /sys/class/drm) and GPU_VM=1 when the
+# GPU or the CPU says this is a virtual machine. Test hooks: lspci / systemd-detect-virt on PATH, SYS_DRM_GLOB.
+gpu_ids() {
+  local line v f
+  GPU_IDS=()
+  GPU_VM=0
+  if command -v lspci >/dev/null 2>&1; then
+    while IFS= read -r line; do
+      v="$(grep -oE '\[[0-9a-f]{4}:[0-9a-f]{4}\]' <<<"$line" | tail -1 | tr -d '[]' | cut -d: -f1)"
+      case "$line" in *QEMU* | *[Bb]ochs* | *[Vv]irtio*) v=1af4 ;; esac
+      GPU_IDS+=("$v")
+    done < <(lspci -nn | grep -E 'VGA compatible controller|3D controller|Display controller' || true)
+  else
+    for f in ${SYS_DRM_GLOB:-/sys/class/drm/card*/device/vendor}; do
+      [ -r "$f" ] && GPU_IDS+=("$(sed 's/^0x//' "$f")")
+    done
+  fi
+  for v in ${GPU_IDS[@]+"${GPU_IDS[@]}"}; do
+    case "$v" in 1af4 | 1b36 | 1234 | 15ad | 80ee) GPU_VM=1 ;; esac
+  done
+  if command -v systemd-detect-virt >/dev/null 2>&1 && systemd-detect-virt --vm -q 2>/dev/null; then GPU_VM=1; fi
+}
+
+# gpu_packages: fills GPU_PKGS and GPU_WHY (display text) from GPU_IDS: the full userspace stack per vendor, union for
+# several GPUs. NVIDIA and unknown hardware get software Vulkan (swrast).
+gpu_packages() {
+  local v kinds=() k
+  GPU_PKGS=(mesa lib32-mesa vulkan-icd-loader lib32-vulkan-icd-loader)
+  GPU_WHY=""
+  if [ -n "${GPU_DRIVER:-}" ]; then
+    kinds=("$GPU_DRIVER")
+    GPU_WHY="GPU_DRIVER=$GPU_DRIVER"
+  else
+    for v in ${GPU_IDS[@]+"${GPU_IDS[@]}"}; do
+      case "$v" in
+        1002) k=radeon; GPU_WHY+="AMD GPU; " ;;
+        8086) k=intel; GPU_WHY+="Intel GPU; " ;;
+        1af4 | 1b36 | 1234) k=virtio; GPU_WHY+="QEMU/virtio GPU; " ;;
+        10de) k=swrast; GPU_WHY+="NVIDIA GPU (not supported by this installer, software Vulkan); " ;;
+        15ad | 80ee) k=swrast; GPU_WHY+="VMware/VirtualBox GPU; " ;;
+        *) k=swrast; GPU_WHY+="unknown GPU $v; " ;;
+      esac
+      kinds+=("$k")
+    done
+    [ "${#kinds[@]}" -gt 0 ] || { kinds=(swrast); GPU_WHY="no GPU found (software Vulkan)"; }
+  fi
+  for k in $(printf '%s\n' "${kinds[@]}" | sort -u); do
+    GPU_PKGS+=("vulkan-$k" "lib32-vulkan-$k")
+    [ "$k" = intel ] && GPU_PKGS+=(intel-media-driver)
+  done
+  return 0
+}
+
+# cpu_ucode: prints the microcode package for this CPU (nothing inside a VM or for other vendors). Test hook: PROC_CPUINFO.
+cpu_ucode() {
+  [ "$GPU_VM" = 1 ] && return 0
+  case "$(grep -m1 '^vendor_id' "${PROC_CPUINFO:-/proc/cpuinfo}" 2>/dev/null)" in
+    *AuthenticAMD*) echo amd-ucode ;;
+    *GenuineIntel*) echo intel-ucode ;;
+  esac
+}
+
+# install_gpu_drivers: Mesa/Vulkan (+ lib32) for the detected GPU(s) and the CPU microcode, installed BEFORE the package
+# lists so pacman never stops to ask which provider of vulkan-driver / lib32-vulkan-driver to use (and --noconfirm never
+# silently picks nvidia-utils). GPU_DRIVER=radeon|intel|virtio|swrast|none overrides the detection.
+install_gpu_drivers() {
+  local pkgs uc
+  case "${GPU_DRIVER:-}" in
+    none) echo "    skip    GPU driver (GPU_DRIVER=none)"; return 0 ;;
+    "" | radeon | intel | virtio | swrast) ;;
+    *) die "GPU_DRIVER must be radeon, intel, virtio, swrast or none" ;;
+  esac
+  gpu_ids
+  gpu_packages
+  uc="$(cpu_ucode)"
+  [ -z "$uc" ] || GPU_PKGS+=("$uc")
+  pkgs=("${GPU_PKGS[@]}")
+  echo "    GPU: ${GPU_WHY%; }"
+  [ "$GPU_VM" = 1 ] && echo "    virtual machine: CPU microcode skipped"
+  [ -z "$uc" ] || echo "    note: $uc updates the CPU at boot; regenerate the bootloader config if it does not pick it up (the installer does not touch it)"
+  if [ "$DRY" = 1 ]; then
+    echo "    [dry-run] sudo pacman -S ${PAC_FLAGS[*]} ${pkgs[*]}"
+  elif [ -z "$(missing_pkgs "${pkgs[@]}")" ]; then
+    echo "    ok      GPU driver (${pkgs[*]})"
+  else
+    changed
+    sudo pacman -S "${PAC_FLAGS[@]}" "${pkgs[@]}"
+  fi
+}
+
+# start_sudo_keepalive: ask for the password once, refresh the sudo timestamp until this script ends
+# (long yay/makepkg builds outlast the default timeout). Stopped by the EXIT trap.
+start_sudo_keepalive() {
+  [ "$DRY" = 0 ] || return 0
+  local s need=0
+  for s in repos packages system; do stage_on "$s" && need=1; done
+  [ "$need" = 1 ] || return 0
+  sudo -v || die "sudo is needed"
+  while true; do
+    sudo -n true 2>/dev/null
+    sleep 50
+    kill -0 "$$" 2>/dev/null || exit 0
+  done &
+  KEEPALIVE_PID=$!
+}
+
 # missing_pkgs NAME...: names not satisfied by an installed package (pacman -T).
 missing_pkgs() { pacman -T "$@" 2>/dev/null || true; }
 
@@ -478,10 +605,12 @@ stage_packages() {
 
   # Full upgrade, never a bare -Sy (partial upgrades break Arch). Also refreshes the new multilib db.
   if [ "$DRY" = 1 ]; then
-    echo "    [dry-run] sudo pacman -Syu ${PAC_FLAGS[*]} base-devel git"
+    echo "    [dry-run] sudo pacman -Syu ${PAC_FLAGS[*]} base-devel git pciutils"
   else
-    sudo pacman -Syu "${PAC_FLAGS[@]}" base-devel git
+    sudo pacman -Syu "${PAC_FLAGS[@]}" base-devel git pciutils
   fi
+
+  install_gpu_drivers
 
   if ! command -v yay >/dev/null 2>&1; then
     changed
@@ -493,7 +622,7 @@ stage_packages() {
       local d
       d="$(mktmp)"
       git clone https://aur.archlinux.org/yay.git "$d/yay"
-      (cd "$d/yay" && if [ -t 0 ]; then makepkg -si; else makepkg -si --noconfirm; fi)
+      (cd "$d/yay" && if [ -t 0 ] && [ "$YES" = 0 ]; then makepkg -si; else makepkg -si --noconfirm; fi)
     fi
   else
     echo "    ok      yay"
@@ -787,7 +916,7 @@ host_var() {
   raw="$(cat /etc/hostname 2>/dev/null || uname -n)"
   raw="$(printf '%s' "$raw" | tr -d '\n')"
   # CrossBattlestation -> HOST_CROSS_BATTLESTATION (read by hypridle.conf `# hyprlang if`). The Hyprland Lua
-  # config matches the hostname itself (host.lua: BATTLESTATION, WORKSTATION, ARCHLINUX, VM).
+  # config matches the hostname itself (host.lua: BATTLESTATION, WORKSTATION, ARCHLINUX, anything ending in VM).
   printf 'HOST_%s' "$(printf '%s' "$raw" | sed -e 's/\([a-z0-9]\)\([A-Z]\)/\1_\2/g' -e 's/-/_/g' | tr '[:lower:]' '[:upper:]')"
 }
 
@@ -901,6 +1030,7 @@ stage_system() {
 
 # ================================================================= main
 [ "$DRY" = 1 ] && log "Dry run: nothing is changed, sudo is not called"
+start_sudo_keepalive
 stage_on repos && stage_repos
 stage_on packages && stage_packages
 stage_on links && stage_links
@@ -922,7 +1052,7 @@ Manual steps (not automated):
   - zellij claude-tabs: clone its repo to ~/code/crossatko/zellij-wc3cz-claude (or set CLAUDE_TABS_DIR), then re-run `--only links`.
   - Sign in: 1Password, Mullvad, `sudo tailscale up`, `jellyfin-qs login`, Brave/Firefox profiles.
   - Optional privacy deny-list for the pre-commit hook: ~/.config/dotfiles-private/denylist.
-  - GPU drivers and machine-specific hardware setup (not covered by the package lists).
+  - Machine-specific hardware setup beyond the GPU stack and CPU microcode (bootloader config, NVIDIA).
   - Log out and back in after the first run (docker group, environment, themes).
   - Optional third-party repos (CachyOS, Chaotic-AUR; not needed by the package lists): `./install.sh --repos`.
   - Root-owned files and services: `./install.sh --system` (or `--only system`); change the login shell with `--chsh`.

@@ -24,7 +24,10 @@ cd ~/dotfiles
 
 The installer works in stages: `repos`, `packages`, `links` and `system`. It is safe to re-run. `repos` and `system`
 are opt-in: `repos` adds the third-party CachyOS and Chaotic-AUR repos to `pacman.conf` (`--repos`, nothing in
-`packages/*.txt` needs it); `system` touches root-owned files (`--system`). `./install.sh --help` lists the rest.
+`packages/*.txt` needs it); `system` touches root-owned files (`--system`). The packages stage detects your GPU (`lspci -nn`) and installs the matching Mesa/Vulkan stack and the CPU microcode
+before the package lists, so pacman never asks which Vulkan driver to use; set `GPU_DRIVER=radeon|intel|virtio|swrast|none`
+to override. NVIDIA is not supported. Pass `--yes` to answer every pacman/yay question automatically. sudo asks for
+the password once. `./install.sh --help` lists the rest.
 
 A few things, like the Hyprland fork and licensed fonts, are manual. The comments in `packages/*.txt`
 say which.

@@ -8,7 +8,7 @@
 #     the workstation uses it as is. Fork build/install steps live in the fork repo.
 #   - Font Awesome 7 Pro (licensed): ~/.local/share/fonts/FontAwesomePro/. Brands/Free come from otf-font-awesome.
 #   - Paper Mono (UI/terminal font): ~/.local/share/fonts/ (no package).
-#   - GPU drivers (vulkan-radeon / nvidia-utils, lib32-* variants) are machine specific and not listed.
+#   - GPU drivers and CPU microcode: chosen per machine by install.sh (install_gpu_drivers), not listed here.
 #   - multilib (needed for steam) is enabled by install.sh.
 
 # --- base / development
@@ -64,6 +64,8 @@ android-tools
 # --- audio
 pipewire
 pipewire-pulse
+pipewire-alsa
+pipewire-jack
 wireplumber
 libpulse
 playerctl

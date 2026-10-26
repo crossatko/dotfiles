@@ -54,5 +54,5 @@ return {
 	is_battlestation = upper:find("BATTLESTATION", 1, true) ~= nil,
 	is_workstation = upper:find("WORKSTATION", 1, true) ~= nil,
 	is_archlinux = upper == "ARCHLINUX",
-	is_vm = upper == "VM",
+	is_vm = upper:match("VM$") ~= nil, -- any hostname ending in -vm (e.g. xyz-vm)
 }
