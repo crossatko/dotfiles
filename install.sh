@@ -9,7 +9,7 @@
 #             (arch-optimised + [cachyos]). Runs before packages so the -Syu there syncs the new repos.
 #   packages  multilib, yay, packages/{pacman,aur,flatpak}.txt, plus opt-in bundles packages/optional/NAME.txt (--with NAME)
 #   links     symlinks into $HOME, shell dotfiles, GTK seed, theme seed, web apps, librepods build
-#   system    (sudo) system/etc files, udev rules, /etc/environment host marker, services, ufw, docker group
+#   system    (sudo) system/etc files, udev rules, /etc/environment host marker, services, ufw
 # Default: repos + packages + links. `system` is opt-in (--system, or --only). Skip the third-party repo with `--only links,packages`.
 # --cachyos (opt-in, needs the repos stage) also adds the CachyOS repos.
 #
@@ -72,7 +72,7 @@ Stages:
   links     symlink config into $HOME (backs up real files once), shell dotfiles, GTK seed, theme seed,
             git hooks, web apps, librepods build
   system    (sudo) install system/etc files (udev rules, ...), /etc/environment host marker, enable services,
-            ufw, docker group
+            ufw
 
 Options:
   --dry-run        print every action, change nothing, do not call sudo
@@ -1106,15 +1106,6 @@ stage_system() {
   else
     echo "    (ufw not installed)"
   fi
-
-  log "Docker group"
-  if ! getent group docker >/dev/null 2>&1; then
-    echo "    (no docker group yet; install docker first)"
-  elif id -nG "$USER" | tr ' ' '\n' | grep -qx docker; then
-    echo "    ok      $USER is in docker"
-  else
-    run sudo usermod -aG docker "$USER"
-  fi
 }
 
 # ================================================================= main
@@ -1146,7 +1137,7 @@ Manual steps (not automated):
   - Sign in: 1Password, Mullvad, `sudo tailscale up`, `jellyfin-qs login`, Brave/Firefox profiles.
   - Optional privacy deny-list for the pre-commit hook: ~/.config/dotfiles-private/denylist.
   - Machine-specific hardware setup beyond the GPU stack and CPU microcode (bootloader config, NVIDIA).
-  - Log out and back in after the first run (docker group, environment, themes).
+  - Log out and back in after the first run (environment, themes).
   - Chaotic-AUR (third-party, prebuilt AUR packages) is added by default; skip it with `--only links,packages`. CachyOS repos: `./install.sh --only repos --cachyos`.
   - Root-owned files and services: `./install.sh --system` (or `--only system`); change the login shell with `--chsh`.
   - macOS is maintained by hand.
