@@ -35,7 +35,7 @@ printf '#!/bin/sh\necho "[]"\n' > "$T/bin/hyprctl"
 printf '#!/bin/sh\nexit 1\n' > "$T/bin/pgrep"
 printf '#!/bin/sh\necho "notify $*" >> "$T/calls"\n' > "$T/bin/notify-send"
 chmod +x "$T/bin/"*
-export T PATH="$T/bin:$PATH" CODE_TERM=term QS_CODE_SESSION=testsess
+export T PATH="$T/bin:$PATH" CODE_TERM=term QS_CODE_SESSION=testsess ZELLIJ_CONFIG_DIR="$T/zcfg"   # no claude-tabs plugin: plain flags
 
 # run code-open on $2 with the session state $1 (missing | running | exited); output and calls into $out / $calls
 run() {
@@ -71,6 +71,16 @@ script=${a[10]}
 want "editor: VISUAL first" "$(VISUAL="printf V:%s" EDITOR="printf E:%s" SHELL=true sh -c "$script" sh "$F")" "V:$F"
 want "editor: then EDITOR"  "$(env -u VISUAL EDITOR="printf E:%s" SHELL=true sh -c "$script" sh "$F")" "E:$F"
 want "editor: none found"   "$(env -u VISUAL -u EDITOR PATH="$T/bin" SHELL=/bin/true /bin/sh -c "$script" sh "$F")" "No editor found*"
+
+# with the claude-tabs plugin: the cwd travels in an explicit layout (a resurrected session's new_tab_template would override --cwd)
+mkdir -p "$T/zcfg/plugins/claude-tabs"; : > "$T/zcfg/plugins/claude-tabs/claude-tabs.wasm"
+run running "$P/sub"
+mapfile -d '' -t a < "$T/newtab"
+want "plugin folder tab" "${a[*]}" "--session testsess action new-tab --name=sub --layout-string layout { pane cwd=\"$P/sub\"; pane size=1 borderless=true { plugin location=\"claude-tabs\"; }; }"
+run running "$F"
+mapfile -d '' -t a < "$T/newtab"
+want "plugin file tab" "${a[6]}" "layout { pane cwd=\"$P\" command=\"sh\" close_on_exit=true { args \"-c\" \"e=*\"sh\" \"$F\"; }; pane size=1 *"
+rm -rf "$T/zcfg"
 
 # a name starting with "-" (relative path): absolute cwd / name as --opt=value, so zellij and the editor never read them as options
 mkdir -p "$T/proj/-d"; echo x > "$T/proj/-f.md"

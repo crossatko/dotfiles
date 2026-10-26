@@ -165,7 +165,7 @@ config/aerospace karabiner swiftbar  macOS only
   `launcher/js/README.md`.
 - `launcher/` files cannot see root singletons: `Launcher.qml` wires `VmSource`/`Binds` to them. Wi-Fi passwords and tokens never go in argv.
 - `vm-ctl`: quickemu exits 0 on errors (the script greps output); never put the vdagent port in a conf's `extra_args`. `code-open` relies on zellij's `<session>
-  | <pane>` title format.
+  | <pane>` title format, and passes the tab cwd in a `--layout-string` (a resurrected session's new_tab_template cwd beats `new-tab --cwd`).
 
 ## systemd / gamescope TV session
 

@@ -32,12 +32,26 @@ term=${CODE_TERM:-ghostty}                                   # the dotfiles' def
 
 line=$(timeout 10 zellij list-sessions --no-formatting 2>/dev/null | awk -v n="$sess" '$1 == n { print; exit }')
 # the tab's initial command for a file (none for a folder)
-edit=()
-[ -n "$file" ] && edit=(--close-on-exit -- sh -c 'e=${VISUAL:-${EDITOR:-nvim}}
+script='e=${VISUAL:-${EDITOR:-nvim}}
 if command -v "${e%% *}" >/dev/null 2>&1; then $e "$1"; else echo "No editor found (VISUAL / EDITOR unset, no nvim): $1"; fi
-exec "${SHELL:-sh}"' sh "$file")
+exec "${SHELL:-sh}"'
+edit=()
+[ -n "$file" ] && edit=(--close-on-exit -- sh -c "$script" sh "$file")
 what="tab $dir${file:+ edit $file}"           # for DRY
-tab() { timeout 10 zellij --session "$sess" action new-tab --cwd="$dir" --name="$name" "${edit[@]}" >/dev/null 2>&1 || fail "Could not open a tab in zellij session $sess"; }
+kq() { local s=${1//\\/\\\\}; printf '"%s"' "${s//\"/\\\"}"; }   # KDL string
+# With the claude-tabs bar the tab is made from an explicit layout: a resurrected session keeps a new_tab_template whose pane has the
+# old cwd, and that beats `new-tab --cwd` (the tab would open in the wrong folder). Without the plugin the flags are enough.
+tab() {
+  local args
+  if [ -e "${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}/plugins/claude-tabs/claude-tabs.wasm" ]; then
+    local pane="pane cwd=$(kq "$dir")"
+    [ -n "$file" ] && pane+=" command=\"sh\" close_on_exit=true { args \"-c\" $(kq "$script") \"sh\" $(kq "$file"); }"
+    args=(--name="$name" --layout-string "layout { $pane; pane size=1 borderless=true { plugin location=\"claude-tabs\"; }; }")
+  else
+    args=(--cwd="$dir" --name="$name" "${edit[@]}")
+  fi
+  timeout 10 zellij --session "$sess" action new-tab "${args[@]}" >/dev/null 2>&1 || fail "Could not open a tab in zellij session $sess"
+}
 spawn() { command -v "$term" >/dev/null || fail "$term not found"; exec "$term" "$@"; }
 # a terminal attaches (creating / resurrecting the session), then the tab is added once the session runs
 attach_then_tab() {
