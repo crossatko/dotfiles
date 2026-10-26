@@ -3,6 +3,11 @@ singleton Appearance 1.0 Appearance.qml
 singleton Motion 1.0 Motion.qml
 singleton Binds 1.0 Binds.qml
 Chip 1.0 Chip.qml
+CalAddEvent 1.0 CalAddEvent.qml
+CalAddState 1.0 CalAddState.qml
+CalPicker 1.0 CalPicker.qml
+CalCreate 1.0 CalCreate.qml
+FieldBox 1.0 FieldBox.qml
 Label 1.0 Label.qml
 VmMeterRow 1.0 VmMeterRow.qml
 Bar 1.0 Bar.qml

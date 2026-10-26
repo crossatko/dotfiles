@@ -12,7 +12,7 @@ WAL mode). Only calendars with "Offline support" enabled in Thunderbird have a l
 (calendar.registry.<id>.cache.enabled = false) are fetched live from the server and are invisible here:
 the list of those is returned under "uncached" so the UI can say so. No network, no credentials.
 
-Output: {"events": [{title, start, end, allDay, calendar, color, location}], "calendars": [...], "uncached": [...]}
+Output: {"source": "omacal"|"thunderbird", "events": [{title, start, end, allDay, calendar, color, location}], "calendars": [...], "writable": [{id, name, color, primary}] (omacal only), "uncached": [...]}
 start/end are local "YYYY-MM-DD HH:MM" strings; for all-day events `end` is the (exclusive) last date.
 """
 import configparser, datetime as dt, glob, json, os, re, shutil, sqlite3, subprocess, sys, tempfile
@@ -111,7 +111,11 @@ def from_omacal(lo, hi):
         events.sort(key=lambda x: (x["start"], x["title"]))
         out_cals = [{"id": str(c["id"]), "name": c.get("label_override") or c.get("summary") or str(c["id"]),
                      "color": color[c["id"]]} for c in cals if c.get("selected", True)]
-        return {"events": events, "calendars": out_cals, "uncached": []}
+        # calendars an event can be created in: owner/writer access only (reader = subscriptions, holidays, shared read-only)
+        writable = [{"id": c["id"], "name": c.get("label_override") or c.get("summary") or str(c["id"]), "color": color[c["id"]],
+                     "primary": bool(c.get("is_primary"))}
+                    for c in cals if c.get("selected", True) and c.get("access_role") in ("owner", "writer")]
+        return {"source": "omacal", "events": events, "calendars": out_cals, "writable": writable, "uncached": []}
     except Exception:
         return None
 
@@ -127,7 +131,7 @@ def main():
         return
     prof = profile_dir()
     if not prof:
-        print(json.dumps({"events": [], "calendars": [], "uncached": [], "error": "no Thunderbird calendar cache found"}))
+        print(json.dumps({"source": "thunderbird", "events": [], "calendars": [], "uncached": [], "error": "no Thunderbird calendar cache found"}))
         return
     reg = registry(os.path.join(prof, "prefs.js"))
     tmp = tempfile.mkdtemp(prefix="calev.")
@@ -201,7 +205,7 @@ def main():
         emit(r, start, end)
 
     events.sort(key=lambda e: (e["start"], e["title"]))
-    print(json.dumps({"events": events, "calendars": out_cals, "uncached": uncached}, ensure_ascii=False))
+    print(json.dumps({"source": "thunderbird", "events": events, "calendars": out_cals, "uncached": uncached}, ensure_ascii=False))
 
 
 main()

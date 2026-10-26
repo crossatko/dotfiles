@@ -25,6 +25,8 @@ GridLayout {
     property var dayMap: ({})                 // "YYYY-MM-DD" -> [event]
     property var uncached: []
     property bool loaded: false
+    property var writable: []                 // calendars events can be added to (omacal only)
+    property string source: ""                // "omacal" | "thunderbird" (calendar-events); events can only be added with omacal
 
     function two(n) { return n < 10 ? "0" + n : "" + n }
     function key(d) { return d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate()) }
@@ -62,6 +64,8 @@ GridLayout {
                 try {
                     const d = JSON.parse(text)
                     cal.uncached = d.uncached || []
+                    cal.source = d.source || ""
+                    cal.writable = d.writable || []
                     cal.index(d.events || [])
                     cal.loaded = true
                 } catch (e) { cal.loaded = true }
@@ -93,12 +97,50 @@ GridLayout {
         SectionHead {
             title: cal.key(cal.selected) === cal.key(cal.today) ? "Today" : Qt.formatDate(cal.selected, "ddd d MMM")
             detail: cal.eventsOn(cal.selected).length > 0 ? cal.eventsOn(cal.selected).length + (cal.eventsOn(cal.selected).length === 1 ? " event" : " events") : ""
+            // omacal only: add inline / open the app on this day
+            Btn { visible: cal.source === "omacal" && cal.writable.length > 0; Layout.preferredHeight: 22; text: "+ Add event"; active: addForm.shown; onClicked: addForm.toggle() }
+            Btn {
+                visible: cal.source === "omacal"
+                Layout.preferredHeight: 22
+                Layout.preferredWidth: 28
+                icon: true
+                text: "\uf08e"
+                onClicked: { creator.openDay(cal.key(cal.selected)); Popups.close() }
+            }
+        }
+
+        CalAddState { id: addState }
+        CalCreate {
+            id: creator
+            onCreated: { addForm.shown = false; cal.reload() }
+        }
+
+        // The add form takes the agenda's place (same fixed height), so nothing else in the popup moves.
+        Item {
+            id: agendaArea
+            Layout.fillWidth: true
+            Layout.preferredHeight: 156            // fixed, so clicking between days never resizes the panel
+
+        CalAddEvent {
+            id: addForm
+            property bool shown: false
+            function toggle() { shown = !shown }
+            onShownChanged: if (shown) open()
+            anchors { left: parent.left; right: parent.right; top: parent.top }
+            visible: shown
+            day: cal.selected
+            calendars: cal.writable
+            lastCalendar: addState.lastId
+            busy: creator.busy
+            serverError: creator.error
+            onSubmit: (title, start, end, allDay, endDate, calendarId) => { addState.remember(calendarId); creator.create(title, cal.key(cal.selected), start, end, allDay, endDate, calendarId) }
+            onCancelled: shown = false
         }
 
         ListView {
             id: agenda
-            Layout.fillWidth: true
-            Layout.preferredHeight: 156            // fixed, so clicking between days never resizes the panel; scrolls when full
+            anchors.fill: parent
+            visible: !addForm.shown
             clip: true
             spacing: 6
             // all-day first, then by time
@@ -138,6 +180,7 @@ GridLayout {
                 text: cal.loaded ? "No events" : "Loading…"
                 color: Theme.muted
             }
+        }
         }
 
 
