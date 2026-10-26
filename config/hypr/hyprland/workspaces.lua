@@ -52,11 +52,28 @@ for _, ws in ipairs(workspaces) do
 		no_border = ws.no_border,
 		gaps_in = ws.gaps_in,
 		gaps_out = ws.gaps_out,
-		on_created_empty = ws.app,
 		default = ws.default or false,
 		persistent = ws.persistent or false,
 	})
 end
+
+-- Launch a workspace's app when it is created empty (replaces the deprecated on_created_empty rule).
+-- NB: workspaces are USERDATA: nil checks and pcall only.
+local app_by_id = {}
+for _, ws in ipairs(workspaces) do
+	if ws.app then
+		app_by_id[ws.id] = ws.app
+	end
+end
+
+hl.on("workspace.created", function(workspace)
+	local ok, id, empty = pcall(function()
+		return tostring(workspace.id), workspace.is_empty
+	end)
+	if ok and empty and app_by_id[id] then
+		hl.exec_cmd(app_by_id[id])
+	end
+end)
 
 -- Workspace 9 (monocle): tiled windows are square; floating ones (quickshell cards etc.) keep their
 -- rounding. A workspace rule's no_rounding would square the floating ones too.

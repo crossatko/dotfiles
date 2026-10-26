@@ -49,8 +49,8 @@ zellij claude-tabs, AeroSpace fork, librepods) live in their own repos, only the
   Vial.
 - **Mac** (secondary, shared, Apple silicon): see macOS. Never run `install.sh` there.
 - Per-host differences: `config/hypr/hyprland/host.lua` (`is_battlestation`/`is_workstation`/`is_vm` hostname flags, `is_vm` = any hostname ending in `vm` such as `xyz-vm`; `$HOSTNAME` env overrides in tests) and
-  `monitors.lua`. Fork-only options must load on stock: probe with `pcall(hl.get_config)` (`managed.lua`, `Theme.qml`). `on_created_empty` workspace rules only
-  fire on the fork.
+  `monitors.lua`. Fork-only options must load on stock: probe with `pcall(hl.get_config)` (`managed.lua`, `Theme.qml`). The empty-workspace app launch (`workspace.created` handler in `workspaces.lua`)
+  is stock-compatible and needs no fork.
 - Hyprland Lua: `hyprctl dispatch "hl.dsp.focus({workspace=N})"`; `hyprctl keyword` is refused; Lua objects are userdata (nil-check, never `type(x)=="table"`);
   `hl.dsp.window.pin` TOGGLES.
 - Fonts: Paper Mono (UI), Font Awesome Pro Sharp + Brands (icons). A new machine needs `inode/directory` -> Nautilus in untracked `~/.config/mimeapps.list`.
