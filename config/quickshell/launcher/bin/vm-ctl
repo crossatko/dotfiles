@@ -15,9 +15,7 @@
   vm-ctl create-bg DIR OS RELEASE [EDITION] [--ram R] [--cores N] [--disk S]
                                        same as create-run but headless: no terminal; progress goes to a job file in
                                        $XDG_RUNTIME_DIR/launcher-vm/jobs/ (read by `status`), toast at the end; SIGTERM cancels
-  vm-ctl status DIR                    JSON {vms: [running VMs: pid, rss, cpu ticks, ram, cores, uptime, monitor], jobs: [...]} (bar chip / panel)
-  vm-ctl shot DIR NAME OUT.png         preview PNG of a running VM from QEMU's monitor `screendump` only (GL guests answer "no surface"); prints
-                                       "screendump <sha>", else the reason on stderr + exit 1 and the last good PNG stays
+  vm-ctl status DIR                    JSON {vms: [running VMs: pid, rss, cpu ticks, ram, cores, uptime, monitor, disk used/total], jobs: [...]} (bar chip / panel)
   vm-ctl cancel JOBID                  cancel a running download job (SIGTERM to its runner), or remove a finished one
   vm-ctl host                          JSON {ram (GB, free --giga), threads, smt, autoRam, autoCores} = quickemu's auto values
   vm-ctl resources DIR NAME RAM CORES  set ram= / cpu_cores= ("auto" removes the line); VM must be stopped
@@ -736,44 +734,25 @@ def proc_stats(pid, cmd):
     return out
 
 
-def last_shot(name, now_start):
-    """mtime (epoch s) of the stored last good preview of a running VM, 0 = none. A frame older than the VM's current boot is a previous
-    run's: it is deleted (the preview is cleared when the VM is (re)started)."""
-    path = state_dir("shots", name + ".png")
+def disk_usage(vm):
+    """(used, total) bytes of the VM's disk image, 0 = unknown. used = allocated blocks (st_blocks * 512); total = the virtual size: bytes
+    24..32 of a qcow2 header (big endian), the file size of a raw image. Any other format: unknown (no extra process per poll)."""
     try:
-        m = os.stat(path).st_mtime
+        st = os.stat(vm.disk)
+        with open(vm.disk, "rb") as f:
+            head = f.read(32)
     except OSError:
-        return 0
-    if m < now_start - 1:
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
-        return 0
-    return m
-
-
-def prune_shots(running):
-    """previews of VMs that are not running any more (stopped, deleted) go away"""
-    now = time.time()
-    try:
-        for f in os.listdir(state_dir("shots")):
-            p = state_dir("shots", f)
-            if f.endswith(".tmp.png"):                  # a `shot` writing right now; only a stale leftover goes
-                try:
-                    if now - os.stat(p).st_mtime > 60:
-                        os.unlink(p)
-                except OSError:
-                    pass
-            elif f.endswith(".png") and f[:-4] not in running:
-                os.unlink(p)
-    except OSError:
-        pass
+        return 0, 0
+    used = st.st_blocks * 512
+    if head[:4] == b"QFI\xfb" and len(head) == 32:
+        return used, int.from_bytes(head[24:32], "big")
+    if (vm.conf.get("disk_format") or "qcow2") == "raw":
+        return used, st.st_size
+    return used, 0
 
 
 def cmd_status(d):
     vms, jobs = [], []
-    running = set()
     try:
         names = sorted(f[:-5] for f in os.listdir(d) if f.endswith(".conf"))
     except OSError:
@@ -789,10 +768,8 @@ def cmd_status(d):
         e = {"name": name, "pid": pid, "guest": i["guest"], "display": i["display"], "ssh": i["ssh"],
              "monitor": os.path.exists(vm.file("-monitor.socket"))}
         e.update(proc_stats(pid, cmd))
-        e["shotAt"] = last_shot(name, now_start=time.time() - e["uptime"])
-        running.add(name)
+        e["diskUsed"], e["diskTotal"] = disk_usage(vm)
         vms.append(e)
-    prune_shots(running)
     jd = state_dir("jobs")
     now = time.time()
     try:
@@ -823,70 +800,6 @@ def cmd_status(d):
         jobs.append(job)
     jobs.sort(key=lambda j: j.get("started", 0))
     print(json.dumps({"vms": vms, "jobs": jobs, "now": now}))
-    return 0
-
-
-def sha_of(path):
-    import hashlib
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()[:16]
-
-
-def hmp_screendump(vm, tmp):
-    """QEMU monitor `screendump` (quickemu's default `monitor=socket`). "" = written, else why not. A guest that scans out through
-    OpenGL (virtio-gpu-gl / VirGL, `-display gtk gl=on`) has no software surface: qemu answers "Error: no surface"."""
-    import socket
-    sock = vm.file("-monitor.socket")
-    s = socket.socket(socket.AF_UNIX)
-    s.settimeout(4)
-    try:
-        os.chdir(os.path.dirname(sock))                         # sun_path is limited to ~107 bytes: connect by relative name
-        s.connect(os.path.basename(sock))
-        s.sendall(("screendump %s -f png\n" % tmp).encode())    # the monitor echoes it; its reply ends with a fresh "(qemu) " prompt
-        reply = b""
-        while b"\n(qemu)" not in reply.partition(b"-f png")[2]:       # past the echo of the command
-            c = s.recv(65536)
-            if not c:
-                break
-            reply += c
-    except (OSError, socket.timeout):
-        return "no monitor socket"
-    finally:
-        s.close()
-    text = reply.decode(errors="replace").partition("-f png")[2]
-    m = re.search(r"Error:?\s*([^\r\n\x1b]*)", text)
-    if m:
-        return m.group(1).strip() or "screendump failed"
-    return "" if os.path.exists(tmp) else "screendump wrote nothing"
-
-
-def cmd_shot(vm, out):
-    """Preview PNG of a running VM from QEMU's own monitor `screendump` (nothing on the Wayland side is ever captured), written atomically.
-    stdout "screendump <sha>"; on failure the reason on stderr and exit 1, and the previous PNG is left alone (it is the last good
-    frame; `status` reports its age and drops it when the VM was restarted)."""
-    if not re.match(r"^/[A-Za-z0-9_./-]+\.png$", out):
-        die("bad output path")
-    if not vm.pid()[0]:
-        return 1
-    os.makedirs(os.path.dirname(out), mode=0o700, exist_ok=True)
-    tmp = out[:-4] + ".tmp.png"
-    why = hmp_screendump(vm, tmp)
-    if why:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        print(why, file=sys.stderr)
-        return 1
-    try:
-        os.replace(tmp, out)
-    except OSError as e:
-        print("could not store the frame: %s" % e.strerror, file=sys.stderr)
-        return 1
-    print("screendump %s" % sha_of(out))
     return 0
 
 
@@ -1065,8 +978,6 @@ def main(argv):
         return cmd_snapshot(vm, a[2], a[3])
     if c == "resources" and len(a) == 4:
         return cmd_resources(vm, a[2], a[3])
-    if c == "shot" and len(a) == 3:
-        return cmd_shot(vm, a[2])
     if c == "attach" and len(a) == 3:
         return cmd_attach(vm, a[2])
     fn = {"detach": cmd_detach}.get(c)

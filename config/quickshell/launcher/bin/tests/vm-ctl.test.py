@@ -1,14 +1,12 @@
-"""Tests for vm-ctl create-bg / status / cancel / shot with a stub quickget and a fake qemu process (no network, no VMs).
+"""Tests for vm-ctl create-bg / status / cancel with a stub quickget and a fake qemu process (no network, no VMs).
 Run: python3 -I launcher/bin/tests/vm-ctl.test.py"""
 import json
 import os
 import shutil
 import signal
-import socket
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import unittest
 
@@ -137,19 +135,6 @@ class T(unittest.TestCase):
         self.assertTrue(seen and max(seen) > 0, seen)
         self.assertLess(max(seen), 2 * 1000 * 1000, seen)
 
-    def test_status_keeps_frame_being_written(self):
-        self.fake_vm()
-        shots = os.path.join(self.state, "shots")
-        os.makedirs(shots)
-        tmp, stale = os.path.join(shots, "vm1.tmp.png"), os.path.join(shots, "old.tmp.png")
-        for f in (tmp, stale):
-            open(f, "wb").write(b"x")
-        old = time.time() - 3600
-        os.utime(stale, (old, old))
-        self.status()
-        self.assertTrue(os.path.exists(tmp))               # a `shot` in progress is not pruned under it
-        self.assertFalse(os.path.exists(stale))
-
     def test_bad_args(self):
         self.assertNotEqual(self.ctl("create-bg", self.root, "foo; rm", "1").returncode, 0)
 
@@ -176,85 +161,28 @@ class T(unittest.TestCase):
         p.wait()
         self.assertEqual(self.status()["vms"], [])
 
-    def test_shot_via_monitor_socket(self):
-        self.fake_vm()
-        sock = os.path.join(self.root, "vm1", "vm1-monitor.socket")
-        srv = socket.socket(socket.AF_UNIX)
-        srv.bind(sock)
-        srv.listen(1)
-
-        def serve():
-            c, _ = srv.accept()
-            c.sendall(b"QEMU monitor\r\n(qemu) ")
-            data = b""
-            while not data.endswith(b"\n"):
-                data += c.recv(4096)
-            path = data.decode().split()[1]
-            open(path, "wb").write(b"\x89PNG")
-            c.sendall(data.rstrip(b"\n") + b"\x1b[K\r\n(qemu) ")
-            c.close()
-        t = threading.Thread(target=serve, daemon=True)
-        t.start()
-        out = os.path.join(self.tmp, "shots", "vm1.png")
-        r = self.ctl("shot", self.root, "vm1", out)
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertTrue(r.stdout.startswith("screendump "))
-        self.assertTrue(os.path.exists(out))
-        self.assertEqual(self.ctl("shot", self.root, "vm1", "/tmp/a b.png").returncode, 2)
-
-    def monitor_no_surface(self):
-        sock = os.path.join(self.root, "vm1", "vm1-monitor.socket")
-        srv = socket.socket(socket.AF_UNIX)
-        srv.bind(sock)
-        srv.listen(5)
-
-        def serve():
-            while True:
-                try:
-                    c, _ = srv.accept()
-                except OSError:
-                    return
-                c.sendall(b"QEMU monitor\r\n(qemu) ")
-                data = b""
-                while not data.endswith(b"\n"):
-                    data += c.recv(4096)
-                c.sendall(data.rstrip(b"\n") + b"\x1b[K\r\nError: no surface\r\n(qemu) ")
-                c.close()
-        threading.Thread(target=serve, daemon=True).start()
-
-    def test_shot_no_surface_keeps_last_frame(self):
-        self.fake_vm()
-        self.monitor_no_surface()
-        out = os.path.join(self.tmp, "shots", "vm1.png")
-        os.makedirs(os.path.dirname(out))
-        with open(out, "wb") as f:
-            f.write(b"OLDFRAME")
-        r = self.ctl("shot", self.root, "vm1", out)
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("no surface", r.stderr)
-        self.assertEqual(open(out, "rb").read(), b"OLDFRAME")
-        self.assertFalse(os.path.exists(out[:-4] + ".tmp.png"))
-
     def test_no_window_capture_code(self):
         with open(VMCTL) as f:
             src = f.read()
         self.assertNotIn("grim", src)
         self.assertNotIn("stableId", src)
 
-    def test_status_reports_and_prunes_frames(self):
-        p = self.fake_vm()
-        shots = os.path.join(self.state, "shots")
-        os.makedirs(shots)
-        frame, gone = os.path.join(shots, "vm1.png"), os.path.join(shots, "gone.png")
-        for f in (frame, gone):
-            open(f, "wb").write(b"x")
+    def test_status_disk_usage(self):
+        self.fake_vm()
+        disk = os.path.join(self.root, "vm1", "disk.qcow2")
+        self.assertEqual(self.status()["vms"][0]["diskTotal"], 0)       # no image: unknown, not an error
+        with open(disk, "wb") as f:
+            f.write(b"QFI\xfb" + b"\0" * 20 + (64 << 30).to_bytes(8, "big"))
+            f.write(b"x" * 8192)
         v = self.status()["vms"][0]
-        self.assertGreater(v["shotAt"], 0)                 # a frame from this boot is reported with its time
-        self.assertFalse(os.path.exists(gone))             # a VM that is not running has no stored frame
-        old = time.time() - 3600
-        os.utime(frame, (old, old))                        # older than this boot: a previous run's frame
-        self.assertEqual(self.status()["vms"][0]["shotAt"], 0)
-        self.assertFalse(os.path.exists(frame))
+        self.assertEqual(v["diskTotal"], 64 << 30)
+        self.assertEqual(v["diskUsed"], os.stat(disk).st_blocks * 512)
+        with open(disk, "wb") as f:                                      # not qcow2, not raw: unknown total
+            f.write(b"junk" * 16)
+        self.assertEqual(self.status()["vms"][0]["diskTotal"], 0)
+        with open(os.path.join(self.root, "vm1.conf"), "a") as f:
+            f.write('disk_format="raw"\n')
+        self.assertEqual(self.status()["vms"][0]["diskTotal"], 64)       # raw: the file size is the virtual size
 
 
 if __name__ == "__main__":

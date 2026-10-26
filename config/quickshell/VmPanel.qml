@@ -2,16 +2,14 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 
-// Virtual machine popup (VM chip): running quickemu VMs with a live preview, CPU / memory / uptime and Show / Shut down,
-// plus the background downloads (progress, speed, ETA, Cancel). Data: VmService.qml. Sampling and previews run only
+// Virtual machine popup (VM chip): running quickemu VMs with CPU / memory / disk / uptime and Show / Shut down,
+// plus the background downloads (progress, speed, ETA, Cancel). Data: VmService.qml. Sampling runs only
 // while this panel exists (it is created on open and destroyed on close).
 ColumnLayout {
     id: vp
     spacing: 10
 
     Binding { target: VmService; property: "panelOpen"; value: true }
-    property real nowMs: Date.now()                  // for the preview age; ticks only while the panel exists
-    Timer { interval: 1000; repeat: true; running: true; onTriggered: vp.nowMs = Date.now() }
     Component.onCompleted: VmService.poll()
 
     PanelHeader {
@@ -65,7 +63,7 @@ ColumnLayout {
         delegate: Rectangle {
             id: card
             required property string modelData
-            readonly property var vm: VmService.vmByName(modelData) || ({ name: modelData, monitor: false, ram: 0, rss: 0, cpu: -1, cores: 0, uptime: 0, display: "" })
+            readonly property var vm: VmService.vmByName(modelData) || ({ name: modelData, monitor: false, ram: 0, rss: 0, cpu: -1, cores: 0, uptime: 0, display: "", diskUsed: 0, diskTotal: 0 })
             Layout.fillWidth: true
             implicitHeight: body.implicitHeight + 24
             radius: Theme.radiusItem
@@ -74,68 +72,13 @@ ColumnLayout {
             border.color: Theme.alpha(Theme.overlay, 0.6)
 
             readonly property real memFrac: vm.ram > 0 ? Math.min(1, vm.rss / vm.ram) : 0
+            readonly property real diskFrac: vm.diskTotal > 0 ? Math.min(1, vm.diskUsed / vm.diskTotal) : 0
             readonly property real cpuFrac: vm.cpu >= 0 && vm.cores > 0 ? Math.min(1, vm.cpu / 100 / vm.cores) : 0
 
             RowLayout {
                 id: body
                 anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 12 }
                 spacing: 12
-
-                // preview: QEMU's monitor screendump (`vm-ctl shot`), nothing else is ever captured. Live = captured in the last few seconds;
-                // otherwise the last good frame (kept on disk, dropped when the VM restarts) is shown dimmed with its age and the reason.
-                Rectangle {
-                    id: pv
-                    readonly property var info: VmService.shotInfo[card.vm.name] || null
-                    readonly property real capAt: VmService.shotAt(card.vm.name)
-                    readonly property bool have: capAt > 0
-                    readonly property real age: have ? Math.max(0, vp.nowMs - capAt) : 0
-                    readonly property bool live: have && info !== null && info.ok && age < 9000
-                    readonly property bool stale: have && !live && info !== null      // (before the first attempt of this open nothing is claimed)
-                    Layout.preferredWidth: 150; Layout.preferredHeight: 94
-                    Layout.alignment: Qt.AlignTop
-                    radius: Math.max(2, Theme.radiusItem - 6)
-                    color: Theme.alpha(Theme.bg, 0.8)
-                    clip: true
-                    border.width: 1; border.color: Theme.alpha(Theme.overlay, 0.5)
-                    Image {
-                        id: shot
-                        anchors.fill: parent
-                        fillMode: Image.PreserveAspectFit
-                        asynchronous: true
-                        cache: false
-                        sourceSize.width: 300
-                        source: pv.have ? VmService.previewUrl(card.vm.name) : ""
-                        visible: status === Image.Ready
-                        opacity: pv.live || (pv.info === null && pv.age < 9000) ? 1 : 0.4
-                    }
-                    Label {
-                        visible: !shot.visible
-                        anchors.centerIn: parent
-                        text: "\uf108"; font.family: Theme.iconFont; font.styleName: "Regular"
-                        font.pixelSize: 26; color: Theme.muted
-                    }
-                    Rectangle {                          // keeps the note readable over a frame
-                        visible: note.visible && shot.visible
-                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                        height: note.implicitHeight + 10
-                        color: Theme.alpha(Theme.bg, 0.8)
-                    }
-                    Label {
-                        id: note
-                        readonly property string reason: VmService.shotReason(card.vm.name)
-                        visible: text !== ""
-                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 5 }
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.Wrap
-                        maximumLineCount: 4
-                        elide: Text.ElideRight
-                        font.pixelSize: Theme.fontCaption
-                        color: pv.stale ? Theme.orange : Theme.muted
-                        text: pv.info === null ? (pv.have ? "from " + VmService.fmtDuration(pv.age / 1000) + " ago" : "capturing...")
-                            : pv.live ? (pv.info.same >= 10 ? "unchanged for " + VmService.fmtDuration(pv.info.same * 3) : "")
-                            : (pv.have ? "from " + VmService.fmtDuration(pv.age / 1000) + " ago" + (reason ? "\n" : "") : "") + reason
-                    }
-                }
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -150,25 +93,21 @@ ColumnLayout {
                         text: "Running " + VmService.fmtDuration(card.vm.uptime) + (card.vm.display === "headless" ? "  ·  headless" : "")
                         color: Theme.fgDim; font.pixelSize: Theme.fontCaption
                     }
-                    RowLayout {
+                    VmMeterRow {
                         Layout.fillWidth: true
-                        spacing: 6
-                        Label { text: "CPU"; color: Theme.fgDim; font.pixelSize: Theme.fontCaption; Layout.preferredWidth: 28 }
-                        Meter { Layout.fillWidth: true; value: card.cpuFrac; animMs: 300; implicitHeight: 4 }
-                        Label {
-                            text: card.vm.cpu >= 0 ? Math.round(card.vm.cpu) + "%" : "…"
-                            font.pixelSize: Theme.fontCaption; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 36
-                        }
+                        label: "CPU"; value: card.cpuFrac
+                        text: card.vm.cpu >= 0 ? Math.round(card.vm.cpu) + "%" : "…"
                     }
-                    RowLayout {
+                    VmMeterRow {
                         Layout.fillWidth: true
-                        spacing: 6
-                        Label { text: "RAM"; color: Theme.fgDim; font.pixelSize: Theme.fontCaption; Layout.preferredWidth: 28 }
-                        Meter { Layout.fillWidth: true; value: card.memFrac; animMs: 300; implicitHeight: 4; fillColor: Theme.accent2 }
-                        Label {
-                            text: VmService.fmtBytes(card.vm.rss) + (card.vm.ram > 0 ? " / " + VmService.fmtBytes(card.vm.ram) : "")
-                            font.pixelSize: Theme.fontCaption; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 96
-                        }
+                        label: "RAM"; value: card.memFrac; fillColor: Theme.accent2
+                        text: VmService.fmtBytes(card.vm.rss) + (card.vm.ram > 0 ? " / " + VmService.fmtBytes(card.vm.ram) : "")
+                    }
+                    VmMeterRow {
+                        visible: card.vm.diskTotal > 0
+                        Layout.fillWidth: true
+                        label: "Disk"; value: card.diskFrac; fillColor: Theme.green
+                        text: VmService.fmtBytes(card.vm.diskUsed) + " / " + VmService.fmtBytes(card.vm.diskTotal)
                     }
                     RowLayout {
                         Layout.fillWidth: true

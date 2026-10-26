@@ -7,9 +7,8 @@ import Quickshell.Io
 // `vm-ctl status DIR` call (launcher/bin/vm-ctl): the running quickemu VMs (qemu PID from <vm>.pid, RSS, CPU ticks,
 // configured RAM / cores, uptime) and the background download jobs (`vm-ctl create-bg`, one JSON file each in
 // $XDG_RUNTIME_DIR/launcher-vm/jobs). Polling only runs while a bar shows the "vm" widget: a slow scan while there is
-// nothing to track, faster while a job runs, the panel is open or VMs are running. Previews (QEMU monitor
-// `screendump`) are taken only while the panel is open (`panelOpen`, set by VmPanel).
-// Env hooks: LAUNCHER_VM_DIR (VM folder, same as the launcher), QS_VM_STATE (job / preview folder, tests).
+// nothing to track, faster while a job runs, the panel is open or VMs are running.
+// Env hooks: LAUNCHER_VM_DIR (VM folder, same as the launcher), QS_VM_STATE (job folder, tests).
 Singleton {
     id: root
 
@@ -25,8 +24,7 @@ Singleton {
 
     property var vms: []                             // [{name, pid, cpu (%), rss, ram, cores, uptime, monitor, ...}]
     property var jobs: []                            // [{id, label, state running|done|failed|cancelled, phase, pct (-1 unknown), speed, eta, bytes, total, error}]
-    property bool panelOpen: false                   // VmPanel is showing: faster sampling + previews
-    property var shotTick: ({})                      // name -> counter, bumped after each new preview
+    property bool panelOpen: false                   // VmPanel is showing: faster sampling
     property bool launcherOpen: false                // launcher shows the VM section (set by Launcher): jobs poll at 1 s there even without the chip
     // jobs just started here that the status feed does not list yet (the runner takes a moment to write its job file): key -> expiry ms
     property var starting: ({})
@@ -87,7 +85,6 @@ Singleton {
     }
     readonly property var activeJob: runningJobs.length > 0 ? runningJobs[0] : null
 
-    function previewUrl(name) { return "file://" + stateDir + "/shots/" + name + ".png?" + (shotTick[name] || 0) }
     function ctl(args) { Quickshell.execDetached([helper].concat(args)) }
     function stop(name) { ctl(["stop", dir, name]) }          // ACPI shutdown of the tracked PID (quickemu --monitor-cmd system_powerdown)
     function focus(name) { ctl(["focus", dir, name]) }
@@ -153,59 +150,7 @@ Singleton {
         }
     }
 
-    // Previews: `vm-ctl shot` = QEMU's own monitor `screendump` (nothing on the Wayland side is captured), one VM at a time, only while the
-    // panel is open. The last good frame is kept on disk per VM ($stateDir/shots, status reports its age as `shotAt`, it is dropped when the
-    // VM restarts or stops), so the card shows it, marked with its age, when new captures fail. A GPU-accelerated guest (virtio-gpu-gl)
-    // answers "no surface" for good, so a failed VM is retried only every 30 s (and again on each panel open).
-    // shotInfo[name] = { at: ms of the last good capture this panel session, ok, sha, same: consecutive identical captures, reason, retryAt }
-    property var shotQueue: []
-    property var shotInfo: ({})
-    function shootAll() {
-        if (!panelOpen || shotProc.running) return
-        const now = Date.now()
-        shotQueue = vms.filter(v => !(shotInfo[v.name] && shotInfo[v.name].retryAt > now)).map(v => v.name)
-        nextShot()
-    }
-    property string shotName: ""
-    function nextShot() {
-        if (shotQueue.length === 0) return
-        shotName = shotQueue[0]; shotQueue = shotQueue.slice(1)
-        shotProc.command = [helper, "shot", dir, shotName, stateDir + "/shots/" + shotName + ".png"]
-        shotProc.running = true
-    }
-    // when the frame of a VM was captured (ms, 0 = no frame): this session's capture, else the stored file's time from `status`
-    function shotAt(name) {
-        const i = shotInfo[name], v = vmByName(name)
-        return Math.max(i ? i.at : 0, v && v.shotAt ? v.shotAt * 1000 : 0)
-    }
-    // short reason for the card
-    function shotReason(name) {
-        const i = shotInfo[name]
-        if (!i || i.ok || !i.reason) return ""
-        return /no surface/i.test(i.reason) ? "preview unavailable for GPU-accelerated guests" : "preview unavailable: " + i.reason
-    }
-    Process {
-        id: shotProc
-        stdout: StdioCollector { id: shotOut }
-        stderr: StdioCollector { id: shotErr }
-        onExited: (code, status) => {
-            if (!root.panelOpen) return                  // closed meanwhile: the next open starts fresh (the frame on disk stays)
-            const n = root.shotName, info = Object.assign({ at: 0, ok: false, sha: "", same: 0, reason: "", retryAt: 0 }, root.shotInfo[n] || {})
-            if (code === 0) {
-                const m = shotOut.text.trim().split(" ")
-                info.same = m[1] === info.sha ? info.same + 1 : 0
-                if (m[1] !== info.sha) { const t = Object.assign({}, root.shotTick); t[n] = (t[n] || 0) + 1; root.shotTick = t }
-                info.ok = true; info.at = Date.now(); info.sha = m[1] || ""; info.reason = ""; info.retryAt = 0
-            } else {
-                info.ok = false; info.reason = shotErr.text.trim().split("\n")[0].slice(0, 120) || "capture failed"
-                info.retryAt = Date.now() + (/no surface/i.test(info.reason) ? 30000 : 9000)
-            }
-            const all = Object.assign({}, root.shotInfo); all[n] = info; root.shotInfo = all
-            if (root.panelOpen) root.nextShot()
-        }
-    }
-    Timer { interval: 3000; repeat: true; running: root.panelOpen && root.vms.length > 0; triggeredOnStart: true; onTriggered: root.shootAll() }
-    onPanelOpenChanged: { if (panelOpen) poll(); else shotInfo = ({}) }      // a new open retries every VM at once
+    onPanelOpenChanged: { if (panelOpen) poll() }
 
     FileView {
         path: root.home + "/.config/launcher/config.json"
