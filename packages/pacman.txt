@@ -1,7 +1,7 @@
 # Repo packages (core/extra/multilib), installed by
 # `./install.sh` (stage `packages`) with `pacman -S --needed`. One name per line, `#` starts a comment.
-# Every name was checked with `pacman -Si`. All names are in core/extra/multilib. The third-party CachyOS and
-# Chaotic-AUR repos are added separately by the `repos` stage; no package here depends on them.
+# Every name was checked with `pacman -Si`. All names are in core/extra/multilib. The third-party Chaotic-AUR
+# repo (and, with --cachyos, CachyOS) is added separately by the `repos` stage; no package here depends on it.
 #
 # Not packaged, install by hand (install.sh lists these at the end):
 #   - Hyprland fork (glass compositing, battlestation only): `hyprland` below is the stock build,

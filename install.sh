@@ -2,14 +2,16 @@
 # Arch Linux installer for these dotfiles. Idempotent: every step checks the current state first and a second
 # run changes nothing. Never run it as root (it calls sudo itself where needed).
 #
-#   ./install.sh [--dry-run] [--yes] [--only STAGE[,STAGE...]] [--with BUNDLE[,BUNDLE...]] [--repos] [--system] [--chsh] [-h|--help]
+#   ./install.sh [--dry-run] [--yes] [--only STAGE[,STAGE...]] [--with BUNDLE[,BUNDLE...]] [--cachyos] [--system] [--chsh] [-h|--help]
 #
 # Stages (run in this order):
-#   repos     (sudo, opt-in) third-party repos on top of Arch: CachyOS (arch-optimised + [cachyos]) and Chaotic-AUR
+#   repos     (sudo) third-party Chaotic-AUR repo (prebuilt AUR packages); with --cachyos (opt-in) also the CachyOS repos
+#             (arch-optimised + [cachyos]). Runs before packages so the -Syu there syncs the new repos.
 #   packages  multilib, yay, packages/{pacman,aur,flatpak}.txt, plus opt-in bundles packages/optional/NAME.txt (--with NAME)
 #   links     symlinks into $HOME, shell dotfiles, GTK seed, theme seed, web apps, librepods build
 #   system    (sudo) system/etc files, udev rules, /etc/environment host marker, services, ufw, docker group
-# Default: packages + links. `repos` and `system` are opt-in: --repos / --system, or --only (e.g. `--only repos,packages,links`).
+# Default: repos + packages + links. `system` is opt-in (--system, or --only). Skip the third-party repo with `--only links,packages`.
+# --cachyos (opt-in, needs the repos stage) also adds the CachyOS repos.
 #
 # Environment: CLAUDE_TABS_DIR (claude-tabs checkout), INSTALL_SKIP (space separated: librepods omz claude-tabs
 # cachyos-repo chaotic-repo), GPU_DRIVER (radeon|intel|virtio|swrast|none instead of GPU detection), PACMAN_CONF (pacman.conf to edit, default /etc/pacman.conf; for tests),
@@ -26,7 +28,7 @@ DRY=0
 YES=0
 CHSH=0
 WANT_SYSTEM=0
-WANT_REPOS=0
+WANT_CACHYOS=0
 ONLY=""
 WITH=""
 BUNDLES=()
@@ -54,15 +56,17 @@ bundle_help() {
 
 usage() {
   cat <<EOF
-Usage: ./install.sh [--dry-run] [--yes] [--only STAGE[,STAGE...]] [--with BUNDLE[,BUNDLE...]] [--repos] [--system] [--chsh] [-h|--help]
+Usage: ./install.sh [--dry-run] [--yes] [--only STAGE[,STAGE...]] [--with BUNDLE[,BUNDLE...]] [--cachyos] [--system] [--chsh] [-h|--help]
 
 Arch Linux only. Idempotent; never run as root.
 
 Stages:
-  repos     (sudo, opt-in) add the third-party CachyOS repos (arch-optimised core/extra rebuilds + [cachyos]) and
-            Chaotic-AUR to pacman.conf, with their keys, keyrings and mirrorlists. Does NOT install the CachyOS
-            kernel. The repos sit above [core]/[extra], so the next -Syu may swap in optimised rebuilds.
-            Opt-in because no package in packages/*.txt needs it.
+  repos     (sudo) add the third-party Chaotic-AUR repo (prebuilt AUR packages, so yay installs them without
+            building) to pacman.conf, with its key, keyring and mirrorlist. It is a third-party repo you have to
+            trust; skip it with '--only links,packages' (yay then builds those packages from the AUR). With
+            --cachyos it also adds the CachyOS repos (arch-optimised core/extra rebuilds + [cachyos]; does NOT
+            install the CachyOS kernel; they sit above [core]/[extra], so the next -Syu may swap in rebuilds).
+            Runs before packages, whose -Syu syncs the new repo.
   packages  enable multilib, bootstrap yay, install packages/pacman.txt, packages/aur.txt, packages/flatpak.txt,
             then the optional bundles chosen with --with
   links     symlink config into $HOME (backs up real files once), shell dotfiles, GTK seed, theme seed,
@@ -75,7 +79,7 @@ Options:
   --yes            pass --noconfirm to pacman/yay (no questions; default: pacman asks, unless stdin is not a terminal)
   --only STAGES    comma separated subset of: repos,packages,links,system
   --with BUNDLES   also install optional bundles (comma separated, or 'all'), see below; runs the packages stage
-  --repos          also run the repos stage (default stages: packages,links)
+  --cachyos        also add the CachyOS repos in the repos stage (opt-in; default stages: repos,packages,links)
   --system         also run the system stage
   --chsh           change the login shell to zsh (asks for your password)
   -h, --help       this text
@@ -139,7 +143,7 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     --with=*) WITH="${1#--with=}" ;;
-    --repos) WANT_REPOS=1 ;;
+    --cachyos) WANT_CACHYOS=1 ;;
     --system) WANT_SYSTEM=1 ;;
     --chsh) CHSH=1 ;;
     -h | --help)
@@ -164,7 +168,7 @@ if [ -n "$ONLY" ]; then
     esac
   done
 else
-  STAGES=(packages links)
+  STAGES=(repos packages links)
 fi
 BUNDLES=()
 if [ -n "$WITH" ]; then
@@ -187,13 +191,13 @@ if [ -n "$WITH" ]; then
     esac
   fi
 fi
-[ "$WANT_REPOS" = 1 ] && STAGES+=(repos)
 [ "$WANT_SYSTEM" = 1 ] && STAGES+=(system)
 stage_on() {
   local s
   for s in "${STAGES[@]}"; do [ "$s" = "$1" ] && return 0; done
   return 1
 }
+[ "$WANT_CACHYOS" = 0 ] || stage_on repos || die "--cachyos belongs to the repos stage, but --only '$ONLY' does not include it"
 
 # ---------------------------------------------------------------- platform checks
 if [ "$(uname -s)" = Darwin ]; then
@@ -427,11 +431,15 @@ cachyos_pkg_url() {
 
 stage_repos() {
   log "Stage repos (third-party package repositories)"
-  echo "    This adds the CachyOS and Chaotic-AUR repos to $PACMAN_CONF (third-party, signed by keys that are"
-  echo "    locally trusted here). The CachyOS kernel is NOT installed. The arch-optimised repos sit above"
-  echo "    [core]/[extra], so the next -Syu can replace Arch packages with optimised rebuilds."
+  echo "    This adds the THIRD-PARTY Chaotic-AUR repo (prebuilt AUR packages) to $PACMAN_CONF and trusts its"
+  echo "    signing key locally, so packages from it install as binaries without building. Skip this stage with"
+  echo "    '--only links,packages' (yay then builds from the AUR)."
+  if [ "$WANT_CACHYOS" = 1 ]; then
+    echo "    --cachyos: also adds the third-party CachyOS repos. The CachyOS kernel is NOT installed. The"
+    echo "    arch-optimised repos sit above [core]/[extra], so the next -Syu can replace Arch packages with rebuilds."
+  fi
 
-  local level want_cachyos=1 want_chaotic=1 pkgs=() url n
+  local level want_cachyos=$WANT_CACHYOS want_chaotic=1 pkgs=() url n
   skipped cachyos-repo && want_cachyos=0
   skipped chaotic-repo && want_chaotic=0
 
@@ -1133,7 +1141,7 @@ Manual steps (not automated):
   - Optional privacy deny-list for the pre-commit hook: ~/.config/dotfiles-private/denylist.
   - Machine-specific hardware setup beyond the GPU stack and CPU microcode (bootloader config, NVIDIA).
   - Log out and back in after the first run (docker group, environment, themes).
-  - Optional third-party repos (CachyOS, Chaotic-AUR; not needed by the package lists): `./install.sh --repos`.
+  - Chaotic-AUR (third-party, prebuilt AUR packages) is added by default; skip it with `--only links,packages`. CachyOS repos: `./install.sh --only repos --cachyos`.
   - Root-owned files and services: `./install.sh --system` (or `--only system`); change the login shell with `--chsh`.
   - macOS is maintained by hand.
 EOF

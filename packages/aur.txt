@@ -1,5 +1,6 @@
 # AUR packages, installed with `yay -S --needed` after pacman.txt (stage `packages`).
 # One name per line, `#` starts a comment. Every name was checked against the AUR RPC (exists, not out of date).
+# Names that Chaotic-AUR also ships install prebuilt (no build) when the `repos` stage ran; the rest are built by yay.
 
 # --- browsers / apps
 brave-bin
