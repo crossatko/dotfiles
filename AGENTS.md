@@ -62,6 +62,7 @@ Wiring in these dotfiles:
 
 ```
 README.md         overview and install steps
+install-mac.sh    macOS: symlinks the Mac configs only (--dry-run)
 install.sh        Arch bootstrap: ./install.sh --help (stages repos, packages, links, system; `repos` and `system` are opt-in (`--repos`, `--system` or `--only`); `repos` sets up the third-party CachyOS + Chaotic-AUR repos in pacman.conf, no package in `packages/*.txt` needs it; default stages packages+links)
 packages/         pacman.txt, aur.txt, flatpak.txt (package lists read by install.sh)
 system/etc/       root-owned files (udev rules, systemd units, mullvad-tailscale coexist rules), see system/README.md
@@ -250,7 +251,7 @@ Settings > Appearance changes corner radius, gaps, border and smart gaps (global
 ## macOS (secondary machine)
 
 Current state only. Shared laptop (own user account), Apple silicon, Homebrew in `/opt/homebrew`, zsh. Not Arch: never run `install.sh` there.
-- **Linked** (`~/.config/<app>` -> `config/<app>`, like `install.sh`): kitty, nvim, zellij, herdr, theme, aerospace, karabiner, ghostty. `~/.zshrc` -> `config/shell/zshrc`, `~/.claude/CLAUDE.md` -> repo `CLAUDE.md`. Nothing runs the theme engine: `theme.py` exits 0 on darwin and `.githooks/theme-render` only seeds. The Mac shows the committed default theme: `bin/theme-seed` copies `config/theme/default/` into the git-ignored `config/theme/out/` (git hooks, or by hand) and follows later changes of `default/`.
+- **Linked** by `./install-mac.sh` (symlinks only, idempotent, `--dry-run`; backs up existing files as `*.bak.<timestamp>`; sets `core.hooksPath`; does not do brew, `defaults`, swiftbar or theme-seed) (`~/.config/<app>` -> `config/<app>`, like `install.sh`): kitty, nvim, zellij, herdr, theme, aerospace, karabiner, ghostty. `~/.zshrc` -> `config/shell/zshrc`, `~/.claude/CLAUDE.md` -> repo `CLAUDE.md`. Nothing runs the theme engine: `theme.py` exits 0 on darwin and `.githooks/theme-render` only seeds. The Mac shows the committed default theme: `bin/theme-seed` copies `config/theme/default/` into the git-ignored `config/theme/out/` (git hooks, or by hand) and follows later changes of `default/`.
 - **brew formulae**: neovim, zellij, herdr, ripgrep, fd, node, lazygit, starship, zoxide, imagemagick, tree-sitter-cli, zsh-autosuggestions, zsh-syntax-highlighting, swiftly, bash. **Casks**: kitty, ghostty, font-paper-mono, karabiner-elements, raycast, swiftbar. Oh My Zsh is a git clone in `~/.oh-my-zsh`.
 - **zsh**: `zshrc` branches on `$OSTYPE`/file existence (brew shellenv, plugin dirs, `update()` = brew update+upgrade). Zellij's `copy_command "wl-copy"` works through the host-local symlink `~/.local/bin/wl-copy -> /usr/bin/pbcopy` (not in the repo).
 - **Terminal = Ghostty** (`/Applications/Ghostty.app`; kitty stays installed as a fallback). `config/ghostty/config` is shared with Linux; Mac-only overrides: `config/ghostty/macos.conf` (font, cell height, background blur, titlebar, option-as-alt, keybinds), linked as `~/Library/Application Support/com.mitchellh.ghostty/config` (read only on macOS, after the shared config). Colours/background come from the per-machine `theme/out/ghostty` (git-ignored).

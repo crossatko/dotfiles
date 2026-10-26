@@ -31,8 +31,8 @@ say which.
 
 ## macOS
 
-There is no installer. Link the configs you want from `config/` by hand (aerospace, karabiner, swiftbar,
-ghostty, kitty, nvim, ...).
+Run `./install-mac.sh` (`--dry-run` to preview) to symlink the Mac configs (aerospace, karabiner, ghostty,
+kitty, nvim, ...). It only links: no brew, no `defaults`, no sudo.
 
 ## Good to know
 
