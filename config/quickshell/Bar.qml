@@ -213,6 +213,9 @@ PanelWindow {
         return s.includes("blueman") || s.includes("nm-applet") || s.includes("networkmanager")
     }
 
+    // an item that reports itself Passive asks not to be shown (omacal with its tray icon turned off)
+    function trayHidden(i) { return bar.isApplet(i) || i.status === Status.Passive }
+
     function run(argv) { runner.command = argv; runner.startDetached() }
     Process { id: runner }
 
@@ -566,14 +569,14 @@ PanelWindow {
     Component {
         id: trayComp
         Chip { ink: bar.ink;
-            show: SystemTray.items.values.some(i => !bar.isApplet(i))   // qmllint disable missing-property
+            show: SystemTray.items.values.some(i => !bar.trayHidden(i))   // qmllint disable missing-property
             padX: 6
             Repeater {
                 model: SystemTray.items
                 Item {
                     id: trayItem
                     required property var modelData
-                    visible: !bar.isApplet(modelData)
+                    visible: !bar.trayHidden(modelData)
                     implicitWidth: Theme.chipIcon
                     implicitHeight: Theme.chipIcon
                     Layout.alignment: Qt.AlignVCenter
