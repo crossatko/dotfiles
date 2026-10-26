@@ -154,7 +154,7 @@ gamescope
 gamemode
 mangohud
 
-# --- containers / virtualization (VM panel uses quickemu from aur.txt)
+# --- containers / virtualization
 docker
 docker-compose
 qemu-desktop
