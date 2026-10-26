@@ -33,6 +33,7 @@ QtObject {
                 icon: a.icon || "",
                 glyph: "",                 // cube
                 desktopId: a.id,
+                argv: (a.runInTerminal ? [] : (a.command || [])).map(String),   // launch command, matched to Hyprland binds (Binds.keysForApp)
                 // web apps from bin/webapp-install (or the old create_brave_webapp function): webapp_<slug>.desktop running
                 // a browser with --app=; Ctrl+K offers "Uninstall webapp" (WebappSource.action)
                 actions: webappSlug(a) ? [{ id: "webapp-uninstall", label: "Uninstall webapp", glyph: "\uf1f8", confirm: true,

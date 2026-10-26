@@ -71,6 +71,31 @@ ModalMenu {
     property bool sectionDirect: false              // section opened by IPC / keybind (openSection), not from the main list: Esc closes instead of going back
     property string confirmId: ""                   // section item waiting for a second Enter (destructive power actions)
 
+    // scroll / selection memory per view (main list, each section, nested levels): saved before leaving a view, restored when Esc / Left
+    // comes back to it; cleared whenever the launcher opens. Key = the view's identity (viewKey).
+    property var viewMem: ({})
+    readonly property string viewKey: section + "|" + jfSrc.depth + "|" + vpnSrc.country + "|" + vmSrc.depth + "|" + secSrc.vodActive
+    function saveView() {
+        const it = results[sel]
+        viewMem[viewKey] = { id: it ? it.id : "", sel: sel, first: first, query: input.text, order: results.map(r => r.id) }
+    }
+    // after refresh() of the view just returned to: same row selected, same scroll offset (false = nothing remembered)
+    function restoreView() {
+        const m = viewMem[viewKey]
+        if (!m || results.length === 0) return false
+        // entering a row re-ranks the main list (frecency), so put the rows back in the order they were left in: nothing shifts
+        const pos = {}
+        m.order.forEach((id, k) => { pos[id] = k })
+        const at = r => pos[r.id] === undefined ? 1e9 : pos[r.id]
+        results = results.map((r, k) => ({ r: r, k: k })).sort((x, y) => at(x.r) - at(y.r) || x.k - y.k).map(e => e.r)
+        let i = m.id === "" ? -1 : results.findIndex(r => r.id === m.id)
+        if (i < 0) i = Math.min(m.sel, results.length - 1)
+        sel = i
+        first = Math.max(0, Math.min(m.first, i), i - numResults + 1, 0)
+        first = Math.min(first, Math.max(0, results.length - numResults))
+        return true
+    }
+
     readonly property int numResults: 8
     readonly property int rowH: 46
     readonly property string stateDir: Quickshell.env("HOME") + "/.local/state/launcher"
@@ -84,8 +109,11 @@ ModalMenu {
     CalcSource { id: calcSrc; onUpdated: lc.refreshKeep() }
     WindowSource { id: winSrc; active: lc.shown }
     EmojiSource { id: emojiSrc }
-    FileSource { id: fileSrc; onUpdated: lc.refreshKeep() }
+    // the file browser (launcher/FileBrowser.qml), one instance per mode (launcher/js/Fs.js MODES)
+    FileBrowser { id: pathSrc; mode: "browse"; active: lc.shown; onUpdated: lc.refreshKeep() }     // "/..." or "~/...": browse a folder
+    FileBrowser { id: findSrc; mode: "find"; active: lc.shown; onUpdated: lc.refreshKeep() }       // "f <text>": name search under ~
     ClipboardSource { id: clipSrc; active: lc.shown; onUpdated: lc.refreshKeep() }
+    FileBrowser { id: projSrc; mode: "projects"; active: lc.shown; onUpdated: lc.refreshKeep() }   // "code <text>": projects, opened in zellij
     JellyfinSource { id: jfSrc; onUpdated: lc.refreshKeep() }
     NetSource { id: netSrc; active: lc.shown; section: lc.section; onUpdated: lc.refreshKeep(); onFinished: lc.close() }   // Network / Bluetooth sections (closes after a connect)
     WebappSource {                                  // Install webapp section: opens its own text prompts, closes after installing
@@ -121,7 +149,7 @@ ModalMenu {
         }
     }
     SectionsSource { id: secSrc; binds: Binds; jf: jfSrc; vpn: vpnSrc; net: netSrc; web: waSrc; vm: vmSrc; onUpdated: lc.refreshKeep() }
-    readonly property var sourceList: [appsSrc, winSrc, cmdSrc, secSrc, jfSrc, netSrc, vpnSrc, vmSrc, waSrc, scriptSrc, calcSrc, emojiSrc, fileSrc, clipSrc, webSrc]
+    readonly property var sourceList: [appsSrc, winSrc, cmdSrc, secSrc, jfSrc, netSrc, vpnSrc, vmSrc, waSrc, scriptSrc, calcSrc, emojiSrc, pathSrc, findSrc, clipSrc, projSrc, webSrc]
 
     readonly property var allItems: {
         const out = []
@@ -186,8 +214,9 @@ ModalMenu {
     onQueryChanged: { confirmId = ""; jfSrc.track(query, section); if (shown && !argItem) refresh() }
     onSelChanged: { clearConfirm(); if (section === "jellyfin") jfSrc.nearEnd(sel, results.length) }   // Jellyfin: next page of a long library
     onOpening: {
-        actionsOpen = false; histPos = -1; argItem = null; confirmId = ""
+        actionsOpen = false; histPos = -1; argItem = null; confirmId = ""; viewMem = ({})
         jfSrc.reset()
+        Binds.load()                                    // shortcut hints on the rows
         section = presetSection
         sectionDirect = section !== ""
         if (section !== "") secSrc.enter(section)
@@ -218,6 +247,7 @@ ModalMenu {
     property string presetSection: ""
     function enterSection(name) {
         if (!secSrc.title(name)) return
+        saveView()
         section = name; sectionDirect = false; confirmId = ""; actionsOpen = false; histPos = -1
         secSrc.enter(name)
         input.text = ""
@@ -245,7 +275,7 @@ ModalMenu {
             input.text = ""
             refresh()
             const i = results.findIndex(r => r.id === id)
-            if (i > 0) { sel = i; first = Math.max(0, i - numResults + 1) }
+            if (!restoreView() && i > 0) { sel = i; first = Math.max(0, i - numResults + 1) }
             return
         }
         if (section === "vms" && vmSrc.depth > 0) {     // VMs: nested level (OS / release / edition / snapshots) -> its parent, row re-selected
@@ -254,7 +284,7 @@ ModalMenu {
             input.text = ""
             refresh()
             const i = results.findIndex(r => r.id === id)
-            if (i > 0) { sel = i; first = Math.max(0, i - numResults + 1) }
+            if (!restoreView() && i > 0) { sel = i; first = Math.max(0, i - numResults + 1) }
             return
         }
         if (section === "twitch" && secSrc.vodActive) {  // nested "Past broadcasts" level -> the channel list, channel stays selected
@@ -264,12 +294,14 @@ ModalMenu {
             input.text = ""
             refresh()
             const i = results.findIndex(r => r.id === id)
-            if (i > 0) { sel = i; first = Math.max(0, i - numResults + 1) }
+            if (!restoreView() && i > 0) { sel = i; first = Math.max(0, i - numResults + 1) }
             return
         }
         section = ""; sectionDirect = false; confirmId = ""; histPos = -1
-        input.text = ""
+        const m = viewMem[viewKey]
+        input.text = m ? m.query : ""                   // the main list comes back with its filter, row and scroll offset
         refresh()
+        restoreView()
     }
     // Jellyfin nested level -> its parent (filter text and selected row restored); leaving the last level of a "jf " prefix search returns to it
     function backJellyfin() {
@@ -280,7 +312,7 @@ ModalMenu {
         input.cursorPosition = input.text.length
         refresh()
         const i = results.findIndex(x => x.id === r.selId)
-        if (i > 0) { sel = i; first = Math.max(0, i - numResults + 1) }
+        if (!restoreView() && i > 0) { sel = i; first = Math.max(0, i - numResults + 1) }
     }
     // after an action pushed a nested level (Twitch past broadcasts, Jellyfin browse): fresh list, empty filter
     function afterEnter() {
@@ -328,6 +360,14 @@ ModalMenu {
     readonly property string rightHint: actionsOpen || argItem || !current || (actions.length < 2 && !jfSrc.rightHintFor(current) && current.kind !== "vpn-country" && !current.vmNav) ? ""
         : current.kind === "vpn-country" ? "→ cities" : current.vmNav ? "→ open" : current.actions && current.actions.some(a => a.id === "twitch-vods") ? "→ broadcasts" : jfSrc.rightHintFor(current) ? "→ browse" : "→ options"
 
+    // Tab in a path query ("/..." or "~/..."): shell-like completion of the last component (FileBrowser.complete); elsewhere Tab moves down
+    function completePath() {
+        const t = pathSrc.complete(input.text, current)
+        if (t !== null && t !== input.text) { histPos = -1; input.text = t; input.cursorPosition = t.length }
+    }
+    // footer hint for Ctrl+Enter: a row's secondary run action (`alt: { id, hint }`, an id of its Ctrl+K actions; file rows: open in zellij)
+    readonly property string altHint: !actionsOpen && !argItem && current && current.alt ? "Ctrl+Enter " + current.alt.hint : ""
+
     // open with the search field prefilled (qs ipc call launcher query "v "); on an open launcher just sets the text
     property string preset: ""
     function openWith(q) {
@@ -358,6 +398,7 @@ ModalMenu {
             enterSection(item.section)
             return
         }
+        if (item.kind === "jf-nav" || item.kind === "vpn-country" || item.vmNav) saveView()
         if (item.kind === "jf-nav" || item.kind === "jf-retry") {   // Jellyfin: open a nested level / reload (not recorded, launcher stays open)
             const r = jfSrc.action(item.kind === "jf-nav" ? "jf-browse" : "jf-retry", item)
             if (r === "enter") afterEnter(); else refresh(true)
@@ -416,6 +457,15 @@ ModalMenu {
         }
     }
 
+    // shortcut of a row, from the Hyprland binds (Binds.keysFor): a section row = `launcher section <name>`, a command row = its command
+    function hintFor(it) {
+        const k = Binds.cmdKeys                         // read for the binding: rows update when the binds arrive
+        if (it.kind === "app") { Binds.progKeys; return it.argv && it.argv.length ? Binds.keysForApp(it.argv) : [] }
+        const cmd = it.kind === "section" ? "qs ipc call launcher section " + it.section
+            : it.kind === "command" ? String(it.command).replace(/^sleep [0-9.]+; /, "") : ""
+        return cmd !== "" && k[cmd] ? k[cmd] : []
+    }
+
     function runIndex(i) { if (i >= 0 && i < results.length) runItem(results[i]) }
 
     // ---- actions (Ctrl+K) ----------------------------------------------------------------------------------
@@ -450,6 +500,7 @@ ModalMenu {
             appsSrc.reveal(it)
             return
         } else {                                        // item-specific actions (it.actions), handled by the source
+            saveView()                                  // may push a nested level (Twitch past broadcasts, Jellyfin browse)
             for (const s of sourceList)
                 if (s.action) {
                     const r = s.action(id, it)
@@ -555,7 +606,7 @@ ModalMenu {
                 Label {
                     visible: input.text === ""
                     anchors.verticalCenter: parent.verticalCenter
-                    text: lc.argItem ? lc.argItem.name + ": " + lc.argItem.argument : lc.section !== "" ? "Filter..." : "Search apps, windows, commands · : emoji · / files"
+                    text: lc.argItem ? lc.argItem.name + ": " + lc.argItem.argument : lc.section !== "" ? "Filter..." : "Search apps, windows, commands · : emoji · / files · code projects"
                     color: Theme.muted
                     font.pixelSize: 14
                 }
@@ -590,9 +641,11 @@ ModalMenu {
                     else if (k === Qt.Key_Left && !ctrl && !(ev.modifiers & Qt.ShiftModifier) && lc.keyLeft()) {}
                     else if (k === Qt.Key_Right && !ctrl && !(ev.modifiers & Qt.ShiftModifier) && lc.keyRight()) {}
                     else if (k === Qt.Key_Backspace && !ctrl && lc.keyBackspace()) {}
+                    else if ((k === Qt.Key_Return || k === Qt.Key_Enter) && ctrl && lc.current && lc.current.alt) lc.doAction(lc.current.alt.id)
                     else if (k === Qt.Key_Return || k === Qt.Key_Enter) lc.runIndex(lc.sel)
                     else if (ctrl && k === Qt.Key_K) lc.openActions()
                     else if (ctrl && k >= Qt.Key_1 && k <= Qt.Key_9) lc.runIndex(lc.first + (k - Qt.Key_1))
+                    else if (k === Qt.Key_Tab && !ctrl && lc.section === "" && lc.modeSource === pathSrc) lc.completePath()
                     else if (k === Qt.Key_Down || k === Qt.Key_Tab || (ctrl && (k === Qt.Key_N || k === Qt.Key_J))) {
                         if (lc.histPos >= 0) recall(lc.histPos - 1)
                         else lc.move(1)
@@ -695,6 +748,13 @@ ModalMenu {
                         spacing: 4
                         Repeater { model: row.modelData.keys || []; KeyBadge { required property string modelData; text: modelData; sel: row.sel } }
                     }
+                    Row {                                    // the item's Hyprland shortcut: keycap chips, same names as the Keybinds section
+                        readonly property var hint: lc.hintFor(row.modelData)
+                        visible: hint.length > 0 && !row.modelData.keys
+                        spacing: 3
+                        Layout.rightMargin: 6
+                        Repeater { model: parent.hint; KeyBadge { required property string modelData; text: modelData; outlined: true; sel: row.sel } }
+                    }
                     Label {
                         visible: !row.modelData.keys
                         text: (lc.usage[row.modelData.id] && lc.usage[row.modelData.id].pinned ? "• " : "") + row.modelData.source
@@ -765,7 +825,7 @@ ModalMenu {
             : lc.actionsOpen ? "↑↓ select · Enter do · ← / Esc back"
             : lc.section === "binds" ? "↑↓ scroll · type to filter (key or name) · ← / Backspace back · Esc " + (lc.sectionDirect ? "close" : "back")
             : lc.section !== "" ? "↑↓ select · Enter run · " + (lc.rightHint ? lc.rightHint + " · " : "") + "← / Backspace back · Esc " + (lc.sectionDirect ? "close" : "back")
-            : "↑↓ select · Enter run · " + (lc.rightHint ? lc.rightHint + " · " : "") + "Ctrl+1-9 quick run · Esc close"
+            : "↑↓ select · Enter run · " + (lc.altHint ? lc.altHint + " · " : "") + (lc.rightHint ? lc.rightHint + " · " : "") + "Ctrl+1-9 quick run · Esc close"
         color: lc.argNote !== "" ? Theme.red : Theme.muted
         font.pixelSize: Theme.fontCaption
     }

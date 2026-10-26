@@ -85,6 +85,70 @@ QtObject {
         return ra.length - rb.length
     }
 
+    // launcher item -> shortcut: binds.lua is read as text for `description -> command` (hyprctl only shows an opaque closure for exec binds;
+    // commands given as `apps.<name>` are resolved through apps.lua), and the keys come from the live bind with that description.
+    // keysFor(cmd) = exact command (`qs ipc call ...`); keysForApp(argv) = an app's launch command, compared by program (appKey).
+    property var descKeys: ({})
+    property string luaText: ""
+    property string appsText: ""
+    property var cmdKeys: ({})
+    property var progKeys: ({})
+    function keysFor(cmd) { return cmdKeys[cmd] || [] }
+    function keysForApp(argv) { return progKeys[appKey(argv)] || [] }
+
+    // identity of a launch command: the program (flatpak: the app id; a browser app window: its --app= address), wrappers, options and
+    // field codes ignored, so `brave --app='https://x'` matches its web app entry and `/usr/bin/brave %U` matches plain `brave`
+    function appKey(argv) {
+        const t = (Array.isArray(argv) ? argv : String(argv).replace(/['"]/g, "").split(/\s+/)).map(x => String(x).replace(/['"]/g, "")).filter(x => x !== "")
+        while (t.length && (/^[A-Za-z_]+=/.test(t[0]) || t[0] === "env")) t.shift()
+        if (!t.length) return ""
+        const prog = t[0].slice(t[0].lastIndexOf("/") + 1)
+        if (prog === "flatpak") return "flatpak:" + (t.slice(1).find(x => /^[A-Za-z0-9_]+(\.[A-Za-z0-9_-]+){2,}$/.test(x)) || "")
+        const app = t.find(x => x.indexOf("--app=") === 0 || x.indexOf("--app-id=") === 0)   // a browser app window is not the plain browser
+        return prog + (app ? "|" + app.slice(app.indexOf("=") + 1).replace(/\/$/, "") : "")
+    }
+
+    function parseApps(text) {
+        const out = {}
+        for (const line of text.split("\n")) {
+            const m = /^\s*(\w+)\s*=\s*"([^"]*)"/.exec(line)
+            if (m) out[m[1]] = m[2]
+        }
+        return out
+    }
+    function link() {
+        const apps = parseApps(appsText)
+        const cm = {}, pm = {}
+        for (const line of luaText.split("\n")) {
+            const q = line.match(/"[^"\n]*"/g)
+            if (!q) continue
+            const strs = q.map(x => x.slice(1, -1))
+            const desc = strs.find(x => descKeys[x])
+            if (!desc) continue
+            let cmd = strs.find(x => x.indexOf("qs ipc call ") === 0) || ""
+            if (cmd === "") {
+                const v = /exec\(apps\.(\w+)\)/.exec(line), l = /exec\("([^"]*)"\)/.exec(line)
+                cmd = v ? (apps[v[1]] || "") : l ? l[1] : ""
+            }
+            if (cmd === "") continue
+            cm[cmd] = descKeys[desc]
+            const k = appKey(cmd)
+            if (k !== "" && !pm[k]) pm[k] = descKeys[desc]
+        }
+        cmdKeys = cm
+        progKeys = pm
+    }
+    property var luaFile: FileView {
+        path: root.fake !== "" ? "" : Quickshell.env("HOME") + "/.config/hypr/hyprland/binds.lua"
+        printErrors: false
+        onLoaded: { root.luaText = text(); root.link() }
+    }
+    property var appsFile: FileView {
+        path: root.fake !== "" ? "" : Quickshell.env("HOME") + "/.config/hypr/hyprland/apps.lua"
+        printErrors: false
+        onLoaded: { root.appsText = text(); root.link() }
+    }
+
     signal refreshed()
 
     property var proc: Process {
@@ -94,6 +158,11 @@ QtObject {
                 let arr = []
                 try { arr = JSON.parse(text) } catch (e) { return }
                 root.items = root.build(arr)
+                const dk = {}
+                for (const r of root.items) if (!dk[r.name] && r._group < 3) dk[r.name] = r.keys
+                root.descKeys = dk
+                root.luaFile.reload()
+                root.appsFile.reload()
                 root.loaded = true
                 root.refreshed()
             }

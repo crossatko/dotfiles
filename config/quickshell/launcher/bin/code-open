@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Opens a folder or a file in the dedicated zellij session (default `code`, $QS_CODE_SESSION; other sessions are never touched).
+# Usage: code-open <folder | file>   (DRY=1 prints the decision instead of acting)
+# A folder becomes a new tab with that cwd, named after it. A file becomes a tab in its folder, named after the file, running
+# ${VISUAL:-${EDITOR:-nvim}} on it (resolved by the shell in the tab, i.e. in the zellij server's environment; no such editor:
+# a note and just the shell), then the shell, so quitting the editor leaves the tab open in that folder.
+#   - session running: the tab is added; then the terminal window that shows the session is focused (most recently focused
+#     first), else a new terminal attaches to it.
+#   - session exited (resurrectable): a new terminal attaches (zellij resurrects its old tabs), then the tab is added once it runs.
+#   - session missing: a folder: a new terminal there runs `zellij attach --create`, so its first tab is the folder; a file: the
+#     same in the file's folder, then the editor tab is added once the session runs.
+# A window "shows the session" when it is the terminal's, a zellij client runs under it, and its title is zellij's "<session> | ..."
+# (details below).
+# Failures show as a notification (the launcher is gone by then, nothing else would tell).
+fail() { notify-send -a Launcher "Projects" "$1" 2>/dev/null; echo "code-open: $1" >&2; exit 1; }
+if [ "$1" = --match ]; then   # unit tests: code-open --match <session> <title> (exit 0 = the title belongs to that session)
+  [[ $3 == "$2" || $3 == "$2 | "* ]]; exit
+fi
+target=${1:-$HOME}
+[ "$target" = / ] || target=${target%/}
+file=
+if [ -d "$target" ]; then dir=$target
+elif [ -f "$target" ]; then file=$target; dir=$(dirname -- "$target")
+else fail "Not found: ${target##*/}"
+fi
+name=${target##*/}
+command -v zellij >/dev/null || fail "zellij is not installed"
+sess=${QS_CODE_SESSION:-code}
+term=${CODE_TERM:-ghostty}                                   # the dotfiles' default terminal (hypr/hyprland/apps.lua)
+
+line=$(zellij list-sessions --no-formatting 2>/dev/null | awk -v n="$sess" '$1 == n { print; exit }')
+# the tab's initial command for a file (none for a folder)
+edit=()
+[ -n "$file" ] && edit=(--close-on-exit -- sh -c 'e=${VISUAL:-${EDITOR:-nvim}}
+if command -v "${e%% *}" >/dev/null 2>&1; then $e "$1"; else echo "No editor found (VISUAL / EDITOR unset, no nvim): $1"; fi
+exec "${SHELL:-sh}"' sh "$file")
+what="tab $dir${file:+ edit $file}"           # for DRY
+tab() { zellij --session "$sess" action new-tab --cwd "$dir" --name "$name" "${edit[@]}" >/dev/null 2>&1 || fail "Could not open a tab in zellij session $sess"; }
+spawn() { command -v "$term" >/dev/null || fail "$term not found"; exec "$term" "$@"; }
+# a terminal attaches (creating / resurrecting the session), then the tab is added once the session runs
+attach_then_tab() {
+  command -v "$term" >/dev/null || fail "$term not found"
+  "$term" --working-directory="$dir" -e zellij attach "$@" "$sess" >/dev/null 2>&1 &
+  for _ in $(seq 1 50); do
+    sleep 0.2
+    zellij list-sessions --no-formatting 2>/dev/null | awk -v n="$sess" '$1 == n && !/EXITED/ { f = 1 } END { exit !f }' && { tab; exit 0; }
+  done
+  fail "Session $sess did not start"
+}
+
+if [ -z "$line" ]; then                         # missing: the new session starts in the folder (a file: then its editor tab)
+  if [ -n "$DRY" ]; then echo "create $sess in $dir${file:+, then $what}"; exit 0; fi
+  [ -n "$file" ] && attach_then_tab --create
+  spawn --working-directory="$dir" -e zellij attach --create "$sess"
+fi
+
+case $line in
+  *EXITED*)                                     # resurrect, wait until it runs, then add the tab
+    if [ -n "$DRY" ]; then echo "resurrect $sess, then $what"; exit 0; fi
+    attach_then_tab
+    ;;
+esac
+
+# running
+if [ -n "$DRY" ]; then echo "$what"; else tab; fi
+
+# Which window shows the session. Zellij titles its terminal window "<session> | <pane title>" (survives a rename, unlike the client's
+# arguments), so: class = the terminal's + a zellij client in the window's process tree + title naming the session. A client started
+# with the session name as an argument counts too (title not yet set). Windows of one terminal process share the pid, hence the title.
+title_matches() { [[ $2 == "$1" || $2 == "$1 | "* ]]; }   # same rule as --match above
+
+declare -A anc=() named=()
+for c in $(pgrep -x zellij); do
+  args=$(tr '\0' '\n' < "/proc/$c/cmdline" 2>/dev/null | tail -n +2)
+  case $args in ""|attach*|a$'\n'*|a) ;; *) continue ;; esac     # a client: bare `zellij` or `zellij attach ...`
+  p=$c; hit=
+  printf '%s\n' "$args" | grep -qxF -- "$sess" && hit=1
+  while [ -n "$p" ] && [ "$p" -gt 1 ]; do
+    anc[$p]=1; [ -n "$hit" ] && named[$p]=1
+    p=$(awk '{ sub(/^.*\) /, ""); print $2 }' "/proc/$p/stat" 2>/dev/null)
+  done
+done
+while IFS=$'\t' read -r addr pid class title; do
+  [ -n "${anc[$pid]:-}" ] || continue
+  [[ ${class,,} == *"${term##*/}"* ]] || continue
+  title_matches "$sess" "$title" || [ -n "${named[$pid]:-}" ] || continue
+  if [ -n "$DRY" ]; then echo "focus $addr"; exit 0; fi
+  # Lua-config Hyprland: the legacy `focuswindow <arg>` syntax is a Lua syntax error (and prints that error, not "ok")
+  out=$(hyprctl dispatch "hl.dsp.focus({window=\"address:$addr\"})" 2>&1)
+  [ "$out" = ok ] || fail "Could not focus the terminal window: ${out:0:80}"
+  exit 0
+done < <(hyprctl clients -j | jq -r 'map(select(.mapped != false)) | sort_by(if .focusHistoryID < 0 then 1e9 else .focusHistoryID end) | .[] | [.address, .pid, .class, (.title | gsub("[\t\n]"; " "))] | @tsv')
+if [ -n "$DRY" ]; then echo "attach $sess"; else spawn -e zellij attach "$sess"; fi
