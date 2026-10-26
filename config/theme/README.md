@@ -52,7 +52,9 @@ overrides ──┘                      │   (out/ is git-ignored; default/ is
   of `default/`, the first `theme.py render/apply` deletes it and `out/` is then never touched by the seeder. A pull that
   changes `config/theme/` re-renders on Linux (`THEME_RENDER_SKIP=1` skips). On a machine with a `theme.local.toml` the default is never seeded: a missing / seeded `out/` (a rebase or merge replaying the untracking commit deletes it) is rendered from the selection by the hooks. Consumers that would fail hard have fallbacks
   (Hyprland `theme.lua` and nvim: `default/palette.lua`; ghostty `config-file = ?`).
-* **Other machines pulling the change that introduced this:** see AGENTS.md "Theme system" for `adopt-legacy`.
+* **Machines that still track the old `out/*` (one-off):** `theme-render` runs `theme.py adopt-legacy`, which reads a copy of the old `out/`, `theme.toml` and herdr config from `~/.local/state/theme/legacy/`
+  (else the `ORIG_HEAD` blobs): the previous wallpaper goes into `theme.local.toml`, local `[settings]`/`[overrides]` edits become local overrides, then it renders. Git refuses to pull while the old
+  tracked `out/*` has local edits: copy them to that folder first, then `git checkout -- config/theme config/herdr`.
 
 ## Light / dark mode
 The chosen mode lives in `~/.local/state/theme/mode` (`dark` default; missing / unreadable = dark; `THEME_MODE` overrides it for one run, not for `theme.py mode`; `theme.py default` is always dark). `theme.py mode light|dark|toggle` writes it and runs an apply without re-extracting; every other `apply` / `render` uses the saved mode. Theme-writing commands (render / apply / mode / per-monitor wallpaper) take `~/.local/state/theme/apply.lock`, so a wallpaper apply and a mode switch run one after the other. `out/palette.json` carries `mode`, so the shell follows instantly.
@@ -213,3 +215,11 @@ separator with 6 px margins). Numbers live in `kvantum_svg.py` (`ALPHA`, shapes)
   Dark's monochrome actions for the rest, symbolic places / devices for 16-24 px requests, then the colour
   Wall-Adwaita dirs (symlinks). `deploy()` points kdeglobals / qt5ct / qt6ct at it and writes 16 px icon-only
   toolbars (kdeglobals) and Dolphin's places panel at 16 px (dolphinrc). It is generated with the icons on `apply`.
+
+## Video wallpapers and per-monitor wallpapers (invariants)
+State is `~/.local/state/theme/wallpapers.json` (written only by `theme.py`; schema in the source). A non-primary `apply` live-sets hyprpaper with `hyprctl hyprpaper wallpaper "<selector>,<path>,cover"`:
+the selector must match the config block's (`desc:<key>` for description keys, connector only for connector keys), else it exits 0 silently (`live_set_wallpaper()` polls `listactive` and restarts hyprpaper).
+Videos run as one `mpvpaper` per output (pid files and logs in `$XDG_RUNTIME_DIR/theme-video/`; stop only if `/proc/<pid>/comm` is `mpvpaper`); `MPV_OPTS` keep `load-scripts=no` (else `mpv-mpris`
+makes wallpapers MPRIS players) and `display-fps-override` must equal the real refresh. "Optimize for monitor" builds an HEVC/H.264 copy per (video, monitor) in `$XDG_CACHE_HOME/theme/video/opt/`;
+`hevc_vaapi` + `hvc1` needs `-bsf:v extract_extradata`; stills and the palette always come from the original; with no hardware decode (AV1 on the Workstation GPU) the still stays until the copy exists.
+Baked wind-down/replay bursts use RIFE (`rife-ncnn-vulkan`, fallback ffmpeg `minterpolate`); keep `BAKE_VERSION`/`OPT_VERSION` in the cache keys when changing the pipeline. `THEME_BAKE=0` disables baking.
