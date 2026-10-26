@@ -142,7 +142,7 @@ PanelWindow {
         // Glass: the card's glass region is the card itself (Glass.qml maps it through the Scale / Translate below, so
         // it grows / slides with the card every frame). Its STRENGTH follows the card's opacity only on a compositor
         // whose solid_glass honours the layer's content alpha (the fork patch "glass alpha from layer content", see
-        // AGENTS.md); on the current build the glass cannot fade, so its region shrinks away in the last part of the
+        // AGENTS.md "Popups, motion and animations"); on the current build the glass cannot fade, so its region shrinks away in the last part of the
         // motion instead (glassScale below, Theme.glassScaleAt).
         // bar edge: past the bar (incl. a floating bar's CURRENT gap, so it follows the compact animation) plus popupGap; other sides: `side` from the screen
         // edge (docked keeps the old 8 px, floating lines up with the bar's gapOut)

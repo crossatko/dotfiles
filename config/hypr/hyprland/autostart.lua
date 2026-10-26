@@ -43,7 +43,7 @@ hl.on("hyprland.start", function()
 	-- either way), so 1x would not mean the same time as Hyprland's animations (Settings > Animations)
 	hl.exec_cmd("env QSG_USE_SIMPLE_ANIMATION_DRIVER=1 quickshell") -- bar + wallpaper picker (config/quickshell)
 	-- notifications are served by quickshell now (config/quickshell/Notifs.qml)
-	hl.exec_cmd("hyprctl setcursor Oxygen-White 24")
+	hl.exec_cmd("hyprctl setcursor Oxygen_White 24")
 	-- Kept running only as the NetworkManager secret agent and the bluez pairing agent; their tray
 	-- icons are hidden in the bar, whose network / bluetooth popups do the everyday work.
 	-- Clipboard history for the Quickshell launcher (launcher/ClipboardSource.qml; `v ` / `clip ` prefix).
@@ -59,7 +59,7 @@ hl.on("hyprland.start", function()
 	end
 end)
 
--- Video wallpapers (mpvpaper above hyprpaper; theme.py video, AGENTS.md "Video wallpapers"): a monitor that comes
+-- Video wallpapers (mpvpaper above hyprpaper; theme.py video, AGENTS.md "Wallpapers (per monitor, videos, links)"): a monitor that comes
 -- or goes gets its player (re)started / reaped. The delay lets hyprpaper map its surface for the new output first
 -- (the video layer has to be mapped after it); `video start` is a no-op for players that already run and for
 -- setups without any video entry. At login start-hyprpaper.sh starts the players itself.

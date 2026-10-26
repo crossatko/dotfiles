@@ -2,8 +2,8 @@ local host = require("hyprland.host")
 
 hl.env("XCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_SIZE", "24")
-hl.env("XCURSOR_THEME", "Oxygen-White")
-hl.env("NIXOS_OZONE_WL", "1")
+hl.env("XCURSOR_THEME", "Oxygen_White")
+hl.env("ELECTRON_OZONE_PLATFORM_HINT", "wayland")
 hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 hl.env("QT_QPA_PLATFORM", "wayland")
 -- The KDE platform theme reads ~/.config/kdeglobals (colors, fonts, icons, style), which

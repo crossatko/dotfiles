@@ -54,5 +54,5 @@ return {
 	is_battlestation = upper:find("BATTLESTATION", 1, true) ~= nil,
 	is_workstation = upper:find("WORKSTATION", 1, true) ~= nil,
 	is_archlinux = upper == "ARCHLINUX",
-	is_nix_vm = upper == "NIX_VM",
+	is_vm = upper == "VM",
 }

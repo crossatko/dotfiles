@@ -1,342 +1,931 @@
 #!/bin/bash
-
-set -e
+# Arch Linux installer for these dotfiles. Idempotent: every step checks the current state first and a second
+# run changes nothing. Never run it as root (it calls sudo itself where needed).
+#
+#   ./install.sh [--dry-run] [--only STAGE[,STAGE...]] [--repos] [--system] [--chsh] [-h|--help]
+#
+# Stages (run in this order):
+#   repos     (sudo, opt-in) third-party repos on top of Arch: CachyOS (arch-optimised + [cachyos]) and Chaotic-AUR
+#   packages  multilib, yay, packages/{pacman,aur,flatpak}.txt
+#   links     symlinks into $HOME, shell dotfiles, GTK seed, theme seed, web apps, librepods build
+#   system    (sudo) system/etc files, udev rules, /etc/environment host marker, services, ufw, docker group
+# Default: packages + links. `repos` and `system` are opt-in: --repos / --system, or --only (e.g. `--only repos,packages,links`).
+#
+# Environment: CLAUDE_TABS_DIR (claude-tabs checkout), INSTALL_SKIP (space separated: librepods omz claude-tabs
+# cachyos-repo chaotic-repo), PACMAN_CONF (pacman.conf to edit, default /etc/pacman.conf; for tests),
+# CACHYOS_LEVEL (force znver4|v4|v3|plain|none instead of CPU detection).
+set -euo pipefail
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_DIR="$DOTFILES_DIR/config"
+PKG_DIR="$DOTFILES_DIR/packages"
+PACMAN_CONF="${PACMAN_CONF:-/etc/pacman.conf}"
+SYS_DIR="$DOTFILES_DIR/system/etc"
 
-echo "Enabling multilib repository for 32-bit gaming packages..."
-# Uncomment [multilib] and the Include line directly below it
-sudo sed -i '/^#\[multilib\]/s/^#//' /etc/pacman.conf
-sudo sed -i '/^\[multilib\]/,/^#Include/s/^#Include/Include/' /etc/pacman.conf
+DRY=0
+CHSH=0
+WANT_SYSTEM=0
+WANT_REPOS=0
+ONLY=""
+CHANGES=0
+FONTS_DIRTY=0
+STAMP="$(date +%Y%m%d-%H%M%S)"
+INSTALL_SKIP="${INSTALL_SKIP:-}"
+TMP_DIRS=()
 
-echo "Syncing repositories and installing prerequisites..."
-sudo pacman -Sy --needed --noconfirm base-devel git
+usage() {
+  cat <<'EOF'
+Usage: ./install.sh [--dry-run] [--only STAGE[,STAGE...]] [--repos] [--system] [--chsh] [-h|--help]
 
-# The repo is public: enable the privacy pre-commit hook (.githooks/pre-commit) for this clone
-git -C "$DOTFILES_DIR" config core.hooksPath .githooks
+Arch Linux only. Idempotent; never run as root.
 
-echo "Setting up yay..."
-if ! command -v yay &>/dev/null; then
-  echo "Installing yay from AUR..."
-  rm -rf /tmp/yay
-  git clone https://aur.archlinux.org/yay.git /tmp/yay
-  cd /tmp/yay
-  makepkg -si --noconfirm
-  cd -
-fi
+Stages:
+  repos     (sudo, opt-in) add the third-party CachyOS repos (arch-optimised core/extra rebuilds + [cachyos]) and
+            Chaotic-AUR to pacman.conf, with their keys, keyrings and mirrorlists. Does NOT install the CachyOS
+            kernel. The repos sit above [core]/[extra], so the next -Syu may swap in optimised rebuilds.
+            Opt-in because no package in packages/*.txt needs it.
+  packages  enable multilib, bootstrap yay, install packages/pacman.txt, packages/aur.txt, packages/flatpak.txt
+  links     symlink config into $HOME (backs up real files once), shell dotfiles, GTK seed, theme seed,
+            git hooks, web apps, librepods build
+  system    (sudo) install system/etc files (udev rules, ...), /etc/environment host marker, enable services,
+            ufw, docker group
 
-echo "Installing packages..."
+Options:
+  --dry-run        print every action, change nothing, do not call sudo
+  --only STAGES    comma separated subset of: repos,packages,links,system
+  --repos          also run the repos stage (default stages: packages,links)
+  --system         also run the system stage
+  --chsh           change the login shell to zsh (asks for your password)
+  -h, --help       this text
+EOF
+}
 
-# Define all packages in an array so we can cleanly use comments and newlines
-PACKAGES=(
-  # Base development tools
-  wget curl neovim vim btop ffmpeg python nodejs jq php mariadb redis yarn
-  libappindicator-gtk3 ddcutil tailscale tableplus
+die() { echo "install.sh: $*" >&2; exit 1; }
+log() { echo "==> $*"; }
+info() { echo "    $*"; }
+warn() { echo "    warning: $*" >&2; }
+changed() { CHANGES=$((CHANGES + 1)); }
+skipped() { case " $INSTALL_SKIP " in *" $1 "*) return 0 ;; esac; return 1; }
 
-  # Fonts & Theming
-  ttf-comic-shanns-nerd noto-fonts noto-fonts-cjk
-  gnome-themes-extra qt5-wayland qt6-wayland dconf
+cleanup() {
+  local d
+  for d in ${TMP_DIRS[@]+"${TMP_DIRS[@]}"}; do rm -rf "$d"; done
+}
+trap cleanup EXIT
 
-  # Terminal & Shell
-  zellij rust rust-wasm fzf wl-clipboard cliphist kitty ghostty zsh starship fastfetch bash-completion zsh-completions
-  zsh-autosuggestions zsh-syntax-highlighting libqalculate
+mktmp() {
+  local d
+  d="$(mktemp -d)"
+  TMP_DIRS+=("$d")
+  printf '%s\n' "$d"
+}
 
-  # Hyprland Ecosystem
-  quickshell imagemagick hyprland hyprpaper hypridle hyprlock hyprpolkitagent wf-recorder slurp grim
-  xdg-desktop-portal-hyprland xdg-desktop-portal-gtk xdg-desktop-portal-gnome
-  bibata-cursor-theme
-
-  # GUI Apps (Swapped appimagelauncher for gearlever)
-  thunderbird mpv pavucontrol network-manager-applet yazi nautilus
-  gnome-disk-utility libreoffice-fresh ark zip unzip unrar p7zip gzip
-  playerctl anki
-
-  # Security & Network
-  ufw 1password brave-bin firefox epiphany
-
-  # Graphics & Gaming
-  mangohud gamescope steam gamemode
-
-  # Containers & Virtualization
-  docker docker-compose
-
-  # Flatpak
-  flatpak
-
-  # Misc
-  tldr
-
-  # Services
-  blueman bluez bluez-utils
-)
-
-# Install all packages directly with yay
-yay -S --needed --noconfirm "${PACKAGES[@]}"
-
-# Enable system services
-echo "Enabling system services..."
-sudo systemctl enable bluetooth
-sudo systemctl enable --now tailscaled
-sudo systemctl enable --now docker
-sudo systemctl enable ufw
-
-# Configure Firewall
-echo "Configuring UFW Firewall..."
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw --force enable
-
-# Setup Docker permissions
-echo "Configuring Docker permissions..."
-sudo usermod -aG docker "$USER"
-
-# Setup Flathub and install Flatpak apps
-echo "Configuring Flathub and installing Discord & Spotify..."
-sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-flatpak install -y flathub com.discordapp.Discord
-flatpak install -y flathub com.spotify.Client
-flatpak install -y flathub org.jellyfin.JellyfinDesktop
-flatpak install -y flathub com.vysp3r.ProtonPlus
-
-# System-wide Environment Variable setup via Hostname
-RAW_HOSTNAME=$(cat /etc/hostname | tr -d '\n')
-FORMATTED_HOST=$(echo "$RAW_HOSTNAME" | sed 's/\([a-z0-9]\)\([A-Z]\)/\1_\2/g' | sed 's/-/_/g' | tr '[:lower:]' '[:upper:]')
-HOST_VAR="HOST_${FORMATTED_HOST}"
-
-echo "Detected hostname '$RAW_HOSTNAME'. Setting system-wide environment variables..."
-sudo sed -i '/^HOST_/d' /etc/environment
-sudo sed -i '/^QT_QPA_PLATFORMTHEME/d' /etc/environment
-echo "$HOST_VAR=1" | sudo tee -a /etc/environment
-echo "QT_QPA_PLATFORMTHEME=gtk3" | sudo tee -a /etc/environment # Forces Qt to use GTK styling
-
-# Symlink config files with backup logic
-echo "Symlinking config files..."
-mkdir -p "$HOME/.config"
-
-CONFIG_APPS=("hypr" "nvim" "kitty" "zellij" "theme" "quickshell" "opencode" "wivrn")
-
-for app in "${CONFIG_APPS[@]}"; do
-  TARGET="$HOME/.config/$app"
-  SOURCE="$CONFIG_DIR/$app"
-
-  if [ -e "$TARGET" ] || [ -L "$TARGET" ]; then
-    echo "  Backing up existing $app to ${app}_backup..."
-    rm -rf "${TARGET}_backup"
-    mv "$TARGET" "${TARGET}_backup"
-  fi
-
-  echo "  Symlinking $app..."
-  ln -s "$SOURCE" "$TARGET"
+# ---------------------------------------------------------------- args
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) DRY=1 ;;
+    --only)
+      [ $# -ge 2 ] || die "--only needs a value"
+      ONLY="$2"
+      shift
+      ;;
+    --only=*) ONLY="${1#--only=}" ;;
+    --repos) WANT_REPOS=1 ;;
+    --system) WANT_SYSTEM=1 ;;
+    --chsh) CHSH=1 ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      die "unknown argument: $1"
+      ;;
+  esac
+  shift
 done
 
-# Zellij claude-tabs plugin (tab bar with a Claude icon / ding / agent counts): standalone package, its own
-# repo, checked out at ~/code/crossatko/zellij-wc3cz-claude (override: CLAUDE_TABS_DIR). Its setup.sh links
-# ~/.config/zellij/plugins/claude-tabs to the checkout, installs the WC3 icon font, pre-grants the plugin
-# permissions and adds the Claude Code hooks. Without the checkout zellij needs default_layout "compact".
-CLAUDE_TABS_DIR=${CLAUDE_TABS_DIR:-$HOME/code/crossatko/zellij-wc3cz-claude}
-if [ -f "$CLAUDE_TABS_DIR/setup.sh" ]; then
-  sh "$CLAUDE_TABS_DIR/setup.sh" || echo "  claude-tabs setup failed (use default_layout 'compact' as a fallback)"
+STAGES=()
+if [ -n "$ONLY" ]; then
+  IFS=',' read -r -a req <<<"$ONLY"
+  for s in "${req[@]}"; do
+    case "$s" in
+      repos | packages | links | system) STAGES+=("$s") ;;
+      *) die "unknown stage '$s' (repos, packages, links, system)" ;;
+    esac
+  done
 else
-  echo "  claude-tabs package not found at $CLAUDE_TABS_DIR: clone it and run its setup.sh, or set default_layout 'compact' in config/zellij/config.kdl"
+  STAGES=(packages links)
 fi
+[ "$WANT_REPOS" = 1 ] && STAGES+=(repos)
+[ "$WANT_SYSTEM" = 1 ] && STAGES+=(system)
+stage_on() {
+  local s
+  for s in "${STAGES[@]}"; do [ "$s" = "$1" ] && return 0; done
+  return 1
+}
 
-# Nautilus right-click scripts (Scripts -> Send via LocalSend)
-mkdir -p "$HOME/.local/share/nautilus/scripts"
-for s in "$CONFIG_DIR"/nautilus/scripts/*; do
-  ln -sfn "$s" "$HOME/.local/share/nautilus/scripts/$(basename "$s")"
-done
+# ---------------------------------------------------------------- platform checks
+if [ "$(uname -s)" = Darwin ]; then
+  die "macOS is maintained by hand (see README.md); this installer is Arch-only."
+fi
+is_arch=0
+[ -e /etc/arch-release ] && is_arch=1
+if [ "$is_arch" = 0 ] && [ -r /etc/os-release ]; then
+  # shellcheck disable=SC1091
+  if (. /etc/os-release && case " ${ID:-} ${ID_LIKE:-} " in *" arch "*) true ;; *) false ;; esac); then is_arch=1; fi
+fi
+[ "$is_arch" = 1 ] || die "this installer supports Arch Linux only."
+[ "$(id -u)" -ne 0 ] || die "do not run as root; sudo is called where needed."
+[ -n "${HOME:-}" ] || die "HOME is not set"
 
-
-# Launcher script commands (executable scripts with "# @launcher.*" headers, see config/quickshell/launcher/ScriptSource.qml).
-# Only the commands dir is linked: ~/.config/launcher also holds the user's config.json.
-mkdir -p "$HOME/.config/launcher"
-ln -sfn "$CONFIG_DIR/launcher/commands" "$HOME/.config/launcher/commands"
-
-# Portal routing (screen sharing pinned to hyprland, file dialogs -> Nautilus chooser) and the GNOME portal
-# unit override: Hyprland never activates graphical-session.target, which the packaged unit requires
-mkdir -p "$HOME/.config/xdg-desktop-portal" "$HOME/.config/systemd/user"
-ln -sfn "$CONFIG_DIR/xdg-desktop-portal/portals.conf" "$HOME/.config/xdg-desktop-portal/portals.conf"
-ln -sfn "$CONFIG_DIR/systemd/user/xdg-desktop-portal-gnome.service" "$HOME/.config/systemd/user/xdg-desktop-portal-gnome.service"
-ln -sfn "$CONFIG_DIR/systemd/user/librepods.service" "$HOME/.config/systemd/user/librepods.service"
-
-# Launcher shim: applies the wallpaper theme to Brave's profile just before it starts
-mkdir -p "$HOME/.local/bin"
-ln -sfn "$CONFIG_DIR/theme/bin/brave" "$HOME/.local/bin/brave"
-# Link router (config/url-router): http(s) links opened by native apps (xdg-open, the portal, Electron) go to the
-# Figma app (figma.com file links, when figma-linux-next is installed), the
-# matching Brave web app window, everything else to Brave as before. Roll back with:
-#   xdg-mime default brave-browser.desktop x-scheme-handler/http x-scheme-handler/https
-# Exec stays unquoted: xdg-open's own desktop-file parser does not strip quotes (so no spaces in $HOME).
-ln -sfn "$CONFIG_DIR/url-router/bin/url-router" "$HOME/.local/bin/url-router"
-mkdir -p "$HOME/.local/share/applications"
-sed "s|@ROUTER@|$HOME/.local/bin/url-router|" "$CONFIG_DIR/url-router/url-router.desktop.in" \
-  >"$HOME/.local/share/applications/url-router.desktop"
-xdg-mime default url-router.desktop x-scheme-handler/http x-scheme-handler/https
-# Jellyfin helper for the launcher (config: ~/.config/jellyfin-qs, login: jellyfin-qs login)
-ln -sfn "$CONFIG_DIR/launcher/jellyfin/bin/jellyfin-qs" "$HOME/.local/bin/jellyfin-qs"
-
-# Firefox: translucent header (userChrome.css + user.js) in the install-default profile, if one exists
-FF_PROFILE_DIR="$HOME/.config/mozilla/firefox"
-if [ -f "$FF_PROFILE_DIR/profiles.ini" ]; then
-  FF_PROFILE="$(awk -F= '/^\[Install/{i=1} i&&/^Default=/{print $2; exit}' "$FF_PROFILE_DIR/profiles.ini")"
-  if [ -n "$FF_PROFILE" ] && [ -d "$FF_PROFILE_DIR/$FF_PROFILE" ]; then
-    mkdir -p "$FF_PROFILE_DIR/$FF_PROFILE/chrome"
-    ln -sfn "$CONFIG_DIR/firefox/userChrome.css" "$FF_PROFILE_DIR/$FF_PROFILE/chrome/userChrome.css"
-    ln -sfn "$CONFIG_DIR/firefox/user.js" "$FF_PROFILE_DIR/$FF_PROFILE/user.js"
+# ---------------------------------------------------------------- helpers
+# run CMD...: print, and execute unless --dry-run. Counts as a change.
+run() {
+  changed
+  if [ "$DRY" = 1 ]; then
+    echo "    [dry-run] $*"
+  else
+    echo "    + $*"
+    "$@"
   fi
-fi
+}
 
-# Generate every app's colors from the wallpaper (see config/theme/README.md)
-sh "$CONFIG_DIR/theme/bin/theme-seed" || true   # out/ from the committed default until the first render
-python3 -I "$CONFIG_DIR/theme/theme.py" render || true
+# link SRC DEST: DEST becomes a symlink to SRC. Correct symlink: untouched. Wrong symlink: replaced.
+# Real file/dir: moved to DEST.backup-<timestamp> once, then linked.
+link() {
+  local src="$1" dest="$2"
+  [ -e "$src" ] || [ -L "$src" ] || { warn "missing source $src"; return 0; }
+  if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
+    echo "    ok      $dest"
+    return 0
+  fi
+  changed
+  if [ "$DRY" = 1 ]; then
+    if [ -L "$dest" ]; then
+      echo "    [dry-run] relink $dest -> $src (was $(readlink "$dest"))"
+    elif [ -e "$dest" ]; then
+      echo "    [dry-run] back up $dest to $dest.backup-$STAMP, link -> $src"
+    else
+      echo "    [dry-run] link $dest -> $src"
+    fi
+    return 0
+  fi
+  mkdir -p "$(dirname "$dest")"
+  if [ -L "$dest" ]; then
+    rm -f "$dest"
+  elif [ -e "$dest" ]; then
+    mv "$dest" "$dest.backup-$STAMP"
+    echo "    backed up $dest to $dest.backup-$STAMP"
+  fi
+  ln -s "$src" "$dest"
+  echo "    linked  $dest -> $src"
+}
 
-# Chromium 141+ enables the WaylandWpColorManagerV1 protocol by default,
-# which fights with Hyprland's own dcip3 color management and makes
-# Brave render bland/shifted colors. brave-flags.conf disables it.
-if [ -e "$HOME/.config/brave-flags.conf" ] || [ -L "$HOME/.config/brave-flags.conf" ]; then
-  rm -f "$HOME/.config/brave-flags.conf"
-fi
-ln -s "$CONFIG_DIR/brave-flags.conf" "$HOME/.config/brave-flags.conf"
+# write_file DEST [MODE]: stdin becomes the content; rewritten only if it differs.
+write_file() {
+  local dest="$1" mode="${2:-644}" tmp
+  tmp="$(mktemp)"
+  cat >"$tmp"
+  if [ -f "$dest" ] && [ ! -L "$dest" ] && cmp -s "$tmp" "$dest"; then
+    rm -f "$tmp"
+    echo "    ok      $dest"
+    return 0
+  fi
+  changed
+  if [ "$DRY" = 1 ]; then
+    echo "    [dry-run] write $dest"
+  else
+    mkdir -p "$(dirname "$dest")"
+    [ -L "$dest" ] && rm -f "$dest"
+    install -m "$mode" "$tmp" "$dest"
+    echo "    wrote   $dest"
+  fi
+  rm -f "$tmp"
+}
 
-# --- THEMING SETUP ---
-echo "Applying GTK Dark Theme and Icons..."
-mkdir -p "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"
+# seed_file DEST: write stdin only when DEST does not exist (the theme engine / the user own it afterwards).
+# Returns 0 when it seeded (or would), 1 when DEST was left alone.
+seed_file() {
+  local dest="$1"
+  if [ -e "$dest" ] || [ -L "$dest" ]; then
+    cat >/dev/null
+    echo "    ok      $dest (kept)"
+    return 1
+  fi
+  write_file "$dest"
+}
 
-# 1. Legacy GTK 3 & 4 settings.ini (Still needed for some older apps)
-cat >"$HOME/.config/gtk-3.0/settings.ini" <<EOF
-[Settings]
-gtk-theme-name=Adwaita-dark
-gtk-icon-theme-name=Adwaita
-gtk-cursor-theme-name=Bibata-Modern-Classic
-gtk-application-prefer-dark-theme=1
-EOF
+# sudo_install SRC DEST [MODE]: root-owned copy, only when the content differs.
+sudo_install() {
+  local src="$1" dest="$2" mode="${3:-644}"
+  if [ -f "$dest" ] && cmp -s "$src" "$dest"; then
+    echo "    ok      $dest"
+    return 1
+  fi
+  changed
+  if [ "$DRY" = 1 ]; then
+    echo "    [dry-run] sudo install -Dm$mode -> $dest"
+  else
+    sudo install -Dm"$mode" "$src" "$dest"
+    echo "    installed $dest"
+  fi
+  return 0
+}
 
-cp "$HOME/.config/gtk-3.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini"
+# read_list FILE: names without comments/blank lines, one per output line.
+read_list() {
+  [ -f "$1" ] || die "missing list $1"
+  sed -e 's/[[:space:]]*#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$1" | grep -v '^$' || true
+}
 
-cat >"$HOME/.gtkrc-2.0" <<EOF
-gtk-theme-name="Adwaita-dark"
-gtk-icon-theme-name="Adwaita"
-gtk-cursor-theme-name="Bibata-Modern-Classic"
-EOF
+PAC_FLAGS=(--needed)
+[ -t 0 ] || PAC_FLAGS+=(--noconfirm)
 
-# 2. Modern GTK4 / libadwaita standard gsettings (This fixes GTK4 dark mode)
-gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
-gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark'
-gsettings set org.gnome.desktop.interface icon-theme 'Adwaita'
-gsettings set org.gnome.desktop.interface cursor-theme 'Bibata-Modern-Classic'
-# blueman's own connect/disconnect notifier is off: the shell's BtNotifier posts those (generic headphones icon otherwise)
-gsettings set org.blueman.general plugin-list "['!ConnectionNotifier']" 2>/dev/null || true
+# ================================================================= stage: repos
+# Third-party repos on top of plain Arch, following the official procedures:
+#   CachyOS  https://mirror.cachyos.org/cachyos-repo.tar.xz (cachyos-repo.sh): recv + lsign key, pacman -U keyring,
+#            mirrorlists and CachyOS's patched pacman (needed for the x86_64_v3/v4 repos), then pacman.conf sections
+#            above [core] (arch-optimised core/extra rebuilds + [cachyos]).
+#   Chaotic  https://aur.chaotic.cx/docs: recv + lsign key, pacman -U keyring + mirrorlist, [chaotic-aur] appended.
+# The script itself is never downloaded or run; only the documented steps are done here.
+CACHYOS_KEY=882DCFE48E2051D48E2562ABF3B607488DB35A47 # short id F3B607488DB35A47 (official) # privacy-ok: public signing key
+CHAOTIC_KEY=EF925EA60F33D0CB85C44AD13056513887B78AEB # short id 3056513887B78AEB (official) # privacy-ok: public signing key
+KEYSERVER=keyserver.ubuntu.com
+CACHYOS_MIRROR=https://mirror.cachyos.org/repo/x86_64/cachyos
+CHAOTIC_MIRROR=https://cdn-mirror.chaotic.cx/chaotic-aur
 
-# GTK bookmarks
-cat >"$HOME/.config/gtk-3.0/bookmarks" <<'EOF'
-file:///home/kreejzak/Documents
-file:///home/kreejzak/Downloads
-file:///home/kreejzak/Music
-file:///home/kreejzak/Pictures
-file:///home/kreejzak/Videos
-file:///home/kreejzak/code
-EOF
+# cachyos_level: znver4 | v4 | v3 | plain (no x86-64-v3: only [cachyos]) | none. Same method as cachyos-repo.sh: ld.so's supported ISA levels, and
+# gcc -march=native for znver4/5 (without gcc: an AMD CPU with AVX-512 is Zen 4 or newer). CACHYOS_LEVEL overrides.
+cachyos_level() {
+  local ld cpu=""
+  if [ -n "${CACHYOS_LEVEL:-}" ]; then
+    printf '%s\n' "$CACHYOS_LEVEL"
+    return 0
+  fi
+  ld="$(/lib/ld-linux-x86-64.so.2 --help 2>/dev/null || true)"
+  if grep -q 'x86-64-v4 (supported, searched)' <<<"$ld"; then
+    if command -v gcc >/dev/null 2>&1; then
+      cpu="$(gcc -march=native -Q --help=target 2>&1 | grep march || true)"
+      if grep -qE '(znver4|znver5)' <<<"$cpu"; then
+        echo znver4
+        return 0
+      fi
+    elif grep -q '^vendor_id.*AuthenticAMD' /proc/cpuinfo 2>/dev/null && grep -q '^flags.*avx512f' /proc/cpuinfo 2>/dev/null; then
+      echo znver4
+      return 0
+    fi
+    echo v4
+  elif grep -q 'x86-64-v3 (supported, searched)' <<<"$ld"; then
+    echo v3
+  else
+    echo plain
+  fi
+}
 
-# Create user directories
-mkdir -p "$HOME/Documents" "$HOME/Downloads" "$HOME/Music" "$HOME/Pictures" "$HOME/Videos" "$HOME/code"
+# render_pacman_conf CONF LEVEL CHAOTIC(0|1): the edited pacman.conf on stdout; identical to CONF when nothing is to do.
+# CachyOS sections go above the first repo section (before [core]), Chaotic goes last. Existing sections are left alone.
+render_pacman_conf() {
+  local conf="$1" level="$2" chaotic="$3" mirror suffix=""
+  case "$level" in
+    znver4) mirror=cachyos-v4-mirrorlist suffix=znver4 ;;
+    v4) mirror=cachyos-v4-mirrorlist suffix=v4 ;;
+    v3) mirror=cachyos-v3-mirrorlist suffix=v3 ;;
+    *) mirror="" ;;
+  esac
+  if grep -q '^\[cachyos' "$conf"; then level=none; fi
+  awk -v level="$level" -v suffix="$suffix" -v mirror="$mirror" -v chaotic="$chaotic" '
+    function block(   s) {
+      if (level == "none") return
+      if (suffix != "") {
+        print "[cachyos-" suffix "]\nInclude = /etc/pacman.d/" mirror "\n"
+        print "[cachyos-core-" suffix "]\nInclude = /etc/pacman.d/" mirror "\n"
+        print "[cachyos-extra-" suffix "]\nInclude = /etc/pacman.d/" mirror "\n"
+      }
+      print "[cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n"
+      done = 1; blank = 1
+    }
+    /^\[chaotic-aur\]/ { has_chaotic = 1 }
+    /^\[options\]/ { in_opt = 1; print; next }
+    /^\[[^]]+\]/ {
+      if (in_opt && suffix != "" && !arch) { print "Architecture = auto"; arch = 1 }
+      in_opt = 0
+      if (!done && level != "none") { if (!blank && NR > 1) print ""; block() }
+    }
+    in_opt && suffix != "" && /^Architecture[ \t]*=/ {
+      print "Architecture = auto"; arch = 1; next
+    }
+    { print; blank = ($0 == "") }
+    END {
+      if (!done && level != "none") { if (!blank) print ""; block() }
+      if (chaotic == 1 && !has_chaotic) {
+        if (!blank) print ""
+        print "[chaotic-aur]\nInclude = /etc/pacman.d/chaotic-mirrorlist"
+      }
+    }
+  ' "$conf"
+}
 
-# --- ZSH & STARSHIP SETUP ---
-echo "Configuring Zsh, Oh My Zsh, and Starship..."
+# repo_key FPR LABEL: import and locally sign a signing key unless it is already trusted.
+repo_key() {
+  local fpr="$1" label="$2"
+  if pacman-key --list-keys "$fpr" 2>/dev/null | grep -qE '\[ *(full|ultimate) *\]'; then
+    echo "    ok      $label signing key trusted"
+    return 0
+  fi
+  changed
+  if [ "$DRY" = 1 ]; then
+    echo "    [dry-run] sudo pacman-key --recv-keys $fpr --keyserver $KEYSERVER"
+    echo "    [dry-run] sudo pacman-key --lsign-key $fpr"
+  else
+    sudo pacman-key --recv-keys "$fpr" --keyserver "$KEYSERVER"
+    sudo pacman-key --lsign-key "$fpr"
+  fi
+}
 
-# Install Oh My Zsh non-interactively
-if [ ! -d "$HOME/.oh-my-zsh" ]; then
-  RUNZSH=no CHSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-fi
+# cachyos_pkg_url NAME: URL of the newest NAME-<version>-*.pkg.tar.zst in the official CachyOS mirror directory.
+cachyos_pkg_url() {
+  local name="$1" listing file
+  listing="$(curl -fsSL --max-time 30 "$CACHYOS_MIRROR/")" || return 1
+  file="$(grep -oE "href=\"$name-[0-9][^\"]*\\.pkg\\.tar\\.zst\"" <<<"$listing" | sed -e 's/^href="//' -e 's/"$//' | sort -V | tail -n 1)"
+  [ -n "$file" ] || return 1
+  printf '%s/%s\n' "$CACHYOS_MIRROR" "$file"
+}
 
-# Generate .zshrc
-cat >"$HOME/.zshrc" <<'EOF'
-# Oh My Zsh configuration
-export ZSH="$HOME/.oh-my-zsh"
-plugins=(git sudo)
-source $ZSH/oh-my-zsh.sh
+stage_repos() {
+  log "Stage repos (third-party package repositories)"
+  echo "    This adds the CachyOS and Chaotic-AUR repos to $PACMAN_CONF (third-party, signed by keys that are"
+  echo "    locally trusted here). The CachyOS kernel is NOT installed. The arch-optimised repos sit above"
+  echo "    [core]/[extra], so the next -Syu can replace Arch packages with optimised rebuilds."
 
-# Arch Linux specific plugin paths for syntax highlighting and autosuggestions
-source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
-source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+  local level want_cachyos=1 want_chaotic=1 pkgs=() url n
+  skipped cachyos-repo && want_cachyos=0
+  skipped chaotic-repo && want_chaotic=0
 
-# Enable completions
-autoload -Uz compinit
-compinit
+  if [ "$want_cachyos" = 1 ]; then
+    if grep -q '^\[cachyos' "$PACMAN_CONF"; then
+      echo "    ok      CachyOS repos already in $PACMAN_CONF"
+      level=none
+    else
+      level="$(cachyos_level)"
+      case "$level" in
+        znver4 | v4 | v3) info "CPU level: $level (arch-optimised repos + [cachyos])" ;;
+        plain) info "CPU level: no x86-64-v3 support, adding only the plain [cachyos] repo" ;;
+        none) ;;
+        *) die "bad CACHYOS_LEVEL '$level' (znver4, v4, v3, plain, none)" ;;
+      esac
+    fi
+  else
+    level=none
+  fi
 
-# Aliases
-alias udd="update-desktop-database ~/.local/share/applications"
+  # 1. keys (signature checks of everything below rely on them)
+  [ "$want_cachyos" = 1 ] && repo_key "$CACHYOS_KEY" CachyOS
+  [ "$want_chaotic" = 1 ] && repo_key "$CHAOTIC_KEY" Chaotic-AUR
 
-# Nix-specific Alias (Only works if Nix package manager is installed on this Arch system)
-alias nix-cleanup="sudo nix-env --profile /nix/var/nix/profiles/system --delete-generations +5 && sudo nix-collect-garbage -d"
+  # 2. keyring / mirrorlist packages, verified by pacman against the keys above
+  if [ "$want_cachyos" = 1 ]; then
+    local need=(cachyos-keyring cachyos-mirrorlist)
+    case "$level" in
+      znver4 | v4) need+=(cachyos-v4-mirrorlist) ;;
+      v3) need+=(cachyos-v3-mirrorlist) ;;
+    esac
+    for n in "${need[@]}"; do
+      pacman -Q "$n" >/dev/null 2>&1 && continue
+      if url="$(cachyos_pkg_url "$n")"; then pkgs+=("$url"); else
+        [ "$DRY" = 1 ] && pkgs+=("$CACHYOS_MIRROR/$n-<latest>-any.pkg.tar.zst") || die "cannot find $n in $CACHYOS_MIRROR"
+      fi
+    done
+    # The x86_64_v3/v4 repos need CachyOS's patched pacman (what cachyos-repo.sh installs too).
+    if [ "$level" != none ] && [ "$level" != plain ] && ! pacman -Qi pacman 2>/dev/null | grep -q '^Packager.*CachyOS'; then
+      if url="$(cachyos_pkg_url pacman)"; then pkgs+=("$url"); else
+        [ "$DRY" = 1 ] && pkgs+=("$CACHYOS_MIRROR/pacman-<latest>-x86_64.pkg.tar.zst") || die "cannot find pacman in $CACHYOS_MIRROR"
+      fi
+    fi
+    if [ "${#pkgs[@]}" -gt 0 ]; then
+      changed
+      if [ "$DRY" = 1 ]; then echo "    [dry-run] sudo pacman -U ${pkgs[*]}"; else sudo pacman -U "${pkgs[@]}"; fi
+    else
+      echo "    ok      CachyOS keyring and mirrorlists installed"
+    fi
+  fi
+  if [ "$want_chaotic" = 1 ]; then
+    pkgs=()
+    pacman -Q chaotic-keyring >/dev/null 2>&1 || pkgs+=("$CHAOTIC_MIRROR/chaotic-keyring.pkg.tar.zst")
+    pacman -Q chaotic-mirrorlist >/dev/null 2>&1 || pkgs+=("$CHAOTIC_MIRROR/chaotic-mirrorlist.pkg.tar.zst")
+    if [ "${#pkgs[@]}" -gt 0 ]; then
+      changed
+      if [ "$DRY" = 1 ]; then echo "    [dry-run] sudo pacman -U ${pkgs[*]}"; else sudo pacman -U "${pkgs[@]}"; fi
+    else
+      echo "    ok      Chaotic-AUR keyring and mirrorlist installed"
+    fi
+  fi
 
-alias :q="exit"
-alias vim="nvim"
-alias up="make up"
-alias upd="make up.d"
-alias down="make down"
-alias killdocker='docker kill $(docker ps -q)'
-alias kd='docker kill $(docker ps -q)'
+  # 3. pacman.conf (backup once, timestamped, before the first edit)
+  local new want_ch=$want_chaotic
+  new="$(mktmp)/pacman.conf"
+  render_pacman_conf "$PACMAN_CONF" "$level" "$want_ch" >"$new"
+  if cmp -s "$new" "$PACMAN_CONF"; then
+    echo "    ok      $PACMAN_CONF needs no change"
+    return 0
+  fi
+  changed
+  if [ "$DRY" = 1 ]; then
+    echo "    [dry-run] back up $PACMAN_CONF to $PACMAN_CONF.bak-dotfiles-$STAMP, then add:"
+    diff -u "$PACMAN_CONF" "$new" | sed -n '/^+[^+]/p' | sed 's/^+/        + /' || true
+    return 0
+  fi
+  sudo cp -p "$PACMAN_CONF" "$PACMAN_CONF.bak-dotfiles-$STAMP"
+  echo "    backed up $PACMAN_CONF to $PACMAN_CONF.bak-dotfiles-$STAMP"
+  sudo install -m644 "$new" "$PACMAN_CONF"
+  echo "    updated $PACMAN_CONF (the packages stage runs the full -Syu)"
+}
 
-# Initialize Starship
-eval "$(starship init zsh)"
-EOF
+# ================================================================= stage: packages
+enable_multilib() {
+  local conf="$PACMAN_CONF" new
+  if grep -q '^\[multilib\]' "$conf"; then
+    echo "    ok      multilib already enabled"
+    return 1
+  fi
+  new="$(mktmp)/pacman.conf"
+  if grep -q '^#\[multilib\]' "$conf"; then
+    awk '
+      $0 == "#[multilib]" { print "[multilib]"; f = 1; next }
+      f && /^#Include/ { sub(/^#/, ""); print; f = 0; next }
+      { print }
+    ' "$conf" >"$new"
+  else
+    { cat "$conf"; printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n'; } >"$new"
+  fi
+  changed
+  if [ "$DRY" = 1 ]; then
+    echo "    [dry-run] enable [multilib] in $conf (backup $conf.bak-dotfiles)"
+    return 0
+  fi
+  [ -e "$conf.bak-dotfiles" ] || sudo cp "$conf" "$conf.bak-dotfiles"
+  sudo install -m644 "$new" "$conf"
+  echo "    enabled [multilib] in $conf"
+  return 0
+}
 
-# Generate starship.toml
-cat >"$HOME/.config/starship.toml" <<'EOF'
-add_newline = true
-EOF
+# missing_pkgs NAME...: names not satisfied by an installed package (pacman -T).
+missing_pkgs() { pacman -T "$@" 2>/dev/null || true; }
 
-# Set default shell to zsh
-echo "Changing default shell to zsh..."
-chsh -s /bin/zsh
+stage_packages() {
+  log "Stage packages"
+  enable_multilib || true
 
-# --- WEB APPS SETUP ---
-echo "Creating Brave Web Apps..."
+  # Full upgrade, never a bare -Sy (partial upgrades break Arch). Also refreshes the new multilib db.
+  if [ "$DRY" = 1 ]; then
+    echo "    [dry-run] sudo pacman -Syu ${PAC_FLAGS[*]} base-devel git"
+  else
+    sudo pacman -Syu "${PAC_FLAGS[@]}" base-devel git
+  fi
 
+  if ! command -v yay >/dev/null 2>&1; then
+    changed
+    if [ "$DRY" = 1 ]; then
+      echo "    [dry-run] install yay (repo package if available, else AUR build)"
+    elif pacman -Si yay >/dev/null 2>&1; then
+      sudo pacman -S "${PAC_FLAGS[@]}" yay
+    else
+      local d
+      d="$(mktmp)"
+      git clone https://aur.archlinux.org/yay.git "$d/yay"
+      (cd "$d/yay" && if [ -t 0 ]; then makepkg -si; else makepkg -si --noconfirm; fi)
+    fi
+  else
+    echo "    ok      yay"
+  fi
+
+  local pac aur missing
+  mapfile -t pac < <(read_list "$PKG_DIR/pacman.txt")
+  mapfile -t aur < <(read_list "$PKG_DIR/aur.txt")
+
+  missing="$(missing_pkgs "${pac[@]}")"
+  if [ -z "$missing" ]; then
+    echo "    ok      pacman.txt (${#pac[@]} packages installed)"
+  else
+    changed
+    FONTS_DIRTY=1
+    # shellcheck disable=SC2086
+    if [ "$DRY" = 1 ]; then
+      echo "    [dry-run] sudo pacman -S ${PAC_FLAGS[*]} $(echo $missing)"
+    else
+      # shellcheck disable=SC2086
+      sudo pacman -S "${PAC_FLAGS[@]}" $missing
+    fi
+  fi
+
+  missing="$(missing_pkgs "${aur[@]}")"
+  if [ -z "$missing" ]; then
+    echo "    ok      aur.txt (${#aur[@]} packages installed)"
+  else
+    changed
+    FONTS_DIRTY=1
+    if [ "$DRY" = 1 ]; then
+      # shellcheck disable=SC2086
+      echo "    [dry-run] yay -S ${PAC_FLAGS[*]} $(echo $missing)"
+    else
+      # shellcheck disable=SC2086
+      yay -S "${PAC_FLAGS[@]}" $missing
+    fi
+  fi
+
+  flatpak_apps
+}
+
+flatpak_apps() {
+  local apps app
+  mapfile -t apps < <(read_list "$PKG_DIR/flatpak.txt")
+  if ! command -v flatpak >/dev/null 2>&1; then
+    if [ "$DRY" = 1 ]; then
+      echo "    [dry-run] flatpak not installed yet; would add flathub (user) and install: ${apps[*]}"
+    else
+      warn "flatpak not found, skipping flatpak apps"
+    fi
+    return 0
+  fi
+  if [ "$DRY" = 1 ] && [ ! -d "$HOME/.local/share/flatpak" ]; then
+    # querying would create ~/.local/share/flatpak; nothing is set up there yet
+    echo "    [dry-run] add flathub (user) and install: ${apps[*]}"
+    changed
+    return 0
+  fi
+  if ! flatpak remotes --user --columns=name 2>/dev/null | grep -qx flathub; then
+    run flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+  else
+    echo "    ok      flathub remote"
+  fi
+  for app in "${apps[@]}"; do
+    if flatpak info "$app" >/dev/null 2>&1; then
+      echo "    ok      flatpak $app"
+    else
+      run flatpak install --user -y flathub "$app"
+    fi
+  done
+}
+
+# ================================================================= stage: links
 create_brave_webapp() {
-  local app_name="$1"
-  local app_url="$2"
-  # Default to the brave icon if a specific one isn't passed
-  local app_icon="${3:-brave}"
-
-  # Format the filename to be lowercase and replace spaces with underscores
-  local filename=$(echo "$app_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '_')
-  local filepath="$HOME/.local/share/applications/webapp_${filename}.desktop"
-
-  echo "  Adding $app_name ($app_url)..."
-  mkdir -p "$HOME/.local/share/applications"
-
-  cat >"$filepath" <<EOF
+  local name="$1" url="$2" icon="${3:-brave}" file
+  file="$(printf '%s' "$name" | tr '[:upper:] ' '[:lower:]_')"
+  write_file "$HOME/.local/share/applications/webapp_${file}.desktop" <<EOF
 [Desktop Entry]
 Version=1.0
-Name=$app_name
-Exec=brave --app="$app_url"
+Name=$name
+Exec=brave --app="$url"
 Terminal=false
 Type=Application
 Categories=Network;WebBrowser;
-Icon=$app_icon
+Icon=$icon
 StartupNotify=true
 EOF
 }
 
-# Create specific web apps here
-create_brave_webapp "Figma" "https://www.figma.com"
-create_brave_webapp "Linear" "https://linear.app"
+gsettings_set() { # SCHEMA KEY VALUE: only when it differs; failures never abort the install
+  local cur
+  cur="$(gsettings get "$1" "$2" 2>/dev/null)" || { warn "gsettings: cannot read $1 $2"; return 0; }
+  if [ "$cur" = "$3" ] || [ "$cur" = "'$3'" ]; then
+    echo "    ok      gsettings $2"
+    return 0
+  fi
+  changed
+  if [ "$DRY" = 1 ]; then
+    echo "    [dry-run] gsettings set $1 $2 $3"
+  else
+    gsettings set "$1" "$2" "$3" 2>/dev/null || warn "gsettings set $1 $2 failed (no dbus/dconf session?)"
+  fi
+}
 
-# Update desktop database so the new web apps (and anything else) appear in your launcher
-echo "Updating desktop database..."
-update-desktop-database ~/.local/share/applications 2>/dev/null || true
+stage_links() {
+  log "Stage links"
+  [ "$DRY" = 1 ] || mkdir -p "$HOME/.config"
 
-# AirPods daemon: pinned upstream omarchy-pods + patches, built into ~/.local (config/librepods/README.md)
-bash "$CONFIG_DIR/librepods/build.sh" || echo "  librepods build failed (AirPods section stays off until it works)"
+  # The repo is public: enable the privacy pre-commit hook (.githooks/pre-commit) for this clone
+  local hp
+  hp="$(git -C "$DOTFILES_DIR" config --get core.hooksPath 2>/dev/null || true)"
+  if [ "$hp" = .githooks ]; then
+    echo "    ok      git core.hooksPath"
+  elif git -C "$DOTFILES_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+    run git -C "$DOTFILES_DIR" config core.hooksPath .githooks
+  fi
 
-# Clean up package cache to free up space
-echo "Cleaning up yay cache..."
-yay -Sc --noconfirm
-# The WC3 icon font (pairs with the symbol_map lines in kitty/linux.conf and the font-codepoint-map lines in ghostty/config) is installed to ~/.local/share/fonts by
-# the claude-tabs setup.sh call above.
-fc-cache -fv
+  log "Config directories"
+  local app
+  for app in hypr nvim kitty zellij theme quickshell opencode wivrn alacritty ghostty fastfetch; do
+    link "$CONFIG_DIR/$app" "$HOME/.config/$app"
+  done
+  link "$CONFIG_DIR/brave-flags.conf" "$HOME/.config/brave-flags.conf"
 
-echo "Installation complete!"
-echo "You may need to log out and log back in (required to apply Docker permissions, theming, and the new $HOST_VAR environment variable)"
+  log "Shell dotfiles"
+  link "$CONFIG_DIR/shell/zshrc" "$HOME/.zshrc"
+  link "$CONFIG_DIR/shell/bashrc" "$HOME/.bashrc"
+  link "$CONFIG_DIR/shell/bash_profile" "$HOME/.bash_profile"
+  link "$CONFIG_DIR/shell/inputrc" "$HOME/.inputrc"
+  # Starship: default prompt settings, only seeded (edit ~/.config/starship.toml freely afterwards)
+  printf 'add_newline = true\n' | seed_file "$HOME/.config/starship.toml" || true
+  if ! skipped omz; then
+    if [ -d "$HOME/.oh-my-zsh" ]; then
+      echo "    ok      oh-my-zsh"
+    else
+      run git clone --depth 1 https://github.com/ohmyzsh/ohmyzsh.git "$HOME/.oh-my-zsh"
+    fi
+  fi
+
+  log "Zellij claude-tabs plugin"
+  # Standalone package in its own repo (default checkout below). Its setup.sh links the plugin into
+  # ~/.config/zellij/plugins, installs the WC3 icon font, pre-grants permissions and adds the Claude Code hooks.
+  local ct="${CLAUDE_TABS_DIR:-$HOME/code/crossatko/zellij-wc3cz-claude}"
+  if skipped claude-tabs; then
+    echo "    skipped (INSTALL_SKIP)"
+  elif [ -f "$ct/setup.sh" ]; then
+    if [ "$DRY" = 1 ]; then
+      echo "    [dry-run] sh $ct/setup.sh"
+    else
+      sh "$ct/setup.sh" || warn "claude-tabs setup failed (use default_layout 'compact' as a fallback)"
+      FONTS_DIRTY=1
+    fi
+  else
+    info "claude-tabs checkout not found at $ct: clone it and run its setup.sh, or set default_layout 'compact' in config/zellij/config.kdl"
+  fi
+
+  log "Scripts, launcher, portals, units"
+  local s
+  for s in "$CONFIG_DIR"/nautilus/scripts/*; do
+    [ -e "$s" ] && link "$s" "$HOME/.local/share/nautilus/scripts/$(basename "$s")"
+  done
+  # Only the commands dir: ~/.config/launcher also holds the user's config.json.
+  link "$CONFIG_DIR/launcher/commands" "$HOME/.config/launcher/commands"
+  # Portal routing (screen sharing pinned to hyprland, file dialogs -> Nautilus chooser) and the GNOME portal unit
+  # override: Hyprland never activates graphical-session.target, which the packaged unit requires.
+  link "$CONFIG_DIR/xdg-desktop-portal/portals.conf" "$HOME/.config/xdg-desktop-portal/portals.conf"
+  link "$CONFIG_DIR/systemd/user/xdg-desktop-portal-gnome.service" "$HOME/.config/systemd/user/xdg-desktop-portal-gnome.service"
+  link "$CONFIG_DIR/systemd/user/librepods.service" "$HOME/.config/systemd/user/librepods.service"
+  # Launcher shim: applies the wallpaper theme to Brave's profile just before it starts
+  link "$CONFIG_DIR/theme/bin/brave" "$HOME/.local/bin/brave"
+  link "$CONFIG_DIR/launcher/jellyfin/bin/jellyfin-qs" "$HOME/.local/bin/jellyfin-qs"
+
+  # Link router (config/url-router): http(s) links opened by native apps go to the Figma app (figma.com files),
+  # the matching Brave web app window, everything else to Brave. Roll back with:
+  #   xdg-mime default brave-browser.desktop x-scheme-handler/http x-scheme-handler/https
+  # Exec stays unquoted: xdg-open's own desktop-file parser does not strip quotes (so no spaces in $HOME).
+  link "$CONFIG_DIR/url-router/bin/url-router" "$HOME/.local/bin/url-router"
+  sed "s|@ROUTER@|$HOME/.local/bin/url-router|" "$CONFIG_DIR/url-router/url-router.desktop.in" |
+    write_file "$HOME/.local/share/applications/url-router.desktop"
+  if command -v xdg-mime >/dev/null 2>&1; then
+    if [ "$(xdg-mime query default x-scheme-handler/http 2>/dev/null)" = url-router.desktop ] &&
+      [ "$(xdg-mime query default x-scheme-handler/https 2>/dev/null)" = url-router.desktop ]; then
+      echo "    ok      xdg-mime http(s) -> url-router"
+    else
+      run xdg-mime default url-router.desktop x-scheme-handler/http x-scheme-handler/https
+    fi
+  fi
+
+  log "Firefox translucent header"
+  local ffdir="$HOME/.config/mozilla/firefox" ffp
+  if [ -f "$ffdir/profiles.ini" ]; then
+    ffp="$(awk -F= '/^\[Install/{i=1} i&&/^Default=/{print $2; exit}' "$ffdir/profiles.ini")"
+    if [ -n "$ffp" ] && [ -d "$ffdir/$ffp" ]; then
+      link "$CONFIG_DIR/firefox/userChrome.css" "$ffdir/$ffp/chrome/userChrome.css"
+      link "$CONFIG_DIR/firefox/user.js" "$ffdir/$ffp/user.js"
+    fi
+  else
+    echo "    (no Firefox profile yet; re-run --only links after the first Firefox start)"
+  fi
+
+  log "Theme (config/theme/README.md)"
+  if [ "$DRY" = 1 ]; then
+    echo "    [dry-run] theme-seed; theme.py render if out/palette.json is still missing"
+  else
+    # theme-seed is a no-op on a machine with a render or a selection; render only when nothing exists yet.
+    sh "$CONFIG_DIR/theme/bin/theme-seed" -q || true
+    local out="${THEME_OUT_DIR:-$CONFIG_DIR/theme/out}"
+    if [ ! -f "$out/palette.json" ]; then
+      if python3 -I "$CONFIG_DIR/theme/theme.py" render; then changed; else warn "theme render failed"; fi
+    else
+      echo "    ok      theme out/"
+    fi
+  fi
+
+  log "GTK / dark mode seed"
+  # settings.ini, gtkrc and gsettings are only seeded on the first run: afterwards the theme engine (theme.py)
+  # owns them and rewriting would undo the wallpaper theme.
+  local gtk_seeded=0 ini
+  ini='[Settings]
+gtk-theme-name=Adwaita-dark
+gtk-icon-theme-name=Adwaita
+gtk-cursor-theme-name=Oxygen_White
+gtk-application-prefer-dark-theme=1'
+  if printf '%s\n' "$ini" | seed_file "$HOME/.config/gtk-3.0/settings.ini"; then gtk_seeded=1; fi
+  printf '%s\n' "$ini" | seed_file "$HOME/.config/gtk-4.0/settings.ini" || true
+  printf 'gtk-theme-name="Adwaita-dark"\ngtk-icon-theme-name="Adwaita"\ngtk-cursor-theme-name="Oxygen_White"\n' |
+    seed_file "$HOME/.gtkrc-2.0" || true
+  # X11 / legacy fallback for the cursor theme (directory name, not the display name "Oxygen White").
+  # Hyprland itself gets it from env.lua (XCURSOR_THEME) and autostart.lua (hyprctl setcursor).
+  printf '[Icon Theme]\nName=Default\nComment=Default Cursor Theme\nInherits=Oxygen_White\n' |
+    seed_file "$HOME/.local/share/icons/default/index.theme" || true
+  printf 'file://%s/Documents\nfile://%s/Downloads\nfile://%s/Music\nfile://%s/Pictures\nfile://%s/Videos\nfile://%s/code\n' \
+    "$HOME" "$HOME" "$HOME" "$HOME" "$HOME" "$HOME" | seed_file "$HOME/.config/gtk-3.0/bookmarks" || true
+
+  if command -v gsettings >/dev/null 2>&1; then
+    if [ "$gtk_seeded" = 1 ]; then
+      gsettings_set org.gnome.desktop.interface color-scheme prefer-dark
+      gsettings_set org.gnome.desktop.interface gtk-theme Adwaita-dark
+      gsettings_set org.gnome.desktop.interface icon-theme Adwaita
+      gsettings_set org.gnome.desktop.interface cursor-theme Oxygen_White
+    fi
+    # blueman's own connect/disconnect notifier is off: the shell's BtNotifier posts those
+    gsettings_set org.blueman.general plugin-list "['!ConnectionNotifier']"
+  else
+    warn "gsettings not found; skipping dark-mode gsettings"
+  fi
+
+  local d
+  for d in Documents Downloads Music Pictures Videos code; do
+    [ -d "$HOME/$d" ] || run mkdir -p "$HOME/$d"
+  done
+
+  log "Brave web apps"
+  local before_apps=$CHANGES
+  create_brave_webapp "Figma" "https://www.figma.com"
+  create_brave_webapp "Linear" "https://linear.app"
+  if [ "$CHANGES" -gt "$before_apps" ] && command -v update-desktop-database >/dev/null 2>&1 && [ "$DRY" = 0 ]; then
+    update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+  fi
+
+  log "AirPods daemon (config/librepods/README.md)"
+  if skipped librepods; then
+    echo "    skipped (INSTALL_SKIP)"
+  elif [ "$DRY" = 1 ]; then
+    echo "    [dry-run] bash config/librepods/build.sh"
+  else
+    bash "$CONFIG_DIR/librepods/build.sh" || warn "librepods build failed (AirPods section stays off until it works)"
+  fi
+
+  if [ "$FONTS_DIRTY" = 1 ] && [ "$DRY" = 0 ] && command -v fc-cache >/dev/null 2>&1; then
+    fc-cache -f >/dev/null 2>&1 || true
+  fi
+
+  if [ "$CHSH" = 1 ]; then
+    local zsh_path
+    zsh_path="$(command -v zsh || true)"
+    if [ -z "$zsh_path" ]; then
+      warn "--chsh: zsh not installed yet (run the packages stage first)"
+    elif [ "$(getent passwd "$USER" | cut -d: -f7)" = "$zsh_path" ]; then
+      echo "    ok      login shell is already zsh"
+    else
+      run chsh -s "$zsh_path"
+    fi
+  fi
+}
+
+# ================================================================= stage: system
+host_var() {
+  local raw
+  raw="$(cat /etc/hostname 2>/dev/null || uname -n)"
+  raw="$(printf '%s' "$raw" | tr -d '\n')"
+  # CrossBattlestation -> HOST_CROSS_BATTLESTATION (read by hypridle.conf `# hyprlang if`). The Hyprland Lua
+  # config matches the hostname itself (host.lua: BATTLESTATION, WORKSTATION, ARCHLINUX, VM).
+  printf 'HOST_%s' "$(printf '%s' "$raw" | sed -e 's/\([a-z0-9]\)\([A-Z]\)/\1_\2/g' -e 's/-/_/g' | tr '[:lower:]' '[:upper:]')"
+}
+
+sync_etc_environment() {
+  local var="$1" cur new
+  cur="$(mktmp)/environment.cur"
+  new="$(mktmp)/environment.new"
+  cat /etc/environment >"$cur" 2>/dev/null || : >"$cur"
+  # Managed line: HOST_* only. Everything else in the file stays as it is.
+  awk -v line="$var=1" '
+    /^HOST_/ { if (!done) { print line; done = 1 } next }
+    { print }
+    END { if (!done) print line }
+  ' "$cur" >"$new"
+  sudo_install "$new" /etc/environment || return 0
+  return 0
+}
+
+enable_unit() {
+  local unit="$1"
+  if [ "$DRY" = 1 ]; then
+    if systemctl is-enabled "$unit" >/dev/null 2>&1; then echo "    ok      $unit enabled"; else
+      changed
+      echo "    [dry-run] sudo systemctl enable --now $unit"
+    fi
+  elif systemctl is-enabled "$unit" >/dev/null 2>&1 && systemctl is-active "$unit" >/dev/null 2>&1; then
+    echo "    ok      $unit"
+  else
+    changed
+    sudo systemctl enable --now "$unit"
+  fi
+}
+
+stage_system() {
+  log "Stage system (sudo)"
+  local udev_changed=0 units_changed=0 f dest tmp
+
+  for f in 50-vial 61-corne-nojoystick 62-corne-via; do
+    sudo_install "$SYS_DIR/udev/rules.d/$f.rules" "/etc/udev/rules.d/$f.rules" && udev_changed=1
+  done
+  sudo_install "$SYS_DIR/systemd/logind.conf.d/inhibit-delay.conf" /etc/systemd/logind.conf.d/inhibit-delay.conf && units_changed=1
+
+  # tty1 autologin: the file names one user, replaced with the current one
+  tmp="$(mktmp)/autologin.conf"
+  sed "s|--autologin [^ ]*|--autologin $USER|" "$SYS_DIR/systemd/system/getty@tty1.service.d/autologin.conf" >"$tmp"
+  sudo_install "$tmp" "/etc/systemd/system/getty@tty1.service.d/autologin.conf" && units_changed=1
+
+  local mt=0
+  if command -v mullvad >/dev/null 2>&1 && command -v tailscale >/dev/null 2>&1; then
+    sudo_install "$SYS_DIR/mullvad-tailscale/coexist.nft" /etc/mullvad-tailscale/coexist.nft && units_changed=1
+    sudo_install "$SYS_DIR/systemd/system/mullvad-tailscale.service" /etc/systemd/system/mullvad-tailscale.service && units_changed=1
+    mt=1
+  else
+    echo "    (mullvad + tailscale not both installed: skipping mullvad-tailscale coexistence files)"
+  fi
+
+  if [ "$udev_changed" = 1 ]; then
+    if [ "$DRY" = 1 ]; then echo "    [dry-run] sudo udevadm control --reload-rules && trigger"; else
+      sudo udevadm control --reload-rules && sudo udevadm trigger
+    fi
+  fi
+  if [ "$units_changed" = 1 ]; then
+    if [ "$DRY" = 1 ]; then echo "    [dry-run] sudo systemctl daemon-reload"; else sudo systemctl daemon-reload; fi
+  fi
+
+  local hv
+  hv="$(host_var)"
+  log "Host marker $hv in /etc/environment"
+  sync_etc_environment "$hv"
+
+  log "Services"
+  local u
+  for u in bluetooth NetworkManager tailscaled docker ufw; do
+    systemctl list-unit-files "$u.service" 2>/dev/null | grep -q "^$u.service" || { echo "    (skip $u: not installed)"; continue; }
+    enable_unit "$u"
+  done
+  [ "$mt" = 1 ] && enable_unit mullvad-tailscale
+  if systemctl list-unit-files mullvad-daemon.service 2>/dev/null | grep -q '^mullvad-daemon.service'; then
+    enable_unit mullvad-daemon
+  fi
+
+  log "Firewall (ufw)"
+  if command -v ufw >/dev/null 2>&1; then
+    local st=""
+    [ "$DRY" = 1 ] || st="$(sudo ufw status verbose 2>/dev/null || true)"
+    if [ "$DRY" = 0 ] && grep -q '^Status: active' <<<"$st" && grep -q 'Default: deny (incoming), allow (outgoing)' <<<"$st"; then
+      echo "    ok      ufw active, deny incoming / allow outgoing"
+    else
+      changed
+      if [ "$DRY" = 1 ]; then
+        echo "    [dry-run] sudo ufw default deny incoming; default allow outgoing; --force enable (skipped if already so)"
+      else
+        sudo ufw default deny incoming
+        sudo ufw default allow outgoing
+        sudo ufw --force enable
+      fi
+    fi
+  else
+    echo "    (ufw not installed)"
+  fi
+
+  log "Docker group"
+  if ! getent group docker >/dev/null 2>&1; then
+    echo "    (no docker group yet; install docker first)"
+  elif id -nG "$USER" | tr ' ' '\n' | grep -qx docker; then
+    echo "    ok      $USER is in docker"
+  else
+    run sudo usermod -aG docker "$USER"
+  fi
+}
+
+# ================================================================= main
+[ "$DRY" = 1 ] && log "Dry run: nothing is changed, sudo is not called"
+stage_on repos && stage_repos
+stage_on packages && stage_packages
+stage_on links && stage_links
+stage_on system && stage_system
+
+echo
+if [ "$DRY" = 1 ]; then
+  echo "Dry run finished: $CHANGES change(s) would be made."
+else
+  echo "Done: $CHANGES change(s) made."
+fi
+
+if stage_on links || stage_on packages || stage_on repos; then
+  cat <<'EOF'
+
+Manual steps (not automated):
+  - Hyprland fork (glass compositing; battlestation only): build/install from the fork repo. Stock `hyprland` works elsewhere.
+  - Font Awesome 7 Pro (licensed) into ~/.local/share/fonts/FontAwesomePro/, and the Paper Mono font into ~/.local/share/fonts/.
+  - zellij claude-tabs: clone its repo to ~/code/crossatko/zellij-wc3cz-claude (or set CLAUDE_TABS_DIR), then re-run `--only links`.
+  - Sign in: 1Password, Mullvad, `sudo tailscale up`, `jellyfin-qs login`, Brave/Firefox profiles.
+  - Optional privacy deny-list for the pre-commit hook: ~/.config/dotfiles-private/denylist.
+  - GPU drivers and machine-specific hardware setup (not covered by the package lists).
+  - Log out and back in after the first run (docker group, environment, themes).
+  - Optional third-party repos (CachyOS, Chaotic-AUR; not needed by the package lists): `./install.sh --repos`.
+  - Root-owned files and services: `./install.sh --system` (or `--only system`); change the login shell with `--chsh`.
+  - macOS is maintained by hand.
+EOF
+fi

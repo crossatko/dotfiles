@@ -26,9 +26,6 @@ compinit
 # Aliases
 alias udd="update-desktop-database ~/.local/share/applications"
 
-# Nix-specific Alias (Only works if Nix package manager is installed on this Arch system)
-alias nix-cleanup="sudo nix-env --profile /nix/var/nix/profiles/system --delete-generations +5 && sudo nix-collect-garbage -d"
-
 alias :q="exit"
 alias vim="nvim"
 alias up="make up"
@@ -162,7 +159,6 @@ export PATH="$PATH:$HOME/.lmstudio/bin"
 # End of LM Studio CLI section
 
 
-if [ -e $HOME/.nix-profile/etc/profile.d/nix.sh ]; then . $HOME/.nix-profile/etc/profile.d/nix.sh; fi
 export PATH="$HOME/.local/bin:$PATH"
 
 

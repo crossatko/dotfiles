@@ -1,3 +1,0 @@
-# Battlestation only (Corne with VIA firmware). Keeps the Corne from being treated as a joystick by games/SDL.
-# Install: sudo cp hosts/CrossBattlestation/etc/udev/rules.d/61-corne-nojoystick.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=input
-SUBSYSTEM=="input", ATTRS{idVendor}=="4653", ATTRS{idProduct}=="0001", ENV{ID_INPUT_JOYSTICK}=""

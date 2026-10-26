@@ -1,5 +1,5 @@
-# Workstation only (Corne with Vial firmware). Vial / VIA raw HID access for the active seat user (WebHID in the browser, vial-gui).
-# Install: sudo cp hosts/CrossWorkstation/etc/udev/rules.d/50-vial.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=hidraw
+# (Corne with Vial firmware). Vial / VIA raw HID access for the active seat user (WebHID in the browser, vial-gui).
+# Install: sudo cp system/etc/udev/rules.d/50-vial.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=hidraw
 # Any keyboard with Vial firmware (serial contains "vial:f64c2b3c")
 KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{serial}=="*vial:f64c2b3c*", MODE="0660", TAG+="uaccess", TAG+="udev-acl"
 # foostan Corne (4653:0001), in case the serial is not set

@@ -16,7 +16,7 @@ menu_shadow_depth=0
 tooltip_shadow_depth=0
 transparent_dolphin_view=false
 respect_DE=false
-# libadwaita geometry (the design reference, measured: AGENTS.md "Design match"); shapes / fills in kvantum_svg.py
+# libadwaita geometry (the design reference, measured: config/theme/README.md "libadwaita design match"); shapes / fills in kvantum_svg.py
 normal_default_pushbutton=false
 groupbox_top_label=true
 slider_width=4

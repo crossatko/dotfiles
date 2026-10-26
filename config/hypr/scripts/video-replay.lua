@@ -1,6 +1,6 @@
 -- Play-once video wallpapers: EVERY workspace change on a monitor advances its clip by one burst (a short ease-in + wind-down
 -- baked into the player's file; theme/mpv/replay.py <connector> = `theme.py video replay`, which ignores the event while the
--- previous burst is still playing: the debounce). See AGENTS.md "Video wallpapers".
+-- previous burst is still playing: the debounce). See AGENTS.md "Wallpapers (per monitor, videos, links)".
 -- Timing: Hyprland emits workspace.active synchronously in CMonitor::changeWorkspace right AFTER startAnimation() of the
 -- old/new workspace, in the same main-loop iteration (before the first animated frame is rendered): the earliest hook.
 --

@@ -1,0 +1,4 @@
+# Flatpak apps from Flathub, installed per user (`flatpak install --user`) by `./install.sh` (stage `packages`).
+# One application ID per line, `#` starts a comment. All IDs checked against the Flathub API.
+com.spotify.Client
+com.vysp3r.ProtonPlus

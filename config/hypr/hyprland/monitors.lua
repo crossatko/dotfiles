@@ -51,7 +51,7 @@ local tv = {
 	cm = "auto",
 }
 
-if host.is_archlinux or host.is_nix_vm then
+if host.is_archlinux or host.is_vm then
 	monitor1 = {
 		output = "Virtual-1",
 		mode = "2560x1440",

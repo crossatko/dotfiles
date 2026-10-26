@@ -3,7 +3,7 @@
 # shell -- replaces SDDM's own "which session, and start the next one when
 # this one ends" role, now that SDDM is disabled entirely (its own VT
 # selection and autologin timing turned out to be unreliable for repeated
-# session switching -- see plans.md).
+# session switching).
 #
 # Loops forever: reads which session is wanted from a marker file, execs
 # it, and whenever that session's own process exits -- a clean switch

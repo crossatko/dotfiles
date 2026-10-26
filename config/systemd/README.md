@@ -27,6 +27,8 @@ Edit the live files and re-copy, or convert to a symlink (see bottom).
 Packages: `gamescope`, `lib32-gamescope` (**must match `gamescope`'s exact
 version** or pacman refuses the dependency), `gamescope-session-cachyos`.
 The 32-bit layer is not optional — 32-bit games need their own WSI layer.
+`gamescope-session-cachyos` is not in `packages/*.txt`; it comes from the CachyOS repo,
+which `./install.sh --repos` can add. Install it by hand afterwards.
 
 Related, outside this directory:
 - `config/hypr/scripts/gamescope-wrapper/gamescope` — PATH-shadow wrapper,

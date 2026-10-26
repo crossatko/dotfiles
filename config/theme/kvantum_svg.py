@@ -1,7 +1,7 @@
 """Adwaita-style SVG for the generated Kvantum theme "Wall" (imported by theme.py write_kvantum_theme).
 
 libadwaita (our GTK4 glass CSS) is the design reference. The fills and sizes below were MEASURED from a libadwaita
-1.10 gallery rendered with our gtk4.css (see AGENTS.md "Design match"): no bevels or gradients, translucent
+1.10 gallery rendered with our gtk4.css (see config/theme/README.md "libadwaita design match"): no bevels or gradients, translucent
 currentColor fills on the glass (buttons / entries fg 10 %, hover 15 %, pressed / checked 30 %; flat buttons
 hover 7 %, pressed 16 %), rounded corners (buttons / entries 9 px, popovers 12 px, rows / tabs / menu items 6 px),
 20 px check boxes / radios with a 2 px fg 15 % ring, accent only for checked / suggested / progress / focus,

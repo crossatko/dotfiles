@@ -52,7 +52,7 @@ overrides ──┘                      │   (out/ is git-ignored; default/ is
   of `default/`, the first `theme.py render/apply` deletes it and `out/` is then never touched by the seeder. A pull that
   changes `config/theme/` re-renders on Linux (`THEME_RENDER_SKIP=1` skips). On a machine with a `theme.local.toml` the default is never seeded: a missing / seeded `out/` (a rebase or merge replaying the untracking commit deletes it) is rendered from the selection by the hooks. Consumers that would fail hard have fallbacks
   (Hyprland `theme.lua` and nvim: `default/palette.lua`; ghostty `config-file = ?`).
-* **Other machines pulling the change that introduced this:** see AGENTS.md (Theme system) for `adopt-legacy`.
+* **Other machines pulling the change that introduced this:** see AGENTS.md "Theme system" for `adopt-legacy`.
 
 ## Light / dark mode
 The chosen mode lives in `~/.local/state/theme/mode` (`dark` default; missing / unreadable = dark; `THEME_MODE` overrides it for one run, not for `theme.py mode`; `theme.py default` is always dark). `theme.py mode light|dark|toggle` writes it and runs an apply without re-extracting; every other `apply` / `render` uses the saved mode. Theme-writing commands (render / apply / mode / per-monitor wallpaper) take `~/.local/state/theme/apply.lock`, so a wallpaper apply and a mode switch run one after the other. `out/palette.json` carries `mode`, so the shell follows instantly.
@@ -145,7 +145,7 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
   Brave shim; globally it would break libadwaita apps.
 * `gtk-button-images` / `gtk-menu-images` are forced off: stock images on buttons pull in legacy icons.
 * `purge_oxygen()` moves the KDE leftovers (look-and-feel, `kdedefaults/*`, kwin decoration) to Breeze Dark /
-  Fusion / our scheme. Cursor themes (`Oxygen-White`, `Oxygen_Black`) are a separate choice and untouched.
+  Fusion / our scheme. Cursor themes (`Oxygen_White`, `Oxygen_Black`) are a separate choice and untouched.
 
 ## File dialogs (portal) and the empty XDG_DESKTOP_PORTAL_DIR
 * Brave/Chromium Open/Save dialogs go through the **xdg-desktop-portal FileChooser**, routed in

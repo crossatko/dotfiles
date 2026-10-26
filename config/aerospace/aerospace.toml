@@ -4,7 +4,7 @@
 # `python3 -I config/karabiner/generate.py --aerospace` prints the main binding lines.
 # Mirrors the Hyprland binds (config/hypr/hyprland/binds.lua): left Option = SUPER, right Cmd = ALT
 # (Karabiner, config/karabiner/generate.py, emits the combos bound below).
-# Full table: AGENTS.md, "macOS" section. Reload: `aerospace reload-config`.
+# Full table: AGENTS.md, "macOS (secondary machine)" section. Reload: `aerospace reload-config`.
 # Top-level keys must stay above the first table header (TOML puts later keys into that table).
 
 config-version = 2
@@ -47,7 +47,7 @@ gaps.outer.top = 10
 gaps.outer.right = 10
 
 # Three-finger trackpad swipe = previous/next workspace (replaces SwipeAeroSpace). The macOS
-# three-finger horizontal swipe is off (trackpad defaults, see AGENTS.md).
+# three-finger horizontal swipe is off (trackpad defaults, see AGENTS.md "macOS (secondary machine)" > Other).
 # Park inactive workspaces by order: lower ones at the bottom-left corner, higher ones at the bottom-right (only a corner pixel stays visible); Mission Control with "Group windows by application" on follows the sides
 hidden-window-placement = 'directional-corner'
 hidden-window-sliver = 1   # visible part of parked windows in points: default 1, integers only (fractions make macOS pull windows ~40 pt back on screen), 0 untested
@@ -162,7 +162,7 @@ if.app-id = 'org.pqrs.Karabiner-EventViewer'
 run = 'layout floating'
 
 [mode.main.binding]
-    # Keys are the combos Karabiner emits (config/karabiner/generate.py; table in AGENTS.md):
+    # Keys are the combos Karabiner emits (config/karabiner/generate.py; table in AGENTS.md "Keyboard (Karabiner)"):
     #   Hyprland SUPER (left Option)          -> cmd-ctrl-alt-
     #   SUPER+SHIFT                           -> cmd-ctrl-alt-shift-
     #   Hyprland ALT (right Command)          -> ctrl-alt-shift-

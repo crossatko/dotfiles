@@ -14,7 +14,7 @@ import Quickshell.Io
 //    video the monitor plays (switching re-applies it) and of the next video clicked.
 // A click (or arrows + Enter) runs `theme.py apply <file> [--mode once|loop] [--monitor <key>]` detached; for the
 // primary that is the full re-theme, for another monitor hyprpaper / the video player only. theme.py owns the state
-// (wallpapers.json, AGENTS.md "Per-monitor wallpapers" / "Video wallpapers"); this page only reads it.
+// (wallpapers.json, AGENTS.md "Wallpapers (per monitor, videos, links)"); this page only reads it.
 // Tabs: Tab / Shift+Tab. The page opens on the tab matching what the edited monitor shows; a tab picked by hand and
 // the edited monitor are kept for the session (Settings' `memory` page hook).
 // Monitor links: a MonitorLinkButton between neighbouring cards (MonitorCardRow) links them; a linked group always gets the

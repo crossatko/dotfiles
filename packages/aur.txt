@@ -1,0 +1,16 @@
+# AUR packages, installed with `yay -S --needed` after pacman.txt (stage `packages`).
+# One name per line, `#` starts a comment. Every name was checked against the AUR RPC (exists, not out of date).
+
+# --- browsers / apps
+brave-bin
+1password
+figma-linux-next-bin
+localsend
+tableplus
+rife-ncnn-vulkan-bin
+
+# --- desktop
+mpvpaper
+
+# --- virtualization
+quickemu-git

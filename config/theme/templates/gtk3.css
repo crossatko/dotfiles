@@ -39,7 +39,7 @@ window.csd headerbar entry:hover, window.csd .toolbar entry:hover, window.csd se
 
 window.csd.dialog.background:not(.popup), window.csd messagedialog.background { background-color: rgba({{surface.rgb}}, {{gtk_a_dialog}}); }
 
-/* ---- libadwaita design (the reference; measured from a libadwaita 1.10 gallery, AGENTS.md "Design match") ----
+/* ---- libadwaita design (the reference; measured from a libadwaita 1.10 gallery, config/theme/README.md "libadwaita design match") ----
    Geometry and shapes for CSD GTK3 windows so they read like libadwaita apps: flat header bar buttons (34 px,
    hover fg 7 %), raised buttons / entries 34 px with fg 10 % fills and 9 px corners, bold button labels, 36 px
    rounded sidebar rows inset 6 px, 20 px check boxes / radios (2 px fg 15 % ring -> accent + accent_fg mark),

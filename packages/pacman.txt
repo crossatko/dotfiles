@@ -1,0 +1,163 @@
+# Repo packages (core/extra/multilib), installed by
+# `./install.sh` (stage `packages`) with `pacman -S --needed`. One name per line, `#` starts a comment.
+# Every name was checked with `pacman -Si`. All names are in core/extra/multilib. The third-party CachyOS and
+# Chaotic-AUR repos are added separately by the `repos` stage; no package here depends on them.
+#
+# Not packaged, install by hand (install.sh lists these at the end):
+#   - Hyprland fork (glass compositing, battlestation only): `hyprland` below is the stock build,
+#     the workstation uses it as is. Fork build/install steps live in the fork repo.
+#   - Font Awesome 7 Pro (licensed): ~/.local/share/fonts/FontAwesomePro/. Brands/Free come from otf-font-awesome.
+#   - Paper Mono (UI/terminal font): ~/.local/share/fonts/ (no package).
+#   - GPU drivers (vulkan-radeon / nvidia-utils, lib32-* variants) are machine specific and not listed.
+#   - multilib (needed for steam) is enabled by install.sh.
+
+# --- base / development
+git
+base-devel
+wget
+curl
+openssh
+neovim
+vim
+btop
+ffmpeg
+python
+python-pillow
+nodejs
+yarn
+rust
+rust-wasm
+php
+mariadb
+valkey
+jq
+ripgrep
+fd
+cmake
+ninja
+tldr
+desktop-file-utils
+xdg-utils
+github-cli
+lazygit
+rsync
+socat
+gdb
+strace
+ncdu
+
+# --- hardware / services
+ddcutil
+brightnessctl
+bluez
+bluez-utils
+blueman
+networkmanager
+network-manager-applet
+tailscale
+mullvad-vpn
+nftables
+ufw
+libappindicator
+android-tools
+
+# --- audio
+pipewire
+pipewire-pulse
+wireplumber
+libpulse
+playerctl
+pavucontrol
+
+# --- fonts / theming (the theme engine writes the GTK/Qt/KDE side)
+noto-fonts
+noto-fonts-cjk
+noto-fonts-emoji
+ttf-nerd-fonts-symbols
+otf-font-awesome
+gnome-themes-extra
+adwaita-icon-theme
+oxygen-cursors
+dconf
+qt5-wayland
+qt6-wayland
+qt6ct
+kconfig
+qt5ct
+kvantum
+kvantum-qt5
+
+# --- terminal / shell
+zsh
+zsh-completions
+zsh-autosuggestions
+zsh-syntax-highlighting
+bash-completion
+starship
+zoxide
+fzf
+zellij
+kitty
+ghostty
+alacritty
+fastfetch
+libqalculate
+
+# --- Hyprland ecosystem
+hyprland
+hyprpaper
+hypridle
+hyprlock
+hyprpolkitagent
+quickshell
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
+xdg-desktop-portal-gnome
+wl-clipboard
+cliphist
+grim
+slurp
+wf-recorder
+wtype
+imagemagick
+librsvg
+hyprshutdown
+
+# --- librepods build deps (config/librepods/build.sh)
+qt6-connectivity
+
+# --- apps
+discord
+firefox
+thunderbird
+mpv
+nautilus
+gnome-disk-utility
+yt-dlp
+mpv-mpris
+scrcpy
+streamlink
+
+# --- archives
+ark
+zip
+unzip
+unrar
+7zip
+gzip
+
+# --- gaming
+steam
+gamescope
+gamemode
+mangohud
+
+# --- containers / virtualization (VM panel uses quickemu from aur.txt)
+docker
+docker-compose
+qemu-desktop
+swtpm
+spice-gtk
+
+# --- flatpak (apps listed in flatpak.txt)
+flatpak

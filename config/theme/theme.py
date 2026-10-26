@@ -765,7 +765,7 @@ PLAY_MAX, WIND_MAX = 600.0, 120.0   # absurd-value caps only: the real limit is 
 WIND_AVG = 0.5   # mean of the wind curve (1 + cos(pi u)) / 2 over [0, 1]: the wind consumes wind * WIND_AVG s of media.
 # mpv/winddown.lua and the Settings sliders (SettingsWallpaper.qml, via `video thumbs`) use the same number.
 WINDDOWN_LUA = ROOT / "mpv" / "winddown.lua"
-WINDDOWN_SMOOTH = True   # display-resample + interpolation during the wind only: see AGENTS.md > Video wallpapers
+WINDDOWN_SMOOTH = True   # display-resample + interpolation during the wind only: see AGENTS.md > Wallpapers (per monitor, videos, links)
 # Smoothing needs mpv's display-fps-override to equal the output's real refresh (else the wind runs at callback rate /
 # override times too fast: 6x on a 360 Hz output with 60), so theme.py passes the connector's refresh as winddown-fps; it
 # also costs a render per vsync, so above this rate (~7 GPU points / 5 W per 360 Hz output with a glass layer, measured)
@@ -1278,7 +1278,7 @@ ENC_LEVEL = "5.2"   # H.264 level of every encode (max 2,073,600 macroblocks/s, 
 H264_MBS, H264_MBS_FRAME = 2073600, 36864
 HEVC_LEVELS = (("5.1", 534773760), ("5.2", 1069547520))
 HEVC_PS_MAX = 8912896
-OPT_QP_HEVC = 16    # hevc_vaapi CQP: "visually lossless" target p5 PSNR >= 50 dB and p5 SSIM >= 0.995 vs the lanczos-scaled source and vs raw RIFE output; 16 is the highest QP meeting it (18 fails: SSIM p5 0.9926 on raycast), measured AGENTS.md
+OPT_QP_HEVC = 16    # hevc_vaapi CQP: "visually lossless" target p5 PSNR >= 50 dB and p5 SSIM >= 0.995 vs the lanczos-scaled source and vs raw RIFE output; 16 is the highest QP meeting it (18 fails: SSIM p5 0.9926 on raycast), measured, see AGENTS.md > Wallpapers (per monitor, videos, links)
 _ENC = {"level": None}
 
 
@@ -1511,7 +1511,7 @@ RIFE_ARGS = ["-j", "2:1:2"]   # extra rife-ncnn-vulkan arguments (thread counts 
 RIFE_GPU = 0            # rife-ncnn-vulkan -g: device 0 is the RX 9070 XT here (`rife-ncnn-vulkan -l`; 1 = the iGPU)
 RIFE_OOM_TEST = int(os.environ.get("THEME_BAKE_RIFE_OOM_ABOVE", "0") or 0)   # tests: a RIFE process started while more than N may run fails
 RIFE_WORKERS = 4        # long-lived rife processes at most (they share one GPU; ~1.2 GB VRAM each at 1440p with ONE proc thread; the free VRAM decides, see rife_worker_count). Knee measured on whole bakes (raycast 4K120 AV1 -> 1440p60, 16 bursts, RX 9070 XT, -j 2:1:2): 1 worker 114.8 s, 2 106.0 s, 3 98.4 s, 4 95.0 s, 6 91.3 s; 4 workers x 2:4:4 (13.7 GB) thrash VRAM: 290.8 s
-BAKE_INTERP = "auto"    # auto = RIFE when installed (measured better than minterpolate: AGENTS.md), else minterpolate
+BAKE_INTERP = "auto"    # auto = RIFE when installed (measured better than minterpolate: AGENTS.md > Wallpapers (per monitor, videos, links)), else minterpolate
 BAKE_MI = {"minterpolate": "mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1", "blend": "mi_mode=blend", "dup": "mi_mode=dup"}   # dup = plain frame stepping (what the runtime speed ramp shows; tests only)
 
 
