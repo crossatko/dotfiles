@@ -20,7 +20,7 @@
 - Handoff contents: goal; findings (verified vs assumed); what was tried and ruled out, and why; current state of files/changes; the exact open problem. Opus continues from there, it does not start over.
 
 ## Verification
-- Always visually test UI/visual changes: reproduce the state, take a screenshot (see Safety: screenshots), and look at it before reporting. "qmllint clean" or "config reloaded" is not verification of how it looks. If it truly cannot be tested without disturbing the live session, use an isolated instance or ask the user to open the state, and say so.
+- Always visually test UI/visual changes: reproduce the state, take a screenshot, and look at it before reporting. "qmllint clean" or "config reloaded" is not verification of how it looks. If it truly cannot be tested without disturbing the live session, use an isolated instance or ask the user to open the state, and say so.
 - Before telling the user something works, verify it yourself with a check proportional to risk (logs, reload, screenshot, test run, grep). Never relay an agent's claim as fact unchecked.
 - Say explicitly what was not verified.
 
@@ -31,7 +31,6 @@
 - Don't put licensed assets (e.g. Font Awesome Pro) into public repos.
 - Public repos (and this file, which is one): never write real setup details into files, notes, tests, comments, commit messages or screenshots. That means real server/host names, tailnet names, URLs, IP/MAC addresses, accounts, emails, serials, tokens. Use placeholders (`jellyfin.example`, `192.0.2.10`, `user@example.com`) and keep real values in files outside the repo. You may tell the user real values in chat, but not write them to the repo.
 - Kill crashed game or app processes proactively. They hold the wine prefix and block the next test.
-- Screenshots (for testing or comparing): capture only the relevant window, better only the relevant part of it, never the whole screen and never the user's real content (their windows, files, messages, browser). For backdrops and tooling on the dotfiles desktop see the dotfiles `AGENTS.md`.
 
 ## Document changes for future agents
 After making changes in any project, record them so the next agent can continue without re-researching:
