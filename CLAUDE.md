@@ -20,7 +20,7 @@
 - Handoff contents: goal; findings (verified vs assumed); what was tried and ruled out, and why; current state of files/changes; the exact open problem. Opus continues from there, it does not start over.
 
 ## Verification
-- Always visually test UI/visual changes: reproduce the state, take a screenshot (grim; see Safety: screenshot rules), and look at it before reporting. "qmllint clean" or "config reloaded" is not verification of how it looks. If it truly cannot be tested without disturbing the live session, use an isolated instance or ask the user to open the state, and say so.
+- Always visually test UI/visual changes: reproduce the state, take a screenshot (see Safety: screenshots), and look at it before reporting. "qmllint clean" or "config reloaded" is not verification of how it looks. If it truly cannot be tested without disturbing the live session, use an isolated instance or ask the user to open the state, and say so.
 - Before telling the user something works, verify it yourself with a check proportional to risk (logs, reload, screenshot, test run, grep). Never relay an agent's claim as fact unchecked.
 - Say explicitly what was not verified.
 
@@ -31,22 +31,16 @@
 - Don't put licensed assets (e.g. Font Awesome Pro) into public repos.
 - Public repos (and this file, which is one): never write real setup details into files, notes, tests, comments, commit messages or screenshots. That means real server/host names, tailnet names, URLs, IP/MAC addresses, accounts, emails, serials, tokens. Use placeholders (`jellyfin.example`, `192.0.2.10`, `user@example.com`) and keep real values in files outside the repo. You may tell the user real values in chat, but not write them to the repo.
 - Kill crashed game or app processes proactively. They hold the wine prefix and block the next test.
-- Screenshot rules:
-  - Never screenshot the whole screen, not for testing, not for comparing.
-  - Capture only the relevant window, better only the relevant part of it, on the correct layer/surface, so no overlapping app gets captured by mistake. E.g. `grim -g "x,y WxH"` with geometry from `hyprctl clients -j` / `hyprctl layers -j`.
-  - Translucent elements (blur/glass/transparency) that need a backdrop: put a generated solid-colour or checkerboard backdrop (a throwaway isolated window) behind the layer and capture that, never the real content behind it.
-  - Never screenshot the user's real content (their windows, files, messages, browser, etc.).
+- Screenshots (for testing or comparing): capture only the relevant window, better only the relevant part of it, never the whole screen and never the user's real content (their windows, files, messages, browser). For backdrops and tooling on the dotfiles desktop see the dotfiles `AGENTS.md`.
 
 ## Document changes for future agents
 After making changes in any project, record them so the next agent can continue without re-researching:
 - Write to the project's existing notes file if there is one (`NOTES.md`, `AGENTS.md`, `docs/`, etc.). Otherwise create `NOTES.md` at the project root.
 - Notes describe the **current state** plus **short caveats**, not a history:
   - **Current state**: what exists and how it works now, and how to build, run or test it.
-  - **Caveats**: one or two lines each: known limitations, things tried that failed and why, unverified assumptions, open follow-ups. In the dotfiles, caveats are about the config side only (e.g. "needs font X installed", "requires the fork, stock Hyprland lacks option Y"); implementation caveats (e.g. "build with flag X, otherwise Z") belong in the app's own repo.
+  - **Caveats**: one or two lines each: known limitations, things tried that failed and why, unverified assumptions, open follow-ups. Implementation caveats (e.g. "build with flag X, otherwise Z") belong in the app's own repo.
   - No dated change logs or "fixed X, then Y" narratives. Histories belong in commit messages or a project-local plan file.
-- Each piece of software documents itself. App internals, design, build and install steps, and what an integration needs live in that app's own repo, never in the dotfiles. This applies to all the user's own projects and custom apps (forks, plugins, tools).
-- The dotfiles notes only record the user's config state per machine: what is installed and linked, which config file controls what, changed system settings, and caveats specific to that machine. For the user's own projects, a line saying where it is installed plus a link to its repo is enough.
-- Never copy concrete config values into the notes (font sizes, opacities, gaps, thresholds, colours, keybind lists, option values). The user changes them by hand all the time, so a copy is stale at once; the config file is the source of truth. Name the file and what it controls (e.g. "Mac-only Ghostty overrides: `config/ghostty/macos.conf`"), not its contents.
+- Each piece of software documents itself: app internals, design, build and install steps, and what an integration needs live in that app's own repo (all the user's own projects, forks, plugins, tools). The dotfiles only record config state; see the dotfiles `AGENTS.md` for the dotfiles notes policy.
 - Notes are read in every future session, so keep them short and factual: update entries in place, remove stale or wrong ones, no contradictions, no secrets, no real setup details (see Safety).
 
 ## No attribution

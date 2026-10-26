@@ -16,7 +16,10 @@ Enforced by `.githooks/pre-commit` (`git config core.hooksPath .githooks`, set b
 
 ### 1. Global rules
 
-Subagent delegation, change documentation (notes = how it works + where it is + short caveats, never copied config values; each app documents itself) and the no-attribution rule live in the global `CLAUDE.md` (this repo's `CLAUDE.md` is linked to `~/.claude*`). They apply here too.
+Subagent delegation/escalation, verification, the general safety rules, the general "document changes" rule (notes = current state + short caveats, no history) and the no-attribution rule live in the global `CLAUDE.md` (this repo's `CLAUDE.md` is linked to `~/.claude*`, so it must stay valid for unrelated projects). They apply here too. The dotfiles-specific parts of the notes policy live here:
+- **Each piece of software documents itself.** App internals, design, build and install steps, and what an integration needs live in that app's own repo, never in the dotfiles. This applies to all the user's own projects and custom apps (forks, plugins, tools). Implementation caveats (e.g. "build with flag X, otherwise Z") belong in the app's own repo.
+- **The dotfiles notes only record the user's config state per machine:** what is installed and linked, which config file controls what, changed system settings, and caveats specific to that machine. For the user's own projects, a line saying where it is installed plus a link to its repo is enough. Caveats here are about the config side only (e.g. "needs font X installed", "requires the fork, stock Hyprland lacks option Y").
+- **Never copy concrete config values into the notes** (font sizes, opacities, gaps, thresholds, colours, keybind lists, option values). The user changes them by hand all the time, so a copy is stale at once; the config file is the source of truth. Name the file and what it controls (e.g. "Mac-only Ghostty overrides: `config/ghostty/macos.conf`"), not its contents.
 
 ### 2. Safety rules learned the hard way (repo-specific)
 
@@ -26,7 +29,7 @@ Subagent delegation, change documentation (notes = how it works + where it is + 
 - Don't touch the screen-sharing portal routing (`config/xdg-desktop-portal`). ScreenCast/RemoteDesktop/Screenshot must stay on the Hyprland portal.
 - **Secrets:** `config/hypr/.secrets` is git-ignored; the tracked `config/hypr/.secrets.example` lists the keys (OpenRouter, Home Assistant URL/token/webhooks). Never print, log or commit values. WiVRn pairing data (`config/wivrn/`) is also not tracked.
 - **Licensed fonts stay out of the repo.** The Font Awesome Pro desktop set is installed in `~/.local/share/fonts/FontAwesomePro/` only (Brands comes from the system package).
-- Screenshot tips: `grim -g "x,y WxH"`; Hyprland dims unfocused windows (focus first when sampling colours); popups open on the *focused* monitor. The user switches workspaces under you: capture only after checking the active workspace and that no foreign window overlaps.
+- **Screenshots:** never capture the whole screen and never the user's real content (their windows, files, messages, browser). Capture only the relevant window, better only the relevant part of it, on the correct layer/surface so no overlapping app is captured: `grim -g "x,y WxH"` with geometry from `hyprctl clients -j` / `hyprctl layers -j`. Translucent elements (blur/glass/transparency) that need a backdrop: put a generated solid-colour or checkerboard backdrop (a throwaway isolated window) behind the layer and capture that, never the real content behind it. Hyprland dims unfocused windows (focus first when sampling colours); popups open on the *focused* monitor. The user switches workspaces under you: capture only after checking the active workspace and that no foreign window overlaps.
 - Never run `theme.py` from a scratch copy with the real `HOME` (it rewrites links in `~/.config` and `~/.local/share/themes`); set `HOME` in the same command.
 
 ## The machines
