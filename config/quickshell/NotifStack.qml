@@ -94,8 +94,10 @@ Item {
         }
         return b
     }
+    property bool openedWithRows: false      // the center was opened with something in it (an empty one only opens for do-not-disturb / IPC)
     onOpenChanged: {
         if (open) {
+            openedWithRows = items.count > 0
             noEmptyStrip = false
             footDelay = Math.min(Math.max(0, Notifs.all.values.length - items.count), sweepMax) * stagger
         } else {
@@ -172,6 +174,8 @@ Item {
         target: items
         function onCountChanged() {
             if (stack.clearing && items.count === 0) { stack.clearing = false; clearLapse.stop(); Popups.close() }
+            // the last card dismissed one by one: the center closes instead of showing the empty strip (do-not-disturb keeps it)
+            else if (stack.open && stack.openedWithRows && items.count === 0 && !Notifs.dnd) Popups.close()
         }
     }
     function clearAll() {
