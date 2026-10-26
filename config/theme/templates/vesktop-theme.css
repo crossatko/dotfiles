@@ -49,6 +49,7 @@
   --font-display: "{{font}}", "gg sans", "Noto Sans", sans-serif;
   --font-headline: "{{font}}", "gg sans", "Noto Sans", sans-serif;
   --font-code: "{{font}}", "gg mono", monospace;
+  --wall-tracking: -0.04em;   /* tighter letter spacing: the mono UI font looks airy at Discord's text sizes next to the terminal */
 
   /* surfaces, current names */
   --background-base-lowest: var(--wall-glass-rail);
@@ -257,3 +258,7 @@ code, [class*="markup"] code, [class*="hljs"] { border-color: var(--wall-line) !
   backdrop-filter: blur(24px);
   border-radius: var(--wall-radius);
 }
+
+/* letter spacing: Discord sets its own on many classes, hence !important; code keeps the font's natural spacing */
+* { letter-spacing: var(--wall-tracking) !important; }
+code, pre, [class*="codeLine"], [class*="hljs"] { letter-spacing: 0 !important; }
