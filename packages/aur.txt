@@ -11,3 +11,6 @@ rife-ncnn-vulkan-bin
 
 # --- desktop
 mpvpaper
+
+# --- virtualization
+quickemu-git
