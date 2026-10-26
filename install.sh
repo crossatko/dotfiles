@@ -2,11 +2,11 @@
 # Arch Linux installer for these dotfiles. Idempotent: every step checks the current state first and a second
 # run changes nothing. Never run it as root (it calls sudo itself where needed).
 #
-#   ./install.sh [--dry-run] [--yes] [--only STAGE[,STAGE...]] [--repos] [--system] [--chsh] [-h|--help]
+#   ./install.sh [--dry-run] [--yes] [--only STAGE[,STAGE...]] [--with BUNDLE[,BUNDLE...]] [--repos] [--system] [--chsh] [-h|--help]
 #
 # Stages (run in this order):
 #   repos     (sudo, opt-in) third-party repos on top of Arch: CachyOS (arch-optimised + [cachyos]) and Chaotic-AUR
-#   packages  multilib, yay, packages/{pacman,aur,flatpak}.txt
+#   packages  multilib, yay, packages/{pacman,aur,flatpak}.txt, plus opt-in bundles packages/optional/NAME.txt (--with NAME)
 #   links     symlinks into $HOME, shell dotfiles, GTK seed, theme seed, web apps, librepods build
 #   system    (sudo) system/etc files, udev rules, /etc/environment host marker, services, ufw, docker group
 # Default: packages + links. `repos` and `system` are opt-in: --repos / --system, or --only (e.g. `--only repos,packages,links`).
@@ -28,6 +28,8 @@ CHSH=0
 WANT_SYSTEM=0
 WANT_REPOS=0
 ONLY=""
+WITH=""
+BUNDLES=()
 CHANGES=0
 FONTS_DIRTY=0
 STAMP="$(date +%Y%m%d-%H%M%S)"
@@ -35,9 +37,24 @@ INSTALL_SKIP="${INSTALL_SKIP:-}"
 TMP_DIRS=()
 KEEPALIVE_PID=
 
+bundle_names() {
+  local f
+  for f in "$PKG_DIR"/optional/*.txt; do
+    [ -e "$f" ] && { f="${f##*/}"; echo "${f%.txt}"; }
+  done
+}
+
+bundle_help() {
+  local b d
+  while IFS= read -r b; do
+    d="$(sed -n '1s/^# Optional bundle: //p' "$PKG_DIR/optional/$b.txt")"
+    printf '  %-16s %s\n' "$b" "${d%.}"
+  done < <(bundle_names)
+}
+
 usage() {
-  cat <<'EOF'
-Usage: ./install.sh [--dry-run] [--yes] [--only STAGE[,STAGE...]] [--repos] [--system] [--chsh] [-h|--help]
+  cat <<EOF
+Usage: ./install.sh [--dry-run] [--yes] [--only STAGE[,STAGE...]] [--with BUNDLE[,BUNDLE...]] [--repos] [--system] [--chsh] [-h|--help]
 
 Arch Linux only. Idempotent; never run as root.
 
@@ -46,7 +63,8 @@ Stages:
             Chaotic-AUR to pacman.conf, with their keys, keyrings and mirrorlists. Does NOT install the CachyOS
             kernel. The repos sit above [core]/[extra], so the next -Syu may swap in optimised rebuilds.
             Opt-in because no package in packages/*.txt needs it.
-  packages  enable multilib, bootstrap yay, install packages/pacman.txt, packages/aur.txt, packages/flatpak.txt
+  packages  enable multilib, bootstrap yay, install packages/pacman.txt, packages/aur.txt, packages/flatpak.txt,
+            then the optional bundles chosen with --with
   links     symlink config into $HOME (backs up real files once), shell dotfiles, GTK seed, theme seed,
             git hooks, web apps, librepods build
   system    (sudo) install system/etc files (udev rules, ...), /etc/environment host marker, enable services,
@@ -56,10 +74,14 @@ Options:
   --dry-run        print every action, change nothing, do not call sudo
   --yes            pass --noconfirm to pacman/yay (no questions; default: pacman asks, unless stdin is not a terminal)
   --only STAGES    comma separated subset of: repos,packages,links,system
+  --with BUNDLES   also install optional bundles (comma separated, or 'all'), see below; runs the packages stage
   --repos          also run the repos stage (default stages: packages,links)
   --system         also run the system stage
   --chsh           change the login shell to zsh (asks for your password)
   -h, --help       this text
+
+Optional bundles (packages/optional/NAME.txt, not installed by default):
+$(bundle_help)
 
 Environment:
   GPU_DRIVER=radeon|intel|virtio|swrast|none
@@ -111,6 +133,12 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     --only=*) ONLY="${1#--only=}" ;;
+    --with)
+      [ $# -ge 2 ] || die "--with needs a value"
+      WITH="$2"
+      shift
+      ;;
+    --with=*) WITH="${1#--with=}" ;;
     --repos) WANT_REPOS=1 ;;
     --system) WANT_SYSTEM=1 ;;
     --chsh) CHSH=1 ;;
@@ -137,6 +165,27 @@ if [ -n "$ONLY" ]; then
   done
 else
   STAGES=(packages links)
+fi
+BUNDLES=()
+if [ -n "$WITH" ]; then
+  mapfile -t avail < <(bundle_names)
+  IFS=',' read -r -a req <<<"$WITH"
+  for s in "${req[@]}"; do
+    if [ "$s" = all ]; then
+      BUNDLES+=("${avail[@]}")
+      continue
+    fi
+    case " ${avail[*]} " in
+      *" $s "*) BUNDLES+=("$s") ;;
+      *) die "unknown bundle '$s' (available: all ${avail[*]})" ;;
+    esac
+  done
+  if [ -n "$ONLY" ]; then
+    case ",$ONLY," in
+      *,packages,*) ;;
+      *) die "--with installs packages, but --only '$ONLY' does not include the packages stage" ;;
+    esac
+  fi
 fi
 [ "$WANT_REPOS" = 1 ] && STAGES+=(repos)
 [ "$WANT_SYSTEM" = 1 ] && STAGES+=(system)
@@ -662,7 +711,30 @@ stage_packages() {
     fi
   fi
 
+  install_bundles
   flatpak_apps
+}
+
+# install_bundles: packages/optional/NAME.txt for each --with bundle. Names may be repo or AUR, so yay handles all.
+install_bundles() {
+  local b names missing
+  for b in $(printf '%s\n' ${BUNDLES[@]+"${BUNDLES[@]}"} | sort -u); do
+    mapfile -t names < <(read_list "$PKG_DIR/optional/$b.txt")
+    missing="$(missing_pkgs "${names[@]}")"
+    if [ -z "$missing" ]; then
+      echo "    ok      optional/$b.txt (${#names[@]} packages installed)"
+    else
+      changed
+      FONTS_DIRTY=1
+      if [ "$DRY" = 1 ]; then
+        # shellcheck disable=SC2086
+        echo "    [dry-run] yay -S ${PAC_FLAGS[*]} $(echo $missing)   (bundle $b)"
+      else
+        # shellcheck disable=SC2086
+        yay -S "${PAC_FLAGS[@]}" $missing
+      fi
+    fi
+  done
 }
 
 flatpak_apps() {
@@ -1037,6 +1109,10 @@ stage_on links && stage_links
 stage_on system && stage_system
 
 echo
+if [ -n "$(bundle_names)" ]; then
+  echo "Optional bundles available: $(bundle_names | paste -sd' ' -); install with --with NAME (or --with all)."
+  echo
+fi
 if [ "$DRY" = 1 ]; then
   echo "Dry run finished: $CHANGES change(s) would be made."
 else

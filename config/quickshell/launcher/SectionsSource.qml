@@ -243,12 +243,13 @@ QtObject {
         return { id: "sec:power:" + id, name: name, subtitle: sub, kind: "power", source: "", glyph: glyph,
                  transient: true, private: true, confirm: confirm, command: command }
     }
+    property var gamingHint: null            // replaces the Gamescope row while gamescope is missing (hint row, Enter copies the install command); set by Launcher
     readonly property var powerRows: [
         power("sleep", "Sleep", "Suspend the computer", "", "~/.config/hypr/scripts/suspend.sh", false),
         power("shutdown", "Shut down", "Power off", "", "hyprshutdown -t 'Shutting down...' --post-cmd 'shutdown now'", true),
         power("reboot", "Restart", "Reboot the computer", "", "hyprshutdown -t 'Restarting...' --post-cmd 'reboot'", true),
         power("exit", "Exit Hyprland", "End the session", "", "hyprshutdown", true),
-        power("gamescope", "Switch to Gamescope", "Log out into the Gamescope session", "",
+        gamingHint || power("gamescope", "Switch to Gamescope", "Log out into the Gamescope session", "",
               "echo gamescope > ~/.local/state/next-session && hyprshutdown -t 'Switching to Gamescope...'", true),
         power("kde", "Switch to KDE", "Log out into the KDE session", "",
               "echo kde > ~/.local/state/next-session && hyprshutdown -t 'Switching to KDE...'", true)

@@ -6,11 +6,6 @@ brave-bin
 1password
 figma-linux-next-bin
 localsend
-tableplus
-rife-ncnn-vulkan-bin
 
 # --- desktop
 mpvpaper
-
-# --- virtualization
-quickemu-git

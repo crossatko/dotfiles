@@ -25,6 +25,8 @@ QtObject {
     id: src
 
     signal updated()
+    property var pkgHint: null                      // hint row (kind "pkg-hint") while quickemu / quickget are missing; set by Launcher from OptionalPackages
+    onPkgHintChanged: changed()
     signal finished()                               // close the launcher (a VM was created and is booting)
     // background downloads (the launcher folder cannot see the root singletons: Launcher.qml wires these to VmService.qml)
     property var jobs: []                           // VmService.allJobs: {id, label (= "os release [edition]"), state, phase, pct, detail, error, name}
@@ -255,7 +257,7 @@ QtObject {
     function rows() {
         const t = top
         if (!t) {
-            const out = [newRow]
+            const out = [pkgHint || newRow]
             for (const j of jobs) out.push(jobRow(j, "vm:job:" + j.label))
             if (error !== "") out.push(info("error", "Could not list VMs", error, "", "red"))
             else if (!loaded) out.push(info("load", "Loading...", ""))

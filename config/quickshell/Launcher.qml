@@ -138,6 +138,9 @@ ModalMenu {
         }
     }
     VpnSource { id: vpnSrc; sw: VpnSwitch; active: lc.shown; section: lc.section; onUpdated: lc.refreshKeep() }   // Tailscale / Mullvad sections
+    Binding { target: vmSrc; property: "pkgHint"; value: OptionalPackages.isMissing("virtualization") ? OptionalPackages.hintRow("virtualization") : null }
+    Binding { target: secSrc; property: "gamingHint"; value: OptionalPackages.isMissing("gaming") ? OptionalPackages.hintRow("gaming", { name: "Switch to Gamescope", subtitle: "Not installed  ·  Enter copies the install command" }) : null }
+    Connections { target: lc; function onShownChanged() { if (lc.shown) OptionalPackages.refresh() } }
     Binding { target: VmService; property: "launcherOpen"; value: vmSrc.current }   // job progress polls at 1 s only while the VM section is shown
     VmSource {                                      // quickemu VMs section
         id: vmSrc
@@ -393,6 +396,10 @@ ModalMenu {
     function runItem(item, arg) {
         if (!item) { close(); return }
         if (item.kind === "info" || item.kind === "bind") return   // loading / error rows in a section
+        if (item.kind === "pkg-hint") {                  // optional bundle missing: copy the install command, stay open
+            Quickshell.execDetached(["sh", "-c", "printf '%s' \"$1\" | wl-copy; notify-send -a Launcher 'Copied install command' \"$1\"", "sh", item.installCommand])
+            return
+        }
         if (item.descend !== undefined) {                // file browser: a folder row descends (query = its path + "/"), nothing recorded
             input.text = item.descend; input.cursorPosition = input.text.length
             return

@@ -8,7 +8,7 @@ maintained alongside it. Linux is the main target. Feel free to borrow anything 
 ```
 config/       app configs, linked into ~/.config (one directory per app)
 system/       root-owned files (udev rules, ...), installed only on request
-packages/     pacman.txt, aur.txt, flatpak.txt
+packages/     pacman.txt, aur.txt, flatpak.txt, optional/ (opt-in bundles)
 install.sh    the Arch Linux installer
 AGENTS.md     how everything works
 ```
@@ -28,6 +28,9 @@ are opt-in: `repos` adds the third-party CachyOS and Chaotic-AUR repos to `pacma
 before the package lists, so pacman never asks which Vulkan driver to use; set `GPU_DRIVER=radeon|intel|virtio|swrast|none`
 to override. NVIDIA is not supported. Pass `--yes` to answer every pacman/yay question automatically. sudo asks for
 the password once. `./install.sh --help` lists the rest.
+
+Big extras (virtualization, gaming, video wallpaper) are optional bundles in `packages/optional/`. Add them with
+`./install.sh --with gaming` (or `--with all`); the Quickshell panels show the install command when one is missing.
 
 A few things, like the Hyprland fork and licensed fonts, are manual. The comments in `packages/*.txt`
 say which.

@@ -666,6 +666,15 @@ ColumnLayout {
         }
     }
 
+    // Videos tab: RIFE (optional bundle) missing -> install hint
+    MissingPackage {
+        visible: page.tab === "videos" && OptionalPackages.isMissing("video-wallpaper")
+        bundle: "video-wallpaper"
+        padX: 12
+        btnRadius: Theme.radiusPage
+        radius: Theme.radiusPage
+    }
+
     // Videos tab: how videos play on this monitor (the playing one and the next one clicked)
     Rectangle {
         visible: page.tab === "videos" && page.videos.length > 0

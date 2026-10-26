@@ -1,0 +1,8 @@
+# Optional bundle: virtualization (VM panel: quickemu, QEMU, TPM, SPICE).
+# Not installed by default; install with `./install.sh --with virtualization`. Quickshell shows an install hint
+# (`yay -S --needed <names below>`) when this feature is missing. One name per line (repo or AUR), `#` starts a comment.
+
+quickemu-git
+qemu-desktop
+swtpm
+spice-gtk

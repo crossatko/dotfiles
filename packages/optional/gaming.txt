@@ -1,0 +1,9 @@
+# Optional bundle: gaming (Steam, gamescope, gamemode, MangoHud).
+# Not installed by default; install with `./install.sh --with gaming`. Quickshell shows an install hint
+# (`yay -S --needed <names below>`) when this feature is missing. One name per line (repo or AUR), `#` starts a comment.
+
+# steam needs [multilib]; the packages stage enables it.
+steam
+gamescope
+gamemode
+mangohud

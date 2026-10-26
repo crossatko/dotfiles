@@ -192,6 +192,8 @@ ColumnLayout {
         }
     }
 
+    MissingPackage { bundle: "virtualization" }   // quickemu / quickget not installed: copy the install command
+
     Notice {
         visible: VmService.vms.length === 0 && VmService.allJobs.length === 0
         Label { text: "Nothing running"; font.bold: true }

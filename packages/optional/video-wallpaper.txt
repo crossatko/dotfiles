@@ -1,0 +1,5 @@
+# Optional bundle: video wallpaper frame interpolation (RIFE).
+# Not installed by default; install with `./install.sh --with video-wallpaper`. Quickshell shows an install hint
+# (`yay -S --needed <names below>`) when this feature is missing. One name per line (repo or AUR), `#` starts a comment.
+
+rife-ncnn-vulkan-bin

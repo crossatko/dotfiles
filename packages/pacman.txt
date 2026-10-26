@@ -9,7 +9,8 @@
 #   - Font Awesome 7 Pro (licensed): ~/.local/share/fonts/FontAwesomePro/. Brands/Free come from otf-font-awesome.
 #   - Paper Mono (UI/terminal font): ~/.local/share/fonts/ (no package).
 #   - GPU drivers and CPU microcode: chosen per machine by install.sh (install_gpu_drivers), not listed here.
-#   - multilib (needed for steam) is enabled by install.sh.
+#   - multilib is enabled by install.sh (32-bit libs for the GPU stack; steam in the gaming bundle needs it).
+#   - Large or niche packages are opt-in bundles in packages/optional/*.txt (`./install.sh --with NAME`).
 
 # --- base / development
 git
@@ -27,8 +28,6 @@ nodejs
 yarn
 rust
 rust-wasm
-php
-mariadb
 valkey
 jq
 ripgrep
@@ -131,7 +130,6 @@ qt6-connectivity
 # --- apps
 discord
 firefox
-thunderbird
 mpv
 nautilus
 gnome-disk-utility
@@ -148,18 +146,9 @@ unrar
 7zip
 gzip
 
-# --- gaming
-steam
-gamescope
-gamemode
-mangohud
-
-# --- containers / virtualization (VM panel uses quickemu from aur.txt)
+# --- containers
 docker
 docker-compose
-qemu-desktop
-swtpm
-spice-gtk
 
 # --- flatpak (apps listed in flatpak.txt)
 flatpak
