@@ -357,7 +357,8 @@ class Integration(unittest.TestCase):
             r = e.run("https://design.example/a", "https://app.webapp.example/b")
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual([json.loads(l) for l in r.stdout.splitlines()],
-                             [{"app": None, "argv": ["brave", "--", "https://design.example/a"], "group": False},
+                             [{"app": None, "argv": ["brave", "--", "https://design.example/a"], "group": False,
+                          "focus": ["hyprctl", "dispatch", 'hl.dsp.focus({window="address:<address of the brave-browser window>"})']},
                               {"app": "tracker", "argv": ["brave", "--app=https://app.webapp.example/b"],
                                "group": False}])
             self.assertIn("unknown key", r.stderr)
@@ -373,6 +374,75 @@ class Integration(unittest.TestCase):
             time.sleep(0.05)
         calls = sorted(c[1:] for c in self.e.calls())
         self.assertEqual(calls, [["--", "https://unknown.example/2"], ["--app=https://tracker.example/1"]])
+
+
+class BrowserFocus(unittest.TestCase):
+    def test_class_selection_prefers_plain_browser_window(self):
+        c = lambda addr, cls, h, **k: dict(address=addr, **{"class": cls, "focusHistoryID": h}, **k)
+        clients = [c("0x1", "brave-chat.example__-Default", 0), c("0x2", "Brave-browser", 3),
+                   c("0x3", "Brave-browser", 1), c("0x4", "chrome-x__-Default", 0), c("0x5", "Brave-browser", 0, mapped=False)]
+        self.assertEqual(R.pick_figma_window(clients, "brave-browser"), "0x3")
+        self.assertIsNone(R.pick_figma_window(clients[:1] + clients[3:4], "brave-browser"))
+
+    def test_browser_class(self):
+        self.assertEqual(R.browser_class(["brave", "--"]), "brave-browser")
+        self.assertEqual(R.browser_class(["/usr/bin/chromium"]), "chromium")
+        self.assertEqual(R.browser_class(["google-chrome-stable"]), "google-chrome")
+
+    def test_focus_waits_for_browser_start(self):
+        class H:
+            n, d, act = 0, [], None
+            ok = True
+            def clients(s):
+                s.n += 1
+                return [{"address": "0x9", "class": "brave-a__-Default", "focusHistoryID": 0}] if s.n < 3 else [
+                    {"address": "0x9", "class": "brave-a__-Default", "focusHistoryID": 0},
+                    {"address": "0xb", "class": "Brave-browser", "focusHistoryID": 1}]
+            def dispatch(s, l):
+                s.d.append(l); s.act = "0xb"; return True
+            def active(s):
+                return s.act
+        h, t = H(), [0.0]
+        old = os.environ.copy()
+        os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = "x"
+        real = shutil.which
+        try:
+            shutil.which = lambda n: "/bin/hyprctl"
+            st = R.figma_focus({}, hypr=h, sleep=lambda s: t.__setitem__(0, t[0] + s), clock=lambda: t[0], lock=False,
+                               cls="brave-browser")
+        finally:
+            shutil.which = real
+            os.environ.clear(); os.environ.update(old)
+        self.assertEqual(st, "focused")
+        self.assertEqual(h.d, ['hl.dsp.focus({window="address:0xb"})'])
+
+    def test_non_hyprland_noop(self):
+        old = os.environ.copy()
+        real = shutil.which
+        try:
+            os.environ.pop("HYPRLAND_INSTANCE_SIGNATURE", None)
+            os.environ["XDG_RUNTIME_DIR"] = tempfile.mkdtemp()
+            shutil.which = lambda n: "/bin/hyprctl"
+            self.assertFalse(R.hypr_available())
+            self.assertEqual(R.figma_focus({}, lock=False, cls="brave-browser"), "no-hyprland")
+            shutil.which = lambda n: None
+            self.assertFalse(R.hypr_available())
+        finally:
+            shutil.which = real
+            os.environ.clear(); os.environ.update(old)
+
+    def test_plan_and_dry_run(self):
+        e = Env()
+        try:
+            r = e.run("https://example.com/x", URL_ROUTER_DRY_RUN="-")
+            self.assertEqual(json.loads(r.stdout)["focus"][:2], ["hyprctl", "dispatch"])
+            r = e.run("https://tracker.example/x", URL_ROUTER_DRY_RUN="-")      # web app link: no browser focus
+            self.assertNotIn("focus", json.loads(r.stdout))
+            e.close(); e = Env(config="focus_browser = no\n")
+            r = e.run("https://example.com/x", URL_ROUTER_DRY_RUN="-")
+            self.assertNotIn("focus", json.loads(r.stdout))
+        finally:
+            e.close()
 
 
 class FakeHypr:

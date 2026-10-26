@@ -180,6 +180,7 @@ wallpaper to hyprpaper on TV resyncs.
 
 - `config/shell/zshrc`: `eval "$(zoxide init zsh)"` stays the LAST line. Bash is the Linux login shell (`install.sh --chsh` switches to zsh).
 - `config/url-router/bin/url-router` is the default http(s) handler (docs in its header, template `config.example`); Brave's "make default" resets the handler.
+  Links sent to the fallback browser focus its plain window (class `Brave-browser`, never `--app` windows; waits up to 10 s for a cold start) via `hl.dsp.focus`; `focus_browser = no` opts out, Hyprland only (elsewhere it execs the browser as before). Web app links are not focused. Real focus is only unit-tested (fake hyprctl), not tried live.
 
 ## macOS
 

@@ -23,3 +23,6 @@
 
 # Figma links: focus the Figma window (Hyprland) after handing it the link. "no" = leave focus alone. Default: yes.
 #focus_figma = no
+
+# Links that go to the fallback browser: focus its (plain, not web app) window, switching workspace (Hyprland). "no" = leave focus alone. Default: yes.
+#focus_browser = no

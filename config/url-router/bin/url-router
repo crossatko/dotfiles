@@ -31,6 +31,10 @@ Config: ${XDG_CONFIG_HOME:-~/.config}/url-router/config (optional; see config.ex
   alias    = <slug> <host> [...]  extra hosts for a web app; "*.example.com" = any sub-domain of example.com
   dry_run  = - | <file>           print (or append to <file>) the argv as JSON instead of running it
   focus_figma = no                do not focus the Figma window after handing it a link (default: yes; Hyprland only)
+  focus_browser = no              do not focus the browser window after a link went to the FALLBACK browser (default:
+                                  yes; Hyprland only; waits up to 10 s if the browser is not running yet). Picks the
+                                  most recently focused plain window of the browser's class (Brave-browser), never an
+                                  --app web app window. Web app links are not focused by this.
   group    = <slug> [...] | *     under Hyprland: when a window of that web app is already open, focus the most
                                   recently focused one, make it a group if it is not one, and open the link's new
                                   window into that group (auto_group; else joined with the Lua group:add after it
@@ -190,7 +194,7 @@ def webapps(data_home):
 
 # ---- config --------------------------------------------------------------------------------------------------------
 def load_config(config_home):
-    cfg = {"fallback": None, "disable": set(), "alias": {}, "dry_run": None, "group": set(), "focus_figma": True}
+    cfg = {"fallback": None, "disable": set(), "alias": {}, "dry_run": None, "group": set(), "focus_figma": True, "focus_browser": True}
     path = os.path.join(config_home, "url-router", "config")
     try:
         with open(path, encoding="utf-8") as f:
@@ -215,6 +219,8 @@ def load_config(config_home):
             cfg["dry_run"] = v
         elif k == "group":
             cfg["group"].update(v.split())
+        elif k == "focus_browser":
+            cfg["focus_browser"] = v.lower() not in ("no", "off", "false", "0")
         elif k == "focus_figma":
             cfg["focus_figma"] = v.lower() not in ("no", "off", "false", "0")
         else:
@@ -294,14 +300,27 @@ FIGMA_CLASS = "figma-linux-next"        # the app's window class (StartupWMClass
 FOCUS_WAIT = 10.0                       # seconds the detached helper waits for the window (cold start)
 
 
-def pick_figma_window(clients):
-    """address of the Figma window to focus from `hyprctl -j clients` data: exact class match, mapped, most
-    recently focused first (focusHistoryID >= 0); None if there is none"""
+def browser_class(argv):
+    """window class of a plain (non --app) window of the fallback browser, lowercase; None if unknown"""
+    name = os.path.basename(argv[0]).lower() if argv else ""
+    if name.startswith("brave"):
+        return "brave-browser"
+    if name.startswith("google-chrome") or name == "chrome":
+        return "google-chrome"
+    if name.startswith("chromium"):
+        return "chromium"
+    return name or None
+
+
+def pick_figma_window(clients, cls=None):
+    """address of the window to focus from `hyprctl -j clients` data (default: Figma): exact class match
+    (case-insensitive), mapped, most recently focused first (focusHistoryID >= 0); None if there is none"""
+    cls = cls or FIGMA_CLASS
     best = None
     for c in clients if isinstance(clients, list) else []:
         if not isinstance(c, dict) or c.get("mapped") is False:
             continue
-        if FIGMA_CLASS not in ((c.get("class") or "").lower(), (c.get("initialClass") or "").lower()):
+        if cls not in ((c.get("class") or "").lower(), (c.get("initialClass") or "").lower()):
             continue
         addr = str(c.get("address") or "")
         if not ADDR.match(addr):
@@ -344,24 +363,33 @@ def figma_focus_cmd(addr):
     return ["hyprctl", "dispatch", lua_focus(addr)]
 
 
-def figma_focus(cfg, hypr=None, sleep=None, clock=None, lock=True):
-    """wait (bounded) for the Figma window and focus it. Returns a short status string; never raises.
-    One helper at a time (flock): a second link while one is waiting does not start another."""
+def hypr_available():
+    """True when hyprctl exists and a live Hyprland is reachable; sets HYPRLAND_INSTANCE_SIGNATURE if it was missing"""
+    if not shutil.which("hyprctl"):
+        return False
+    if not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        sig = hypr_signature(os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid())
+        if not sig:
+            return False
+        os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = sig
+    return True
+
+
+def figma_focus(cfg, hypr=None, sleep=None, clock=None, lock=True, cls=None, lockname="url-router-figma.lock"):
+    """wait (bounded) for the Figma window (or, with cls, the window of that class) and focus it. Returns a short
+    status string; never raises. One helper at a time (flock): a second link while one is waiting does not start another."""
     import time
     sleep = sleep or time.sleep
     clock = clock or time.monotonic
     try:
         if not shutil.which("hyprctl"):
             return "no-hyprctl"
-        if not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
-            sig = hypr_signature(os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid())
-            if not sig:
-                return "no-hyprland"
-            os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = sig
+        if not hypr_available():
+            return "no-hyprland"
         if lock:
             import fcntl
             rt = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
-            fd = os.open(os.path.join(rt, "url-router-figma.lock"), os.O_CREAT | os.O_RDWR, 0o600)
+            fd = os.open(os.path.join(rt, lockname), os.O_CREAT | os.O_RDWR, 0o600)
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except OSError:
@@ -371,7 +399,7 @@ def figma_focus(cfg, hypr=None, sleep=None, clock=None, lock=True):
         addr, tries = None, 0
         while clock() < end:
             clients = hypr.clients()
-            addr = pick_figma_window(clients) if clients is not None else None
+            addr = pick_figma_window(clients, cls) if clients is not None else None
             if addr:
                 hypr.dispatch(lua_focus(addr))
                 tries += 1
@@ -401,6 +429,11 @@ def plan(url, apps, cfg):
     if "--" not in argv[1:] and url.startswith("-"):  # a leading "-" must never become a flag
         argv = argv + ["--"]
     return None, argv + [url]
+
+
+def browser_focus_wanted(slug, argv, cfg):
+    """class to focus after a FALLBACK-browser launch, or None (routed, opted out, unknown browser)"""
+    return browser_class(argv) if slug is None and cfg["focus_browser"] else None
 
 
 # ---- Hyprland grouping (opt-in: group = <slug>... | *) ---------------------------------------------------------------
@@ -564,7 +597,9 @@ def main(args):
     if dry:
         out = "".join(json.dumps({"app": s, "argv": v, "group": group_enabled(s, cfg)}
                        | ({"focus": figma_focus_cmd("<address of the %s window>" % FIGMA_CLASS)}
-                          if s == "figma" and cfg["focus_figma"] else {})) + "\n" for s, v in plans)
+                          if s == "figma" and cfg["focus_figma"] else {})
+                       | ({"focus": figma_focus_cmd("<address of the %s window>" % browser_focus_wanted(s, v, cfg))}
+                          if browser_focus_wanted(s, v, cfg) else {})) + "\n" for s, v in plans)
         if dry in ("-", "1"):
             sys.stdout.write(out)
         else:
@@ -575,6 +610,8 @@ def main(args):
     hypr = None
     rc = 0
     want_focus = False
+    browser_cls = None
+    can_focus = None
     for i, (slug, argv) in enumerate(plans):
         log(("web app %s" % slug) if slug else "fallback browser")
         native = slug == "figma" and argv[0] == FIGMA_APP     # not a webapp_figma.desktop entry
@@ -593,6 +630,13 @@ def main(args):
                 subprocess.Popen(argv, start_new_session=True, stdin=subprocess.DEVNULL)
                 want_focus = cfg["focus_figma"]
                 continue
+            bc = browser_focus_wanted(slug, argv, cfg)
+            if bc:
+                can_focus = hypr_available() if can_focus is None else can_focus
+            if bc and can_focus:    # keep this process: it focuses the browser window after the launch
+                subprocess.Popen(argv, start_new_session=True, stdin=subprocess.DEVNULL)
+                browser_cls = bc
+                continue
             if i == len(plans) - 1:
                 os.execvp(argv[0], argv)
             subprocess.Popen(argv, start_new_session=True)
@@ -601,6 +645,9 @@ def main(args):
             rc = 1
     if want_focus and detach():           # parent returns at once; the child waits for the window and focuses it
         log("figma focus: " + figma_focus(cfg))
+        os._exit(0)
+    if browser_cls and detach():
+        log("browser focus: " + figma_focus(cfg, cls=browser_cls, lockname="url-router-browser.lock"))
         os._exit(0)
     return rc
 
