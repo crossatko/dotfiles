@@ -1,0 +1,9 @@
+#!/bin/bash
+# Lock the session: the shell's lock screen (Lock.qml), else hyprlock when the shell is not running or its PAM service is
+# not installed (`./install.sh --system`), so a missing piece never leaves the session unlocked.
+# Exit 0 = shell lock requested, 3 = hyprlock fallback. Callers: hypridle lock_cmd, the SUPER+SHIFT+L bind, lock-wait.
+# QS_LOCK_ARGS: extra qs arguments (tests: "-p /path/to/config").
+qs_args=(${QS_LOCK_ARGS:-})
+if [ "$(qs "${qs_args[@]}" ipc call lock lock 2>/dev/null)" = ok ]; then exit 0; fi
+pidof hyprlock >/dev/null || hyprlock
+exit 3

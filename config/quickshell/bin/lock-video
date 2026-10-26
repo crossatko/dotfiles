@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Lock screen video wallpaper info: `lock-video <connector>` prints one JSON line
+{"file", "bursts": [t0..tK], "idx", "cyc"} for the play-once video wallpaper (mpvpaper + theme/mpv/winddown.lua) of that
+output, or nothing (exit 1) when it has none (image / loop wallpaper, no baked file, player gone).
+While an ext-session-lock is held the compositor draws only the lock surfaces, so the lock plays the same baked clip
+itself (LockVideo.qml): `file` = the player's file, burst i = bursts[i]..bursts[i+1], `idx` = the NEXT burst (the held
+frame is bursts[idx]). Read-only: the state file written by theme.py ($XDG_RUNTIME_DIR/theme-video/<conn>.json), the
+player's /proc cmdline (script-opts winddown-bursts / -cyc / -station) and its station file."""
+import json
+import os
+import sys
+
+OK = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-")
+
+
+def main(conn):
+    if not 0 < len(conn) <= 40 or not OK.issuperset(conn):
+        return 1
+    d = (os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/theme-{os.getuid()}") + "/theme-video/"
+    try:
+        with open(d + conn + ".json") as f:
+            st = json.load(f)
+        if st.get("mode") != "once" or not st.get("baked") or not os.path.isfile(st["file"]):
+            return 1
+        pid = int(st["pid"])
+        with open(f"/proc/{pid}/comm") as f:
+            if f.read().strip() != "mpvpaper":
+                return 1
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            args = f.read().decode("utf-8", "replace").split("\0")
+    except (OSError, ValueError, KeyError, TypeError):
+        return 1
+    opts = {}
+    for a in " ".join(args).split(" "):   # mpvpaper -o takes ONE argument holding every mpv option
+        if a.startswith("script-opts="):
+            for kv in a[len("script-opts="):].split(","):
+                k, _, v = kv.partition("=")
+                opts[k] = v
+    try:
+        bursts = [float(x) for x in opts.get("winddown-bursts", "").split("/") if x]
+        cyc = int(opts.get("winddown-cyc", "0"))
+    except ValueError:
+        return 1
+    if len(bursts) < 2:
+        return 1
+    k = len(bursts) - 1
+    idx = 0
+    try:
+        with open(opts.get("winddown-station", "")) as f:
+            tag, _, n = f.read().strip().partition(":")
+        if tag == opts.get("winddown-tag") and n.isdigit():
+            idx = int(n) % k
+    except OSError:
+        pass
+    print(json.dumps({"file": st["file"], "bursts": bursts, "idx": idx, "cyc": cyc}))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1]) if len(sys.argv) > 1 else 1)

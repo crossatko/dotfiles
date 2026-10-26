@@ -1,0 +1,24 @@
+#!/bin/bash
+# Is the compositor holding a session lock that no locker is alive to own (the lock screen's client died)?
+# Exit 0 stranded, 1 unlocked, 2 undetermined. $1 = pid of the asking shell (a crash re-execs in place), ignored
+# in the "another locker is running" check. Hyprland reports no lock state directly, but an active ext-session-lock
+# is one of the reasons a monitor cannot go solitary: LOCK in solitaryBlockedBy (stays set after the client dies).
+# A monitor with no workspace yet is blocked by WORKSPACE first, so a missing LOCK there means nothing was asked.
+# Needs misc:allow_session_lock_restore so that a new client may take the lock over (hypr/hyprland/settings.lua).
+monitors=$(hyprctl -j monitors 2>/dev/null) || exit 2
+state=$(jq '
+  def blockers: .solitaryBlockedBy // [];
+  if any(.[]; blockers | index("LOCK")) then 0
+  elif any(.[]; blockers | index("WORKSPACE") | not) then 1
+  else 2 end' <<<"$monitors" 2>/dev/null)
+case $state in 0 | 1) ;; *) exit 2 ;; esac
+[ "$state" = 1 ] && exit 1
+# another running locker may own the lock: do not steal it. That is hyprlock, or a second shell of the SAME config (same
+# command line as the asker; the Twitch player and other Quickshell apps do not lock, so they do not count).
+pgrep -u "$UID" -x hyprlock >/dev/null && exit 2
+own=$(tr '\0' ' ' <"/proc/${1:-0}/cmdline" 2>/dev/null)
+for pid in $(pgrep -u "$UID" -x 'quickshell|qs'); do
+  [ "$pid" = "$1" ] && continue
+  [ "$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null)" = "$own" ] && exit 2
+done
+exit 0

@@ -117,7 +117,7 @@ Item {
     // Settings > Glass: the live solid_glass values when the compositor has them (Theme.glass and GlassTuneCtl read
     // them back); otherwise (stock Hyprland, other blur variant, not read yet) the page's built-in defaults. The lens is
     // in-app, so it works without the compositor's glass either way.
-    readonly property var gv: Theme.glass && GlassTuneCtl.ready ? GlassTuneCtl.values : GlassTuneCtl.defaults()
+    readonly property var gv: GlassTuneCtl.effective
 
     Loader {
         active: sl.lensOn

@@ -50,7 +50,7 @@ bind({ mod, "M" }, "Messages", exec(apps.messages))
 bind({ mod, "SHIFT", "Q" }, "Close window", hl.dsp.window.close())
 bind({ mod, "SHIFT", "Escape" }, "Leave computer", leave_computer)
 
-bind({ mod, "SHIFT", "L" }, "Lock screen", exec("hyprlock"))
+bind({ mod, "SHIFT", "L" }, "Lock screen", exec("~/.config/quickshell/bin/lock-now")) -- shell lock screen, hyprlock when it is unavailable
 
 bind({ mod, "F" }, "Toggle fullscreen", hl.dsp.window.fullscreen({ action = "toggle" }))
 bind({ mod, "V" }, "Toggle floating", hl.dsp.window.float({ action = "toggle" }))

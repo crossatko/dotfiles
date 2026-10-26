@@ -29,6 +29,7 @@ ShellRoot {
     Toasts { bars: root.bars }
     Osd { id: osd; bars: root.bars }
     BtNotifier {}
+    Lock { id: lockService }
 
     // one popup host per screen; Popups.* says which is open
     Variants {
@@ -57,6 +58,16 @@ ShellRoot {
         }
         function close(): void { Popups.close() }
         function esc(): void { Popups.esc() }
+    }
+
+    // qs ipc call lock lock | locked | secure | status   (SUPER+SHIFT+L, hypridle lock_cmd; bin/lock-wait before suspend)
+    // lock -> "ok" | "missing-pam" (PAM service not installed: `./install.sh --system`); locked / secure -> "true" | "false"
+    IpcHandler {
+        target: "lock"
+        function lock(): string { return lockService.lock() ? "ok" : "missing-pam" }
+        function locked(): string { return lockService.currentlyLocked() ? "true" : "false" }
+        function secure(): string { return lockService.isSecure() ? "true" : "false" }
+        function status(): string { return lockService.status() }
     }
 
     // qs ipc call osd brightness   (shows the focused display's brightness)

@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Hold / release the desktop's play-once video players around the lock (Lock.qml):
+  lock-desktop-video hold <connector>...     pause every player that is mid-burst; prints the connectors it paused
+  lock-desktop-video release <connector>...  unpause those again (they finish their burst from the same frame)
+While locked the mpvpaper layer is hidden and gets no frame callbacks: a player left running stalls and then races through
+the backlog at unlock (the wallpaper fast-forwards). Held, it stays on the frame the unlock transition's snapshot shows.
+Players that are already parked (paused) are left alone. Only `_socket`, like theme/mpv/replay.py (same state files)."""
+import os
+import sys
+
+import _socket
+
+OK = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-")
+
+
+def ask(conn, cmd):
+    """send one mpv IPC command, return its reply line (None: no player / unreachable)"""
+    if not 0 < len(conn) <= 40 or not OK.issuperset(conn):
+        return None
+    d = (os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/theme-{os.getuid()}") + "/theme-video/"
+    try:
+        with open(d + conn + ".json") as f:
+            if '"mode": "once"' not in f.read():
+                return None
+    except OSError:
+        return None
+    s = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    s.settimeout(0.3)
+    try:
+        s.connect(d + conn + ".sock")
+        s.sendall(cmd + b"\n")
+        buf = b""
+        while b'"request_id":5' not in buf:
+            chunk = s.recv(4096)
+            if not chunk:
+                return None
+            buf += chunk
+        return next(ln for ln in buf.split(b"\n") if b'"request_id":5' in ln)
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
+def main(argv):
+    if len(argv) < 2 or argv[0] not in ("hold", "release"):
+        return 2
+    for conn in argv[1:]:
+        if argv[0] == "hold":
+            r = ask(conn, b'{"command":["get_property","pause"],"request_id":5}')
+            if r and b'"data":false' in r:
+                ask(conn, b'{"command":["set_property","pause",true],"request_id":5}')
+                print(conn)
+        else:
+            ask(conn, b'{"command":["set_property","pause",false],"request_id":5}')
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

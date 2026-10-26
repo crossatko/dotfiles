@@ -28,8 +28,8 @@ Item {
         SequentialAnimation on scale {
             running: rs.busy
             loops: Animation.Infinite
-            NumberAnimation { to: 0.7; duration: 380; easing.type: Easing.InOutSine }
-            NumberAnimation { to: 1; duration: 380; easing.type: Easing.InOutSine }
+            NumberAnimation { to: 0.7; duration: Theme.busyPulseMs; easing.type: Easing.InOutSine }
+            NumberAnimation { to: 1; duration: Theme.busyPulseMs; easing.type: Easing.InOutSine }
             onRunningChanged: if (!running) glyph.scale = 1
         }
     }

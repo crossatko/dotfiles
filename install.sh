@@ -1121,6 +1121,8 @@ stage_system() {
     sudo_install "$SYS_DIR/udev/rules.d/$f.rules" "/etc/udev/rules.d/$f.rules" && udev_changed=1
   done
   sudo_install "$SYS_DIR/systemd/logind.conf.d/inhibit-delay.conf" /etc/systemd/logind.conf.d/inhibit-delay.conf && units_changed=1
+  # lock screen password check (config/quickshell/Lock.qml); without it `lock-now` falls back to hyprlock
+  sudo_install "$SYS_DIR/pam.d/quickshell-lock" /etc/pam.d/quickshell-lock || true
 
   # tty1 autologin: the file names one user, replaced with the current one
   tmp="$(mktmp)/autologin.conf"

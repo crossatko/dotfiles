@@ -11,6 +11,7 @@ Rectangle {
     property string placeholder: ""
     property bool error: false
     property bool flat: false
+    property bool dropRepeat: false   // swallow key auto-repeat except Backspace / Delete (the lock screen: a stuck key must not type)
     property int pixelSize: Theme.fontSize
     property alias horizontalAlignment: field.horizontalAlignment
     property real outerRadius: Theme.radius      // radius of whatever the field sits in (see Btn)
@@ -57,6 +58,8 @@ Rectangle {
         activeFocusOnTab: box.enabled
         clip: true
         onAccepted: box.accepted()
+        Keys.priority: Keys.BeforeItem
+        Keys.onPressed: e => { if (box.dropRepeat && e.isAutoRepeat && e.key !== Qt.Key_Backspace && e.key !== Qt.Key_Delete) e.accepted = true }
         Keys.onEscapePressed: { Popups.escAt = Date.now(); box.cancelled() }
         Label {
             visible: field.text === ""

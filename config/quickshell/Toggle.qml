@@ -44,8 +44,8 @@ Item {
         SequentialAnimation on opacity {
             running: sw.busy
             loops: Animation.Infinite
-            NumberAnimation { to: 0.35; duration: 380; easing.type: Easing.InOutSine }
-            NumberAnimation { to: 1; duration: 380; easing.type: Easing.InOutSine }
+            NumberAnimation { to: 0.35; duration: Theme.busyPulseMs; easing.type: Easing.InOutSine }
+            NumberAnimation { to: 1; duration: Theme.busyPulseMs; easing.type: Easing.InOutSine }
             onRunningChanged: if (!running) knob.opacity = 1
         }
     }

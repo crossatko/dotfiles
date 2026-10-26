@@ -154,6 +154,15 @@ Singleton {
     readonly property int popupMoveMs: popupMs(Motion.baseMs)
     readonly property int popupFadeOutMs: popupMs(Motion.baseMs * 0.35)
     readonly property int popupFadeInMs: popupMs(Motion.baseMs * 0.65)
+    // feedback motion: one half of the "busy" pulse (Toggle knob, RowState glyph, lock dots; not speed-scaled: it is a
+    // state, not a transition) and the wrong-password shake (whole run, speed-scaled) with its amplitude
+    readonly property int busyPulseMs: 380
+    readonly property int shakeMs: popupMs(Motion.baseMs * 1.5)
+    readonly property int shakePx: 10
+    // how much the lock screen darkens the wallpaper (MultiEffect brightness, additive): the blurred backdrop and what the glass
+    // clock / dots refract (GlassShape `dim`) use the same amount
+    readonly property real lockDim: LockPrefs.dim    // Settings > Lock "Wallpaper dim" (default 0.5)
+    readonly property int lockRevealMs: popupMs(Motion.baseMs * 2.5)   // lock screen -> desktop transition after unlock
     // curve (Motion.popupCurve): open / move ease out (Back overshoots); close = the same family decelerating WITHOUT
     // overshoot (Back closes with OutCubic), so it is visible to the very end: no last-frame drop from an ease-in, no
     // crossing of 0 before the end (2026-10-20; before: In* curves, and Back closed early, see PopupHost)

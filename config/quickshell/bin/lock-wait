@@ -1,0 +1,15 @@
+#!/bin/bash
+# Lock now and wait until the compositor confirms the lock is secure (every output covered), bounded by $1 ms
+# (default 4000: below logind's default 5 s InhibitDelayMaxSec, which system/etc/systemd/logind.conf.d raises).
+# For hypridle's before_sleep_cmd: `loginctl lock-session` returns at once, the machine could suspend unlocked.
+# Exit 0 secure, 1 gave up (the caller suspends anyway: logind does not wait longer).
+qs_args=(${QS_LOCK_ARGS:-})   # tests: e.g. "-p /path/to/config" for another instance
+budget=${1:-4000}
+end=$(( $(date +%s%3N) + budget ))
+"$(dirname "$0")/lock-now"
+[ $? = 3 ] && exit 0   # hyprlock fallback: nothing to poll (it blocks until unlocked)
+while [ "$(date +%s%3N)" -lt "$end" ]; do
+  [ "$(qs "${qs_args[@]}" ipc call lock secure 2>/dev/null)" = true ] && exit 0
+  sleep 0.1
+done
+exit 1

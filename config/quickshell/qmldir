@@ -98,3 +98,21 @@ NotifSlot 1.0 NotifSlot.qml
 singleton VmService 1.0 VmService.qml
 VmChip 1.0 VmChip.qml
 VmPanel 1.0 VmPanel.qml
+Lock 1.0 Lock.qml
+LockView 1.0 LockView.qml
+GlassText 1.0 GlassText.qml
+GlassShape 1.0 GlassShape.qml
+GlassBead 1.0 GlassBead.qml
+GlassTextFlat 1.0 GlassTextFlat.qml
+GlassMask 1.0 GlassMask.qml
+LockVideo 1.0 LockVideo.qml
+LockClock 1.0 LockClock.qml
+LockField 1.0 LockField.qml
+LockDots 1.0 LockDots.qml
+LockReveal 1.0 LockReveal.qml
+LockPreview 1.0 LockPreview.qml
+singleton LockPrefs 1.0 LockPrefs.qml
+singleton LockWallpapers 1.0 LockWallpapers.qml
+PrefSlider 1.0 PrefSlider.qml
+PrefToggle 1.0 PrefToggle.qml
+SettingsLock 1.0 SettingsLock.qml

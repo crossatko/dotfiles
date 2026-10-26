@@ -295,3 +295,6 @@ hl.config({
 hl.config({ master = { new_status = "master" } })
 hl.config({ scrolling = { fullscreen_on_one_column = true } })
 hl.config({ misc = { force_default_wallpaper = -1, disable_hyprland_logo = true } })
+-- a restarted Quickshell may take over the session lock of a crashed one (Lock.qml, bin/lock-stranded); without it the
+-- compositor refuses a new lock client and the screen stays on the red failsafe
+hl.config({ misc = { allow_session_lock_restore = true } })

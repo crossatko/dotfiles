@@ -41,7 +41,7 @@ zellij claude-tabs, AeroSpace fork, librepods) live in their own repos, only the
 ## Machines
 
 - Plain Arch Linux (CachyOS repos are only an opt-in), **Hyprland with the native Lua config** (`hl.*`), Quickshell (QML) for
-  bar/popups/launcher/notifications/Settings, hyprpaper, hyprlock.
+  bar/popups/launcher/notifications/Settings/lock screen, hyprpaper (hyprlock = fallback only, below).
 - **Battlestation** (primary desktop): two 2560x1440 monitors (360 Hz OLED + 60 Hz), RX 9070 XT, a living-room 4K TV output for Steam Big Picture/gamescope
   sessions. Runs the user's **Hyprland fork** at `/usr/local/bin/Hyprland` (glass compositing: `solid_glass`, `layer_alpha_ref`, workspace-created-empty fix).
   Corne keyboard with VIA.
@@ -135,6 +135,43 @@ config/aerospace karabiner swiftbar  macOS only
   own file. New popup: file + `PopupHost` switch/width entries + chip `bar.pop` + qmldir. New Settings page: `allPages` in `Settings.qml` + qmldir (hooks
   documented in its header). New bar widget: registry entry in `BarWidgets.qml`. Bar chips: never set `implicitWidth`, never `BarLabel` with the icon font (use
   `BarIcon`).
+- **Lock screen** (replaces hyprlock; `Lock.qml` service + `LockView/LockClock/LockField/LockDots/LockVideo/LockReveal.qml`, glass in
+  `GlassShape/GlassText/GlassBead.qml`, `qs ipc call lock lock|locked|secure|status`): an ext-session-lock inside the main shell. Callers go
+  through `bin/lock-now` (hypridle `lock_cmd`, SUPER+SHIFT+L; falls back to hyprlock when the shell or the PAM service is missing), hypridle
+  `before_sleep_cmd` (workstation) = `bin/lock-wait` (blocks until `secure`, 4 s cap). Password = PAM service `quickshell-lock`
+  (`system/etc/pam.d/`, installed only by `install.sh --system`; until then the lock refuses with `missing-pam`). A crashed shell leaves
+  Hyprland's failsafe; the restarted shell takes the lock over (`bin/lock-stranded`, needs `misc:allow_session_lock_restore`, set in
+  `settings.lua`; a test shell killed while locked re-locks on restart).
+  Each monitor shows its own wallpaper still (`LockWallpapers`: theme.py `wallpapers.json` by monitor key, else the primary's), pre-decoded at
+  shell start (same url/size as the lock's Image: a cache hit), and its own video clip. Locking is immediate unless outputs changed in the
+  last 1.5 s (then the old 500 ms settle); `LockView` is compiled once at start. Measured in the nested session: `lock-now` returns in
+  ~15 ms; lock surfaces created ~5 ms later, the compositor's configure arrives ~150 ms after that and secure ~230 ms (compositor / window
+  setup, not shell work). Look: blurred wallpaper, glass clock (one `GlassText` per character: no melting between glyphs; a changed digit
+  morphs between two shape fields) forming left to right after the lock is up, flat date, no field/labels: typed characters are glass beads (`LockDots`, ListModel: only the new bead animates; pulse while PAM
+  checks, red + shake + clear when wrong). Glass = `shaders/glassfield.frag` (once per mask, RGBA16F: coverage, smooth multi-radius blurred
+  height clipped to the glyph, shadow blur) + `glasstext.frag` (normals from that height, refraction of the SHARP scene, fresnel
+  reflection, soft highlights, shadow); rebuild with `qsb --qt6`. Masks render 2x (mipmapped) on scale-1 outputs. Driven by Settings > Glass
+  (`GlassTuneCtl.effective`) but mapped: frost/clarity ignored, tint/darkening faint. No compositor glass on a lock surface; without
+  `Theme.glass`: `GlassTextFlat` + flat dots. All motion goes through `Theme.popupMs` (animation speed; off = instant).
+  Lock/unlock transition: right before the lock is taken, `grim -t ppm` snapshots every output into `$XDG_RUNTIME_DIR/qs-lock` (0700,
+  deleted on unlock; skipped on a stranded takeover; ~15 ms, 120 ms cap, a late one is dropped). The snapshot covers the surface from its first frame, a glass ring
+  (`LockReveal`, `shaders/lockreveal.frag`) closes over it, and after a correct password the ring opens back onto it before
+  `locked = false` (`Theme.lockRevealMs`). No snapshot = instant. Caveat: the desktop may have changed while locked (e.g. the video
+  wallpaper advanced), so the last transition frame can differ from the real desktop.
+  Settings > Lock screen (`SettingsLock.qml`, rows `PrefSlider`/`PrefToggle`) edits `LockPrefs` (lock.json next to animations.json,
+  same storage pattern as Motion; `qs ipc call lockprefs ...`): dim (`Theme.lockDim`, blurred backdrop and what the glass refracts), blur,
+  clock/dot size, date, 24h, clock reveal, snapshot, unlock ring, video bursts; defaults = the stock look. Its preview (`LockPreview`) is
+  a real `LockView` with `preview: true` (no input/video/lock) at a virtual 1920x1080, 16:9. Per-monitor stills: `LockWallpapers`. Backdrop chain is
+  `bleed` px larger than the screen (no dark blur edges); the video goes in as its own layer (a ShaderEffectSource of the
+  VideoOutput inside another layer stays empty). Play-once video wallpapers: `LockVideo` plays the same baked clip (QtMultimedia, paused =
+  no decode, ~0 % CPU; `ready` only after a real decoded frame, else the still stays; re-parks if the backend stops a player on its own, seen on a
+  second surface right after loading) and never seeks except to park and at the clip's wrap (seeking a paused player showed a keyframe: jumps); one burst
+  when the lock engages (`LockView.engaged` = secure; surfaces exist earlier), and on typing / Enter (`bin/lock-video` reads the desktop
+  player's state). The desktop player is NOT advanced while locked (hidden, it stalled and fast-forwarded at unlock): before the snapshot,
+  `bin/lock-desktop-video hold` pauses a player that is mid-burst and `release` resumes it after unlock, so the reveal ends on the frame
+  the desktop is really on. Image/loop wallpapers show the still. Test hooks: `QS_LOCK_PAM_DIR`,
+  `QS_LOCK_PAM_SERVICE`, `QS_LOCK_WALLPAPER`, `QS_LOCK_VIDEO`, `QS_LOCK_ARGS`, `QS_LOCK_CLOCK` (fixed clock text; several separated by spaces cycle every 3 s), `QS_WALLPAPERS_FILE`. Revert to hyprlock: point
+  the two `lock_cmd`s and the bind back at `hyprlock` (`hyprlock.conf` is untouched).
 - `Theme.edgeGap` is NOT the user's `edgeGap` key (that is `Theme.gapOut`).
 - Appearance (`appearance.json`) is written only by `Appearance.qml`; Hyprland side is `hypr/hyprland/managed.lua` (loaded last via `pcall(require)`, no
   hand-written settings there). Adding keys: deploy theme files, then Hyprland files, then Quickshell files (every intermediate state must load). Animation base

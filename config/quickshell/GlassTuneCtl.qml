@@ -119,6 +119,15 @@ Singleton {
     property string guard: "checking"
     property string guardError: ""
     readonly property bool ready: guard === "ok"
+    // what shell-drawn glass (slider lens, lock screen) uses: the live values when the compositor has solid_glass,
+    // else the page's defaults; and the tint as a colour (alpha = absorption), from the theme bg when tintFromBg
+    readonly property var effective: Theme.glass && ready ? values : defaults()
+    readonly property color effectiveTint: {
+        const t = effective.tint
+        const a = ((t >>> 24) & 255) / 255
+        return tintFromBg && Theme.glass ? Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, a)
+                                         : Qt.rgba(((t >>> 16) & 255) / 255, ((t >>> 8) & 255) / 255, (t & 255) / 255, a)
+    }
     // the running Hyprland has no decoration:blur:solid_glass:* options (stock build)
     property bool unsupported: false
     function fail(msg) { guard = "error"; guardError = msg; status = "" }
