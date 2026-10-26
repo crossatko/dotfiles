@@ -36,7 +36,6 @@ local workspaces = {
 		monitor = mediaWorkspaceOutput,
 		layout = "monocle",
 		no_border = true,
-		no_rounding = true,
 		gaps_in = 0,
 		gaps_out = 0,
 	},
@@ -51,7 +50,6 @@ for _, ws in ipairs(workspaces) do
 		monitor = ws.monitor,
 		layout = ws.layout,
 		no_border = ws.no_border,
-		no_rounding = ws.no_rounding,
 		gaps_in = ws.gaps_in,
 		gaps_out = ws.gaps_out,
 		on_created_empty = ws.app,
@@ -59,6 +57,10 @@ for _, ws in ipairs(workspaces) do
 		persistent = ws.persistent or false,
 	})
 end
+
+-- Workspace 9 (monocle): tiled windows are square; floating ones (quickshell cards etc.) keep their
+-- rounding. A workspace rule's no_rounding would square the floating ones too.
+hl.window_rule({ name = "monocle-square", rounding = 0, match = { float = false, workspace = "9" } })
 
 -- Battlestation: the right strip reserved for the pinned video window is a monitor reserved_area
 -- toggled by scripts/pip-reserve.lua (a w[p1-9] workspace rule only matched the workspace that owns the
