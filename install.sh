@@ -311,6 +311,9 @@ read_list() {
 
 PAC_FLAGS=(--needed)
 { [ -t 0 ] && [ "$YES" = 0 ]; } || PAC_FLAGS+=(--noconfirm)
+# yay also asks about cleaning, diffs, PKGBUILD edits and removing make dependencies for every AUR package;
+# answer them once here (no menus, keep the build tools) so a long install is not interrupted
+YAY_FLAGS=(--answerclean None --answerdiff None --answeredit None --noremovemake)
 
 # ================================================================= stage: repos
 # Third-party repos on top of plain Arch, following the official procedures:
@@ -704,10 +707,10 @@ stage_packages() {
     FONTS_DIRTY=1
     if [ "$DRY" = 1 ]; then
       # shellcheck disable=SC2086
-      echo "    [dry-run] yay -S ${PAC_FLAGS[*]} $(echo $missing)"
+      echo "    [dry-run] yay -S ${PAC_FLAGS[*]} ${YAY_FLAGS[*]} $(echo $missing)"
     else
       # shellcheck disable=SC2086
-      yay -S "${PAC_FLAGS[@]}" $missing
+      yay -S "${PAC_FLAGS[@]}" "${YAY_FLAGS[@]}" $missing
     fi
   fi
 
@@ -728,10 +731,10 @@ install_bundles() {
       FONTS_DIRTY=1
       if [ "$DRY" = 1 ]; then
         # shellcheck disable=SC2086
-        echo "    [dry-run] yay -S ${PAC_FLAGS[*]} $(echo $missing)   (bundle $b)"
+        echo "    [dry-run] yay -S ${PAC_FLAGS[*]} ${YAY_FLAGS[*]} $(echo $missing)   (bundle $b)"
       else
         # shellcheck disable=SC2086
-        yay -S "${PAC_FLAGS[@]}" $missing
+        yay -S "${PAC_FLAGS[@]}" "${YAY_FLAGS[@]}" $missing
       fi
     fi
   done
