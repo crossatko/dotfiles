@@ -2,6 +2,7 @@
 """Run the extractor + palette builder against nasty synthetic wallpapers and
 assert the result is always usable. `python3 -I selftest.py`"""
 import importlib.util
+import re
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,40 @@ CASES = {
     "red-streak-on-black": ["-size", "800x400", "xc:#151515", "-fill", "#701c1a", "-draw", "rectangle 100,50 160,56"],
 }
 EXTRA_FORMATS = {"anim.gif": ["-size", "100x100", "xc:red", "(", "-size", "100x100", "xc:blue", ")", "-loop", "0"]}
+
+OM_KEYS = ("mode accent selection muted background dark_background darker_background lighter_background foreground "
+           "dark_foreground light_foreground bright_foreground red yellow orange green cyan blue magenta brown bright_red "
+           "bright_yellow bright_green bright_cyan bright_blue bright_magenta").split()
+
+
+def omarchy_problems(pal, mode):
+    """Render templates/omarchy/colors.toml and check it the way Omarchy's line-based parser reads it."""
+    text = theme.render((theme.ROOT / "templates/omarchy/colors.toml").read_text(), pal,
+                        {"mode": mode, **theme.omarchy_extras(pal, mode)})
+    got, bad = {}, []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        m = re.fullmatch(r'([A-Za-z0-9_-]+) = "([^"]*)"', line)
+        if not m:
+            bad.append(f"line {line!r}")
+            continue
+        got[m.group(1)] = m.group(2)
+    bad += [f"missing {k}" for k in OM_KEYS if k not in got]
+    bad += [f"extra {k}" for k in got if k not in OM_KEYS]
+    bad += [f"{k} not #rrggbb" for k, v in got.items() if k != "mode" and not re.fullmatch(r"#[0-9a-f]{6}", v)]
+    if got.get("mode") != mode:
+        bad.append("mode")
+    if not bad:
+        lum = lambda k: theme.luminance(got[k])
+        # (a pure #000000 background cannot get darker: equal is all that is possible there)
+        ok = lum("darker_background") <= lum("dark_background") <= lum("background") and (lum("background") == 0 or lum("dark_background") < lum("background"))
+        if not ok:
+            bad.append("background shades not ordered darker < dark < background")
+        if mode == "dark" and not lum("lighter_background") > lum("background"):
+            bad.append("dark: lighter_background not lighter")
+    return bad
+
 
 fails = 0
 with tempfile.TemporaryDirectory() as d:
@@ -72,6 +107,8 @@ with tempfile.TemporaryDirectory() as d:
             "light all hex": all(len(v) == 7 and v[0] == "#" for v in lp.values()),
         })
         bad = [k for k, ok in checks.items() if not ok]
+        bad += [f"omarchy dark: {p}" for p in omarchy_problems(pal, "dark")]
+        bad += [f"omarchy light: {p}" for p in omarchy_problems(lp, "light")]
         status = "ok  " if not bad else "FAIL"
         fails += bool(bad)
         print(f"{status} {name:26} bg {bg} fg {pal['fg']} accent {pal['accent']} (found color: {base['accent'] is not None}) {bad or ''}")

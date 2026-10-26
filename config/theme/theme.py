@@ -3555,11 +3555,14 @@ def render_all(pal, cfg, mode=None, dark=None):
         extra["monitor_blocks"] = ""
     extra.update(wallpaper_t=tilde(wp), tv_wallpaper_t=tilde(extra["tv_wallpaper"]))   # hyprpaper expands ~
     extra["static_blocks"] = static_blocks(cfg, extra)
+    rendered = {}
     for tpl in sorted((ROOT / "templates").iterdir()):
-        if DEFAULT_MODE and tpl.name in HOST_TEMPLATES:
+        if tpl.is_dir() or (DEFAULT_MODE and tpl.name in HOST_TEMPLATES):
             continue
         dest = (HOST_OUT if tpl.name in HOST_TEMPLATES else OUT) / tpl.name
-        write_atomic(dest, render(tpl.read_text(), pal, extra))
+        rendered[tpl.name] = render(tpl.read_text(), pal, extra)
+        write_atomic(dest, rendered[tpl.name])
+    render_omarchy(pal, mode, extra, rendered, wp)
     expand = tilde if DEFAULT_MODE else os.path.expanduser
     dirs = [expand(d) for d in cfg.get("wallpaper_dirs", ["~/Pictures/wallpapers"])]
     s = cfg.get("settings", {})
@@ -3577,6 +3580,97 @@ def render_all(pal, cfg, mode=None, dark=None):
     write_atomic(OUT / "palette.json", json.dumps({"wallpaper": wp, "wallpaper_dirs": dirs, "video_dirs": [tilde(d) for d in video_dirs(cfg)] if DEFAULT_MODE else video_dirs(cfg), "mode": mode, **ui, **pal, **light}, indent=2) + "\n")
     lua = "return {\n" + f'  wallpaper = "{wp}",\n  rounding = {ui["rounding"]},\n' + "".join(f'  {k} = "{v}",\n' for k, v in pal.items()) + "}\n"
     write_atomic(OUT / "palette.lua", lua)
+
+
+# ------------------------------------------------------------ Omarchy theme dir
+# out/omarchy/ is a complete Omarchy theme (colors.toml + the terminal files whose format matches ours), so Omarchy-
+# ecosystem apps that read ~/.local/state/omarchy/current/theme/colors.toml follow the wallpaper. Omarchy derives
+# the legacy colorN names and selection_foreground itself, so they are not written. Only the neutral ramp is mapped
+# (templates/omarchy/colors.toml); the rest are palette keys.
+OMARCHY_NAME = "wallpaper"                      # current/theme.name (Omarchy theme names: [A-Za-z0-9_][A-Za-z0-9._+-]*)
+OMARCHY_FILES = {"alacritty.toml": "alacritty.toml", "kitty.conf": "kitty.conf", "ghostty": "ghostty.conf"}
+OMARCHY_CURRENT = "~/.local/state/omarchy/current"
+# icon set (Yaru accent variants) by accent hue, degrees: (upper bound, name)
+YARU_HUES = [(20, "Yaru-red"), (70, "Yaru-yellow"), (100, "Yaru-olive"), (170, "Yaru-sage"), (260, "Yaru-blue"),
+             (300, "Yaru-purple"), (340, "Yaru-magenta"), (361, "Yaru-red")]
+
+
+def omarchy_extras(pal, mode):
+    """Values Omarchy needs that the palette has no key for. Offsets follow the stock themes: dark themes shade
+    background 25 % / 50 % toward black (tokyo-night), light themes only ~6 % / 12 % (catppuccin-latte); the
+    foreground shades go toward white in both (light: bright_foreground stays the foreground, as in latte)."""
+    light = mode == "light"
+    t1, t2 = (0.06, 0.12) if light else (0.25, 0.50)
+    return {"om_dark_background": mix(pal["bg"], "#000000", t1), "om_darker_background": mix(pal["bg"], "#000000", t2),
+            "om_light_foreground": mix(pal["fg"], "#ffffff", 0.10),
+            "om_bright_foreground": pal["fg"] if light else mix(pal["fg"], "#ffffff", 0.20),
+            "om_brown": mix(pal["orange"], "#000000", 0.5)}
+
+
+def yaru_icons(accent):
+    h, _, s = to_hls(accent)
+    if s < 0.15:
+        return None
+    deg = h * 360
+    return next(n for hi, n in YARU_HUES if deg < hi)
+
+
+def render_omarchy(pal, mode, extra, rendered, wp):
+    """out/omarchy/: colors.toml + alacritty.toml kitty.conf ghostty.conf (our own outputs, same formats) and, on a host
+    render only, backgrounds/ (the wallpaper), preview.png and icons.theme. Skipped (formats Omarchy renders itself
+    from its own templates): btop, neovim, helix, vscode, foot, obsidian, ... See README."""
+    om = OUT / "omarchy"
+    om.mkdir(exist_ok=True)
+    x = {**extra, "mode": mode, **omarchy_extras(pal, mode)}
+    write_atomic(om / "colors.toml", render((ROOT / "templates/omarchy/colors.toml").read_text(), pal, x))
+    for src, name in OMARCHY_FILES.items():
+        write_atomic(om / name, rendered[src])
+    if DEFAULT_MODE:   # the committed default stays tiny: no image copy (default/wallpaper.jpg is generated)
+        return
+    icons = yaru_icons(pal["accent"])
+    if icons:
+        write_atomic(om / "icons.theme", icons + "\n")
+    else:
+        (om / "icons.theme").unlink(missing_ok=True)
+    src = Path(wp)
+    if not src.is_file():
+        return
+    bgd = om / "backgrounds"
+    bgd.mkdir(exist_ok=True)
+    dst = bgd / ("wallpaper" + (src.suffix.lower() or ".jpg"))
+    for f in bgd.iterdir():
+        if f != dst:
+            f.unlink()
+    prev = om / "preview.png"
+    if not dst.exists() or dst.stat().st_size != src.stat().st_size or not prev.exists() or prev.stat().st_mtime < src.stat().st_mtime:
+        tmp = dst.with_name(".tmp-" + dst.name)
+        shutil.copyfile(src, tmp)
+        os.replace(tmp, dst)
+        ptmp = om / ".tmp-preview.png"
+        r = subprocess.run(["magick", str(dst) + "[0]", "-resize", "1280x720^", "-gravity", "center", "-extent", "1280x720", f"PNG:{ptmp}"],
+                           capture_output=True)
+        if r.returncode == 0:
+            os.replace(ptmp, prev)
+        else:
+            ptmp.unlink(missing_ok=True)
+
+
+def link_omarchy():
+    """~/.local/state/omarchy/current/theme -> out/omarchy (+ theme.name). A real directory there belongs to a real
+    Omarchy install and is never touched."""
+    cur = Path(os.path.expanduser(OMARCHY_CURRENT))
+    dest = cur / "theme"
+    if dest.exists() and not dest.is_symlink():
+        print(f"theme: {dest} is a real directory (an Omarchy install); not linking out/omarchy there")
+        return
+    cur.mkdir(parents=True, exist_ok=True)
+    src = OUT / "omarchy"
+    if not (dest.is_symlink() and dest.resolve() == src.resolve()):
+        tmp = cur / ".theme.tmp"
+        tmp.unlink(missing_ok=True)
+        tmp.symlink_to(src)
+        os.replace(tmp, dest)   # atomic swap of the link (a dangling link is replaced too)
+    write_atomic(cur / "theme.name", OMARCHY_NAME + "\n")
 
 
 # --------------------------------------------------------------------- deploy
@@ -3942,6 +4036,7 @@ def deploy_herdr():
 
 def deploy(cfg, pal, mode=None):
     mode = mode or get_mode()
+    link_omarchy()
     link("~/.config/gtk-3.0/gtk.css", HOST_OUT / "gtk3.css")  # gtk.css + glass for CSD GTK3 windows (Gecko excluded)
     link("~/.config/gtk-4.0/gtk.css", HOST_OUT / "gtk4.css")  # gtk.css + translucent libadwaita (gtk_glass_*)
 

@@ -85,6 +85,7 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 | zellij | theme file `themes/wall.kdl` | yes (rewrite of config.kdl triggers its watcher) |
 | herdr | `~/.config/herdr/config.toml` is generated (tracked `config/herdr/config.toml` + this machine's `[theme]` block; herdr has no include) | `herdr server reload-config` |
 | hyprland, hyprlock, hyprtoolkit, hyprpaper | `dofile` / `source` / symlink | yes (`hyprctl reload`, hyprpaper restart); hyprlock reads its wallpaper path on each lock |
+| Omarchy apps (omacal, omamail, ...) | `out/omarchy/` is a complete Omarchy theme, linked as `~/.local/state/omarchy/current/theme` (+ `current/theme.name`); see below | their own file watch |
 | quickshell bar + Settings | watches `out/palette.json` | instant |
 | notifications | quickshell `Notifs.qml` server + toasts + notification center | instant, palette-driven |
 | launcher / menus | quickshell `Launcher.qml` | instant, palette-driven |
@@ -115,6 +116,11 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 * **Blur**: the quickshell bar opts in to Hyprland's own blur via the `qs-bar` layer rule in
   `hypr/hyprland/rules.lua`; tune with `bar_opacity`.
 * Not themed: Discord, web page contents.
+
+## Omarchy theme dir
+`templates/omarchy/colors.toml` -> `out/omarchy/colors.toml` (all 28 keys Omarchy knows, lower-case `#rrggbb`; Omarchy derives `color0..15` and `selection_foreground` itself, so they are not written). Mapping (`omarchy_extras()`): `background`=bg, `lighter_background`=surface, `selection`=overlay, `dark_foreground`=subtle, `muted`/`accent`/ANSI = palette; `dark_background` / `darker_background` = bg mixed 25 % / 50 % toward black (light mode 6 % / 12 %, as catppuccin-latte; 25 % would be mid-grey), `light_foreground` = fg +10 % white, `bright_foreground` = fg +20 % white (light mode: = fg, as latte), `brown` = orange mixed 50 % toward black. Also in `out/omarchy/`: `alacritty.toml`, `kitty.conf`, `ghostty.conf` (our own outputs, same formats), and on a host render `backgrounds/wallpaper.*` (the wallpaper still), `preview.png` and `icons.theme` (Yaru variant by accent hue; omitted for a grey accent). `default/omarchy/` holds only the four text files (`bin/theme-seed` copies it). Linux `deploy()` points `~/.local/state/omarchy/current/theme` at `out/omarchy` (symlink swapped atomically); a REAL directory there (a real Omarchy install) is left alone with a note. Files are rewritten with tmp + rename like all outputs. `selftest.py` parses the generated `colors.toml` under Omarchy's rules for both modes.
+* Skipped (Omarchy renders them from its own templates, no equivalent output here): btop, neovim, helix, foot, vscode, obsidian, chromium, hyprland, keyboard.rgb, shell.toml, ...
+* Caveats: apps watching `current/theme/colors.toml` through the symlink and our rename-replace writes is NOT verified (a watch on the file or the resolved directory sees the rename; a watch on the `current/` directory does not see the link target change). The wallpaper name inside `backgrounds/` is fixed (`wallpaper.<ext>`), the theme name is `wallpaper`.
 
 ## Launcher
 `SUPER+D` = `qs ipc call launcher toggle` (Raycast-style launcher, `config/quickshell/Launcher.qml`).

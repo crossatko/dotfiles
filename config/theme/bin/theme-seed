@@ -39,6 +39,17 @@ for f in "$def"/*; do
 		sed "s|~/|$home_esc/|g" "$f" >"$out/.$name.seed.tmp" && mv -f "$out/.$name.seed.tmp" "$out/$name" && n=$((n + 1))
 	fi
 done
+# default/omarchy/ (the Omarchy theme dir: colors.toml and terminal files, no images) -> out/omarchy/
+if [ -d "$def/omarchy" ]; then
+	mkdir -p "$out/omarchy" || exit 0
+	for f in "$def"/omarchy/*; do
+		[ -f "$f" ] || continue
+		name=${f##*/}
+		if [ "$refresh" = 1 ] || [ ! -e "$out/omarchy/$name" ]; then
+			sed "s|~/|$home_esc/|g" "$f" >"$out/omarchy/.$name.seed.tmp" && mv -f "$out/omarchy/.$name.seed.tmp" "$out/omarchy/$name" && n=$((n + 1))
+		fi
+	done
+fi
 printf '%s\n' "$sum" >"$marker"
 [ "$quiet" = 1 ] || [ "$n" = 0 ] || echo "theme-seed: $n default file(s) copied into $out"
 exit 0

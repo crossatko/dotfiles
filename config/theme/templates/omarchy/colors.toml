@@ -1,0 +1,31 @@
+mode = "{{mode}}"
+
+accent = "{{accent}}"
+selection = "{{overlay}}"
+muted = "{{muted}}"
+
+background = "{{bg}}"
+dark_background = "{{om_dark_background}}"
+darker_background = "{{om_darker_background}}"
+lighter_background = "{{surface}}"
+
+foreground = "{{fg}}"
+dark_foreground = "{{subtle}}"
+light_foreground = "{{om_light_foreground}}"
+bright_foreground = "{{om_bright_foreground}}"
+
+red = "{{red}}"
+yellow = "{{yellow}}"
+orange = "{{orange}}"
+green = "{{green}}"
+cyan = "{{cyan}}"
+blue = "{{blue}}"
+magenta = "{{magenta}}"
+brown = "{{om_brown}}"
+
+bright_red = "{{bright_red}}"
+bright_yellow = "{{bright_yellow}}"
+bright_green = "{{bright_green}}"
+bright_cyan = "{{bright_cyan}}"
+bright_blue = "{{bright_blue}}"
+bright_magenta = "{{bright_magenta}}"
