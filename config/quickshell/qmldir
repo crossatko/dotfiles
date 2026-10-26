@@ -8,6 +8,9 @@ CalAddState 1.0 CalAddState.qml
 CalPicker 1.0 CalPicker.qml
 CalCreate 1.0 CalCreate.qml
 FieldBox 1.0 FieldBox.qml
+FormRow 1.0 FormRow.qml
+DateStepper 1.0 DateStepper.qml
+DropSelect 1.0 DropSelect.qml
 Label 1.0 Label.qml
 VmMeterRow 1.0 VmMeterRow.qml
 Bar 1.0 Bar.qml

@@ -115,19 +115,33 @@ GridLayout {
             onCreated: { addForm.shown = false; cal.reload() }
         }
 
-        // The add form takes the agenda's place (same fixed height), so nothing else in the popup moves.
+        // The add form takes the agenda's place. The agenda keeps its fixed height (clicking between days never
+        // resizes the panel); while the form is open the area grows to the form's height, away from the grid (the
+        // card's far edge moves, the grid stays put under the pointer), and the two cross-fade.
         Item {
             id: agendaArea
+            readonly property real agendaH: 156
+            readonly property real openH: addForm.implicitHeight + 6      // a little air before the month header
             Layout.fillWidth: true
-            Layout.preferredHeight: 156            // fixed, so clicking between days never resizes the panel
+            Layout.preferredHeight: expanded ? Math.max(agendaH, openH) : agendaH
+            // only the open / close glides: the form's own changes (calendar list unfolding) are animated inside it
+            Behavior on Layout.preferredHeight { enabled: agendaArea.morphing; NumberAnimation { duration: Theme.popupMoveMs; easing.type: Theme.popupEaseMove } }
+            property bool morphing: false
+            property bool expanded: false             // follows addForm.shown, set after `morphing` so the change glides
+            Timer { id: morphEnd; interval: Theme.popupMoveMs + 30; onTriggered: agendaArea.morphing = false }
+            clip: morphing
 
         CalAddEvent {
             id: addForm
             property bool shown: false
             function toggle() { shown = !shown }
-            onShownChanged: if (shown) open()
+            onShownChanged: { agendaArea.morphing = true; morphEnd.restart(); agendaArea.expanded = shown; if (shown) open() }
             anchors { left: parent.left; right: parent.right; top: parent.top }
-            visible: shown
+            anchors.topMargin: shown ? 0 : -8
+            Behavior on anchors.topMargin { NumberAnimation { duration: Theme.popupMoveMs; easing.type: Theme.popupEaseMove } }
+            opacity: shown ? 1 : 0
+            visible: opacity > 0
+            Behavior on opacity { NumberAnimation { duration: Theme.popupFadeInMs; easing.type: Easing.OutCubic } }
             day: cal.selected
             calendars: cal.writable
             lastCalendar: addState.lastId
@@ -139,8 +153,11 @@ GridLayout {
 
         ListView {
             id: agenda
-            anchors.fill: parent
-            visible: !addForm.shown
+            anchors { left: parent.left; right: parent.right; top: parent.top }
+            height: agendaArea.agendaH
+            opacity: addForm.shown ? 0 : 1
+            visible: opacity > 0
+            Behavior on opacity { NumberAnimation { duration: Theme.popupFadeInMs; easing.type: Easing.OutCubic } }
             clip: true
             spacing: 6
             // all-day first, then by time

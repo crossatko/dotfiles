@@ -76,3 +76,11 @@ test("pickCalendar: last used, else primary, else first", () => {
     assert.strictEqual(C.pickCalendar([{ id: 3 }, { id: 4 }], undefined), 0);
     assert.strictEqual(C.pickCalendar([], 1), -1);
 });
+
+test("spanDays counts both ends, across months and DST", () => {
+    assert.strictEqual(C.spanDays("2026-10-26", "2026-10-26"), 1);
+    assert.strictEqual(C.spanDays("2026-10-26", "2026-10-28"), 3);
+    assert.strictEqual(C.spanDays("2026-10-24", "2026-10-26"), 3);
+    assert.strictEqual(C.spanDays("2026-10-31", "2026-11-02"), 3);
+    assert.strictEqual(C.spanDays("2026-10-26", "bad"), 0);
+});

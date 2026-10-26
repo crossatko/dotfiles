@@ -40,6 +40,13 @@ function shiftDate(s, n) {
     var p = s.trim().split("-");
     return isoDate(new Date(+p[0], +p[1] - 1, +p[2] + n));
 }
+// days from `date` to `endDate` counted inclusively ("2026-10-26", "2026-10-28" -> 3); 0 when either is invalid
+function spanDays(date, endDate) {
+    if (!validDate(date) || !validDate(endDate)) return 0;
+    var a = date.trim().split("-"), b = endDate.trim().split("-");
+    // UTC days: a DST change in between must not shorten the span
+    return Math.round((Date.UTC(+b[0], +b[1] - 1, +b[2]) - Date.UTC(+a[0], +a[1] - 1, +a[2])) / 86400000) + 1;
+}
 
 // error text, or "" when the input is fine. date/endDate: YYYY-MM-DD (endDate inclusive; empty = same day)
 function validate(title, start, end, allDay, date, endDate) {
