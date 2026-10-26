@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Events from Thunderbird's local calendar cache, as JSON.
+"""Events for the bar's calendar popup, as JSON. Prefers omacal; falls back to Thunderbird's local cache.
 
     calendar-events <from YYYY-MM-DD> <to YYYY-MM-DD>     (to is exclusive)
 
-Reads <profile>/calendar-data/cache.sqlite READ-ONLY from a private copy (Thunderbird keeps it open in
+If `omacal` is on PATH and `omacal calendars --json` lists a calendar, events come from `omacal events list`
+(read-only CLI, already expanded for recurrence; its --to is inclusive, ours is exclusive). Any failure or
+timeout there falls through to Thunderbird below.
+
+Thunderbird path: reads <profile>/calendar-data/cache.sqlite READ-ONLY from a private copy (Thunderbird keeps it open in
 WAL mode). Only calendars with "Offline support" enabled in Thunderbird have a local copy; the others
 (calendar.registry.<id>.cache.enabled = false) are fetched live from the server and are invisible here:
 the list of those is returned under "uncached" so the UI can say so. No network, no credentials.
@@ -11,7 +15,7 @@ the list of those is returned under "uncached" so the UI can say so. No network,
 Output: {"events": [{title, start, end, allDay, calendar, color, location}], "calendars": [...], "uncached": [...]}
 start/end are local "YYYY-MM-DD HH:MM" strings; for all-day events `end` is the (exclusive) last date.
 """
-import configparser, datetime as dt, glob, json, os, re, shutil, sqlite3, sys, tempfile
+import configparser, datetime as dt, glob, json, os, re, shutil, sqlite3, subprocess, sys, tempfile
 from zoneinfo import ZoneInfo
 
 try:
@@ -69,11 +73,58 @@ def to_local(us, tzname):
     return d.astimezone(LOCAL)
 
 
+def omacal_json(*args):
+    r = subprocess.run(["omacal", *args, "--json"], capture_output=True, text=True, timeout=10)
+    d = json.loads(r.stdout)
+    if r.returncode != 0 or not d.get("ok"):
+        raise RuntimeError("omacal failed")
+    return d["data"]
+
+
+def from_omacal(lo, hi):
+    """Output dict from omacal, or None when it is missing, empty or failing (caller falls back)."""
+    if not shutil.which("omacal"):
+        return None
+    try:
+        cals = omacal_json("calendars")
+        if not cals:
+            return None
+        last = (hi - dt.timedelta(days=1)).date()           # omacal's --to is inclusive
+        if last < lo.date():
+            last = lo.date()
+        rows = omacal_json("events", "list", "--from", lo.date().isoformat(), "--to", last.isoformat())
+        color = {c["id"]: c.get("color_override") or c.get("color_hex") or "#888888" for c in cals}
+        events = []
+        for r in rows:
+            s, e = dt.datetime.fromisoformat(r["start"]), dt.datetime.fromisoformat(r["end"])
+            if not r["allDay"]:
+                s, e = s.astimezone(LOCAL), e.astimezone(LOCAL)
+            events.append({
+                "title": r["title"] or "(no title)",
+                "start": s.strftime("%Y-%m-%d %H:%M"),
+                "end": e.strftime("%Y-%m-%d %H:%M"),
+                "allDay": bool(r["allDay"]),
+                "calendar": r.get("calendar") or "",
+                "color": color.get(r.get("calendarId"), "#888888"),
+                "location": r.get("location") or "",
+            })
+        events.sort(key=lambda x: (x["start"], x["title"]))
+        out_cals = [{"id": str(c["id"]), "name": c.get("label_override") or c.get("summary") or str(c["id"]),
+                     "color": color[c["id"]]} for c in cals if c.get("selected", True)]
+        return {"events": events, "calendars": out_cals, "uncached": []}
+    except Exception:
+        return None
+
+
 def main():
     if len(sys.argv) != 3:
         sys.exit(__doc__)
     lo = dt.datetime.fromisoformat(sys.argv[1])
     hi = dt.datetime.fromisoformat(sys.argv[2])
+    res = from_omacal(lo, hi)
+    if res is not None:
+        print(json.dumps(res, ensure_ascii=False))
+        return
     prof = profile_dir()
     if not prof:
         print(json.dumps({"events": [], "calendars": [], "uncached": [], "error": "no Thunderbird calendar cache found"}))
