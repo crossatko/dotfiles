@@ -8,7 +8,8 @@ import QtQuick.Window
 // unblurred (`sharpInset` px larger on every side), `origin` = this item's top-left in them. Values: Settings > Glass
 // (GlassTuneCtl.effective, as Slider.qml), nothing lock-specific; `glow` (alpha = strength) fills the glass with a
 // colour (state feedback, e.g. an error). Cost: the field renders once per mask change; the optics pass is cheap and
-// redraws with the backdrop. `refracting` is false (the caller shows its flat fallback) without Theme.glass / a backdrop / the shaders.
+// redraws with the backdrop. `refracting` is false (the caller shows its flat fallback) without Theme.shellGlass / a backdrop / the shaders
+// (shell-drawn: works on stock Hyprland too).
 Item {
     id: g
     property Item mask: null
@@ -36,7 +37,7 @@ Item {
     property int refresh: 0
     property int refresh2: 0
     readonly property var gv: GlassTuneCtl.effective
-    readonly property bool refracting: mask !== null && backdrop !== null && Theme.glass && fx.status !== ShaderEffect.Error && fieldFx.status !== ShaderEffect.Error && fieldFx2.status !== ShaderEffect.Error
+    readonly property bool refracting: mask !== null && backdrop !== null && Theme.shellGlass && fx.status !== ShaderEffect.Error && fieldFx.status !== ShaderEffect.Error && fieldFx2.status !== ShaderEffect.Error
     // the mask (GlassMask / the bead disc) renders at 2x, mipmapped, on a scale-1 output (per screen; 1x on scaled
     // outputs, which have the pixels already): the field's blurs read it smooth
     readonly property int ss: Screen.devicePixelRatio > 1 ? 1 : 2

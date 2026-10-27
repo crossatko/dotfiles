@@ -16,7 +16,7 @@ import Quickshell.Io
 Singleton {
     id: br
 
-    readonly property int minPercent: 5
+    readonly property int minPercent: 1
     readonly property string setScript: Quickshell.env("HOME") + "/.config/hypr/scripts/ddc-set-brightness.sh"
     readonly property string detectScript: Quickshell.env("QS_BRIGHTNESS_DETECT") || (Quickshell.shellDir + "/bin/brightness-detect")
 

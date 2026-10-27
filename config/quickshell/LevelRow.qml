@@ -14,6 +14,7 @@ RowLayout {
     property real value: 0
     property bool dim: false
     property real floor: 0
+    property var notches: []                   // Slider notches (Presets.volumeNotches, ...)
     property string valueText: ""
     signal moved(real v)
     signal iconClicked()
@@ -38,6 +39,7 @@ RowLayout {
         value: lr.value
         dim: lr.dim
         floor: lr.floor
+        notches: lr.notches
         onMoved: v => lr.moved(v)
     }
     Label { text: lr.valueText; Layout.preferredWidth: Math.ceil(valueMetrics.advanceWidth); horizontalAlignment: Text.AlignRight; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }

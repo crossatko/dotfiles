@@ -334,6 +334,10 @@ Item {
                     Layout.fillWidth: true
                     dim: padRow.auto || !padRow.active
                     value: padRow.total / BarConfig.flushPadManualMax
+                    notches: [BarConfig.autoPad() / BarConfig.flushPadManualMax]       // the Auto value
+                    step: 2 / BarConfig.flushPadManualMax
+                    resetToNotch: false
+                    onResetRequested: if (padRow.active && ed.sel) BarConfig.set(ed.sel, "flushPadding", "auto")
                     onMoved: v => { if (padRow.active && ed.sel) BarConfig.set(ed.sel, "flushPadding", Math.round(v * BarConfig.flushPadManualMax / 2) * 2) }
                 }
                 Label { text: padRow.total + " px"; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
@@ -352,6 +356,7 @@ Item {
                     Layout.fillWidth: true
                     dim: !sensRow.active
                     value: sensRow.sens / 100
+                    notches: [BarConfig.contrastSensDefault / 100]
                     onMoved: v => { if (sensRow.active && ed.sel) BarConfig.set(ed.sel, "contrastSens", Math.round(v * 100)) }
                 }
                 Label { text: sensRow.sens < 40 ? "light text" : sensRow.sens > 60 ? "dark text" : "balanced"; Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
@@ -370,6 +375,7 @@ Item {
                     Layout.fillWidth: true
                     dim: !fillRow.active
                     value: fillRow.fill / 100
+                    notches: [BarConfig.hoverFillDefault / 100]
                     onMoved: v => { if (fillRow.active && ed.sel) BarConfig.set(ed.sel, "hoverFill", Math.round(v * 100)) }
                 }
                 Label { text: fillRow.fill + " %"; Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }

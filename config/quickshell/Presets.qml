@@ -173,4 +173,12 @@ Singleton {
     readonly property var deskSize: [{ id: "s", name: "Small", v: 0.12 }, { id: "m", name: "Medium", v: 0.16 }, { id: "l", name: "Large", v: 0.22 }]
     readonly property string deskSizeCurrent: { void DeskClockPrefs.data; const p = deskSize.find(p => near(DeskClockPrefs.size, p.v, 0.005)); return p ? p.id : "custom" }
     function applyDeskSize(id) { const p = deskSize.find(p => p.id === id); if (!p) return false; DeskClockPrefs.set("size", p.v); return true }
+
+    // ---- Slider notches (Slider / LevelRow `notches`: track values 0..1, the first one is the default a double-click
+    // resets to). Constants: there is no "default volume / brightness" setting. Settings rows take their notches from
+    // their own defaults and the preset tables above (PrefSlider `extras`, GlassOptRow, ShapeAdvanced). ----
+    readonly property var volumeNotches: [0.8, 1]        // output volume: the usual level, then full
+    readonly property var micNotches: [1]                // microphone: full (the level a source starts at)
+    readonly property var brightnessNotches: [0.8, 1]
+    readonly property var centreNotches: [0.5]           // balance-like: HA light / fan level, colour strips, AirPods adaptive
 }

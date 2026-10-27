@@ -3,7 +3,8 @@ import QtQuick.Layouts
 
 // One Settings > Glass value row: title | slider | value | reset. `o` = a GlassTuneCtl.opts entry (min, max, dec,
 // unit, curve: slider response exponent > 1 gives the low end more travel). `inherited` = the value is not set here
-// (a surface profile showing the global value): the value is muted. `mark` = track tick (0..1, -1 = none).
+// (a surface profile showing the global value): the value is muted. The slider's default notch is the option's default,
+// or `mark` (0..1) when set (a surface profile: the global value); a double-click = reset().
 SettingRow {
     id: row
     property var o: ({ min: 0, max: 1, dec: 2 })
@@ -24,7 +25,9 @@ SettingRow {
         objectName: "slider-" + (row.o.key || "")
         Layout.fillWidth: true
         value: row.toNorm(row.cur)
-        mark: row.mark
+        notches: [row.mark >= 0 ? row.mark : row.toNorm(row.o.def ?? row.o.min)]
+        resetToNotch: false
+        onResetRequested: row.reset()
         onMoved: v => row.moved(row.fromNorm(v))
     }
     Label {

@@ -5,7 +5,8 @@ import QtQuick.Window
 import Quickshell
 
 // Settings -> Look & feel: how the shell looks and moves, as a few named choices (Presets.qml) with live previews and
-// almost no words: colour mode (theme.py mode: dark / light from the same wallpaper), glass style (GlassTuneCtl /
+// almost no words: colour mode (theme.py mode: dark / light from the same wallpaper) and accent source (theme.py accent:
+// a standout detail or the dominant colour), glass style (GlassTuneCtl /
 // glass.json: the Settings window itself shows the result), motion (Motion / animations.json: popup replay), shape
 // (Appearance / appearance.json: a scaled desktop). Each section's Customise… fold holds the detailed controls that
 // were the old Glass / Animations / Appearance pages (GlassAdvanced, MotionAdvanced, ShapeAdvanced); a tweak there
@@ -33,6 +34,17 @@ Item {
     }
     Connections { target: Theme; function onModeChanged() { if (Theme.mode === pg.colorWant) pg.colorWant = "" } }
     Timer { id: colorGuard; interval: 20000; onTriggered: pg.colorWant = "" }
+
+    // ---- accent source: theme.py accent standout|dominant (re-render from the cached analysis, like the mode) ----
+    property string accentWant: ""
+    function setAccentPick(v) {
+        if (accentWant !== "" || v === Theme.accentPick) return
+        accentWant = v
+        accentGuard.restart()
+        Quickshell.execDetached(["python3", "-I", Theme.themeDir + "/theme.py", "accent", v])
+    }
+    Connections { target: Theme; function onAccentPickChanged() { if (Theme.accentPick === pg.accentWant) pg.accentWant = "" } }
+    Timer { id: accentGuard; interval: 20000; onTriggered: pg.accentWant = "" }
 
     // a changed motion replays the demo once the choice rests
     Connections {
@@ -64,6 +76,18 @@ Item {
             current: pg.colorWant !== "" ? pg.colorWant : Theme.mode
             hint: pg.colorWant !== "" ? "switching…" : ""
             onPicked: v => pg.setColorMode(v)
+        }
+        ChoiceRow {
+            title: "Accent"
+            titleWidth: pg.titleW
+            values: ["standout", "dominant"]
+            labels: ["Standout", "Dominant"]
+            objectNames: ["accent-standout", "accent-dominant"]
+            segWidth: 90
+            current: pg.accentWant !== "" ? pg.accentWant : Theme.accentPick
+            hint: pg.accentWant !== "" ? "switching…" : ""
+            info: "Standout: a small vivid detail of the wallpaper, when it has one."
+            onPicked: v => pg.setAccentPick(v)
         }
 
         // ---------------------------------------------------------------- glass

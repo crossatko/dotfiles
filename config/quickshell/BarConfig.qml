@@ -69,8 +69,10 @@ Singleton {
     // has no backdrop, default 35; chips are transparent at rest there, active ones keep their accent fill; glass bars keep their look).
     readonly property var contrastModes: ["auto", "dark", "light", "off"]
     function contrast(s) { const v = entry(s).contrast; return contrastModes.indexOf(v) >= 0 ? v : "auto" }
-    function contrastSens(s) { const v = entry(s).contrastSens; return typeof v === "number" && isFinite(v) ? Math.max(0, Math.min(100, Math.round(v))) : 50 }
-    function hoverFill(s) { const v = entry(s).hoverFill; return typeof v === "number" && isFinite(v) ? Math.max(0, Math.min(100, Math.round(v))) : 35 }
+    readonly property int contrastSensDefault: 50
+    readonly property int hoverFillDefault: 35
+    function contrastSens(s) { const v = entry(s).contrastSens; return typeof v === "number" && isFinite(v) ? Math.max(0, Math.min(100, Math.round(v))) : contrastSensDefault }
+    function hoverFill(s) { const v = entry(s).hoverFill; return typeof v === "number" && isFinite(v) ? Math.max(0, Math.min(100, Math.round(v))) : hoverFillDefault }
     // "Flush mode": option on and the bar docked. The bar has no backdrop then (Bar.qml), Hyprland's outer gap on the bar's side
     // is 0 on that monitor (hypr/hyprland/managed.lua apply_bar_gaps) and the bar's height follows the window gap: chip height +
     // 3 x the visible gap between windows (2 x gaps_in), clamped to flushPadMin..flushPadMax in total, split evenly above and

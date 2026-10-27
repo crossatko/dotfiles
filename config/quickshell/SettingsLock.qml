@@ -112,9 +112,9 @@ Item {
             detail: Object.keys(LockPrefs.data).length > 0 ? Object.keys(LockPrefs.data).length + " changed" : ""
 
             SectionHead { title: "Look" }
-            PrefSlider { id: dim; title: "Wallpaper dim"; titleWidth: pg.titleW; store: LockPrefs; key: "dim"; format: v => pg.pct(v) }
-            PrefSlider { id: blur; title: "Blur"; titleWidth: pg.titleW; store: LockPrefs; key: "blur"; format: v => v + " px" }
-            PrefSlider { id: size; title: "Clock size"; titleWidth: pg.titleW; store: LockPrefs; key: "clockSize"; format: v => pg.pct(v) }
+            PrefSlider { id: dim; title: "Wallpaper dim"; titleWidth: pg.titleW; store: LockPrefs; key: "dim"; format: v => pg.pct(v); extras: Presets.lockBackdrop.map(p => p.v.dim) }
+            PrefSlider { id: blur; title: "Blur"; titleWidth: pg.titleW; store: LockPrefs; key: "blur"; format: v => v + " px"; extras: Presets.lockBackdrop.map(p => p.v.blur) }
+            PrefSlider { id: size; title: "Clock size"; titleWidth: pg.titleW; store: LockPrefs; key: "clockSize"; format: v => pg.pct(v); extras: Presets.lockSize.map(p => p.v) }
             PrefSlider { id: dots; title: "Dot size"; titleWidth: pg.titleW; store: LockPrefs; key: "dotSize"; format: v => (v * 100).toFixed(1) + " %" }
 
             SectionHead {
@@ -124,7 +124,7 @@ Item {
             }
             PrefToggle { titleWidth: pg.titleW; store: LockPrefs; key: "showDate"; label: "Show the date" }
             PrefToggle { titleWidth: pg.titleW; store: LockPrefs; key: "mediaCard"; label: "Playback card"; hint: "under the dots" }
-            PrefSlider { id: morph; title: "Morph time"; titleWidth: pg.titleW; store: LockPrefs; key: "morph"; format: v => pg.times(v) }
+            PrefSlider { id: morph; title: "Morph time"; titleWidth: pg.titleW; store: LockPrefs; key: "morph"; format: v => pg.times(v); extras: Presets.morph.map(p => p.v) }
 
             SectionHead { title: "Motion"; InfoTip { text: "At the Animations speed; none = instant." } }
             PrefToggle { titleWidth: pg.titleW; store: LockPrefs; key: "clockReveal"; label: "Clock reveal" }

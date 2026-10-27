@@ -103,9 +103,9 @@ Item {
                 detail: Object.keys(DeskClockPrefs.data).length > 0 ? Object.keys(DeskClockPrefs.data).length + " changed" : ""
 
                 SectionHead { title: "Look"; InfoTip { text: "The glass itself: Settings > Look & feel." } }
-                PrefSlider { id: size; title: "Size"; titleWidth: pg.titleW; store: DeskClockPrefs; key: "size"; format: v => pg.pct(v) }
-                PrefSlider { id: posX; title: "Horizontal"; titleWidth: pg.titleW; store: DeskClockPrefs; key: "posX"; format: v => pg.pct(v) }
-                PrefSlider { id: posY; title: "Vertical"; titleWidth: pg.titleW; store: DeskClockPrefs; key: "posY"; format: v => pg.pct(v) }
+                PrefSlider { id: size; title: "Size"; titleWidth: pg.titleW; store: DeskClockPrefs; key: "size"; format: v => pg.pct(v); extras: Presets.deskSize.map(p => p.v) }
+                PrefSlider { id: posX; title: "Horizontal"; titleWidth: pg.titleW; store: DeskClockPrefs; key: "posX"; format: v => pg.pct(v); extras: [0.5] }
+                PrefSlider { id: posY; title: "Vertical"; titleWidth: pg.titleW; store: DeskClockPrefs; key: "posY"; format: v => pg.pct(v); extras: [0.5] }
                 PrefToggle { titleWidth: pg.titleW; store: DeskClockPrefs; key: "adapt"; label: "Adapt to wallpaper" }
                 PrefSlider { id: adaptStrength; title: "Adapt strength"; titleWidth: pg.titleW; store: DeskClockPrefs; key: "adaptStrength"; format: v => pg.pct(v); enabled: DeskClockPrefs.adapt; opacity: enabled ? 1 : Theme.disabledOpacity }
 
@@ -115,7 +115,7 @@ Item {
                     Btn { objectName: "btn-deskclock-morph"; text: Icons.play + "  Morph"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26; onClicked: preview.demo() }
                 }
                 PrefToggle { titleWidth: pg.titleW; store: DeskClockPrefs; key: "clock24h"; label: "24-hour clock" }
-                PrefSlider { id: morph; title: "Morph time"; titleWidth: pg.titleW; store: DeskClockPrefs; key: "morph"; format: v => pg.times(v) }
+                PrefSlider { id: morph; title: "Morph time"; titleWidth: pg.titleW; store: DeskClockPrefs; key: "morph"; format: v => pg.times(v); extras: Presets.morph.map(p => p.v) }
             }
         }
 

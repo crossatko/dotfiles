@@ -20,7 +20,16 @@ ColumnLayout {
     readonly property int valueW: 62        // the value column of every slider row (PrefSlider.valueWidth)
     spacing: 12
 
-    // effective value of a numeric key
+    // effective value of a numeric key; its theme default (the slider's default notch, the edge gap follows the gap)
+    // and the Shape presets' values (further notches)
+    function defOf(key) {
+        if (key === "radius") return Theme.radiusDefault
+        if (key === "gap") return Theme.gapDefault
+        if (key === "edgeGap") return Theme.gap
+        if (key === "border") return Theme.borderDefault
+        return 0
+    }
+    function presetValues(key) { return key === "edgeGap" ? [] : Presets.shape.map(p => p.v[key]) }
     function eff(key) {
         if (key === "radius") return Theme.radius
         if (key === "gap") return Theme.gap
@@ -143,6 +152,10 @@ ColumnLayout {
                 objectName: "slider-" + row.modelData.key
                 Layout.fillWidth: true
                 value: row.cur / row.modelData.max
+                notches: [sa.defOf(row.modelData.key) / row.modelData.max].concat(sa.presetValues(row.modelData.key).map(p => p / row.modelData.max))
+                step: row.modelData.step / row.modelData.max
+                resetToNotch: false
+                onResetRequested: if (row.own) Appearance.unset(row.modelData.key)
                 onMoved: v => sa.slide(row.modelData.key, v, row.modelData.max, row.modelData.step)
             }
             Label { text: row.cur + " px"; Layout.preferredWidth: sa.valueW; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }

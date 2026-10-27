@@ -9,10 +9,12 @@ import Quickshell.Io
 // lettering (one GlassText per character, as the lock clock) and the date in the UI font, refracting what the desktop
 // shows under it: the play-once video wallpaper of `connector` (DeskClockVideo: the same clip in step with the desktop
 // player, moving during a burst), else `wallpaper` (the still / image, cropped like hyprpaper's cover). Nothing else is
-// drawn behind the lettering; all optics come from Settings > Glass (GlassTuneCtl.effective).
+// drawn behind the lettering; all optics come from Settings > Glass (GlassTuneCtl.effective). A wallpaper change
+// cross-fades the refracted image (WallpaperView, as the desktop) and never drops the glass to the flat look.
 // This item is SCREEN sized (backdrop coordinates); the clock sits in `area` (DeskClockPrefs size / position), the caller
 // shows only that part. Until a source has a frame the lettering is GlassTextFlat, then the glass forms (popup motion
-// tokens; none = instant). Without Theme.glass GlassText is flat anyway.
+// tokens; none = instant). Shell-drawn glass (Theme.shellGlass): the same on stock Hyprland; GlassText is flat only
+// when its shaders fail.
 // Idle: nothing animates; a minute change morphs the changed digits; with seconds a tick morphs only the changed digits
 // (each GlassText renders its own mask and shape field again, nothing else); a burst redraws the clock with the video's frames.
 Item {
@@ -21,9 +23,12 @@ Item {
     property string connector: ""           // "" = no video (Settings preview)
     property var screen: null               // whose wallpaper (wallpapers.json entry: the video for the brightness sample)
     property bool preview: false            // Settings: the wallpaper is drawn too (on the desktop it is under the window)
-    readonly property bool wallReady: img.status === Image.Ready && img.source !== ""
+    readonly property bool wallReady: wall.hasImage
     readonly property bool videoOn: video.ready
-    readonly property Item source: videoOn ? video.output : stage
+    // what the glass refracts: always `stage` (the still / image, the video copy drawn over it, and during a hand-over
+    // the frozen old picture fading out on top)
+    readonly property Item liveSource: videoOn ? video.output : wall     // which picture is live (swap detection)
+    readonly property Item source: stageTex
     readonly property bool sourceReady: videoOn || wallReady
 
     readonly property real unit: Math.min(width, height)
@@ -78,7 +83,7 @@ Item {
         if (flatAnim.duration <= 0) flatT = flatAnim.to
         else flatAnim.start()
     }
-    Component.onCompleted: { reveal.dateShown = 0; if (sourceReady) Qt.callLater(form) }
+    Component.onCompleted: { reveal.dateShown = 0; lastLive = liveSource; if (sourceReady) Qt.callLater(form) }
     NumberAnimation { id: flatAnim; target: v; property: "flatT"; easing.type: Easing.InOutSine }
 
     // ---- wallpaper-aware glass (DeskClockPrefs adapt / adaptStrength) ----
@@ -145,21 +150,110 @@ Item {
         return t * t * (3 - 2 * t) * DeskClockPrefs.adaptStrength
     }
 
+    // ---- hand-over: a change that SWAPS the live picture (video <-> still, video -> video, a new clip on the same output)
+    // never cuts. A still / image change cross-fades by itself (WallpaperView, in step with the desktop); a swap of the
+    // picture would jump. So when this monitor's wallpaper entry changes (out/wallpaper.json, written before theme.py
+    // touches the players) `snap` (a copy of `scene`) is armed live for that window only (3 s at most); at the first swap
+    // it freezes on the last frame shown and covers the scene until the new picture has settled (no swap for 200 ms,
+    // DeskClockVideo not busy; 2.4 s cap), then fades out over Motion.emphasisMs (0 with motion off: a cut). At rest
+    // nothing extra is drawn (snap released). Everything lives inside `stage`, the one texture the glass samples:
+    // copies of a hidden layer through a second layer were not refreshed (stale mid-fade frames, jumps at the end).
+    readonly property var entry: v.preview ? null : Wallpaper.entryFor(v.screen)
+    readonly property string entryKey: entry ? entry.path + "|" + entry.fit : ""
+    readonly property string videoKey: (video.info ? video.info.file : "") + "|" + (video.loopInfo ? video.loopInfo.file : "")
+    property bool armed: false
+    property bool holding: false
+    property real handT: 0
+    property int holdTicks: 0
+    property int armFrames: 0             // frames the armed copy has rendered (< 2: it may hold nothing yet)
+    property Item lastLive: null          // the live picture before the latest swap
+    onEntryKeyChanged: arm()
+    onLiveSourceChanged: { const prev = lastLive; lastLive = liveSource; if (armed || holding) hold(prev) }
+    onVideoKeyChanged: if (armed || holding) hold(null)
+    Connections {
+        target: v.armed && !v.holding ? v.Window.window : null
+        function onFrameSwapped() { v.armFrames += 1 }
+    }
+    function arm() {
+        if (v.preview || v.holding || !v.sourceReady) return
+        snap.sourceItem = scene
+        snap.live = true
+        v.armFrames = 0
+        v.armed = true
+        armEnd.restart()
+    }
+    function hold(prev) {
+        if (!v.holding) {
+            if (!v.armed) return
+            snap.live = false            // frozen on the last frame it rendered: what the glass showed
+            // swapped before the armed copy rendered a frame (theme.py stops the old player right after writing the
+            // state): copy the outgoing video item once now, it still shows its last frame (the loop copy is unloaded
+            // only after the next probe, a clip's player changes its source only then)
+            if (v.armFrames < 2 && prev && prev !== wall) { snap.sourceItem = prev; snap.scheduleUpdate() }
+            v.handT = 0
+            v.holding = true
+        }
+        handFade.stop()
+        v.handT = 0
+        v.holdTicks = 0
+        settle.restart()
+    }
+    function release() {
+        handFade.stop()
+        v.holding = false
+        v.armed = false
+        v.handT = 0
+        snap.live = false
+        snap.sourceItem = null
+    }
+    Timer { id: armEnd; interval: 3000; onTriggered: if (!v.holding) v.release() }
+    Timer {
+        id: settle
+        interval: 200
+        onTriggered: {
+            v.holdTicks += 1
+            if ((video.busy || !v.sourceReady) && v.holdTicks < 12) { restart(); return }
+            if (Motion.emphasisMs <= 0) { v.release(); return }
+            handFade.restart()
+        }
+    }
+    NumberAnimation { id: handFade; target: v; property: "handT"; from: 0; to: 1; duration: Motion.emphasisMs; easing.type: Motion.easeHover; onFinished: v.release() }
+
     // ---- what the glass refracts ----
+    // `stage` is drawn only into `stageTex` (hideSource), the texture the glass samples. Not a hidden layer
+    // (visible: false + layer): its content was not re-rendered for every change (a cross-fade's last frames went missing
+    // and showed up later as a jump); a hidden ShaderEffectSource source keeps updating.
+    ShaderEffectSource {
+        id: stageTex
+        anchors.fill: parent
+        sourceItem: stage
+        hideSource: true
+        live: true
+        smooth: true            // sampled bent by the glass
+        visible: false
+    }
     Item {
         id: stage
         anchors.fill: parent
-        visible: false
-        layer.enabled: true
-        layer.smooth: true      // sampled bent by the glass
-        Image {
-            id: img
+        // the same two-slot view as the desktop's wallpaper layer (same decode: one cache entry; same cross-fade): a new
+        // wallpaper fades in under the glass in step with the desktop, the old one stays refracted until it is decoded
+        Item {
+            id: scene
             anchors.fill: parent
-            source: v.wallpaper !== "" && v.width > 0 ? "file://" + v.wallpaper : ""
-            sourceSize: Qt.size(v.width, v.height)
-            fillMode: Image.PreserveAspectCrop        // = hyprpaper's cover
-            asynchronous: true
+            WallpaperView {
+                id: wall
+                anchors.fill: parent
+                screen: v.screen
+                path: v.wallpaper
+                reporting: false
+                pixelScale: v.preview ? 1 : (monitor && monitor.scale > 0 ? monitor.scale : 1)
+            }
+            // the video copy's frames over the still (ShaderEffect's default shader draws `source`; only while it plays)
+            ShaderEffect { anchors.fill: parent; property var source: v.videoOn ? video.output : null; visible: v.videoOn }
         }
+        // drawn while armed too (a copy of the scene over the scene: the same picture), so its texture is current the
+        // moment it freezes (an undrawn ShaderEffectSource is not updated: the first held frames were stale)
+        ShaderEffectSource { id: snap; anchors.fill: parent; hideSource: false; live: false; visible: v.armed || v.holding; opacity: 1 - v.handT }
     }
     // the video copy: drawn (an invisible VideoOutput gets no frames), but all but transparent, so the window shows
     // only the lettering; the desktop's own player is right under it
@@ -171,7 +265,7 @@ Item {
     }
 
     // Settings preview: the desktop under the clock
-    ShaderEffectSource { anchors.fill: parent; visible: v.preview; sourceItem: stage; hideSource: false }
+    ShaderEffect { anchors.fill: parent; visible: v.preview; property var source: stageTex }
 
     // Lock: the desktop under `ink` WITHOUT the clock (what the glass refracts), grabbed when a lock is requested; the
     // lock surface lays it over the desktop snapshot (which still has the clock) and fades it in (LockClockPatch).
@@ -250,7 +344,7 @@ Item {
                     }
                     GlassTextFlat {
                         x: -g.pad; y: -g.pad
-                        visible: v.flatT > 0 && Theme.glass      // without Theme.glass GlassText shows this itself
+                        visible: v.flatT > 0 && Theme.shellGlass      // without shell glass GlassText shows this itself
                         opacity: v.flatT * Math.min(1, g.pop * 1.4)
                         text: g.text; pixelSize: g.pixelSize; weight: g.weight; pad: g.pad
                     }

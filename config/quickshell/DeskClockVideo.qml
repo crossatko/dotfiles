@@ -29,6 +29,10 @@ Item {
     readonly property var bursts: info ? info.bursts : []
     readonly property int count: Math.max(0, bursts.length - 1)
     readonly property Item output: loopCopy !== null && loopCopy.ready ? loopCopy.output : out
+    // still settling after a change (probing the player, the loop copy or the clip not showing a frame yet): the desktop
+    // clock holds its hand-over snapshot until this is false (DeskClockView)
+    readonly property bool busy: probeProc.running || (loopInfo !== null && !(loopCopy !== null && loopCopy.ready))
+                                 || (info !== null && !hadFrame)
 
     function probe() { if (connector !== "") Qt.callLater(() => { probeProc.running = true }) }
     onConnectorChanged: probe()

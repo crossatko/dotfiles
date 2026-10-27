@@ -13,9 +13,12 @@ import Quickshell.Io
 //  - "Wallpaper" with two tabs, Images (wallpaper_dirs) and Videos (video_dirs), and the thumbnail grid (WallpaperTile)
 //    of that library. The Videos tab adds the Playback row (Play once / Loop): the mode of the video the monitor plays
 //    (switching re-applies it) and of the next video clicked.
-// A click (or arrows + Enter) runs `theme.py apply <file> [--mode once|loop] [--monitor <key>]` detached; for the
-// primary that is the full re-theme, for another monitor hyprpaper / the video player only. theme.py owns the state
-// (wallpapers.json, AGENTS.md "Wallpapers (per monitor, videos, links)"); this page only reads it.
+// A click (or arrows + Enter) runs `theme.py apply <file> [--mode once|loop] [--monitor <key>]` detached; it shows the
+// wallpaper at once (hyprpaper live set / the player) and leaves the rest to its background worker: for the primary the
+// re-theme, for another monitor the still only. The clicked tile is marked at once; clicks never wait (the latest wins,
+// theme.py supersedes the older worker); the palette glyph in the title row pulses while the worker runs
+// ($XDG_RUNTIME_DIR/theme-apply/status.json). theme.py owns the state (wallpapers.json, AGENTS.md "Wallpapers (per
+// monitor, videos, links)"); this page only reads it.
 // Tabs: Tab / Shift+Tab. The page opens on the tab matching what the edited monitor shows; a tab picked by hand is kept
 // for the session (Settings' `memory` page hook).
 // Monitor links: a MonitorLinkButton between neighbouring chips links them; a linked group always gets the
@@ -37,7 +40,7 @@ ColumnLayout {
     readonly property var videos: files.filter(f => isVideo(f))
     property bool scanned: false
     property int sel: -1                       // keyboard selection (index into `list`), -1 = none yet
-    property string applying: ""               // path handed to theme.py, cleared once the monitor shows it
+    property string applying: ""               // path of the latest click, cleared once the monitor shows it (shown as current until then)
     property string applyingMode: ""           // video mode handed to theme.py ("" for an image)
     property string newMode: "once"            // mode for a video clicked while the monitor plays none
     property var thumbs: ({})                  // video path -> cached still (jpg), filled in async
@@ -158,9 +161,12 @@ ColumnLayout {
         const v = e && typeof e === "object" ? Number(e[field]) : 0
         return isFinite(v) && v > 0 ? v : 0
     }
-    function timedFor(key) {      // the entry carries a play time (no `play` = full length)
+    function timingFor(key) {     // the entry stores its timing (no `play` = the defaults, theme.py timing_default)
         const e = entryFor(key)
-        return !!e && typeof e === "object" && e.play !== undefined && isFinite(Number(e.play))
+        return !!e && typeof e === "object" && e.play !== undefined
+    }
+    function fullFor(key) {       // stored full length (`play: "full"`)
+        return timingFor(key) && !isFinite(Number(entryFor(key).play))
     }
     function easeFor(key) {      // replay ease-in seconds of that monitor's entry, -1 = none stored (theme.toml default)
         const e = entryFor(key)
@@ -182,12 +188,15 @@ ColumnLayout {
     readonly property string shownMode: modeFor(target)
     // Play for / Wind down (play-once only): what the sliders show. Follows the playing clip's entry; while a drag is
     // being applied (retimeTimer / busyState) the dragged value wins so the sliders never jump back.
-    readonly property real statePlay: numFor(target, "play")
-    readonly property real stateWind: numFor(target, "wind")
-    readonly property bool stateFull: !timedFor(target)
+    readonly property real statePlay: timingFor(target) ? numFor(target, "play") : playDefault
+    readonly property real stateWind: timingFor(target) ? numFor(target, "wind") : windDefault
+    readonly property bool stateFull: fullFor(target)
+    // nothing stored = theme.toml replay_play_default / replay_wind_default (theme.py `video thumbs` reports them)
+    property real playDefault: 0
+    property real windDefault: 5
     property real uiPlay: 0
-    property real uiWind: 0
-    property bool uiFull: true               // Play for at its maximum = the whole usable length, no wind down (the default)
+    property real uiWind: 5
+    property bool uiFull: false              // Play for at its maximum = the whole usable length, no wind down
     property bool timingDirty: false
     // Play for and Wind down share the clip: play + wind * windAvg <= D. D = whole usable seconds of the playing video
     // (theme.py `video thumbs`, cached), windAvg = the curve's mean speed (theme.py WIND_AVG; the wind consumes wind * windAvg s).
@@ -196,10 +205,10 @@ ColumnLayout {
     // Replay ease-in: seconds every workspace-switch burst takes to speed up from rest (0 = none; a burst is ease-in + wind-down,
     // at least 1 s). Stored in the entry as `ease` once the slider was touched; until then the theme.toml `replay_ease_in` default.
     readonly property real easeMax: 1
-    property real easeDefault: 0.4
+    property real easeDefault: 0
     readonly property bool stateEaseSet: easeFor(target) >= 0
     readonly property real stateEase: stateEaseSet ? easeFor(target) : easeDefault
-    property real uiEase: 0.4
+    property real uiEase: 0
     property bool uiEaseSet: false
     readonly property real maxPlay: shownVideo !== "" && usable[shownVideo] > 0 ? usable[shownVideo] : 60   // no video yet: theme.py clamps on apply
     function windMaxFor(p) { return Math.max(0, Math.min(120, (maxPlay - p) / windAvg)) }
@@ -212,6 +221,9 @@ ColumnLayout {
         if (Number(f[2]) > 0) { const u = Object.assign({}, usable); u[f[0]] = Number(f[2]); usable = u }
         if (Number(f[3]) > 0) windAvg = Number(f[3])
         if (f.length > 4 && f[4] !== "" && isFinite(Number(f[4]))) easeDefault = Number(f[4])
+        if (f.length > 6 && f[5] !== "" && isFinite(Number(f[5])) && f[6] !== "" && isFinite(Number(f[6]))) {
+            playDefault = Number(f[5]); windDefault = Number(f[6])
+        }
     }
     // the playing clip may not be in the scanned folders (picked elsewhere): ask for its usable length directly
     // how the replay works on the edited monitor (theme.py `video loopinfo`: seconds per switch, steps per loop / back to the start with a fade, from the cached analyses; the step count follows that monitor's bake cost): read-only line
@@ -252,7 +264,7 @@ ColumnLayout {
         if (timingDirty) return
         if (shownVideo !== "") { uiPlay = statePlay; uiWind = stateWind; uiFull = stateFull; uiEase = stateEase; uiEaseSet = stateEaseSet }
         else if (memory && memory.play !== undefined) {
-            uiPlay = memory.play; uiWind = memory.wind; uiFull = memory.full !== false
+            uiPlay = memory.play; uiWind = memory.wind; uiFull = memory.full === true
             if (memory.ease !== undefined) { uiEase = memory.ease; uiEaseSet = memory.easeSet === true }
         }
     }
@@ -352,7 +364,26 @@ ColumnLayout {
         onLoadFailed: { page.wpMonitors = {}; page.wpPrimary = ""; page.wpPrimaryVideo = null; page.wpLinks = [] }
     }
     // the file may not exist yet (watching a missing file sees no creation): poll while theme.py works
-    Timer { interval: 300; repeat: true; running: page.applying !== "" || page.busyState; onTriggered: stateView.reload() }
+    Timer { interval: 300; repeat: true; running: page.applying !== "" || page.busyState || page.working; onTriggered: { stateView.reload(); workView.reload() } }
+    // theme.py's background worker (palette, still, reloads): {gen, state: working|done|failed, pid}; a dead pid = not working
+    property var work: ({})
+    property bool workDead: false
+    readonly property bool working: work.state === "working" && !workDead
+    onWorkChanged: { workDead = false; if (work.state === "failed") applying = "" }   // failed: the old palette stays, the state shows what is on
+    FileView {
+        id: workView
+        path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/theme-apply/status.json"
+        printErrors: false
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: { try { page.work = JSON.parse(text()) } catch (e) { page.work = ({}) } }
+        onLoadFailed: page.work = ({})
+    }
+    // the file appears with the first apply of this login (a watch on a missing file sees no creation): poll while shown
+    Timer { interval: 1000; repeat: true; running: page.visible && !page.working; onTriggered: workView.reload() }
+    Timer { interval: 2000; repeat: true; running: page.working && page.work.pid > 0
+        onTriggered: { workPid.command = ["test", "-d", "/proc/" + page.work.pid]; workPid.running = true } }
+    Process { id: workPid; onExited: code => { if (code !== 0) page.workDead = true } }
     property bool busyState: false
     Timer { id: busyTimer; interval: 3000; onTriggered: page.busyState = false }
 
@@ -363,10 +394,11 @@ ColumnLayout {
 
     // detached: closing Settings mid-apply must not kill theme.py
     function apply(path, mode) {
-        if (!path || applying !== "" || unreadable(path)) return
+        if (!path || unreadable(path)) return
         const vid = isVideo(path)
         const m = vid ? (mode || playMode) : ""
-        if (vid ? (path === shownVideo && m === shownMode) : (shownVideo === "" && path === shown)) return   // already there
+        if (applying !== "" ? (path === applying && m === applyingMode)   // the latest click wins; the same again is a no-op
+            : vid ? (path === shownVideo && m === shownMode) : (shownVideo === "" && path === shown)) return   // already there
         applying = path
         applyingMode = m
         applyTimeout.restart()
@@ -376,7 +408,7 @@ ColumnLayout {
         const cmd = ["python3", "-I", Theme.themeDir + "/theme.py", "apply", path]
         if (isVideo(path)) {
             cmd.push("--mode", m)
-            if (m === "once" && !uiFull) cmd.push("--play", String(uiPlay), "--wind", String(uiWind))
+            if (m === "once") cmd.push("--play", uiFull ? "full" : String(uiPlay), "--wind", String(uiFull ? 0 : uiWind))
             if (m === "once" && uiEaseSet) cmd.push("--ease", String(uiEase))
         }
         if (linkedGroup) group.forEach(k => cmd.push("--monitor", k))   // linked: the whole group in one call (the primary among them = full re-theme)
@@ -456,6 +488,7 @@ ColumnLayout {
                 page.files = text.split("\n").filter(l => l.length > 0)
                 page.scanned = true
                 page.thumbsDone = false
+                Quickshell.execDetached(["python3", "-I", Theme.themeDir + "/theme.py", "analyze"])   // palette cache of new files (lowest priority)
                 const vids = page.files.filter(f => page.isVideo(f))
                 if (vids.length > 0) { thumbProc.command = ["python3", "-I", Theme.themeDir + "/theme.py", "video", "thumbs"].concat(vids); thumbProc.running = true }
                 else page.thumbsDone = true
@@ -495,7 +528,7 @@ ColumnLayout {
 
             Label {
                 id: caption
-                anchors { left: parent.left; right: swatchRow.left; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                anchors { left: parent.left; right: swatchRow.left; rightMargin: page.working ? 12 + workIcon.width + 6 : 12; verticalCenter: parent.verticalCenter }
                 horizontalAlignment: Text.AlignRight
                 elide: Text.ElideMiddle
                 font.pixelSize: Theme.fontCaption
@@ -504,6 +537,21 @@ ColumnLayout {
                 text: pal.hovered !== "" ? pal.hovered
                     : page.wpPrimaryVideo ? page.baseName(page.wpPrimaryVideo.video)
                     : page.stillVideo(page.currentPath) ? page.baseName(page.stillVideo(page.currentPath).video) : page.baseName(page.currentPath)
+            }
+            Icon {   // the background worker (palette, still, app reloads) is running
+                id: workIcon
+                anchors { right: swatchRow.left; rightMargin: 6; verticalCenter: parent.verticalCenter }
+                visible: page.working
+                text: Icons.palette
+                font.pixelSize: Theme.iconMd
+                color: Theme.accent
+                SequentialAnimation on opacity {
+                    running: workIcon.visible
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 0.3; duration: Theme.busyPulseMs; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: 1; duration: Theme.busyPulseMs; easing.type: Easing.InOutSine }
+                    onRunningChanged: if (!running) workIcon.opacity = 1
+                }
             }
             Row {
                 id: swatchRow
@@ -717,6 +765,7 @@ ColumnLayout {
                     onDownChanged: if (!down) page.flushTiming()
                     Layout.fillWidth: true
                     value: page.uiFull ? 1 : page.uiPlay / page.maxPlay
+                    notches: [page.playDefault / page.maxPlay, 1]      // the default, full length
                     onMoved: v => { const p = Math.round(v * page.maxPlay); page.setTiming(p, page.uiWind, p >= page.maxPlay) }
                 }
                 Label {
@@ -738,6 +787,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     dim: page.uiFull
                     value: page.maxWind > 0 ? page.uiWind / page.maxWind : 0
+                    notches: page.maxWind > 0 ? [page.windDefault / page.maxWind] : []
                     onMoved: v => { if (!page.uiFull) page.setTiming(page.uiPlay, v * page.maxWind, false) }
                 }
                 Label {
@@ -757,6 +807,7 @@ ColumnLayout {
                     onDownChanged: if (!down) page.flushTiming()
                     Layout.fillWidth: true
                     value: page.uiEase / page.easeMax
+                    notches: [page.easeDefault / page.easeMax]
                     onMoved: v => page.setEase(v * page.easeMax)
                 }
                 Label {
@@ -794,9 +845,9 @@ ColumnLayout {
                 height: page.cellH
                 name: page.baseName(modelData)
                 source: video ? (page.thumbs[modelData] || "") : modelData
-                current: video ? modelData === page.shownVideo : (page.shownVideo === "" && modelData === page.shown)
+                current: page.applying !== "" ? modelData === page.applying   // the click shows at once
+                    : video ? modelData === page.shownVideo : (page.shownVideo === "" && modelData === page.shown)
                 cursor: index === page.sel
-                busy: modelData === page.applying
                 unreadable: page.unreadable(modelData)
                 badge: video && current ? (page.shownMode === "loop" ? "LOOP" : "ONCE") : ""
                 onClicked: { page.sel = index; page.apply(modelData) }

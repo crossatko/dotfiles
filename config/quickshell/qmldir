@@ -28,6 +28,8 @@ singleton Icons 1.0 Icons.qml
 BarReserve 1.0 BarReserve.qml
 Toggle 1.0 Toggle.qml
 Slider 1.0 Slider.qml
+NotchSnap 1.0 NotchSnap.qml
+NotchTicks 1.0 NotchTicks.qml
 Tile 1.0 Tile.qml
 DevicePicker 1.0 DevicePicker.qml
 BtProfilePicker 1.0 BtProfilePicker.qml
@@ -125,6 +127,10 @@ LockReveal 1.0 LockReveal.qml
 LockPreview 1.0 LockPreview.qml
 singleton LockPrefs 1.0 LockPrefs.qml
 singleton LockWallpapers 1.0 LockWallpapers.qml
+singleton Wallpaper 1.0 Wallpaper.qml
+WallpaperLayer 1.0 WallpaperLayer.qml
+WallpaperView 1.0 WallpaperView.qml
+WallpaperImage 1.0 WallpaperImage.qml
 singleton DeskClockPrefs 1.0 DeskClockPrefs.qml
 PrefSlider 1.0 PrefSlider.qml
 PrefToggle 1.0 PrefToggle.qml

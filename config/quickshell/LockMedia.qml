@@ -4,7 +4,7 @@ import QtQuick.Layouts
 
 // The lock screen's playback card (LockView, under the password dots; Settings > Lock "Playback card"): the media
 // panel's parts (MediaPick / MediaArt / MediaSeek / MediaTransport) in one row: cover, title / artist and progress,
-// previous / play-pause / next. With Theme.glass the card is a glass slab (GlassShape over a rounded-rect mask, the
+// previous / play-pause / next. With Theme.shellGlass the card is a glass slab (GlassShape over a rounded-rect mask, the
 // lock's lettering optics, refracting `backdrop` / `sharpBackdrop`, `origin` = this item's top-left in them) under a
 // faint fill; without it a flat card like the popups' (fill, border, GlassEdge). Shown only while a player exists
 // (`shown`), fading in / out on the popup motion tokens. The buttons are MouseAreas: clicks never take the keyboard
@@ -50,7 +50,7 @@ Item {
         x: -card.pad; y: -card.pad
         width: card.width + 2 * card.pad; height: card.height + 2 * card.pad
         visible: false
-        layer.enabled: Theme.glass && card.visible
+        layer.enabled: Theme.shellGlass && card.visible
         layer.smooth: true
         layer.mipmap: true
         layer.textureSize: Qt.size(width * slab.ss, height * slab.ss)
@@ -60,7 +60,7 @@ Item {
         id: slab
         x: -card.pad; y: -card.pad
         width: slabMask.width; height: slabMask.height
-        mask: Theme.glass ? slabMask : null
+        mask: Theme.shellGlass ? slabMask : null
         pad: card.pad
         strokeHalf: 9
         shade: 0.3

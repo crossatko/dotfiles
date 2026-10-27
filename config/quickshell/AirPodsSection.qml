@@ -82,6 +82,7 @@ ColumnLayout {
         visible: ap.live && AirPods.mode === 3
         icon: Icons.earWaveform            // ear-waveform
         value: AirPods.adaptive / 100
+        notches: Presets.centreNotches
         valueText: AirPods.adaptive + "%"
         onMoved: v => AirPods.setAdaptive(v * 100)
     }

@@ -193,6 +193,7 @@ Rectangle {
                 Layout.fillWidth: true
                 value: ent.domain === "fan" ? (ent.localPct >= 0 ? ent.localPct : (ent.a.percentage || 0) / 100)
                                             : (ent.localBri >= 0 ? ent.localBri : ent.bri)
+                notches: Presets.centreNotches
                 onMoved: v => {
                     if (ent.domain === "fan") { ent.localPct = v; ent.later("fan", "set_percentage", { percentage: Math.round(v * 100) }) }
                     else { ent.localBri = Math.max(0.01, v); ent.later("light", "turn_on", { brightness: Math.max(1, Math.round(v * 255)) }) }
@@ -230,6 +231,7 @@ Rectangle {
                 Layout.fillWidth: true
                 colors: ["#ffffff", Qt.hsva(Math.max(0, colorBox.hue), 1, 1, 1)]
                 value: ent.a.color_mode === "color_temp" && ent.localSat < 0 ? -1 : colorBox.sat
+                notches: Presets.centreNotches
                 onMoved: v => {
                     ent.localSat = v
                     const h = ent.localHue >= 0 ? ent.localHue : ent.hs ? ent.hs[0] / 360 : 0
@@ -245,6 +247,7 @@ Rectangle {
                     Layout.fillWidth: true
                     colors: ["#ff9329", "#ffd2a1", "#fff4e5", "#dce8ff"]
                     value: ent.localCt >= 0 ? ent.localCt : ent.a.color_mode === "color_temp" ? ent.ct : -1
+                    notches: Presets.centreNotches
                     onMoved: v => {
                         ent.localCt = v
                         ent.later("light", "turn_on", { color_temp_kelvin: Math.round(ent.ctMin + v * (ent.ctMax - ent.ctMin)) })

@@ -10,6 +10,9 @@ ShellRoot {
     readonly property var bars: BarConfig.bars
     Binding { target: Popups; property: "bars"; value: root.bars }
 
+    // the desktop wallpaper (theme.py wallpaper_backend "quickshell"; Wallpaper.qml): background layer, first so it maps early
+    WallpaperLayer {}
+
     Variants {
         model: Quickshell.screens.filter(s => root.bars[s.name] !== undefined)
         Bar {

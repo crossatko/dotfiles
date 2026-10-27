@@ -13,26 +13,47 @@ Singleton {
     readonly property string home: Quickshell.env("HOME")
     readonly property string themeDir: home + "/.config/theme"
 
-    readonly property color bg: p.bg
-    readonly property color bgAlt: p.bg_alt
-    readonly property color surface: p.surface
-    readonly property color surface2: p.surface2
-    readonly property color overlay: p.overlay
-    readonly property color muted: p.muted
-    readonly property color fgDim: p.fg_dim
-    readonly property color fg: p.fg
-    readonly property color accent: p.accent
-    readonly property color accent2: p.accent2
-    readonly property color red: p.red
-    readonly property color green: p.green
-    readonly property color yellow: p.yellow
-    readonly property color blue: p.blue
-    readonly property color magenta: p.magenta
-    readonly property color cyan: p.cyan
-    readonly property color orange: p.orange
+    // palette colours: cross-fade (paletteFadeMs) when palette.json changes (wallpaper switch, refined palette, mode);
+    // the first read is applied as is (fadeReady)
+    property color bg: p.bg
+    property color bgAlt: p.bg_alt
+    property color surface: p.surface
+    property color surface2: p.surface2
+    property color overlay: p.overlay
+    property color muted: p.muted
+    property color fgDim: p.fg_dim
+    property color fg: p.fg
+    property color accent: p.accent
+    property color accent2: p.accent2
+    property color red: p.red
+    property color green: p.green
+    property color yellow: p.yellow
+    property color blue: p.blue
+    property color magenta: p.magenta
+    property color cyan: p.cyan
+    property color orange: p.orange
+    property bool fadeReady: false
+    Behavior on bg { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on bgAlt { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on surface { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on surface2 { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on overlay { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on muted { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on fgDim { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on fg { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on accent { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on accent2 { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on red { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on green { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on yellow { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on blue { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on magenta { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on cyan { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
+    Behavior on orange { enabled: root.fadeReady; ColorAnimation { duration: root.paletteFadeMs; easing.type: Easing.InOutQuad } }
     readonly property string wallpaper: p.wallpaper
     readonly property string mode: p.mode === "light" ? "light" : "dark"   // light / dark theme (theme.py mode, Settings > Wallpaper & theme)
     readonly property bool light: mode === "light"
+    readonly property string accentPick: p.accent_pick === "dominant" ? "dominant" : "standout"   // accent source (theme.py accent, Settings > Look & feel)
     readonly property var wallpaperDirs: p.wallpaper_dirs
     readonly property var videoDirs: p.video_dirs && p.video_dirs.length > 0 ? p.video_dirs : [home + "/Videos/wallpapers"]   // video wallpapers (mp4/webm/mkv), see SettingsWallpaper.qml
     readonly property real barOpacity: p.bar_opacity
@@ -40,6 +61,10 @@ Singleton {
     // (stock Hyprland without that variant, kawase, blur off, no hyprctl) keeps the original, more opaque fills, which
     // the qs-.* layer rule blurs as before. Re-checked on every config reload.
     property bool glass: false
+    // glass the SHELL draws itself (GlassShape: desktop clock, lock clock / date, beads, lock playback slab): it refracts the
+    // wallpaper in the shell's own shaders, so it needs no compositor glass (stock Hyprland too). A shader that fails to
+    // load still falls back to the flat lettering (GlassShape.refracting). QS_SHELL_GLASS=0 forces the flat look (tests).
+    readonly property bool shellGlass: Quickshell.env("QS_SHELL_GLASS") !== "0"
     property bool glassKnown: false     // false until the first check finished
     // true when the running Hyprland fades a layer's glass with the layer's own alpha (fork option
     // decoration:blur:solid_glass:layer_alpha_ref > 0, set by managed.lua when the option exists): a card fading its
@@ -159,11 +184,14 @@ Singleton {
     function clampInt(v, lo, hi, dflt) {
         return (typeof v !== "number" || !isFinite(v)) ? dflt : Math.max(lo, Math.min(hi, Math.round(v)))
     }
-    readonly property int radius: Appearance.pick("radius", clampInt(p.rounding, 0, 32, 0))     // R, for outer elements
-    readonly property int gap: Appearance.pick("gap", clampInt(p.gap, 0, 32, 0))                // window gap G
+    readonly property int radiusDefault: clampInt(p.rounding, 0, 32, 0)     // the theme's own values (Shape slider notches)
+    readonly property int gapDefault: clampInt(p.gap, 0, 32, 0)
+    readonly property int borderDefault: clampInt(p.border_size, 0, 6, 2)
+    readonly property int radius: Appearance.pick("radius", radiusDefault)     // R, for outer elements
+    readonly property int gap: Appearance.pick("gap", gapDefault)                // window gap G
     readonly property int gapIn: Math.round(gap / 2)        // Hyprland gaps_in (visible gap between windows ~ G)
     readonly property int gapOut: Appearance.pick("edgeGap", gap)                               // Hyprland gaps_out (screen edge)
-    readonly property int borderSize: Appearance.pick("border", clampInt(p.border_size, 0, 6, 2))
+    readonly property int borderSize: Appearance.pick("border", borderDefault)
     readonly property bool barFloating: Appearance.pick("barFloating", p.bar_floating === true)
     readonly property bool smartGaps: Appearance.pick("smartGaps", p.smart_gaps !== false)
 
@@ -243,6 +271,7 @@ Singleton {
     // clock / dots refract (GlassShape `dim`) use the same amount
     readonly property real lockDim: LockPrefs.dim    // Settings > Lock "Wallpaper dim" (default 0.5)
     readonly property int lockRevealMs: popupMs(Motion.baseMs * 2.5)   // lock screen -> desktop transition after unlock
+    readonly property int paletteFadeMs: popupMs(Motion.baseMs * 3)       // palette cross-fade (600 ms at 1x)
     // curve (Motion.popupCurve): open / move ease out (Back overshoots); close = the same family decelerating WITHOUT
     // overshoot (Back closes with OutCubic), so it is visible to the very end: no last-frame drop from an ease-in, no
     // crossing of 0 before the end (2026-10-20; before: In* curves, and Back closed early, see PopupHost)
@@ -279,7 +308,7 @@ Singleton {
     function alpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
 
     // first read is synchronous, so shape defaults (bar_floating, rounding, gap) are right on the first frame
-    Component.onCompleted: { paletteFile.text(); checkGlass() }
+    Component.onCompleted: { paletteFile.text(); checkGlass(); Qt.callLater(() => root.fadeReady = true) }
 
     FileView {
         id: paletteFile
@@ -314,6 +343,7 @@ Singleton {
         property string orange: "#c69980"
         property string wallpaper: ""
         property string mode: "dark"
+        property string accent_pick: "standout"
         property var wallpaper_dirs: []
         property var video_dirs: []
         property real bar_opacity: 0.55

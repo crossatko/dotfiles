@@ -18,12 +18,11 @@ ColumnLayout {
     spacing: 12
 
     // EVERY speed slider (popups, Hyprland, categories): log scale over Motion.speedRange (0.25 .. 10), so the same
-    // position is the same multiplier everywhere and 1x sits at ~38 % (tick mark); snaps to 1x within 1.5 % of the
-    // track; steps 0.05 below 2x, 0.1 below 5x, 0.25 above
+    // position is the same multiplier everywhere and 1x sits at ~38 % (the default notch: the Slider snaps there and a
+    // double-click unsets the key); steps 0.05 below 2x, 0.1 below 5x, 0.25 above
     function toNorm(v) { const r = Motion.speedRange; return Math.log(v / r[0]) / Math.log(r[1] / r[0]) }
     readonly property real oneX: toNorm(1)
     function fromNorm(n) {
-        if (Math.abs(n - oneX) < 0.015) return 1
         const r = Motion.speedRange
         const v = r[0] * Math.pow(r[1] / r[0], n)
         const step = v < 2 ? 0.05 : v < 5 ? 0.1 : 0.25
@@ -62,6 +61,8 @@ ColumnLayout {
             objectName: "slider-popupSpeed"
             Layout.fillWidth: true
             mark: ma.oneX
+            resetToNotch: false
+            onResetRequested: Motion.unset("popupSpeed")
             value: ma.toNorm(Motion.popupSpeed)
             onMoved: v => ma.slide("popupSpeed", v)
         }
@@ -142,6 +143,8 @@ ColumnLayout {
                 objectName: "slider-hyprSpeed"
                 Layout.fillWidth: true
                 mark: ma.oneX
+                resetToNotch: false
+                onResetRequested: Motion.unset("hyprSpeed")
                 value: ma.toNorm(Motion.value("hyprSpeed"))
                 onMoved: v => ma.slide("hyprSpeed", v)
             }
@@ -205,6 +208,8 @@ ColumnLayout {
                     Layout.fillWidth: true
                     dim: !catRow.on
                     mark: ma.oneX
+                    resetToNotch: false
+                    onResetRequested: Motion.unset(catRow.gid + "Speed")
                     value: ma.toNorm(Motion.value(catRow.gid + "Speed"))
                     onMoved: v => ma.slide(catRow.gid + "Speed", v)
                 }

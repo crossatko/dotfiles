@@ -31,6 +31,7 @@ ColumnLayout {
             labelWidth: Math.ceil(longest.advanceWidth)
             value: pct / 100
             floor: Brightness.minPercent / 100
+            notches: Presets.brightnessNotches
             onMoved: v => Brightness.set(row.modelData, v * 100)
             valueText: pct + "%"
         }

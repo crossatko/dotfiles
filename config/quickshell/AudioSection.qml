@@ -18,6 +18,7 @@ ColumnLayout {
         iconClickable: true
         onIconClicked: if (au.sink) au.sink.muted = !au.sink.muted
         value: au.sink ? au.sink.volume : 0
+        notches: Presets.volumeNotches
         dim: !au.sink || au.sink.muted
         onMoved: v => { if (au.sink) { au.sink.muted = false; au.sink.volume = v } }
         valueText: au.sink ? Math.round(au.sink.volume * 100) + "%" : "–"
@@ -33,6 +34,7 @@ ColumnLayout {
         iconClickable: true
         onIconClicked: if (au.source) au.source.muted = !au.source.muted
         value: au.source ? au.source.volume : 0
+        notches: Presets.micNotches
         dim: !au.source || au.source.muted
         onMoved: v => { if (au.source) { au.source.muted = false; au.source.volume = v } }
         valueText: au.source ? Math.round(au.source.volume * 100) + "%" : "–"

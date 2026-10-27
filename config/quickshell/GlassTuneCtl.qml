@@ -141,7 +141,7 @@ Singleton {
     readonly property color effectiveTint: {
         const t = effective.tint
         const a = ((t >>> 24) & 255) / 255
-        return tintFromBg && Theme.glass ? Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, a)
+        return tintFromBg ? Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, a)
                                          : Qt.rgba(((t >>> 16) & 255) / 255, ((t >>> 8) & 255) / 255, (t & 255) / 255, a)
     }
     // the running Hyprland has no decoration:blur:solid_glass:* options (stock build)

@@ -123,6 +123,7 @@ ColumnLayout {
                             objectName: "slider-tint-" + trow.modelData.s
                             Layout.fillWidth: true
                             value: trow.cur / 255
+                            notches: [((GlassTuneCtl.tintDef >>> trow.modelData.s) & 255) / 255]   // the default tint's channel
                             onMoved: v => ga.setTint(trow.modelData.s, v * 255)
                         }
                         Label { text: trow.cur; Layout.preferredWidth: ga.valueW; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
