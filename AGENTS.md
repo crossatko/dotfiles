@@ -92,7 +92,15 @@ config/aerospace karabiner swiftbar  macOS only
 - **Nested Hyprland** (glass, scale, layers, rules, wallpapers, GTK/Qt apps): `Hyprland -c <config copy>` with its own short `XDG_RUNTIME_DIR`; `hyprctl output
   create headless TEST` + `hl.monitor{...}`; export the nested `HYPRLAND_INSTANCE_SIGNATURE`/`WAYLAND_DISPLAY`; `grim -o TEST`; headless renders only while the
   nested window is visible; enable `TEST` in the test HOME's `bars.json`; real `hyprctl` on PATH (a shim makes `Theme.glass` false). Never `pkill -f` a pattern
-  matching your own command line.
+  matching your own command line. Keep the test HOME, runtime dir, logs and screenshots in the agent scratchpad dir (the Wayland socket path must stay < 108 chars: use a short symlink into it).
+  Nested outputs must be visible (no headless outputs): extra monitors via `hyprctl output create wayland <name>` against the nested instance.
+  The nested window opens tiled on the CURRENT workspace (no scratchpad rule any more): its output size follows the live tiling, so keep
+  sessions short, verify pointer coordinates (`hyprctl cursorpos` on the nested instance) before a virtual click, and stop everything by PID at the end.
+  Caveats: find the nested instance signature as the `$XDG_RUNTIME_DIR/hypr/*/` dir whose `hyprland.lock` holds the nested PID (old dirs linger; a stale
+  signature makes hyprpaper / quickshell talk to a dead instance); hyprpaper 0.8 takes `hyprctl hyprpaper wallpaper ",<path>"` (`preload` / `reload`
+  are gone); a nested STOCK Hyprland shows the config-error overlay for the fork-only keys in `settings.lua` (they are not `pcall`-guarded), which
+  covers part of the output; a nested window sometimes starts without an output (log stops after "New wayland pointer"): stop and start it again.
+  A test harness (own HOME / runtime dir, pops / look / shape / glass / anim / wall / mode / measure scripts) lived in the agent scratchpad `dl/`.
 - **Theme engine:** temp clone + temp `HOME` with `~/.config/theme` linked, `THEME_OUT_DIR`, PATH shims for `pkill hyprctl gsettings kwriteconfig6 herdr
   hyprpaper`.
 
@@ -116,6 +124,14 @@ config/aerospace karabiner swiftbar  macOS only
   (`THEME_RENDER_SKIP=1` skips). herdr has no include: edits to its settings need `theme.py render`.
 - Layout defaults in `theme.toml [settings]` drive Quickshell only; Hyprland's own values are hand-written in `hypr/hyprland/theme.lua`/`settings.lua`: keep in
   sync.
+- Hyprland group bar (`group.groupbar` in `settings.lua`, values in `theme.lua` `M.groupbar` / `groupbar_colors` /
+  `groupbar_rounding`): one glass pill per window, no titles, 12 px (slimmest that reads as glass; 14-16 = safe), 6 px between pills and above the window, pill tops
+  level with the neighbours (`keep_upper_gap = false`). Radius = min(window radius, height / 2) (0 = square), re-applied by
+  `managed.lua` `apply_groupbar` on `layout_apply()`. `groupbar.blur` puts the fork's solid_glass lens under each pill
+  (stock: plain blur); fills are washes: half the card fill on glass, else max(0.3, 0.75 x plain_fill_min) plus a ~1 px
+  lit top edge (gradient stops). Focused = accent glass, others neutral, locked = warn hue. Glass test at load =
+  `decoration.blur.variant` solid_glass (as Theme.qml). Hyprland has no hover state, icons or per-tab widths, and an
+  unfocused group shows every pill inactive. Colour / mode changes need `theme.py render` + `hyprctl reload`.
 - GTK/Kvantum/Brave CSS is rendered per host into `out/host/` (alpha depends on fork vs stock): run `theme.py render` once after pulling on a new host.
 - Toolkit glass: the compositor already tints/blurs behind translucent windows, so app CSS paints only the card fill (tint in CSS would double). `theme.py
   hypr_solid_glass()` and `Theme.qml` use the same test: keep in sync. GTK4 blur needs `backdrop-filter`.
@@ -129,12 +145,32 @@ config/aerospace karabiner swiftbar  macOS only
   `Popups.qml` (popups), `Settings.qml` + `Settings*.qml` (Settings pages), `Launcher.qml` + `launcher/*Source.qml` (launcher sections), `Notifs.qml` /
   `NotifStack.qml` / `Toasts.qml` (notifications), `Osd.qml`, `Appearance.qml` (writes `appearance.json`), `Vm*.qml` + `launcher/bin/vm-ctl` (VM chip/panel),
   `bin/` (python/sh helpers behind sections).
+  Caveat: `Theme.qml` watches `palette.json` with a FileView; in nested test shells (HOME/.config/theme a symlink re-created by the
+  test scripts) a theme.py mode switch was sometimes not picked up until a shell restart. Not reproduced on the live shell.
 - Use `Theme` tokens, never literal pixels/colours. One layer rule in `rules.lua` blurs `qs-.*`: layer-rule namespaces match the WHOLE name (a bare `^qs-`
   matches nothing and once turned all blur off).
 - Reuse the shared building blocks (`PanelHeader`, `ListRow`, `Notice`, `Btn`, `Segmented`, `ModalMenu`, `PopupRegistration`, ...); extract repeated UI into its
-  own file. New popup: file + `PopupHost` switch/width entries + chip `bar.pop` + qmldir. New Settings page: `allPages` in `Settings.qml` + qmldir (hooks
-  documented in its header). New bar widget: registry entry in `BarWidgets.qml`. Bar chips: never set `implicitWidth`, never `BarLabel` with the icon font (use
-  `BarIcon`).
+  own file. New Settings page: `allPages` in `Settings.qml` + qmldir (hooks documented in its header), built with the Settings pattern below. New popup / bar
+  widget / setting: `DESIGN.md` "Adding things". Bar chips: never set `implicitWidth`, never `BarLabel` with the icon font (use `BarIcon`).
+- **Design language: `DESIGN.md`** (tokens, colour roles, icon rules and the `Icons.qml` registry, component anatomy, state and
+  motion rules, how to add a bar widget / popup / setting). Rules of thumb: `Theme` tokens only (a content cap is a named property),
+  `Icons.<name>` for every glyph, shared parts (`ListRow`, `Btn`, `EmptyState`, ...) instead of inline re-draws, one ink at rest and
+  accent only for on / selected / open. A new shared file needs a qmldir entry and a shell restart.
+- **Settings** (`Settings.qml`, `allPages`: `look` Look & feel = `SettingsLook.qml` (Colour mode; Glass / Motion / Shape presets with previews; folds
+  `GlassAdvanced` / `MotionAdvanced` / `ShapeAdvanced` = the former Glass / Animations / Appearance pages, whose ids redirect there), `monitors`, `wallpaper`,
+  `bar`, `lock`, `deskclock`). Page pattern: title only, no intro; the 1-3 primary choices first (`PresetCards` = visual cards with a live preview Component and a
+  tick, `ChoiceRow` = `Segmented` + `CustomTag` + a <= 5-word `hint` + `InfoTip`), then one `AdvancedFold` ("Customise…", `detail` = a short badge such as
+  "3 changed") holding every detailed row (`PrefSlider` / `PrefToggle` / `PrefSwitch` / `GlassOptRow`), then `PageReset`. Words: labels, value badges, an
+  `InfoTip` (hover tooltip; lock / warning glyph for a disabled or unavailable thing) for the rare technical note; never sentences or footnotes. Presets =
+  named value sets in `Presets.qml` (glass, motion, shape, bar look, lock layout / size / backdrop, morph, desk clock size): `<area>Current` says which
+  set the saved values equal within a tolerance, else "custom" (nothing is migrated; Custom keeps the saved values until a preset is picked; a slider in the
+  fold turns the choice into Custom), `apply<Area>()` writes through the stores' own setters. Adding a setting: a primary choice only when it is a clear
+  few-way decision with a preview, otherwise a row inside the fold; a new preset = one table entry. Previews: `GlassSample` (a sketch; the Settings window
+  itself is the real compositor glass), `MotionDemo`, `ShapeDemo`, `BarLookSample`, `LockSketch`, `LockPreview`, `DeskClockPreview`, `GridPick` (3x3
+  position). Test hooks: `qs ipc call settingsui locate <objectName> | reveal <objectName> | scroll <y> | grab <png under /tmp> | size <w> <h> | fold <objectName> 1|0 | showAt <objectName> <y>` (`grab` = the card's own
+  full-size rendering without the compositor glass: nested outputs are often too small for grim). Caveats: a light-mode glass set that differs from the
+  dark one shows Custom in light mode (the saved light set has clarity 0, the Liquid preset 0.247); the 760 px minimum window fits the folds only with
+  elided section details; older comments / notes saying "Settings > Glass / Animations / Appearance" mean the Look & feel folds.
 - **Lock screen** (replaces hyprlock; `Lock.qml` service + `LockView/LockClock/LockField/LockDots/LockVideo/LockReveal.qml`, glass in
   `GlassShape/GlassText/GlassBead.qml`, `qs ipc call lock lock|locked|secure|status`; `status` lists per screen the still's file name and, while locked, the clip, `videoReady`
   and what the surface shows: still / video / none): an ext-session-lock inside the main shell. Callers go
@@ -160,12 +196,12 @@ config/aerospace karabiner swiftbar  macOS only
   (`LockReveal`, `shaders/lockreveal.frag`) closes over it, and after a correct password the ring opens back onto it before
   `locked = false` (`Theme.lockRevealMs`). No snapshot = instant. Caveat: the desktop may have changed while locked (e.g. the video
   wallpaper advanced), so the last transition frame can differ from the real desktop.
-  Settings > Lock screen (`SettingsLock.qml`, rows `PrefSlider`/`PrefToggle`) edits `LockPrefs` (lock.json next to animations.json,
+  Settings > Lock screen (`SettingsLock.qml`: Layout / Clock size / Backdrop / Morph presets, every row under Customise…, rows `PrefSlider`/`PrefToggle`/`PrefSwitch`) edits `LockPrefs` (lock.json next to animations.json,
   same storage pattern as Motion; `qs ipc call lockprefs ...`): dim (`Theme.lockDim`, blurred backdrop and what the glass refracts; MULTIPLIES by 1 - dim: a black veil
   over the blur and `glasstext.frag` `seen()`. MultiEffect `brightness` subtracts and turned a dark blurred video frame fully black on one
   monitor), blur,
   clock/dot size, date, 24h, seconds, morph time, clock screens (`hidden` map by `Appearance.monitorKey`, same scheme as the desktop
-  clock; `ipc call lockprefs hideClockOn|showClockOn <key>`; off = no clock/date/playback card there, the dots keep their place), playback
+  clock, switched on Settings > Monitors; `ipc call lockprefs hideClockOn|showClockOn <key>`; off = no clock/date/playback card there, the dots keep their place), playback
   card, clock reveal, snapshot, unlock ring, video bursts; defaults = the stock look. Its preview (`LockPreview`) is
   a real `LockView` with `preview: true` (no input/video/lock, sample playback card) at a virtual 1920x1080, 16:9. Per-monitor stills: `LockWallpapers`. Backdrop chain is
   `bleed` px larger than the screen (no dark blur edges); the video goes in as its own layer (a ShaderEffectSource of the
@@ -174,7 +210,10 @@ config/aerospace karabiner swiftbar  macOS only
   second surface right after loading) and never seeks except to park and at the clip's wrap (seeking a paused player showed a keyframe: jumps); one burst
   when the lock engages (`LockView.engaged` = secure; surfaces exist earlier), and on typing / Enter (`bin/lock-video` reads the desktop
   player's state). The desktop player is NOT advanced while locked (hidden, it stalled and fast-forwarded at unlock): before the snapshot,
-  `bin/lock-desktop-video hold` pauses a player that is mid-burst and `release` resumes it after unlock, so the reveal ends on the frame
+  `bin/lock-desktop-video hold` freezes a player that is mid-burst (`script-message winddown-hold` + pause: an unbaked clip's
+  runtime wind-down ramp runs on wall time and, only paused, finished while locked and seeked to the stop frame = a jump at
+  unlock; players started with an older winddown.lua get the pause only) and `release` continues it after unlock
+  (`winddown-release` shifts the ramp by the time held), so the reveal ends on the frame
   the desktop is really on. Image/loop wallpapers show the still. Test hooks: `QS_LOCK_PAM_DIR`,
   `QS_LOCK_PAM_SERVICE`, `QS_LOCK_WALLPAPER`, `QS_LOCK_VIDEO`, `QS_LOCK_ARGS`, `QS_LOCK_CLOCK` (fixed clock text; several separated by spaces cycle every 3 s), `QS_WALLPAPERS_FILE`. Revert to hyprlock: point
   the two `lock_cmd`s and the bind back at `hyprlock` (`hyprlock.conf` is untouched).
@@ -191,14 +230,74 @@ config/aerospace karabiner swiftbar  macOS only
   ~1.1 % of a core + ~2.2 ms/s GPU (morph 0: ~0.4 % / ~0.8 ms/s); seconds off = idle as before (~0.2 %, ~0.05 ms/s).
 - **Shell glass** (all optics from Settings > Glass, `GlassTuneCtl.effective`): `GlassLens.qml` = the shared lens (`shaders/sliderlens.frag`,
   refracts the shell's own card, same on stock), only alive while `amount` > 0 (Slider handle while dragged, Toggle knob while pressed /
-  sliding after a click, OSD level while it changes; `qs ipc call osd level volume|brightness <0-100>` shows the pill for tests).
+  sliding after a click, OSD level while it changes; `qs ipc call osd level volume|brightness <0-100>` shows the pill for tests, `volume -1` = muted).
   Toggle's knob slide runs on the popup move tokens. The lens retires in two steps (stop hiding the host + stop drawing, unload
   100 ms later): unloading the effect directly left one frame in which neither drew (the OSD content blinked). `GlassEdge.qml` (inside every `isGlassItem` card) = 1 px rim lit from `light_angle`, only
   without `Theme.glass`. Shell-only Glass keys (`shell: true` in `GlassTuneCtl.opts`, group "Shell", e.g. `edge`) are saved in glass.json
   but never sent to Hyprland (managed.lua ignores unknown keys). Without solid_glass (stock) the Glass page is still listed and edits /
   saves the values for the shell only (`GlassTuneCtl.editable`). Caveat: a workspace-switch lens on the bar was tried and dropped (on a flush
-  bar it refracts nothing but chip pixels: a grey squircle that blurs the active chip).
-- **Desktop clock** (opt-in, Settings > Desktop clock, `DeskClockPrefs` -> deskclock.json, `QS_DESKCLOCK_FILE`, `qs ipc call deskclock
+  bar it refracts nothing but chip pixels: a grey squircle that blurs the active chip). `RimLight.qml` (PopupHost card, ModalMenu card,
+  Settings) = the 1 px rim near the pointer catches a radial light while hovered (one odd-even ring Shape, no layers; Glass > Shell
+  "Pointer rim", key `pointer_rim`, 0 = off).
+- **Per-surface glass** (Look & feel > Glass > Customise… > Surfaces, choice Uniform / Differentiated / Custom; fork builds whose `decoration:blur:solid_glass:per_surface` exists, probed
+  as `Theme.glassPerSurface`; group bar / border options probed separately: `glassGroupbarOpt`, `glassBorderOpt`): a profile per
+  surface = overrides of `depth refraction aberration specular_intensity frost clarity darkening`, unset = the global value; no
+  profile = today's look. Surfaces: bar `qs-bar`, popups `qs-popup`, launcher `qs-launcher`, OSD `qs-osd`, notifications
+  `qs-toast` (named layer rules `qs-glass-<id>`, `glass = "key:value ..."`), group bar (`group:groupbar:solid_glass`), window
+  borders (`decoration:blur:solid_glass:border`: off / "on" / overrides; drawn only with border size > 0). Stored in glass.json
+  `"surfaces"` (both modes) through `GlassTuneCtl.surfaces` (one writer); `GlassSurfaces.qml` = logic + live apply
+  (`hyprctl eval "glass_surfaces_apply({...})"`, throttled), `managed.lua` `M.apply_surfaces` composes the strings at load,
+  reload and from that eval (`M.read_surfaces` / `M.split_surfaces`: strip "surfaces" before parsing the mode sets). UI:
+  `GlassSurfacesSection` > `GlassSurfaceProfile` (FoldSection) > `GlassOptRow` (also the page's global rows); preset
+  "Differentiated" in `GlassSurfaces.presets`; IPC `qs ipc call glasssurfaces set|unset|reset|preset|border|dump` (exists once
+  the Glass page was opened). Stock / old fork: nothing is sent (an unknown rule field is a config error there), the section
+  is disabled with a note. Add a surface: `GlassSurfaces.surfaces` + `managed.lua` `M.SURFACE_LAYERS` / `M.SURFACE_IDS`.
+  Caveats: re-registering a named rule appends its effect (last wins; Lua only re-sends changed strings, a reload clears
+  them); the tray menu (xdg popup of the bar) cannot get a profile (the fork resolves the `glass` rule for layer surfaces
+  and windows, not popups; from the source); Settings (a window) has none yet (would be a window rule); the shell's own
+  lenses (GlassLens, glass lettering) keep the global values.
+- **Motion language** (`Motion.qml`, shell section; `Theme.popup*` are the same tokens): `Motion.ms(base)` = base / popup speed, 16 ms
+  floor, 0 when style "none" (`Motion.reduced`); `pressMs` 80 / `hoverMs` 120 / `moveMs` 200 / `exitMs` 150 / `emphasisMs` 300 at 1x;
+  `easeEnter`/`easeMove`/`easeExit` follow the Curve setting, `easeHover` = OutCubic; `stagger(i, max)`. Never hard-code a duration
+  (state pulses like `busyPulseMs` excepted); overshoot only on press release and a toast landing; no SpringAnimation (no duration:
+  cannot follow speed / off). Parts: `PressFeedback` (sink by ~2 px + overshoot release; Btn, Tile, ListRow, Chip, Settings nav;
+  HoverGlow brightens under the pointer while pressed), `GlideHighlight` (one gliding selection marker: launcher rows / actions,
+  Settings sidebar, `Segmented`; the selected item then draws no fill, `Btn.activeFill: false`), `Reveal` (fade + rise of content
+  swapped in place: Settings page, launcher section / action panel, tray submenu), `OpenMotion` (open / close `t` of a small surface:
+  OSD; unmaps after the close, glass tail via `glassScaleAt`, close forced after exitMs + 400 if frames stall; stock = unmap at
+  once, the blur is the whole window), `FoldBox` + `Chevron` (DropSelect, DevicePicker, BtProfilePicker). Fade colours from
+  `Theme.alpha(sameColour, 0)`, not "transparent" (lerps through black). Caveat: the tray menu (xdg popup, compositor blurs the
+  whole surface) keeps no open / close motion of its own: a fading card would leave an empty blurred box.
+- **Primary monitor** (`Monitors.qml`, singleton): `Monitors.ordered` (primary first, then by x, y, name), `.primary` / `.primaryName` / `.primaryKey`, `isPrimary(screen)`, `title(screen)`; new code uses these
+  instead of indexing `Quickshell.screens` wherever order or "the first monitor" matters (Settings window default, Osd / Toasts default target, `Popups.focusedScreen` fallback, launcher default, Settings monitor choosers,
+  wallpaper-theme source default). Per-screen windows that just iterate all screens stay on `Quickshell.screens`. Choice = `quickshell/monitors.json` next to appearance.json
+  (`QS_MONITORS_FILE`; `{"version":1,"primary":"<Appearance.monitorKey>"}`; the shell is the only writer; `qs ipc call monitors get|set <connector>|clear`), set in Settings > Monitors (`MonitorPicker`
+  thumbnails by real position; `PrimaryTag` marks the primary in every monitor list). No choice or the monitor is gone = automatic: highest refresh rate (Hyprland IPC), most pixels, connector name; the
+  saved choice is kept and applies again when the monitor returns. `theme.py` (`shell_primary_key`) uses the same file / rule when the wallpaper `primary` is unset. Caveat: Hyprland's `monitors.primary` Lua table
+  is not readable from the shell; a nested session shows every output at 60 Hz, so the refresh-rate rule was only checked by reading the code.
+  **Settings > Monitors** (`SettingsMonitors.qml`, page id `monitors`): `MonitorPicker` = the MAP and selector (every monitor at real relative
+  size / position, uniformly scaled to the width and <= 240 px tall, >= `controlGap` between tiles; each tile = its wallpaper still, cover crop,
+  bottom scrim with connector + Hz and a Primary chip in `Theme.barInkLight` ink; accent outline = selected; click selects, double click / Enter
+  makes primary, arrows move), then `ChoiceRow` Primary Auto | Manual (Auto = `clearPrimary`, Manual pins the selected one), then ONE `MonitorCard`
+  for the selected monitor (name, connector, mode / scale `Pill`s from `Monitors.modeText` / `scaleText`, `PrimaryTag` or "Set as primary") with
+  three `LabelSwitch` tiles writing the features' own stores: Bar = `BarConfig.set(s, "enabled")` (linked group together, last bar locked), Lock
+  clock = `LockPrefs.setClockOn`, Desktop clock = `DeskClockPrefs.setShownOn` (locked while the clock is off). The selection is the shared
+  `Monitors.selected`. Badges re-read Hyprland (`refreshMonitors`) on open and on any geometry change. It is the only place for these per-monitor
+  switches (other pages show at most a status such as "no bar" on a chip). objectNames `monitor-pick-<conn>`, `monitor-card-<conn>`,
+  `mon-bar|mon-lockclock|mon-deskclock-<conn>`, `mon-primary-<conn>`, `primary-auto|primary-manual`.
+  **Monitor chooser** (`MonitorChooser.qml` + `MonitorChip.qml`): the ONE way a Settings page picks the monitor it edits (Wallpaper, Bar, Lock
+  screen and Desktop clock previews, Look & feel > Shape > Customise… smart gaps). A strip of chips in `Monitors.ordered` order (wallpaper
+  still in the monitor's aspect, model over connector + optional status, `PrimaryTag`, optional accent `mark`), bound to the shared Settings
+  pick `Monitors.selected` / `Monitors.select()` (`""` / a monitor that went away = the primary; Settings resets it on open; the Monitors map
+  uses it too), so switching on one page carries to the others. Hidden with one monitor. Options: `allEntry` + `allCurrent` (an "All" chip,
+  `picked("")`), `linkable` + `linkedAt(i)` / `linkToggled(i)` / `groupedFor` (a `MonitorLinkButton` between neighbours: Bar, Wallpaper),
+  `subtitleFor` / `markFor` / `thumbFor`, trailing page actions as children (stacked under the chips when narrow). Tab focuses it, arrows pick;
+  link buttons take Tab + Space. Adding a per-monitor setting: put `MonitorChooser {}` above the rows and read `Monitors.selected` (key via
+  `Appearance.monitorKey`); never a per-monitor switch list. objectNames `monitor-chip-<conn>|all`, `monitor-link-<i>`; test hook `qs ipc call
+  monitors select <connector>|selected`. Wallpaper page: palette glyph = palette source (wallpapers.json `primary`, else the shell primary
+  as theme.py), row actions "Follow primary" (`theme.py clear`) and "Use for palette" (`theme.py primary`). Nested test arrangements: `hyprctl eval 'hl.monitor({output="TEST2", mode="1600x900@60",
+  position="0x900", transform=1, scale=1.25})'` on the nested instance (a wayland output takes the mode until its host window is resized again).
+- **Desktop clock** (opt-in, Settings > Desktop clock: Size presets, 3x3 position grid, sliders under Customise…; `DeskClockPrefs` -> deskclock.json, `QS_DESKCLOCK_FILE`, `qs ipc call deskclock
   get|set|unset|reset|hideOn|showOn`): `DeskClock.qml` = one bottom-layer window per shown monitor (`qs-deskclock`, empty blur region,
   clock area only; `rules.lua` layer rule `order = -1` keeps it above mpvpaper, which is on the bottom layer too), `DeskClockView.qml` =
   GlassText per character refracting what the desktop shows: the still / image (`LockWallpapers.stillFor`, cover crop like hyprpaper) or,
@@ -240,9 +339,9 @@ config/aerospace karabiner swiftbar  macOS only
   body, stronger wider shadow; airy 0 = exactly the Settings > Glass look (the lock never sets it). Shader changes need a shell restart. `QS_DESKCLOCK_CLOCK` = test clock text
   (as `QS_LOCK_CLOCK`). GlassText morph caveat: its two mask texts are set, not bound to `text` (a binding changed both masks at once:
   no morph, the digit just switched), and a text change bumps `GlassShape.refresh` / `refresh2` so that mask's shape field re-renders.
-  Desktop clock page: seconds, morph time ("Show morph" / a changed slider steps the preview a minute ahead and back), monitors
-  (`MonitorToggles`, shared with the lock page). Glyphs created after the reveal (character count changed) start formed.
-- **Bar text contrast** (Settings > Bar > Text contrast; bars.json per bar `contrast` auto|dark|light|off, `contrastSens` 0..100, `hoverFill` 0..100): while
+  Desktop clock page: seconds, morph time ("Show morph" / a changed slider steps the preview a minute ahead and back); which
+  monitors show it: Settings > Monitors. Glyphs created after the reveal (character count changed) start formed.
+- **Bar text contrast** (Settings > Bar > Text, shown for the Transparent look (= docked + transparent when flush; Floating / Docked / Transparent are the Look cards); bars.json per bar `contrast` auto|dark|light|off, `contrastSens` 0..100, `hoverFill` 0..100): while
   the bar has no backdrop (flush + "transparent when flush", `Bar.inkFlat`) its text sits on the wallpaper, so each section (left / centre / right)
   gets a `BarInk.qml` colour set, whatever the theme mode: dark text on a bright wallpaper, light on a dark one (`Theme.barInkDark/barInkLight` = the
   palette's hues clamped in lightness), chips are fully transparent at rest (no pill, no outline; contrast comes from the ink only), the hovered one gets a soft wash (grey-blue 0.26 x `hoverFill` behind dark text, white 0.32 x behind light text; default 35 % = ~9 / ~11 %), active
