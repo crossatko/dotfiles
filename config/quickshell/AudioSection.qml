@@ -6,7 +6,7 @@ import Quickshell.Services.Pipewire
 // Clicking a speaker / microphone icon mutes it.
 ColumnLayout {
     id: au
-    spacing: 6
+    spacing: Theme.controlGap
 
     PwObjectTracker { objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource] }
     readonly property var sink: Pipewire.defaultAudioSink ? Pipewire.defaultAudioSink.audio : null
@@ -14,7 +14,7 @@ ColumnLayout {
 
     LevelRow {
         icon: Icons.volumeGlyph(!au.sink || au.sink.muted, au.sink ? au.sink.volume : 0)
-        iconColor: au.sink && au.sink.muted ? Theme.muted : Theme.accent
+        iconColor: !au.sink || au.sink.muted ? Theme.muted : Theme.accent    // live output = accent, muted / none = muted (as the bar chip)
         iconClickable: true
         onIconClicked: if (au.sink) au.sink.muted = !au.sink.muted
         value: au.sink ? au.sink.volume : 0
@@ -26,10 +26,10 @@ ColumnLayout {
     BtProfilePicker { Layout.fillWidth: true }
 
     LevelRow {
-        Layout.topMargin: 4
+        Layout.topMargin: Theme.gapTight
         visible: au.source !== null
-        icon: au.source && au.source.muted ? "\uf131" : "\uf130"
-        iconColor: au.source && au.source.muted ? Theme.muted : Theme.accent
+        icon: au.source && au.source.muted ? Icons.micOff : Icons.mic
+        iconColor: !au.source || au.source.muted ? Theme.muted : Theme.accent
         iconClickable: true
         onIconClicked: if (au.source) au.source.muted = !au.source.muted
         value: au.source ? au.source.volume : 0

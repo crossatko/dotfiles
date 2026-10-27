@@ -15,12 +15,14 @@ import "launcher/js/Vpn.js" as Vpn
 // Never shows the real (non-Mullvad) location / IP of the disconnected state, and never runs `account get`.
 ColumnLayout {
     id: mv
-    spacing: 6
+    spacing: Theme.controlGap
 
     readonly property string bin: Quickshell.env("QS_MULLVAD") ? String(Quickshell.env("QS_MULLVAD")) : "mullvad"
-    readonly property int rowH: 44
+    readonly property int rowH: Theme.rowH
     readonly property int cityH: 36
-    readonly property int maxListH: 5 * cityH + 4 * 6 + 18      // ~5.5 rows, then it scrolls
+    readonly property int listGap: Theme.gapTight                 // items of a list
+    readonly property int maxListH: 5 * cityH + 4 * listGap       // 5 whole country rows, then it scrolls
+    readonly property int valueMaxW: 200      // cap of the chosen location text in the Location row
 
     property bool loaded: false
     property bool missing: false          // no mullvad CLI on PATH
@@ -237,8 +239,8 @@ ColumnLayout {
         // daemon down: same box as Tailscale's operator hint
         Notice {
             visible: mv.loaded && mv.daemonDown
-            padX: 8
-            padY: 8
+            padX: Theme.gapRow
+            padY: Theme.gapRow
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
@@ -247,11 +249,11 @@ ColumnLayout {
             }
             Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: 30
-                radius: Theme.inner(Theme.radiusItem, 8)
+                implicitHeight: Theme.controlH
+                radius: Theme.inner(Theme.radiusItem, Theme.gapRow)
                 color: Theme.alpha(Theme.bg, 0.6)
                 Label {
-                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 10 }
+                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: Theme.padSm; rightMargin: Theme.padSm }
                     text: mv.copied === "daemon" ? "Copied" : "sudo systemctl enable --now mullvad-daemon"
                     color: mv.copied === "daemon" ? Theme.accent : Theme.fg
                     font.pixelSize: Theme.fontSmall
@@ -260,7 +262,7 @@ ColumnLayout {
             }
             RowLayout {
                 spacing: Theme.controlGap
-                Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Copy command"; active: true; onClicked: mv.copy("daemon", "sudo systemctl enable --now mullvad-daemon") }
+                Btn { outerRadius: Theme.radiusItem; inset: Theme.gapRow; text: "Copy command"; active: true; onClicked: mv.copy("daemon", "sudo systemctl enable --now mullvad-daemon") }
             }
         }
 
@@ -270,7 +272,7 @@ ColumnLayout {
             Layout.fillWidth: true
             rowH: mv.rowH
             interactive: false
-            icon: "\uf3ed"
+            icon: Icons.shield
             iconColor: mv.tunnel === "connected" ? Theme.accent : mv.tunnel === "error" || mv.lockedDown ? Theme.orange : Theme.muted
             selected: mv.tunnel === "connected"
             RowText {
@@ -286,7 +288,7 @@ ColumnLayout {
                 text: done ? "Copied" : mv.loc ? mv.loc.ipv4 : ""
                 font.pixelSize: Theme.fontSmall
                 color: done ? Theme.accent : ipArea.containsMouse ? Theme.fg : Theme.fgDim
-                MouseArea { id: ipArea; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: mv.copy("ip", mv.loc.ipv4) }
+                MouseArea { id: ipArea; anchors.fill: parent; anchors.margins: -Theme.gapTight; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: mv.copy("ip", mv.loc.ipv4) }
             }
         }
 
@@ -311,17 +313,17 @@ ColumnLayout {
         ListRow {
             visible: mv.up
             Layout.fillWidth: true
-            rowH: 36
-            icon: "\uf0ac"
-            iconSize: 15
+            rowH: mv.cityH
+            icon: Icons.globe
+            iconSize: Theme.iconMd
             iconColor: Theme.fgDim
             outlined: mv.picking
             onClicked: { mv.picking = !mv.picking; if (mv.picking && mv.countries.length === 0) relaysProc.running = true }
             RowText { title: "Location"; titleColor: Theme.fgDim }
-            Label { text: mv.chosenLabel() || "…"; color: Theme.fg; font.pixelSize: Theme.fontSmall; elide: Text.ElideRight; Layout.maximumWidth: 200 }
+            Label { text: mv.chosenLabel() || "…"; color: Theme.fg; font.pixelSize: Theme.fontSmall; elide: Text.ElideRight; Layout.maximumWidth: mv.valueMaxW }
             Icon {
-                text: "\uf078"
-                font.pixelSize: 11
+                text: Icons.chevronDown
+                font.pixelSize: Theme.iconSm
                 color: Theme.fgDim
                 rotation: mv.picking ? 180 : 0
                 Behavior on rotation { NumberAnimation { duration: Theme.popupMoveMs; easing.type: Easing.OutCubic } }
@@ -336,9 +338,9 @@ ColumnLayout {
             Layout.fillHeight: true
             Layout.preferredHeight: Math.min(mv.maxListH, contentHeight)
             Layout.maximumHeight: Math.min(mv.maxListH, contentHeight)
-            Layout.minimumHeight: Math.min(2 * mv.cityH + 6, contentHeight)
+            Layout.minimumHeight: Math.min(2 * mv.cityH + mv.listGap, contentHeight)
             clip: true
-            spacing: 6
+            spacing: mv.listGap
             boundsBehavior: Flickable.StopAtBounds
             model: mv.countries
             delegate: ListRow {
@@ -350,11 +352,11 @@ ColumnLayout {
                 readonly property bool current: mv.chosen.cc === c.code
                 width: list.width
                 rowH: mv.cityH
-                selected: current
+                selected: current && !open
                 outlined: open
                 onClicked: mv.openCountry = card.open ? "" : card.c.code
                 expanded: open
-                bodyGap: 10
+                bodyGap: Theme.padSm
                 onHeightChanged: if (open) list.positionViewAtIndex(index, ListView.Contain)
 
                 RowText {
@@ -400,9 +402,9 @@ ColumnLayout {
                 readonly property var val: modelData.k === "lockdown" ? mv.lockdown : mv.autoConnect
                 visible: mv.up && val !== undefined
                 Layout.fillWidth: true
-                Layout.leftMargin: 12
-                Layout.rightMargin: 12
-                spacing: 10
+                Layout.leftMargin: Theme.pad
+                Layout.rightMargin: Theme.pad
+                spacing: Theme.padSm
                 RowText { title: opt.modelData.t; sub: opt.modelData.s; titleColor: Theme.fgDim }
                 Toggle {
                     checked: opt.val === true

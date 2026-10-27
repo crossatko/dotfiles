@@ -2,10 +2,11 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 
-// Settings window: a floating toplevel titled "qs-settings" (Hyprland places it: SUPER+LMB drags, the position is
-// remembered, a double-click on the title row re-centres; see hypr/scripts/modal-windows.lua), Escape / the X close it. A sidebar
+// Settings window: a floating toplevel titled "qs-settings" (Hyprland places it: SUPER+LMB drags; it always opens centred at the default size, nothing is
+// remembered, a double-click on the title row re-centres a dragged one; see hypr/scripts/modal-windows.lua), Escape / the X close it. A sidebar
 // of pages on the left and the selected page (scrollable) on the right. Resizable and tileable (the size it opens at
 // is a default; Hyprland remembers the floating size). Opened from the control center's gear,
 // or `qs ipc call settings toggle|open|close` / `qs ipc call settings page <id>`; `qs ipc call picker toggle`
@@ -23,23 +24,27 @@ FloatingWindow {
     id: win
 
     // glassOnly pages exist only while the running Hyprland draws the solid_glass blur (Theme.glass)
+    // Every page: its 1-3 primary choices first (ChoiceRow / PresetCards with previews, presets in Presets.qml, hardly any
+    // words: a label, a value badge, an InfoTip for a technical note), then an AdvancedFold ("Customise…") with the
+    // detailed rows, and a PageReset at the end.
     readonly property var allPages: [
-        { id: "bar",      title: "Bar",      icon: "\uf0db", source: "SettingsBar.qml" },
-        { id: "wallpaper", title: "Wallpaper & theme", icon: "\uf03e", source: "SettingsWallpaper.qml" },
-        { id: "appearance", title: "Appearance", icon: "\uf53f", source: "SettingsAppearance.qml" },
-        { id: "animations", title: "Animations", icon: "\uf008", source: "SettingsAnimations.qml" },
-        { id: "lock", title: "Lock screen", icon: "\uf023", source: "SettingsLock.qml" },
-        { id: "deskclock", title: "Desktop clock", icon: "\uf017", source: "SettingsDeskClock.qml" },
-        { id: "glass", title: "Glass", icon: "\uf0d0", source: "SettingsGlass.qml" }
+        { id: "look", title: "Look & feel", icon: Icons.palette, source: "SettingsLook.qml" },
+        { id: "monitors", title: "Monitors", icon: Icons.monitor, source: "SettingsMonitors.qml" },
+        { id: "wallpaper", title: "Wallpaper", icon: Icons.image, source: "SettingsWallpaper.qml" },
+        { id: "bar", title: "Bar", icon: Icons.tableColumns, source: "SettingsBar.qml" },
+        { id: "lock", title: "Lock screen", icon: Icons.lock, source: "SettingsLock.qml" },
+        { id: "deskclock", title: "Desktop clock", icon: Icons.clock, source: "SettingsDeskClock.qml" }
     ]
+    // page ids of earlier versions (scripts, muscle memory) -> where that setting lives now
+    readonly property var oldPages: ({ appearance: "look", animations: "look", glass: "look" })
     readonly property var pages: allPages.filter(p => !p.glassOnly || Theme.glass)
     readonly property var glassCtl: GlassTuneCtl       // instantiates the controller (and its `glasstune` IPC target) with the shell
-    property string page: "bar"
+    property string page: "look"
     property var pageMemory: ({})                   // page id -> object handed to a page's `memory` hook (session only)
     readonly property var current: pages.find(p => p.id === page) || pages[0]
 
     property bool shown: false
-    property var scr: Quickshell.screens[0]        // the monitor it was opened for: the card is sized from it
+    property var scr: Monitors.primary        // the monitor it was opened for: the card is sized from it
     title: "qs-settings"
     visible: shown
     color: "transparent"
@@ -47,8 +52,9 @@ FloatingWindow {
     implicitWidth: Math.min(scr.width - 80, Math.max(920, scr.width * 0.6))   // 920: content area no narrower than before the wider sidebar
     implicitHeight: Math.min(scr.height - 80, Math.max(600, scr.height * 0.62))
     // resizable (SUPER+RMB) and tileable (togglefloating): the card fills the window, 760x480 is the smallest
-    minimumSize: pinSize ? Qt.size(implicitWidth, implicitHeight) : Qt.size(760, 480)
-    maximumSize: pinSize ? Qt.size(implicitWidth, implicitHeight) : Qt.size(16384, 16384)
+    property size testSize: Qt.size(0, 0)          // test hook `settingsui size w h`: pins the window to that size (0 = off)
+    minimumSize: testSize.width > 0 ? testSize : pinSize ? Qt.size(implicitWidth, implicitHeight) : Qt.size(760, 480)
+    maximumSize: testSize.width > 0 ? testSize : pinSize ? Qt.size(implicitWidth, implicitHeight) : Qt.size(16384, 16384)
     Timer { id: unpin; interval: 150; onTriggered: win.pinSize = false }
     BackgroundEffect.blurRegion: Region { regions: glass.instances }
     Glass { id: glass; root: win.contentItem; active: visible }
@@ -56,11 +62,12 @@ FloatingWindow {
     // sized for the monitor of the popup it was asked from (control center gear), else the focused one; Hyprland
     // opens it on the focused monitor
     function open(p) {
-        if (p === "monitors") p = "bar"           // old page id: bar on/off + edge now live on the Bar page
+        if (p && oldPages[p]) p = oldPages[p]
         if (p && pages.some(x => x.id === p)) page = p
         if (shown) return
         const from = Popups.name !== "" ? Quickshell.screens.find(s => s.name === Popups.screen) : null
         scr = from || Popups.focusedScreen()
+        Monitors.select("")                       // the pages' shared monitor pick starts at the primary
         Popups.closeAll()
         pinSize = true
         unpin.restart()
@@ -77,6 +84,60 @@ FloatingWindow {
     }
 
     onShownChanged: if (shown) focusPage()
+
+    // test hooks (nested sessions drive the window with a virtual pointer): `qs ipc call settingsui locate <objectName>`
+    // -> "x,y wxh" of that item of the open page in window coordinates, `scroll <y>` sets the page's scroll position
+    function findNamed(root, name) {
+        if (!root) return null
+        if (root.objectName === name) return root
+        const kids = root.contentItem !== undefined && root.contentItem ? [root.contentItem] : []
+        for (const c of root.children) kids.push(c)
+        for (const c of kids) { const r = findNamed(c, name); if (r) return r }
+        return null
+    }
+    function locate(name) {
+        const it = findNamed(card, name)
+        if (!it) return ""
+        const p = it.mapToItem(null, 0, 0)
+        return Math.round(p.x) + "," + Math.round(p.y) + " " + Math.round(it.width) + "x" + Math.round(it.height)
+    }
+    IpcHandler {
+        target: "settingsui"
+        function locate(name: string): string { return win.locate(name) }
+        // the card rendered by the shell itself at full size (what the window shows minus the compositor's glass), as a PNG
+        function grab(path: string): string {
+            if (!path.startsWith("/tmp/")) return "refused"
+            card.grabToImage(r => { r.saveToFile(path) })
+            return "ok"
+        }
+        function scroll(y: string): void { flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, Number(y))) }
+        // pin the window to w x h (a tall window shows a whole page in one grab; 0 0 = back to resizable)
+        function size(w: string, h: string): void { win.testSize = Qt.size(Number(w), Number(h)) }
+        // open / close a named fold (AdvancedFold / FoldSection objectName) without the pointer
+        function fold(name: string, open: string): string {
+            const it = win.findNamed(card, name)
+            if (!it || it.open === undefined) return ""
+            it.open = open === "1" || open === "true"
+            return "ok"
+        }
+        // scroll so that the named item sits `at` px below the page top (a nested output smaller than the window
+        // reaches only part of it: put the item where the pointer can go)
+        function showAt(name: string, at: string): string {
+            const it = win.findNamed(card, name)
+            if (!it) return ""
+            const y = it.mapToItem(flick.contentItem, 0, 0).y
+            flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, y - Number(at)))
+            return "ok"
+        }
+        // scroll so that the named item is in view (40 px from the top)
+        function reveal(name: string): string {
+            const it = win.findNamed(card, name)
+            if (!it) return ""
+            const y = it.mapToItem(flick.contentItem, 0, 0).y
+            flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, y - 40))
+            return "ok"
+        }
+    }
     Connections {
         target: Popups
         function onSettingsRequest(action, p) {
@@ -102,6 +163,7 @@ FloatingWindow {
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.5)
         GlassEdge { anchors.fill: parent; radius: parent.radius }   // the rim without the compositor's glass
+        RimLight { anchors.fill: parent; radius: parent.radius; z: 1 }   // the rim near the pointer catches a light
 
         Keys.onEscapePressed: win.close()    // keys a focused page leaves unhandled bubble up to here
 
@@ -122,13 +184,22 @@ FloatingWindow {
                     color: Theme.alpha(Theme.fg, 0.04)
                     radius: Theme.radius
                 }
+                // the selected page's marker glides between the entries (GlideHighlight)
+                GlideHighlight {
+                    target: { void navRep.count; return navRep.itemAt(win.pages.findIndex(p => p.id === win.current.id)) }
+                    radius: Theme.radiusItem
+                    color: Theme.alpha(Theme.accent, 0.26)
+                    border.width: 1
+                    border.color: Theme.alpha(Theme.accent, 0.8)
+                }
 
                 ColumnLayout {
                     id: side
                     anchors { fill: parent; margins: 12 }
                     spacing: 4
-                    Label { text: "Settings"; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.bottomMargin: 10; Layout.leftMargin: 6 }
+                    Label { text: "Settings"; font.pixelSize: Theme.fontLead; font.bold: true; Layout.bottomMargin: Theme.padSm; Layout.leftMargin: Theme.controlGap }
                     Repeater {
+                        id: navRep
                         model: win.pages
                         Rectangle {
                             id: nav
@@ -138,22 +209,22 @@ FloatingWindow {
                             implicitWidth: navRow.implicitWidth + 12 + 18    // left padding + right padding with some air
                             implicitHeight: 36
                             radius: Theme.radiusItem
-                            color: sel ? Theme.alpha(Theme.accent, 0.26) : navGlow.hovered ? Theme.alpha(Theme.fg, 0.10) : "transparent"
-                            border.width: sel ? 1 : 0
-                            border.color: Theme.alpha(Theme.accent, 0.8)
+                            color: Theme.alpha(Theme.fg, !sel && navGlow.hovered ? 0.10 : 0)   // selected: the GlideHighlight under it
+                            Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
                             HoverGlow { id: navGlow; area: navArea; radius: nav.radius }
+                            PressFeedback { area: navArea }
                             RowLayout {
                                 id: navRow
                                 anchors { fill: parent; leftMargin: 12; rightMargin: 18 }
                                 spacing: 10
-                                Icon { text: nav.modelData.icon; font.pixelSize: 14; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: nav.sel ? Theme.accent : Theme.fgDim }
+                                Icon { text: nav.modelData.icon; font.pixelSize: Theme.iconMd; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: Theme.iconLg; color: nav.sel ? Theme.accent : Theme.fgDim }
                                 Label { text: nav.modelData.title; Layout.fillWidth: true; color: nav.sel ? Theme.fg : Theme.fgDim }
                             }
                             MouseArea { id: navArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: win.page = nav.modelData.id }
                         }
                     }
                     Item { Layout.fillHeight: true }
-                    Label { text: "Esc to close"; color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.leftMargin: 6 }
+                    Label { text: "Esc to close"; color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.leftMargin: Theme.controlGap }
                 }
             }
 
@@ -172,7 +243,7 @@ FloatingWindow {
                     RowLayout {
                         anchors.fill: parent
                         spacing: 16
-                        Label { id: titleLabel; text: win.current.title; font.pixelSize: 20; Layout.alignment: Qt.AlignVCenter }
+                        Label { id: titleLabel; text: win.current.title; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.alignment: Qt.AlignVCenter }
                         // the page's optional `headerItem` (stays put while the page scrolls); empty = spacer
                         Loader {
                             id: headerLoader
@@ -181,7 +252,7 @@ FloatingWindow {
                             Layout.alignment: Qt.AlignVCenter
                             sourceComponent: pageLoader.item && pageLoader.item.headerItem ? pageLoader.item.headerItem : null   // qmllint disable missing-property
                         }
-                        Btn { id: closeBtn; icon: true; text: "\uf00d"; inset: 18; Layout.alignment: Qt.AlignVCenter; onClicked: win.close() }
+                        Btn { id: closeBtn; icon: true; text: Icons.xmark; inset: 18; Layout.alignment: Qt.AlignVCenter; onClicked: win.close() }
                     }
                 }
 
@@ -196,6 +267,8 @@ FloatingWindow {
                     // don't scroll while a chip is dragged
                     interactive: !(pageLoader.item && pageLoader.item.dragging === true)   // qmllint disable missing-property
 
+                    // a new page arrives (fade + rise, Reveal); the old one is gone at once
+                    Reveal { id: pageReveal; target: pageLoader; rise: 10 }
                     Loader {
                         id: pageLoader
                         width: flick.width
@@ -209,6 +282,7 @@ FloatingWindow {
                                 item.memory = win.pageMemory[win.current.id]
                             }
                             // qmllint enable missing-property
+                            pageReveal.play()
                             win.focusPage()
                         }
                     }

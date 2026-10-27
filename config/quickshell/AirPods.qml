@@ -100,6 +100,7 @@ Singleton {
     }
     function _apply(text) {
         daemon = true
+        misses = 0
         raw = Pods.parse(text)
         _confirm()
     }
@@ -113,8 +114,17 @@ Singleton {
     Timer { id: settle; interval: root.settleMs; onTriggered: { root.pend = ({}); stateFile.reload() } }
     Timer { id: adaptiveSend; interval: 150; onTriggered: root.run("adaptive:" + root.adaptiveTarget) }
     Timer { id: errClear; interval: 5000; onTriggered: root.error = "" }
-    // the file appears when the daemon starts (a watch on a missing file can miss that): look again while it is absent
-    Timer { interval: 5000; repeat: true; running: !root.daemon; onTriggered: stateFile.reload() }
+    // the file appears when the daemon starts (a watch on a missing file can miss that): look again while it is absent, but only
+    // while something shows it (the Bluetooth chip in a bar layout, or its popup), every 5 s for `fastTries` misses, then once a
+    // minute (machines without the daemon); opening the popup starts the quick tries again
+    readonly property bool watched: BarWidgets.shown("bluetooth") || Popups.name === "bt"
+    readonly property int fastTries: 12
+    property int misses: 0
+    onWatchedChanged: if (watched && !daemon) { misses = 0; stateFile.reload() }
+    Timer {
+        interval: root.misses >= root.fastTries ? 60000 : 5000; repeat: true; running: !root.daemon && root.watched
+        onTriggered: { root.misses++; stateFile.reload() }
+    }
 
     FileView {
         id: stateFile

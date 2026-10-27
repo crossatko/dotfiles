@@ -14,29 +14,31 @@ ColumnLayout {
     property bool charging: false
     property bool inEar: false
     property string age: ""
-    property int ring: 56
+    property int ring: 56                   // art size of the ring
+    readonly property int stroke: 4
+    readonly property int arcInset: 3
 
     readonly property bool known: level >= 0
     readonly property bool stale: known && age !== ""
     readonly property color tone: !known || stale ? Theme.muted : charging ? Theme.green : level <= 15 ? Theme.red : Theme.accent
 
-    spacing: 4
+    spacing: Theme.gapTight
 
     Item {
         Layout.alignment: Qt.AlignHCenter
         implicitWidth: br.ring
         implicitHeight: br.ring
-        opacity: br.known ? 1 : 0.55
+        opacity: br.known ? 1 : Theme.dimOpacity
         Shape {
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer     // analytic anti-aliasing: crisp at fractional scales
             ShapePath {
-                strokeColor: Theme.alpha(Theme.fg, 0.12); strokeWidth: 4; fillColor: "transparent"
-                PathAngleArc { centerX: br.ring / 2; centerY: br.ring / 2; radiusX: br.ring / 2 - 3; radiusY: br.ring / 2 - 3; startAngle: 0; sweepAngle: 360 }
+                strokeColor: Theme.itemActive; strokeWidth: br.stroke; fillColor: Theme.alpha(Theme.bg, 0)
+                PathAngleArc { centerX: br.ring / 2; centerY: br.ring / 2; radiusX: br.ring / 2 - br.arcInset; radiusY: br.ring / 2 - br.arcInset; startAngle: 0; sweepAngle: 360 }
             }
             ShapePath {
-                strokeColor: br.tone; strokeWidth: 4; fillColor: "transparent"; capStyle: ShapePath.RoundCap
-                PathAngleArc { centerX: br.ring / 2; centerY: br.ring / 2; radiusX: br.ring / 2 - 3; radiusY: br.ring / 2 - 3; startAngle: -90; sweepAngle: br.known ? 3.6 * br.level : 0 }
+                strokeColor: br.tone; strokeWidth: br.stroke; fillColor: Theme.alpha(Theme.bg, 0); capStyle: ShapePath.RoundCap
+                PathAngleArc { centerX: br.ring / 2; centerY: br.ring / 2; radiusX: br.ring / 2 - br.arcInset; radiusY: br.ring / 2 - br.arcInset; startAngle: -90; sweepAngle: br.known ? 3.6 * br.level : 0 }
             }
         }
         PodIcon {
@@ -48,10 +50,10 @@ ColumnLayout {
     }
     RowLayout {
         Layout.alignment: Qt.AlignHCenter
-        spacing: 4
-        opacity: br.known ? 1 : 0.55
+        spacing: Theme.gapTight
+        opacity: br.known ? 1 : Theme.dimOpacity
         Label { text: br.known ? br.level + "%" : "–"; font.pixelSize: Theme.fontSize; color: br.stale ? Theme.fgDim : Theme.fg }
-        Icon { visible: br.charging && !br.stale; text: "\uf0e7"; font.pixelSize: 11; color: Theme.green }   // bolt
+        Icon { visible: br.charging && !br.stale; text: Icons.bolt; font.pixelSize: Theme.iconSm; color: Theme.green }   // bolt
     }
     Label {
         Layout.alignment: Qt.AlignHCenter

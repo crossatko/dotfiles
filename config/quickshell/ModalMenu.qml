@@ -21,6 +21,7 @@ PanelWindow {
     property string iconFamily: Theme.iconFont    // Theme.brandFont for a brand logo
     property Item focusItem: null                  // gets keyboard focus on open (e.g. a search field); null = onKeyPressed
     property int cardWidth: 520
+    readonly property int inset: Theme.pad + Theme.gapRow   // 20: the modal card's padding (wider than a popup's `pad`); KeyBadge / Btn radii are concentric with it
     property bool shown: false
     property var fixedScreen: null                 // opt-in: always open on this screen instead of the focused one
     property bool respectReserved: false           // opt-in: lay out in the usable area (bar strip, monitor reserved_area) instead of the full monitor
@@ -100,8 +101,8 @@ PanelWindow {
         id: cardBox
         readonly property bool isGlassItem: true
         anchors.centerIn: parent
-        width: Math.min(parent.width - 32, win.cardWidth)
-        height: body.implicitHeight + 40
+        width: Math.min(parent.width - 2 * Theme.pad, win.cardWidth)
+        height: body.implicitHeight + 2 * win.inset
         Behavior on height { enabled: win.animated && win.shown && win.t >= 1; NumberAnimation { duration: Theme.popupMoveMs; easing.type: Theme.popupEaseMove } }
         opacity: win.animated ? Math.max(0, Math.min(1, win.t)) : 1
         readonly property real glassScale: win.animated ? Theme.glassScaleAt(win.t) : 1   // see PopupHost card
@@ -117,23 +118,24 @@ PanelWindow {
         radius: Theme.radius
         color: Theme.alpha(Theme.bg, Theme.glass ? Theme.cardFill : 0.85)   // glass behind it (Glass.qml); without solid_glass: blurred by the qs-.* layer rule
         border.width: 1
-        border.color: Theme.alpha(Theme.overlay, 0.5)
+        border.color: Theme.edge
         GlassEdge { anchors.fill: parent; radius: parent.radius }   // the rim without the compositor's glass
 
         MouseArea { anchors.fill: parent }   // clicks on the card don't reach the close-scrim
+        RimLight { anchors.fill: parent; radius: parent.radius; z: 1 }   // the rim near the pointer catches a light
 
         ColumnLayout {
             id: body
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 20 }
-            spacing: 14
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: win.inset }
+            spacing: Theme.pad
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 10
-                Icon { text: win.icon; font.family: win.iconFamily; font.pixelSize: 16; color: win.iconColor }
+                spacing: Theme.padSm
+                Icon { visible: win.icon !== ""; text: win.icon; font.family: win.iconFamily; font.pixelSize: Theme.iconLg; color: win.iconColor; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: Theme.iconCol }
                 Label { text: win.title; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight }
                 Label { visible: win.titleSub !== ""; text: win.titleSub; font.pixelSize: Theme.fontCaption; color: Theme.fgDim; elide: Text.ElideRight }
-                Btn { icon: true; text: ""; inset: 20; onClicked: win.close() }   // 20 px inside the card
+                Btn { icon: true; text: Icons.xmark; inset: win.inset; onClicked: win.close() }   // concentric: `inset` px inside the card
             }
         }
     }

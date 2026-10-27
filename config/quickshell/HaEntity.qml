@@ -14,6 +14,9 @@ Rectangle {
     property bool compact: false             // scene / script tile: the whole card runs it
     property bool expanded: false            // light colour controls
     signal toggleExpand()
+    readonly property int indent: Theme.pad + Theme.iconCol + 2     // controls under the title line up with the title text
+    readonly property int tempW: 64          // width of the target temperature text
+    readonly property int kelvinW: 42        // width of the colour-temperature value
 
     readonly property var e: HomeAssistant.byId[entityId] || null
     readonly property string domain: entityId.split(".")[0]
@@ -77,17 +80,17 @@ Rectangle {
 
     function icon() {
         switch (domain) {
-        case "light": return on ? "" : ""
-        case "switch": return ""
-        case "input_boolean": return on ? "" : ""
-        case "climate": return st === "heat" ? "" : st === "cool" ? "" : ""
-        case "vacuum": return ""
-        case "fan": return ""
-        case "cover": return on ? "" : ""
-        case "scene": return ""
-        case "script": return ""
+        case "light": return on ? Icons.lightOn : Icons.lightbulb
+        case "switch": return Icons.outlet
+        case "input_boolean": return on ? Icons.toggleOn : Icons.toggleOff
+        case "climate": return st === "heat" ? Icons.fire : st === "cool" ? Icons.snowflake : Icons.airConditioner
+        case "vacuum": return Icons.vacuum
+        case "fan": return Icons.fan
+        case "cover": return on ? Icons.blindsOpen : Icons.blinds
+        case "scene": return Icons.wand
+        case "script": return Icons.scroll
         }
-        return ""
+        return Icons.home
     }
     function pretty(s) { return s ? String(s.charAt(0).toUpperCase() + s.slice(1)).replace(/_/g, " ") : "" }
     function sub() {
@@ -116,8 +119,8 @@ Rectangle {
          : on ? Theme.alpha(Theme.accent, 0.14) : Theme.alpha(Theme.fg, 0.05)
     border.width: on ? 1 : 0
     border.color: Theme.alpha(Theme.accent, 0.45)
-    opacity: hiddenNow || unavailable ? 0.45 : 1
-    Behavior on color { ColorAnimation { duration: 120 } }
+    opacity: hiddenNow || unavailable ? Theme.disabledOpacity : 1
+    Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
 
     HoverGlow { id: tileGlow; area: tileArea; radius: ent.radius }
     MouseArea {                               // scene / script tile: click runs it
@@ -131,45 +134,45 @@ Rectangle {
 
     ColumnLayout {
         id: body
-        anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 10 }
-        spacing: 8
+        anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: Theme.pad; rightMargin: Theme.padSm }
+        spacing: Theme.gapRow
 
         // ---- head: icon, name / state, main control ----
         RowLayout {
             Layout.fillWidth: true
-            spacing: 14
+            spacing: Theme.pad          // icon column -> text, as ListRow
             Icon {
                 text: ent.icon()
-                font.pixelSize: ent.compact ? 15 : 18
+                font.pixelSize: ent.compact ? Theme.iconMd : Theme.iconLg
                 horizontalAlignment: Text.AlignHCenter
-                Layout.preferredWidth: 22
+                Layout.preferredWidth: Theme.iconCol
                 color: ent.domain === "light" && ent.on ? ent.tint : ent.on ? Theme.accent : Theme.fgDim
             }
             RowText { title: ent.title; sub: !ent.compact || ent.editing ? ent.sub() : "" }
 
             // hide / unhide
             Btn {
-                outerRadius: Theme.radiusItem; inset: 8      // ~8-10 px inside the entity card
+                outerRadius: Theme.radiusItem; inset: Theme.gapRow      // ~8-10 px inside the entity card
                 visible: ent.editing
                 icon: true
-                text: ent.hiddenNow ? "" : ""
+                text: ent.hiddenNow ? Icons.eyeOff : Icons.eye
                 active: !ent.hiddenNow
                 onClicked: HomeAssistant.setHidden(ent.entityId, !ent.hiddenNow)
             }
 
             // colour controls (lights with colour / temperature)
             Btn {
-                outerRadius: Theme.radiusItem; inset: 8
+                outerRadius: Theme.radiusItem; inset: Theme.gapRow
                 visible: !ent.editing && ent.on && (ent.hasColor || ent.hasCt)
                 icon: true
-                text: ""
+                text: Icons.palette
                 active: ent.expanded
                 onClicked: ent.toggleExpand()
             }
             // covers: open / stop / close
             Repeater {
-                model: !ent.editing && ent.domain === "cover" ? [["", "open_cover"], ["", "stop_cover"], ["", "close_cover"]] : []
-                Btn { required property var modelData; outerRadius: Theme.radiusItem; inset: 8; icon: true; text: modelData[0]; enabledLook: !ent.unavailable; onClicked: if (!ent.unavailable) ent.now("cover", modelData[1]) }
+                model: !ent.editing && ent.domain === "cover" ? [[Icons.chevronUp, "open_cover"], [Icons.stop, "stop_cover"], [Icons.chevronDown, "close_cover"]] : []
+                Btn { required property var modelData; outerRadius: Theme.radiusItem; inset: Theme.gapRow; icon: true; text: modelData[0]; enabledLook: !ent.unavailable; onClicked: if (!ent.unavailable) ent.now("cover", modelData[1]) }
             }
             Toggle {
                 visible: !ent.editing && ["light", "switch", "input_boolean", "fan", "climate"].indexOf(ent.domain) >= 0
@@ -184,8 +187,8 @@ Rectangle {
         RowLayout {
             visible: !ent.editing && ent.on && (ent.hasBri || (ent.domain === "fan" && typeof ent.a.percentage === "number"))
             Layout.fillWidth: true
-            Layout.leftMargin: 36
-            spacing: 10
+            Layout.leftMargin: ent.indent
+            spacing: Theme.padSm
             Slider {
                 Layout.fillWidth: true
                 value: ent.domain === "fan" ? (ent.localPct >= 0 ? ent.localPct : (ent.a.percentage || 0) / 100)
@@ -202,9 +205,9 @@ Rectangle {
             id: colorBox
             visible: !ent.editing && ent.on && ent.expanded && (ent.hasColor || ent.hasCt)
             Layout.fillWidth: true
-            Layout.leftMargin: 36
-            Layout.rightMargin: 4
-            spacing: 10
+            Layout.leftMargin: ent.indent
+            Layout.rightMargin: Theme.gapTight
+            spacing: Theme.padSm
 
             readonly property real hue: ent.localHue >= 0 ? ent.localHue : ent.hs ? ent.hs[0] / 360 : -1
             readonly property real sat: ent.localSat >= 0 ? ent.localSat : ent.hs ? ent.hs[1] / 100 : -1
@@ -237,7 +240,7 @@ Rectangle {
             RowLayout {
                 visible: ent.hasCt
                 Layout.fillWidth: true
-                spacing: 10
+                spacing: Theme.padSm
                 HaStrip {
                     Layout.fillWidth: true
                     colors: ["#ff9329", "#ffd2a1", "#fff4e5", "#dce8ff"]
@@ -251,7 +254,7 @@ Rectangle {
                     text: ent.localCt < 0 && (ent.ct < 0 || ent.a.color_mode !== "color_temp") ? "—"
                         : Math.round(ent.ctMin + (ent.localCt >= 0 ? ent.localCt : ent.ct) * (ent.ctMax - ent.ctMin)) + "K"
                     color: Theme.fgDim; font.pixelSize: Theme.fontCaption
-                    Layout.preferredWidth: 42
+                    Layout.preferredWidth: ent.kelvinW
                     horizontalAlignment: Text.AlignRight
                 }
             }
@@ -262,30 +265,30 @@ Rectangle {
             id: tempRow
             visible: !ent.editing && ent.domain === "climate" && !ent.unavailable && ent.hasTarget
             Layout.fillWidth: true
-            Layout.leftMargin: 36
-            spacing: 6
+            Layout.leftMargin: ent.indent
+            spacing: Theme.controlGap
             readonly property real target: ent.localTemp > -999 ? ent.localTemp : (ent.a.temperature || 0)
             function step(dir) {
                 const t = Math.max(ent.a.min_temp ?? 7, Math.min(ent.a.max_temp ?? 35, target + dir * ent.tStep))
                 ent.localTemp = t
                 ent.later("climate", "set_temperature", { temperature: t })
             }
-            Btn { outerRadius: Theme.radiusItem; inset: 8; icon: true; text: ""; onClicked: tempRow.step(-1) }
-            Label { text: tempRow.target.toFixed(ent.tStep < 1 ? 1 : 0) + ent.unit; font.pixelSize: 15; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 64 }
-            Btn { outerRadius: Theme.radiusItem; inset: 8; icon: true; text: ""; onClicked: tempRow.step(1) }
+            Btn { outerRadius: Theme.radiusItem; inset: Theme.gapRow; icon: true; text: Icons.minus; onClicked: tempRow.step(-1) }
+            Label { text: tempRow.target.toFixed(ent.tStep < 1 ? 1 : 0) + ent.unit; font.pixelSize: Theme.fontLead; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: ent.tempW }
+            Btn { outerRadius: Theme.radiusItem; inset: Theme.gapRow; icon: true; text: Icons.plus; onClicked: tempRow.step(1) }
             Item { Layout.fillWidth: true }
             Label { visible: typeof ent.a.current_humidity === "number"; text: ent.a.current_humidity + "% RH"; color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
         }
         Flow {
             visible: !ent.editing && ent.domain === "climate" && !ent.unavailable && (ent.a.hvac_modes || []).length > 0
             Layout.fillWidth: true
-            Layout.leftMargin: 36
-            spacing: 6
+            Layout.leftMargin: ent.indent
+            spacing: Theme.controlGap
             Repeater {
                 model: ent.domain === "climate" ? (ent.a.hvac_modes || []) : []
                 Btn {
                     required property var modelData
-                    outerRadius: Theme.radiusItem; inset: 8
+                    outerRadius: Theme.radiusItem; inset: Theme.gapRow
                     text: ({ heat_cool: "Auto", fan_only: "Fan", off: "Off" })[modelData] || ent.pretty(modelData)
                     active: ent.st === modelData
                     onClicked: ent.now("climate", "set_hvac_mode", { hvac_mode: modelData })

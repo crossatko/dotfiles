@@ -8,10 +8,15 @@ import Quickshell.Networking
 // Wired status + Wi-Fi list + Tailscale machines + Mullvad (both VPN sections fold, see FoldSection). Wi-Fi password prompt appears inline for new secured networks.
 ColumnLayout {
     id: net
-    spacing: 8
-    readonly property int rowH: 44         // every connection row, wired or Wi-Fi
-    readonly property int rowGap: 6        // gap between any two rows
-    implicitHeight: Math.min(760, header.implicitHeight + body.implicitHeight + tailscale.implicitHeight + mullvad.implicitHeight + 56)
+    spacing: Theme.gapRow
+    readonly property int rowH: Theme.rowH            // every connection row, wired or Wi-Fi
+    readonly property int rowGap: Theme.gapTight      // gap between any two rows (items of a list)
+    readonly property int maxH: 760                   // content cap of the popup
+    readonly property int listRows: 5                 // Wi-Fi list: whole rows, then it scrolls (as BtPanel)
+    readonly property int listMax: listRows * (rowH + rowGap) - rowGap
+    readonly property int formH: 2 * Theme.controlH + Theme.controlGap + Theme.padSm + Theme.gapTight / 2   // password form: field + buttons + gaps (bodyTop / bodyGap below)
+    readonly property int listMaxAsking: listMax + formH   // ... while a password form is open: the same rows plus the form
+    implicitHeight: Math.min(maxH, header.implicitHeight + body.implicitHeight + tailscale.implicitHeight + mullvad.implicitHeight + 5 * Theme.gapRow + 2 * Theme.gapTight)
 
     readonly property var devs: Networking.devices.values   // qmllint disable missing-property
     readonly property var wired: devs.filter(d => d.type === DeviceType.Wired)
@@ -23,7 +28,7 @@ ColumnLayout {
     Component.onCompleted: if (wifiDev) wifiDev.scannerEnabled = true
     Component.onDestruction: if (wifiDev) wifiDev.scannerEnabled = false
 
-    function bars(s) { return s > 0.66 ? "\uf1eb" : s > 0.33 ? "\uf6ab" : "\uf6aa" }
+    function bars(s) { return s > 0.66 ? Icons.wifi : s > 0.33 ? Icons.wifiFair : Icons.wifiWeak }
     function stateText(st) {
         return st === ConnectionState.Connected ? "Connected" : st === ConnectionState.Connecting ? "Connecting…"
              : st === ConnectionState.Disconnecting ? "Disconnecting…" : "Disconnected"
@@ -83,22 +88,22 @@ ColumnLayout {
     }
     Notice {
         visible: net.portal
-        padX: 8
-        padY: 8
+        padX: Theme.gapRow
+        padY: Theme.gapRow
         Label {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
             text: "This network needs a sign-in."
             font.pixelSize: Theme.fontSmall
         }
-        Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Sign in"; active: true; onClicked: portalUrl.running = true }
+        Btn { outerRadius: Theme.radiusItem; inset: Theme.gapRow; text: "Sign in"; active: true; onClicked: portalUrl.running = true }
     }
 
     Notice {
         visible: net.confirm !== null
         danger: true
-        padX: 8
-        padY: 8
+        padX: Theme.gapRow
+        padY: Theme.gapRow
         Label {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
@@ -106,16 +111,16 @@ ColumnLayout {
             font.pixelSize: Theme.fontSmall
         }
         RowLayout {
-            spacing: 6
-            Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Cancel"; onClicked: net.confirm = null }
-            Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Disconnect"; active: true; onClicked: { const c = net.confirm; net.confirm = null; c.run() } }
+            spacing: Theme.controlGap
+            Btn { outerRadius: Theme.radiusItem; inset: Theme.gapRow; text: "Cancel"; onClicked: net.confirm = null }
+            Btn { outerRadius: Theme.radiusItem; inset: Theme.gapRow; text: "Disconnect"; active: true; onClicked: { const c = net.confirm; net.confirm = null; c.run() } }
         }
     }
 
     ColumnLayout {
         id: body
         Layout.fillWidth: true
-        spacing: net.rowGap
+        spacing: Theme.gapRow      // head <-> list; the blocks below add gapTight (= pad between blocks)
 
         SectionHead {
             visible: net.wired.length > 0
@@ -123,36 +128,41 @@ ColumnLayout {
             detail: net.wired.filter(d => d.connected).length + " / " + net.wired.length + " connected"
         }
 
-        Repeater {
-            model: net.wired
-            ListRow {
-                id: wiredRow
-                required property var modelData
-                readonly property bool canToggle: !!modelData.network || modelData.connected
-                readonly property bool on: modelData.state === ConnectionState.Connected || modelData.state === ConnectionState.Connecting
-                Layout.fillWidth: true
-                rowH: net.rowH
-                icon: "\uf796"
-                iconColor: modelData.connected ? Theme.accent : Theme.muted
-                baseColor: Theme.alpha(Theme.fg, 0.07)
-                interactive: canToggle
-                opacity: canToggle ? 1 : 0.45
-                onClicked: net.setWired(wiredRow.modelData, !wiredRow.on)
-                RowText {
-                    title: wiredRow.modelData.name
-                    sub: net.stateText(wiredRow.modelData.state) + (wiredRow.modelData.linkSpeed > 0 ? " · " + wiredRow.modelData.linkSpeed + " Mb/s" : "")
-                }
-                RowState {
-                    connected: wiredRow.modelData.state === ConnectionState.Connected
-                    hovered: wiredRow.hovered
-                    hintable: wiredRow.canToggle
-                    busy: wiredRow.modelData.state === ConnectionState.Connecting || wiredRow.modelData.state === ConnectionState.Disconnecting
+        ColumnLayout {
+            visible: net.wired.length > 0
+            Layout.fillWidth: true
+            spacing: net.rowGap
+            Repeater {
+                model: net.wired
+                ListRow {
+                    id: wiredRow
+                    required property var modelData
+                    readonly property bool canToggle: !!modelData.network || modelData.connected
+                    readonly property bool on: modelData.state === ConnectionState.Connected || modelData.state === ConnectionState.Connecting
+                    Layout.fillWidth: true
+                    rowH: net.rowH
+                    icon: Icons.ethernet
+                    iconColor: modelData.connected ? Theme.accent : Theme.muted   // the icon and the check carry the state; the row stays neutral
+                    baseColor: Theme.alpha(Theme.fg, 0.07)
+                    interactive: canToggle
+                    opacity: canToggle ? 1 : Theme.disabledOpacity
+                    onClicked: net.setWired(wiredRow.modelData, !wiredRow.on)
+                    RowText {
+                        title: wiredRow.modelData.name
+                        sub: net.stateText(wiredRow.modelData.state) + (wiredRow.modelData.linkSpeed > 0 ? " · " + wiredRow.modelData.linkSpeed + " Mb/s" : "")
+                    }
+                    RowState {
+                        connected: wiredRow.modelData.state === ConnectionState.Connected
+                        hovered: wiredRow.hovered
+                        hintable: wiredRow.canToggle
+                        busy: wiredRow.modelData.state === ConnectionState.Connecting || wiredRow.modelData.state === ConnectionState.Disconnecting
+                    }
                 }
             }
         }
 
         SectionHead {
-            Layout.topMargin: 8
+            Layout.topMargin: net.wired.length > 0 ? Theme.gapTight : 0
             title: "Wireless"
             detail: net.wifiDev && Networking.wifiEnabled ? net.wifiDev.networks.values.length + " networks" : ""
             Toggle {
@@ -165,22 +175,14 @@ ColumnLayout {
             }
         }
 
-        Label {
-            visible: net.wifiDev === null
-            text: "No Wi-Fi adapter"
-            color: Theme.muted
-        }
-        Label {
-            visible: net.wifiDev !== null && !Networking.wifiEnabled
-            text: "Wi-Fi is off"
-            color: Theme.muted
-        }
+        EmptyState { visible: net.wifiDev === null; icon: Icons.wifiOff; text: "No Wi-Fi adapter" }
+        EmptyState { visible: net.wifiDev !== null && !Networking.wifiEnabled; icon: Icons.wifiOff; text: "Wi-Fi is off" }
 
         ListView {
             id: wifiList
             visible: net.wifiDev !== null && Networking.wifiEnabled
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(net.asking ? 380 : 260, contentHeight)
+            Layout.preferredHeight: Math.min(net.asking ? net.listMaxAsking : net.listMax, contentHeight)
             clip: true
             spacing: net.rowGap
             // frozen while a password is being typed: the live list re-sorts whenever a signal strength changes,
@@ -197,7 +199,6 @@ ColumnLayout {
                 width: wifiList.width
                 rowH: net.rowH
                 icon: net.bars(modelData.signalStrength)
-                iconSize: 16
                 iconColor: modelData.connected ? Theme.accent : Theme.fg
                 selected: modelData.connected
                 outlined: asking
@@ -206,8 +207,8 @@ ColumnLayout {
                 onClicked: mouse => mouse.button === Qt.RightButton && modelData.known ? modelData.forget() : net.setWifi(modelData, !modelData.connected)
                 // the password form below expands inside this card
                 expanded: asking
-                bodyTop: 2
-                bodyGap: 10
+                bodyTop: Theme.gapTight / 2
+                bodyGap: Theme.padSm
 
                 onAskingChanged: if (asking) {
                     failed = false; pw.text = ""
@@ -221,7 +222,7 @@ ColumnLayout {
                 }
 
                 RowText { title: card.modelData.name }
-                Icon { visible: card.modelData.security !== WifiSecurityType.Open; text: "\uf023"; font.pixelSize: 13; color: Theme.muted }
+                Icon { visible: card.modelData.security !== WifiSecurityType.Open; text: Icons.lock; font.pixelSize: Theme.iconSm; color: Theme.muted }
                 RowState {
                     connected: card.modelData.connected
                     busy: card.modelData.stateChanging
@@ -231,18 +232,18 @@ ColumnLayout {
                 body: ColumnLayout {
                     id: form
                     Layout.fillWidth: true
-                    spacing: 6
+                    spacing: Theme.controlGap
                     Rectangle {
                         Layout.fillWidth: true
-                        implicitHeight: 34
-                        radius: Theme.inner(card.radius, 12)    // inside the card's 12 px padding
+                        implicitHeight: Theme.controlH
+                        radius: Theme.inner(card.radius, Theme.pad)    // inside the card's padding
                         color: Theme.alpha(Theme.bg, 0.6)
                         border.width: 1
-                        border.color: card.failed ? Theme.alpha(Theme.red, 0.9) : pw.activeFocus ? Theme.alpha(Theme.accent, 0.9) : Theme.alpha(Theme.overlay, 0.6)
-                        Behavior on border.color { ColorAnimation { duration: 120 } }
+                        border.color: card.failed ? Theme.dangerEdge : pw.activeFocus ? Theme.accentEdge : Theme.edge
+                        Behavior on border.color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
                         RowLayout {
-                            anchors { fill: parent; leftMargin: 10; rightMargin: 6 }
-                            spacing: 6
+                            anchors { fill: parent; leftMargin: Theme.padSm; rightMargin: Theme.controlGap }
+                            spacing: Theme.controlGap
                             TextInput {
                                 id: pw
                                 Layout.fillWidth: true
@@ -263,16 +264,16 @@ ColumnLayout {
                             Icon {
                                 id: reveal
                                 property bool shown: false
-                                text: shown ? "\uf06e" : "\uf070"
+                                text: shown ? Icons.eye : Icons.eyeOff
                                 color: revealArea.containsMouse ? Theme.fg : Theme.muted
-                                font.pixelSize: 15
-                                MouseArea { id: revealArea; anchors.fill: parent; anchors.margins: -5; hoverEnabled: true; onClicked: reveal.shown = !reveal.shown }
+                                font.pixelSize: Theme.iconMd
+                                MouseArea { id: revealArea; anchors.fill: parent; anchors.margins: -Theme.gapTight; hoverEnabled: true; onClicked: reveal.shown = !reveal.shown }
                             }
                         }
                     }
                     Label { visible: card.failed; text: "Could not connect. Wrong password?"; color: Theme.red; font.pixelSize: Theme.fontCaption }
                     RowLayout {
-                        spacing: 6
+                        spacing: Theme.controlGap
                         Btn { outerRadius: card.radius; text: "Cancel"; onClicked: net.asking = null }
                         Btn { outerRadius: card.radius; text: "Connect"; active: true; enabledLook: pw.text.length >= 8; onClicked: net.submit(card.modelData, pw.text) }
                     }
@@ -286,12 +287,12 @@ ColumnLayout {
         id: tailscale
         Layout.fillWidth: true
         Layout.fillHeight: true
-        Layout.topMargin: 8
+        Layout.topMargin: Theme.gapTight
     }
     MullvadSection {
         id: mullvad
         Layout.fillWidth: true
         Layout.fillHeight: true
-        Layout.topMargin: 8
+        Layout.topMargin: Theme.gapTight
     }
 }

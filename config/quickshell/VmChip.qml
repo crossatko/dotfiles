@@ -8,15 +8,16 @@ Chip {
     id: chip
     readonly property var job: VmService.activeJob
     show: VmService.busy
+    readonly property int meterW: 48       // width of the job progress bar
 
-    BarIcon { text: "\uf108"; color: chip.job || VmService.vms.length > 0 ? chip.ink.accent : chip.ink.muted }
+    BarIcon { text: Icons.vm; color: chip.job || VmService.vms.length > 0 ? chip.ink.accent : chip.ink.muted }
     Meter {
         visible: chip.job !== null
-        Layout.preferredWidth: 48; Layout.preferredHeight: 4; Layout.alignment: Qt.AlignVCenter
-        implicitHeight: 4
+        Layout.preferredWidth: chip.meterW; Layout.preferredHeight: Theme.gapTight; Layout.alignment: Qt.AlignVCenter
+        implicitHeight: Theme.gapTight
         value: chip.job && chip.job.pct >= 0 ? chip.job.pct / 100 : 0
         fillColor: chip.ink.accent
-        animMs: 300
+        animMs: Motion.emphasisMs
     }
     BarLabel { visible: chip.job !== null && chip.job.pct >= 0; text: chip.job ? Math.floor(chip.job.pct) + "%" : ""; color: chip.ink.fgDim }
     BarLabel { visible: chip.job !== null && chip.job.pct < 0; text: chip.job ? chip.job.phase : ""; color: chip.ink.fgDim; elide: Text.ElideRight; Layout.maximumWidth: 90 }

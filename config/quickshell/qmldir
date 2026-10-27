@@ -20,6 +20,7 @@ NotifCard 1.0 NotifCard.qml
 Toasts 1.0 Toasts.qml
 BtNotifier 1.0 BtNotifier.qml
 Btn 1.0 Btn.qml
+ResetBtn 1.0 ResetBtn.qml
 Osd 1.0 Osd.qml
 PopupHost 1.0 PopupHost.qml
 NotifIcon 1.0 NotifIcon.qml
@@ -37,7 +38,6 @@ PodIcon 1.0 PodIcon.qml
 BudRing 1.0 BudRing.qml
 ModeTiles 1.0 ModeTiles.qml
 AirPodsSection 1.0 AirPodsSection.qml
-AudioPanel 1.0 AudioPanel.qml
 singleton Brightness 1.0 Brightness.qml
 BrightnessSection 1.0 BrightnessSection.qml
 singleton BarConfig 1.0 BarConfig.qml
@@ -50,17 +50,26 @@ singleton BarWidgets 1.0 BarWidgets.qml
 singleton HomeAssistant 1.0 HomeAssistant.qml
 HaStrip 1.0 HaStrip.qml
 HaEntity 1.0 HaEntity.qml
-HaPanel 1.0 HaPanel.qml
 HaVacuum 1.0 HaVacuum.qml
 singleton AiUsage 1.0 AiUsage.qml
 AiLimit 1.0 AiLimit.qml
-AiPanel 1.0 AiPanel.qml
 Settings 1.0 Settings.qml
 SettingsBar 1.0 SettingsBar.qml
+SettingsLook 1.0 SettingsLook.qml
+singleton Presets 1.0 Presets.qml
+ChoiceRow 1.0 ChoiceRow.qml
+CustomTag 1.0 CustomTag.qml
+PresetCards 1.0 PresetCards.qml
+AdvancedFold 1.0 AdvancedFold.qml
+PageReset 1.0 PageReset.qml
+GridPick 1.0 GridPick.qml
+GlassSample 1.0 GlassSample.qml
+MotionDemo 1.0 MotionDemo.qml
+ShapeDemo 1.0 ShapeDemo.qml
+GlassAdvanced 1.0 GlassAdvanced.qml
+MotionAdvanced 1.0 MotionAdvanced.qml
+ShapeAdvanced 1.0 ShapeAdvanced.qml
 SettingsWallpaper 1.0 SettingsWallpaper.qml
-SettingsAppearance 1.0 SettingsAppearance.qml
-SettingsAnimations 1.0 SettingsAnimations.qml
-SettingsGlass 1.0 SettingsGlass.qml
 TailscaleSection 1.0 TailscaleSection.qml
 RowState 1.0 RowState.qml
 Icon 1.0 Icon.qml
@@ -68,6 +77,9 @@ PanelHeader 1.0 PanelHeader.qml
 ListRow 1.0 ListRow.qml
 RowText 1.0 RowText.qml
 Notice 1.0 Notice.qml
+EmptyState 1.0 EmptyState.qml
+StatusDot 1.0 StatusDot.qml
+Pill 1.0 Pill.qml
 CopyBtn 1.0 CopyBtn.qml
 MissingPackage 1.0 MissingPackage.qml
 singleton OptionalPackages 1.0 OptionalPackages.qml
@@ -81,14 +93,15 @@ SettingRow 1.0 SettingRow.qml
 Meter 1.0 Meter.qml
 Glass 1.0 Glass.qml
 singleton GlassTuneCtl 1.0 GlassTuneCtl.qml
+singleton GlassSurfaces 1.0 GlassSurfaces.qml
+GlassOptRow 1.0 GlassOptRow.qml
+GlassSurfaceProfile 1.0 GlassSurfaceProfile.qml
+GlassSurfacesSection 1.0 GlassSurfacesSection.qml
 Launcher 1.0 Launcher.qml
 HoverGlow 1.0 HoverGlow.qml
 SwipeDismiss 1.0 SwipeDismiss.qml
-WallpaperMonitorCard 1.0 WallpaperMonitorCard.qml
 WallpaperTile 1.0 WallpaperTile.qml
 MonitorLinkButton 1.0 MonitorLinkButton.qml
-MonitorCardRow 1.0 MonitorCardRow.qml
-NotchMask 1.0 NotchMask.qml
 MullvadSection 1.0 MullvadSection.qml
 FoldSection 1.0 FoldSection.qml
 singleton VpnSwitch 1.0 VpnSwitch.qml
@@ -97,7 +110,6 @@ NotifStack 1.0 NotifStack.qml
 NotifSlot 1.0 NotifSlot.qml
 singleton VmService 1.0 VmService.qml
 VmChip 1.0 VmChip.qml
-VmPanel 1.0 VmPanel.qml
 Lock 1.0 Lock.qml
 LockView 1.0 LockView.qml
 GlassText 1.0 GlassText.qml
@@ -135,4 +147,24 @@ MediaArt 1.0 MediaArt.qml
 MediaSeek 1.0 MediaSeek.qml
 MediaTransport 1.0 MediaTransport.qml
 LockMedia 1.0 LockMedia.qml
-MonitorToggles 1.0 MonitorToggles.qml
+PressFeedback 1.0 PressFeedback.qml
+GlideHighlight 1.0 GlideHighlight.qml
+Reveal 1.0 Reveal.qml
+OpenMotion 1.0 OpenMotion.qml
+FoldBox 1.0 FoldBox.qml
+Chevron 1.0 Chevron.qml
+RimLight 1.0 RimLight.qml
+LockSketch 1.0 LockSketch.qml
+PrefSwitch 1.0 PrefSwitch.qml
+BarLookSample 1.0 BarLookSample.qml
+InfoTip 1.0 InfoTip.qml
+singleton SystemStats 1.0 SystemStats.qml
+singleton Recording 1.0 Recording.qml
+singleton Monitors 1.0 Monitors.qml
+PrimaryTag 1.0 PrimaryTag.qml
+MonitorPicker 1.0 MonitorPicker.qml
+SettingsMonitors 1.0 SettingsMonitors.qml
+MonitorCard 1.0 MonitorCard.qml
+MonitorChooser 1.0 MonitorChooser.qml
+MonitorChip 1.0 MonitorChip.qml
+LabelSwitch 1.0 LabelSwitch.qml

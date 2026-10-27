@@ -6,7 +6,8 @@ import QtQuick.Layouts
 // State and transport: HomeAssistant.qml. The eye button switches to hide / unhide mode.
 ColumnLayout {
     id: hp
-    spacing: 10
+    readonly property int listMaxH: 600     // the entity list scrolls beyond this height
+    spacing: Theme.padSm
 
     property bool editing: false
     property var expanded: ({})              // entity_id -> true: colour controls open
@@ -58,13 +59,13 @@ ColumnLayout {
         Btn {
             visible: HomeAssistant.configured
             icon: true
-            text: ""
+            text: Icons.refresh
             onClicked: HomeAssistant.refresh(true)
         }
         Btn {
             visible: HomeAssistant.configured && HomeAssistant.status === "ok"
             icon: true
-            text: hp.editing ? "" : ""
+            text: hp.editing ? Icons.eyeOff : Icons.eye
             active: hp.editing
             onClicked: hp.editing = !hp.editing
         }
@@ -77,8 +78,8 @@ ColumnLayout {
         readonly property bool bad: HomeAssistant.configured && HomeAssistant.failed
         visible: setup || bad || HomeAssistant.actionError !== "" || hp.editing || (HomeAssistant.status === "loading" && hp.sectionCount === 0)
         danger: bad || HomeAssistant.actionError !== ""
-        padY: 10
-        spacing: 10
+        padY: Theme.padSm
+        spacing: Theme.padSm
         Label {
             id: noticeText
             Layout.fillWidth: true
@@ -105,7 +106,7 @@ ColumnLayout {
         RowLayout {
             visible: notice.bad
             Layout.fillWidth: true
-            spacing: 8
+            spacing: Theme.gapRow
             Btn {
                 outerRadius: notice.radius       // inside the notice's 12 px padding
                 text: HomeAssistant.retrying || HomeAssistant.refreshing ? "Retrying…" : "Retry"
@@ -121,7 +122,7 @@ ColumnLayout {
         id: flick
         visible: HomeAssistant.configured && HomeAssistant.status === "ok" && hp.sectionCount > 0
         Layout.fillWidth: true
-        Layout.preferredHeight: visible ? Math.min(600, content.implicitHeight) : 0
+        Layout.preferredHeight: visible ? Math.min(hp.listMaxH, content.implicitHeight) : 0
         contentHeight: content.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
@@ -129,7 +130,7 @@ ColumnLayout {
         ColumnLayout {
             id: content
             width: flick.width
-            spacing: 8
+            spacing: Theme.gapRow
 
             Repeater {
                 model: hp.groups
@@ -139,10 +140,10 @@ ColumnLayout {
                     readonly property var ids: hp.entsOf(modelData)      // delegates stay alive while the section is off; its grid is just hidden
                     readonly property bool off: HomeAssistant.isSectionHidden(modelData.key)
                     visible: hp.sectionVisible(modelData)
-                    opacity: off ? 0.5 : 1
+                    opacity: off ? Theme.disabledOpacity : 1
                     Layout.fillWidth: true
-                    Layout.topMargin: 4
-                    spacing: 6
+                    Layout.topMargin: Theme.gapTight
+                    spacing: Theme.controlGap
 
                     SectionHead {
                         title: grp.modelData.title
@@ -163,8 +164,8 @@ ColumnLayout {
                         visible: !grp.off
                         Layout.fillWidth: true
                         columns: grp.modelData.grid ? 2 : 1
-                        rowSpacing: 6
-                        columnSpacing: 6
+                        rowSpacing: Theme.controlGap
+                        columnSpacing: Theme.controlGap
                         Repeater {
                             model: grp.isVacuum ? grp.ids : []
                             HaVacuum {
@@ -208,11 +209,11 @@ ColumnLayout {
         font.pixelSize: Theme.fontCaption
     }
 
-    Label {
+    EmptyState {
         visible: HomeAssistant.configured && HomeAssistant.status === "ok" && hp.sectionCount === 0
-        text: hp.hiddenCount > 0 || hp.hiddenSectionCount > 0 ? "Everything is hidden. Use the eye button to bring entities and sections back." : "No lights, switches, climate, vacuum, fan or cover entities found."
-        wrapMode: Text.Wrap
-        Layout.fillWidth: true
-        color: Theme.muted
+        readonly property bool allHidden: hp.hiddenCount > 0 || hp.hiddenSectionCount > 0
+        icon: allHidden ? Icons.eyeOff : Icons.home
+        text: allHidden ? "All hidden" : "No entities"
+        hint: allHidden ? "Everything is hidden. Use the eye button to bring entities and sections back." : "No lights, switches, climate, vacuum, fan or cover entities found."
     }
 }

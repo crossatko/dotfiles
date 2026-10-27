@@ -25,10 +25,12 @@ import Quickshell.Hyprland
 // shell is a client of (wl_socket == WAYLAND_DISPLAY) and is NOT the live session (wl_socket "wayland-1").
 // The real config sets nestedOnly: false and talks to its own (current) instance.
 //
-// Shell-only options (`shell: true` in opts, group "Shell"): drawn by the shell alone (GlassEdge), never sent to or read
+// Shell-only options (`shell: true` in opts, group "Shell"): drawn by the shell alone (GlassEdge, RimLight), never sent to or read
 // from Hyprland, saved in glass.json like the rest (managed.lua applies only the solid_glass keys it knows).
 // Without solid_glass (stock Hyprland: `unsupported`) the page still edits and saves every value: the shell's own glass
 // (GlassLens, GlassEdge, the glass lettering) uses them through `effective`; nothing goes to the compositor.
+// Per-surface profiles (Settings > Glass > Surfaces): GlassSurfaces.qml owns their logic and the compositor side; they are
+// stored here (`surfaces`, glass.json's top-level "surfaces" object, shared by both modes) so glass.json has one writer.
 Singleton {
     id: ctl
 
@@ -53,7 +55,8 @@ Singleton {
         { key: "frost",              group: "Material", label: "Frost",           min: 0,   max: 16,  def: 3,    dec: 1, unit: "px" },
         { key: "darkening",          group: "Material", label: "Darkening",       min: 0,   max: 1,   def: 0.35, dec: 2 },
         { key: "saturation",         group: "Material", label: "Saturation",      min: 0,   max: 3,   def: 1.25, dec: 2 },
-        { key: "edge",               group: "Shell",    label: "Flat card edge",  min: 0,   max: 1,   def: 0.5,  dec: 2, shell: true }
+        { key: "edge",               group: "Shell",    label: "Flat card edge",  min: 0,   max: 1,   def: 0.5,  dec: 2, shell: true },
+        { key: "pointer_rim",        group: "Shell",    label: "Pointer rim",     min: 0,   max: 1,   def: 0.5,  dec: 2, shell: true }
     ]
     readonly property int tintDef: 0x14EEF5FF          // 0xAARRGGBB, alpha = absorption
     readonly property var keys: opts.filter(o => !o.shell).map(o => o.key).concat(["tint"])   // solid_glass (Hyprland)
@@ -243,6 +246,15 @@ Singleton {
         environment: (ctl.copyDisplay ? { WAYLAND_DISPLAY: ctl.copyDisplay } : ({}))
     }
 
+    // ---- per-surface profiles (GlassSurfaces.qml) ----
+    // {id: {key: number, enabled: bool (border)}}; replaced as a whole so bindings update
+    property var surfaces: ({})
+    function setSurfaces(obj) {
+        surfaces = obj
+        saver.restart()
+    }
+    readonly property bool savePending: saver.running
+
     // ---- persistence ----
     readonly property string stateFile: {
         const env = Quickshell.env("QS_GLASS_FILE")
@@ -265,6 +277,8 @@ Singleton {
             Object.assign(out, o)
             if (typeof file.light === "object" && file.light !== null) out.light = file.light
         }
+        delete out.surfaces
+        if (Object.keys(surfaces).length > 0) out.surfaces = surfaces
         const dir = stateFile.substring(0, stateFile.lastIndexOf("/")) || "/"
         Quickshell.execDetached(["mkdir", "-p", dir])
         store.setText(JSON.stringify(out) + "\n")
@@ -283,6 +297,7 @@ Singleton {
             const p = Theme.mode === "light" ? (f.light || {}) : f
             for (const k of allKeys) if (typeof p[k] === "number" && isFinite(p[k])) o[k] = clamp(k, p[k])
             if (typeof p.tint_from_bg === "boolean") fb = p.tint_from_bg
+            surfaces = (typeof f.surfaces === "object" && f.surfaces !== null && !Array.isArray(f.surfaces)) ? f.surfaces : ({})
         } catch (e) {}
         overrides = o
         tintFromBgSet = fb

@@ -11,19 +11,19 @@ Item {
     property bool hovered: false
     property bool hintable: true
 
-    implicitWidth: 22
-    implicitHeight: 22
+    implicitWidth: Theme.iconCol
+    implicitHeight: Theme.iconCol
 
     Text {
         id: glyph
         anchors.centerIn: parent
         font.family: Theme.iconFont
         font.styleName: "Regular"
-        font.pixelSize: 14
-        text: rs.busy ? "" : rs.connected ? "" : ""
+        font.pixelSize: Theme.fontSize
+        text: rs.busy ? Icons.ellipsis : rs.connected ? Icons.check : Icons.plug
         color: rs.connected || rs.busy ? Theme.accent : Theme.muted
         opacity: rs.busy || rs.connected ? 1 : (rs.hovered && rs.hintable ? 0.7 : 0)
-        Behavior on opacity { NumberAnimation { duration: 120 } }
+        Behavior on opacity { NumberAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
 
         SequentialAnimation on scale {
             running: rs.busy

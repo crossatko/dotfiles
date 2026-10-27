@@ -7,7 +7,8 @@ import QtQuick.Layouts
 // found on the machine. Data: AiUsage.qml -> bin/ai-usage.
 ColumnLayout {
     id: ap
-    spacing: 10
+    readonly property int listMaxH: 620     // the profile list scrolls beyond this height
+    spacing: Theme.padSm
 
     readonly property var profiles: AiUsage.profiles
     readonly property var others: AiUsage.others
@@ -25,34 +26,30 @@ ColumnLayout {
     PanelHeader {
         title: "AI usage"
         showStatus: true
-        status: AiUsage.loading && !AiUsage.loaded ? "Loading…" : AiUsage.error !== "" ? AiUsage.error : ""
+        // the error sits in the status line only while there are cards to keep; with none it is the empty state below
+        status: AiUsage.loading && !AiUsage.loaded ? "Loading…" : AiUsage.error !== "" && ap.profiles.length > 0 ? AiUsage.error : ""
         statusColor: AiUsage.error !== "" ? Theme.red : Theme.fgDim
         Btn {
             icon: true
-            text: ""
+            text: Icons.retry
             active: AiUsage.loading
             onClicked: AiUsage.refresh(true)
         }
     }
 
-    // empty state
-    Notice {
-        visible: AiUsage.loaded && ap.profiles.length === 0
-        spacing: 4
-        Label { text: "No Claude profiles found"; font.bold: true }
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.Wrap
-            text: "Looked for ~/.claude* directories (one per CLAUDE_CONFIG_DIR). Run claude and log in, then refresh."
-            color: Theme.fgDim; font.pixelSize: Theme.fontSmall
-        }
+    EmptyState {
+        readonly property bool failed: AiUsage.error !== ""
+        visible: (AiUsage.loaded || failed) && ap.profiles.length === 0
+        icon: failed ? Icons.warning : Icons.user
+        text: failed ? "No usage data" : "No Claude profiles found"
+        hint: failed ? AiUsage.error : "Looked for ~/.claude* directories (one per CLAUDE_CONFIG_DIR). Run claude and log in, then refresh."
     }
 
     Flickable {
         id: flick
         visible: ap.profiles.length > 0 || ap.others.length > 0
         Layout.fillWidth: true
-        Layout.preferredHeight: visible ? Math.min(620, content.implicitHeight) : 0
+        Layout.preferredHeight: visible ? Math.min(ap.listMaxH, content.implicitHeight) : 0
         contentHeight: content.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
@@ -60,7 +57,7 @@ ColumnLayout {
         ColumnLayout {
             id: content
             width: flick.width
-            spacing: 10
+            spacing: Theme.padSm
 
             SectionHead {
                 visible: ap.profiles.length > 0
@@ -70,41 +67,31 @@ ColumnLayout {
 
             Repeater {
                 model: ap.profiles
-                Rectangle {
+                Notice {
                     id: card
                     required property var modelData
                     readonly property var p: modelData
-                    Layout.fillWidth: true
-                    implicitHeight: cardCol.implicitHeight + 24
-                    radius: Theme.radiusItem
-                    color: Theme.alpha(Theme.fg, 0.05)
-                    border.width: 1
-                    border.color: Theme.alpha(Theme.overlay, 0.55)
+                    spacing: Theme.padSm
+                    // width of the "Today" / "7 days" label column of the local estimate
+                    readonly property real dayW: Math.ceil(Math.max(dayA.advanceWidth, dayB.advanceWidth)) + Theme.gapRow
+                    TextMetrics { id: dayA; font.family: Theme.font; font.pixelSize: Theme.fontSmall; text: "Today" }
+                    TextMetrics { id: dayB; font.family: Theme.font; font.pixelSize: Theme.fontSmall; text: "7 days" }
 
                     ColumnLayout {
                         id: cardCol
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
-                        spacing: 10
+                        Layout.fillWidth: true
+                        spacing: Theme.padSm
 
                         // account line: label, plan badge, profile dir
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 8
+                            spacing: Theme.gapRow
                             Label { text: card.p.label || card.p.dir; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
-                            Rectangle {
-                                visible: (card.p.plan || "") !== ""
-                                implicitWidth: planText.implicitWidth + 12
-                                implicitHeight: 20
-                                radius: Math.min(3, Theme.radius)
-                                color: Theme.alpha(Theme.accent, 0.16)
-                                border.width: 1
-                                border.color: Theme.alpha(Theme.accent, 0.6)
-                                Label { id: planText; anchors.centerIn: parent; text: card.p.plan || ""; color: Theme.accent; font.pixelSize: Theme.fontCaption; font.bold: true }
-                            }
+                            Pill { visible: (card.p.plan || "") !== ""; text: card.p.plan || "" }
                         }
                         Label {
                             visible: text !== ""
-                            Layout.topMargin: -6
+                            Layout.topMargin: -Theme.controlGap
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                             text: [card.p.label !== card.p.dir ? "~/" + card.p.dir : "", card.p.org || ""].filter(s => s).join("  ·  ")
@@ -115,12 +102,12 @@ ColumnLayout {
                         RowLayout {
                             visible: (card.p.message || "") !== ""
                             Layout.fillWidth: true
-                            spacing: 8
+                            spacing: Theme.gapRow
                             Icon {
-                                text: ""
+                                text: Icons.warning
                                 visible: ["expired", "paused", "forbidden", "error", "nologin"].indexOf(card.p.status) >= 0
                                 color: ap.statusColor(card.p.status)
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.iconSm
                             }
                             Label {
                                 Layout.fillWidth: true
@@ -152,16 +139,16 @@ ColumnLayout {
                         ColumnLayout {
                             visible: !!card.p.local && (card.p.windows || []).length === 0
                             Layout.fillWidth: true
-                            spacing: 4
+                            spacing: Theme.gapTight
                             Label { text: "Local estimate · session logs" + (card.p.local && card.p.local.partial ? " (still counting)" : ""); color: Theme.fgDim; font.pixelSize: Theme.fontCaption; font.bold: true }
                             RowLayout {
                                 Layout.fillWidth: true
-                                Label { text: "Today"; font.pixelSize: Theme.fontSmall; Layout.preferredWidth: 56 }
+                                Label { text: "Today"; font.pixelSize: Theme.fontSmall; Layout.preferredWidth: card.dayW }
                                 Label { text: card.p.local ? ap.statsLine(card.p.local.today) : ""; color: Theme.fgDim; font.pixelSize: Theme.fontSmall; Layout.fillWidth: true; elide: Text.ElideRight }
                             }
                             RowLayout {
                                 Layout.fillWidth: true
-                                Label { text: "7 days"; font.pixelSize: Theme.fontSmall; Layout.preferredWidth: 56 }
+                                Label { text: "7 days"; font.pixelSize: Theme.fontSmall; Layout.preferredWidth: card.dayW }
                                 Label { text: card.p.local ? ap.statsLine(card.p.local.week) : ""; color: Theme.fgDim; font.pixelSize: Theme.fontSmall; Layout.fillWidth: true; elide: Text.ElideRight }
                             }
                         }
@@ -178,7 +165,7 @@ ColumnLayout {
 
             SectionHead {
                 visible: ap.others.length > 0
-                Layout.topMargin: 4
+                Layout.topMargin: Theme.gapTight
                 title: "Other tools"
             }
             Repeater {
@@ -187,10 +174,10 @@ ColumnLayout {
                     id: other
                     required property var modelData
                     Layout.fillWidth: true
-                    spacing: 8
+                    spacing: Theme.gapRow
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: Theme.gapRow
                         Label { text: other.modelData.name; font.bold: true }
                         Label { text: other.modelData.detail || ""; color: Theme.fgDim; font.pixelSize: Theme.fontCaption; elide: Text.ElideRight; Layout.fillWidth: true }
                         Label { visible: !!other.modelData.lastUsed; text: other.modelData.lastUsed ? AiUsage.ago(other.modelData.lastUsed) : ""; color: Theme.muted; font.pixelSize: Theme.fontCaption }

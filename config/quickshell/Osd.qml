@@ -6,6 +6,7 @@ import Quickshell.Services.Pipewire
 
 // Volume / brightness pill, bottom-center of the focused monitor. Volume is observed from
 // Pipewire (so wpctl keybinds just work); brightness when the keys step it (Brightness.stepped)
+// Test hook: `qs ipc call osd level volume -1` shows the muted pill (a negative level = muted, see show()).
 // PanelWindow is an uncreatable interface type in Quickshell's qmltypes (the real window exists at runtime)
 // qmllint disable uncreatable-type
 PanelWindow {
@@ -18,16 +19,26 @@ PanelWindow {
     property bool muted: false
     property bool shown: false
     property bool armed: false          // ignore the volume values Pipewire reports while starting
+    readonly property int pillW: 320    // the pill: wide enough for the meter to read as a scale, two bar heights tall
+    readonly property int pillH: 56
+    readonly property int glyphCol: Theme.iconXl + Theme.padSm   // 32: the widest OSD glyph (volume-high at iconXl) centred, so the meter never shifts
+    readonly property int valueW: Theme.iconCol + Theme.iconXl   // 44: "100%" / "muted" right-aligned in a fixed column
+    readonly property int sidePad: Theme.pad + Theme.controlGap  // 18: the pill's side inset (a pill breathes more than a card)
 
     screen: target
-    visible: shown
+    // shell-side open / close (OpenMotion, popup style): with the compositor's glass the pill fades out and its glass
+    // shrinks away before the surface unmaps (the layer fade alone left the glass box behind for the whole fade, then
+    // dropped it at once). Without it (stock) the blur is the whole window and cannot shrink: unmap at once and let
+    // Hyprland's layer fade take the pill out as before.
+    visible: Theme.glass ? motion.shown : osd.shown
+    OpenMotion { id: motion; open: osd.shown; delay: 40 }
     anchors { bottom: true }
     // above a (floating) bottom bar
     // qmllint disable missing-property
     margins.bottom: 70 + (bars[(screen ? screen.name : "")] === "bottom" ? BarConfig.insetOf(screen) : 0)
     // qmllint enable missing-property
-    implicitWidth: 320
-    implicitHeight: 56
+    implicitWidth: pillW
+    implicitHeight: pillH
     color: "transparent"
     // -1 = ignore the monitor's reserved area (the pinned-video strip), so it stays in the screen corner; 0 = follow the bar
     // (Settings > Bar). This window hops between screens: a zone changed in the same tick as the screen was not applied to the
@@ -51,6 +62,7 @@ PanelWindow {
     }
     function show(k, v, m) {
         focusScreen()
+        if (v < 0) m = true                // test hook (see the header): a negative level stands for "muted"
         const nv = Math.max(0, Math.min(1, v))
         if (shown && (nv !== value || k !== kind)) lensHold.restart()
         else if (!shown && !m) lensHold.restart()
@@ -96,7 +108,7 @@ PanelWindow {
         else growAnim.start()
     }
     NumberAnimation { id: growAnim; target: osd; property: "grow" }
-    readonly property real lensSize: 14 + 10 * grow
+    readonly property real lensSize: Theme.iconMd + (Theme.iconXl - Theme.iconSm) * grow   // 14 -> 24 px: the lens grows from a dot to a bead on the fill's end
     readonly property point lensC: {
         void [meter.fillWidth, meter.x, meter.width, card.width, card.height]
         return meter.mapToItem(card, meter.fillWidth, meter.height / 2)
@@ -113,30 +125,44 @@ PanelWindow {
         id: card
         readonly property bool isGlassItem: true
         anchors.fill: parent
+        opacity: Math.max(0, Math.min(1, motion.t))
+        readonly property real glassScale: Theme.glassScaleAt(motion.t)   // see PopupHost's card
+        layer.enabled: motion.moving                                      // fade as one texture
+        transform: [
+            Scale { origin.x: card.width / 2; origin.y: card.height; xScale: motion.popScale; yScale: motion.popScale },
+            Translate { y: motion.slide }
+        ]
         radius: Theme.radius
         color: Theme.alpha(Theme.bg, Theme.cardFill)
         border.width: 1
-        border.color: Theme.alpha(Theme.overlay, 0.5)
+        border.color: Theme.edge
         GlassEdge { anchors.fill: parent; radius: parent.radius }   // the rim without the compositor's glass
 
         RowLayout {
-            anchors { fill: parent; leftMargin: 18; rightMargin: 18 }
-            spacing: 14
+            anchors { fill: parent; leftMargin: osd.sidePad; rightMargin: osd.sidePad }
+            spacing: Theme.pad
+            // the glyph carries the state: accent while live, muted when muted (as the bar chip)
             Icon {
-                font.pixelSize: 22
+                font.pixelSize: Theme.iconXl
                 color: osd.muted ? Theme.muted : Theme.accent
-                text: osd.kind === "brightness" ? "\uf185" : Icons.volumeGlyph(osd.muted, osd.value)
+                text: osd.kind === "brightness" ? Icons.sun : Icons.volumeGlyph(osd.muted, osd.value)
+                horizontalAlignment: Text.AlignHCenter
+                Layout.preferredWidth: osd.glyphCol
             }
             Meter {
                 id: meter
                 Layout.fillWidth: true
-                radius: Math.min(height / 2, Theme.inner(Theme.radius, 18))
+                radius: Math.min(height / 2, Theme.inner(Theme.radius, osd.sidePad))
                 color: Theme.alpha(Theme.fg, 0.15)
                 value: osd.muted ? 0 : osd.value
-                animMs: 80
+                animMs: Motion.pressMs
                 easingType: Easing.Linear
             }
-            Label { text: osd.muted ? "muted" : Math.round(osd.value * 100) + "%"; Layout.preferredWidth: 46; horizontalAlignment: Text.AlignRight }
+            Label {
+                text: osd.muted ? "muted" : Math.round(osd.value * 100) + "%"
+                Layout.preferredWidth: osd.valueW
+                horizontalAlignment: Text.AlignRight
+            }
         }
     }
 }

@@ -3,7 +3,7 @@ import QtQuick.Layouts
 
 // Audio popup (click the volume chip in the bar): output + input volume and device selection.
 ColumnLayout {
-    spacing: 12
+    spacing: Theme.pad
 
     PanelHeader { title: "Audio" }
     AudioSection { Layout.fillWidth: true }

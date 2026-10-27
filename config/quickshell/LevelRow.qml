@@ -7,7 +7,7 @@ import QtQuick.Layouts
 RowLayout {
     id: lr
     property string icon: ""
-    property color iconColor: Theme.accent
+    property color iconColor: Theme.accent      // the icon names the slider: accent while live, muted while that source is muted
     property bool iconClickable: false
     property string label: ""                  // "" = no name column
     property real labelWidth: 0                // name column width (all rows the same, so the sliders line up)
@@ -19,15 +19,18 @@ RowLayout {
     signal iconClicked()
 
     Layout.fillWidth: true
-    spacing: 10
+    spacing: Theme.padSm
+
+    // value column: as wide as the widest value ("100%")
+    TextMetrics { id: valueMetrics; font.family: Theme.font; font.pixelSize: Theme.fontSmall; text: "100%" }
 
     Icon {
         text: lr.icon
         horizontalAlignment: Text.AlignHCenter
-        Layout.preferredWidth: 24
-        font.pixelSize: 17
+        Layout.preferredWidth: Theme.iconCol
+        font.pixelSize: Theme.iconLg
         color: lr.iconColor
-        MouseArea { anchors.fill: parent; anchors.margins: -5; enabled: lr.iconClickable; cursorShape: Qt.PointingHandCursor; onClicked: lr.iconClicked() }
+        MouseArea { anchors.fill: parent; anchors.margins: -Theme.gapTight; enabled: lr.iconClickable; cursorShape: Qt.PointingHandCursor; onClicked: lr.iconClicked() }
     }
     Label { visible: lr.label !== ""; text: lr.label; Layout.preferredWidth: lr.labelWidth; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
     Slider {
@@ -37,5 +40,5 @@ RowLayout {
         floor: lr.floor
         onMoved: v => lr.moved(v)
     }
-    Label { text: lr.valueText; Layout.preferredWidth: 40; horizontalAlignment: Text.AlignRight; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
+    Label { text: lr.valueText; Layout.preferredWidth: Math.ceil(valueMetrics.advanceWidth); horizontalAlignment: Text.AlignRight; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
 }

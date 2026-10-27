@@ -33,6 +33,12 @@ Shape {
     property color color: fill
     readonly property real lum: 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b
     property real strength: Math.max(0.04, Math.min(0.12, 0.06 / Math.sqrt(Math.max(0.05, lum))))   // alpha at the centre
+    // press feedback (with PressFeedback's sink): while `area` is pressed the light under the pointer gets brighter and
+    // tighter, so a click is felt where it lands (Motion.hoverMs; reduced motion = instant)
+    readonly property bool pressed: area !== null && area.pressed && area.enabled
+    property real press: pressed ? 1 : 0
+    Behavior on press { NumberAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
+    readonly property real peak: strength * (1 + 1.2 * press)
     property real reach: 3                           // gradient radius: reach x height ...
     property real widthReach: 0.7                    // ... or this x width, whichever is larger
     property var testPos: null                       // test hook: Qt.point -> shown there as if hovered
@@ -63,7 +69,7 @@ Shape {
     opacity: on ? 1 : 0
     visible: opacity > 0
     // one duration both ways: a Behavior whose duration depends on `on` reads the old value when it starts
-    Behavior on opacity { NumberAnimation { duration: Theme.popupFadeInMs; easing.type: Easing.OutCubic } }
+    Behavior on opacity { NumberAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
     preferredRendererType: Shape.CurveRenderer
 
     ShapePath {
@@ -72,10 +78,10 @@ Shape {
         fillGradient: RadialGradient {
             centerX: glow.at.x; centerY: glow.at.y
             focalX: glow.at.x; focalY: glow.at.y
-            centerRadius: Math.max(8, glow.height * glow.reach, glow.width * glow.widthReach)
+            centerRadius: Math.max(8, glow.height * glow.reach, glow.width * glow.widthReach) * (1 - 0.35 * glow.press)
             focalRadius: 0
-            GradientStop { position: 0; color: Theme.alpha(glow.color, glow.strength) }
-            GradientStop { position: 0.5; color: Theme.alpha(glow.color, glow.strength * 0.4) }
+            GradientStop { position: 0; color: Theme.alpha(glow.color, glow.peak) }
+            GradientStop { position: 0.5; color: Theme.alpha(glow.color, glow.peak * 0.4) }
             GradientStop { position: 1; color: Theme.alpha(glow.color, 0) }
         }
         PathRectangle {

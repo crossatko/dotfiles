@@ -10,7 +10,8 @@ Rectangle {
     property string min: ""
     property string sameText: ""
     property real outerRadius: Theme.radius
-    property real inset: 12
+    property real inset: Theme.pad
+    readonly property int minTextW: 84     // the date text never gets narrower than this
     readonly property bool atMin: min !== "" && value <= min
     signal moved(string value)
 
@@ -25,10 +26,10 @@ Rectangle {
         return Qt.formatDate(new Date(+p[0], +p[1] - 1, +p[2]), "ddd d MMM")
     }
 
-    implicitHeight: 30
+    implicitHeight: Theme.controlH
     implicitWidth: row.implicitWidth
     radius: Math.min(Theme.inner(outerRadius, inset), Math.floor(height / 3))
-    color: Theme.alpha(Theme.fg, 0.07)
+    color: Theme.itemFill
 
     WheelHandler { onWheel: ev => ds.step(ev.angleDelta.y > 0 ? 1 : -1) }
 
@@ -36,16 +37,16 @@ Rectangle {
         id: row
         anchors.fill: parent
         spacing: 0
-        StepArrow { glyph: "\uf053"; r: ds.radius; off: ds.atMin; onHit: ds.step(-1) }
+        StepArrow { glyph: Icons.chevronLeft; r: ds.radius; off: ds.atMin; onHit: ds.step(-1) }
         Label {
             Layout.fillWidth: true
-            Layout.minimumWidth: 84
+            Layout.minimumWidth: ds.minTextW
             horizontalAlignment: Text.AlignHCenter
             text: ds.atMin && ds.sameText !== "" ? ds.sameText : ds.pretty(ds.value)
             color: ds.atMin && ds.sameText !== "" ? Theme.fgDim : Theme.fg
             font.pixelSize: Theme.fontSmall
         }
-        StepArrow { glyph: "\uf054"; r: ds.radius; onHit: ds.step(1) }
+        StepArrow { glyph: Icons.chevronRight; r: ds.radius; onHit: ds.step(1) }
     }
 
     component StepArrow: Rectangle {
@@ -54,13 +55,13 @@ Rectangle {
         property bool off: false
         property real r: 0
         signal hit()
-        Layout.preferredWidth: 28
+        Layout.preferredWidth: 28           // arrow hit area
         Layout.fillHeight: true
         radius: r
-        color: glow.hovered && !off ? Theme.alpha(Theme.fg, 0.10) : "transparent"
-        Behavior on color { ColorAnimation { duration: 100 } }
+        color: glow.hovered && !off ? Theme.itemHover : Theme.alpha(Theme.fg, 0)
+        Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
         HoverGlow { id: glow; area: ma; radius: arrow.r }
-        Icon { anchors.centerIn: parent; text: arrow.glyph; font.pixelSize: 10; color: arrow.off ? Theme.alpha(Theme.muted, 0.5) : Theme.fgDim }
+        Icon { anchors.centerIn: parent; text: arrow.glyph; font.pixelSize: Theme.fontTiny; color: arrow.off ? Theme.alpha(Theme.muted, 0.5) : Theme.fgDim }
         MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; enabled: !arrow.off; onClicked: arrow.hit() }
     }
 }

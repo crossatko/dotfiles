@@ -23,7 +23,7 @@ ModalMenu {
 
     kind: "launcher"
     animated: Motion.launcherMotion          // Settings -> Animations "Launcher": popup speed / curve / style
-    cardWidth: 640
+    cardWidth: launcherW
     // always the main display (Hyprland's monitors.primary = monitor1 sits at 0,0 on the workstation / VM hosts), and
     // inside its usable area (bar reserve + monitor reserved_area), so the card centres there
     // host override: config.json { "screen": "<text>" } = case-insensitive substring of a screen's model or name (e.g. its
@@ -41,7 +41,7 @@ ModalMenu {
     // header follows the context: action panel (item name), argument prompt (item name), section, prefix mode, else "Launcher"
     readonly property var modeSource: section === "" && !argItem && query.trim() !== ""
         ? (sourceList.find(s => s.exclusive && s.exclusive(query.trim(), query)) || null) : null
-    readonly property string rocket: "\uf135"
+    readonly property string rocket: Icons.rocket
     title: actionsOpen && current ? current.name
         : argItem ? argItem.name
         : section !== "" ? secSrc.header(section)
@@ -51,6 +51,8 @@ ModalMenu {
         : argItem ? (argItem.argGlyph || argItem.glyph || rocket)
         : section !== "" ? (secSrc.glyph(section) || rocket)
         : modeSource ? modeSource.modeGlyph : rocket
+    // a section whose glyph is a brand mark (Twitch) draws its header icon with the brand font
+    iconFamily: !actionsOpen && !argItem && section !== "" && secSrc.brand(section) ? Theme.brandFont : Theme.iconFont
 
     property string query: ""
     property var results: []
@@ -96,8 +98,12 @@ ModalMenu {
         return true
     }
 
-    readonly property int numResults: 8
-    readonly property int rowH: 46
+    readonly property int launcherW: 640                // the card: room for a title, its sub line, a shortcut and the badges on one row
+    readonly property int numResults: 8                 // rows in view; the list scrolls past them
+    readonly property int rowH: Theme.rowH
+    readonly property int fieldH: Theme.rowH - Theme.gapTight   // 40: the search field, the one prominent control (taller than controlH)
+    readonly property int progressW: 90                 // the meter of a progress row (VM downloads)
+    readonly property int scrollW: 3                    // the scroll position mark at the list's right edge
     readonly property string stateDir: Quickshell.env("HOME") + "/.local/state/launcher"
     readonly property var current: results[sel]
 
@@ -186,7 +192,7 @@ ModalMenu {
             while (isStatus(results[sel]) && statusAt > 0 && isStatus(results[statusAt - 1])) statusAt--
             const fromStatus = isStatus(results[sel])
             results = rows.map(it => it.id === confirmId
-                ? Object.assign({}, it, { name: it.confirmText || ("Confirm: " + it.name), subtitle: it.confirmSub || "Press Enter again to confirm", glyph: "\uf071", iconColor: "red" })
+                ? Object.assign({}, it, { name: it.confirmText || ("Confirm: " + it.name), subtitle: it.confirmSub || "Press Enter again to confirm", glyph: Icons.warning, iconColor: "red" })
                 : it)
             let i = 0
             if (keep) {                                 // same row stays selected (rows can shift: Stop recording appears once the status is known)
@@ -485,12 +491,12 @@ ModalMenu {
         const it = current
         if (!it) return []
         const u = usage[it.id] || {}
-        const a = [{ id: "run", label: it.runLabel || "Run", glyph: "" }]
+        const a = [{ id: "run", label: it.runLabel || "Run", glyph: Icons.play }]
         if (it.kind !== "web" && !it.transient) {
-            a.push({ id: "pin", label: u.pinned ? "Unpin" : "Pin", glyph: "" })       // thumbtack
-            a.push({ id: "hide", label: "Hide", glyph: "" })                        // eye-slash
+            a.push({ id: "pin", label: u.pinned ? "Unpin" : "Pin", glyph: Icons.thumbtack })       // thumbtack
+            a.push({ id: "hide", label: "Hide", glyph: Icons.eyeOff })                        // eye-slash
         }
-        if (it.kind === "app") a.push({ id: "reveal", label: "Open .desktop location", glyph: "" })   // folder-open
+        if (it.kind === "app") a.push({ id: "reveal", label: "Open .desktop location", glyph: Icons.folderOpen })   // folder-open
         return a.concat(it.actions || [])
     }
 
@@ -586,28 +592,29 @@ ModalMenu {
         }
     }
 
-    // ---- search field ------------------------------------------------------------------------------------
+    // ---- search field: a hairline box, a soft accent edge while it has the focus ----
     Rectangle {
         Layout.fillWidth: true
-        implicitHeight: 40
+        implicitHeight: lc.fieldH
         radius: Theme.radiusModal
         color: Theme.alpha(Theme.fg, 0.07)
         border.width: 1
         border.color: input.activeFocus ? Theme.alpha(Theme.accent, 0.4) : Theme.alpha(Theme.overlay, 0.45)
+        Behavior on border.color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
 
         RowLayout {
-            anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
-            spacing: 10
-            Icon { text: lc.argSecret ? "\uf084" : ""; font.pixelSize: 14; color: Theme.muted; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 22 }   // magnifying-glass (key while a Wi-Fi password is typed)
+            anchors { fill: parent; leftMargin: Theme.pad; rightMargin: Theme.pad }
+            spacing: Theme.padSm
+            Icon { text: lc.argSecret ? Icons.key : Icons.search; font.pixelSize: Theme.iconMd; color: Theme.muted; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: Theme.iconCol }   // magnifying-glass (key while a Wi-Fi password is typed)
             TextInput {
                 id: input
                 Layout.fillWidth: true
                 clip: true
                 color: Theme.fg
-                selectionColor: Theme.alpha(Theme.accent, 0.4)
+                selectionColor: Theme.accentHover
                 selectedTextColor: Theme.fg
                 font.family: Theme.font
-                font.pixelSize: 14
+                font.pixelSize: Theme.fontLead
                 // Wi-Fi password prompt: masked, no input-method prediction / learning
                 echoMode: lc.argSecret ? TextInput.Password : TextInput.Normal
                 passwordCharacter: "\u2022"
@@ -620,7 +627,7 @@ ModalMenu {
                     anchors.verticalCenter: parent.verticalCenter
                     text: lc.argItem ? lc.argItem.name + ": " + lc.argItem.argument : lc.section !== "" ? "Filter..." : "Search apps, windows, commands · : emoji · / files · code projects"
                     color: Theme.muted
-                    font.pixelSize: 14
+                    font.pixelSize: Theme.fontLead
                 }
 
                 function recall(pos) {
@@ -685,9 +692,36 @@ ModalMenu {
     Item {
         id: list
         Layout.fillWidth: true
-        readonly property int gap: 4
+        readonly property int gap: Theme.gapTight
         readonly property bool scrolls: lc.results.length > lc.numResults
+        readonly property int scrollInset: scrolls ? Theme.padSm : 0   // room for the scroll mark at the right
         implicitHeight: lc.numResults * lc.rowH + (lc.numResults - 1) * gap
+
+        // a section / the action panel swapped in: the rows arrive (not on every keystroke: typing must stay instant)
+        Reveal { id: listReveal; rise: 6 }
+        Connections {
+            target: lc
+            function onSectionChanged() { listReveal.play() }
+            function onActionsOpenChanged() { listReveal.play() }
+        }
+        // the selection is one marker gliding between rows (GlideHighlight), not a fill switching row by row: the
+        // selected row's accent fill and outline
+        GlideHighlight {
+            visible: !lc.actionsOpen && lc.results.length > 0 && lc.sel >= lc.first && lc.sel < lc.first + lc.numResults
+            want: Qt.rect(0, (lc.sel - lc.first) * (lc.rowH + list.gap), list.width - list.scrollInset, lc.rowH)
+            radius: Theme.radiusModal
+            color: Theme.alpha(Theme.accent, 0.26)
+            border.width: 1
+            border.color: Theme.accentEdge
+        }
+        GlideHighlight {
+            visible: lc.actionsOpen && lc.actions.length > 0
+            want: Qt.rect(0, lc.asel * (lc.rowH + list.gap), list.width, lc.rowH)
+            radius: Theme.radiusModal
+            color: Theme.alpha(Theme.accent, 0.26)
+            border.width: 1
+            border.color: Theme.accentEdge
+        }
 
         WheelHandler {
             enabled: !lc.actionsOpen
@@ -697,7 +731,7 @@ ModalMenu {
 
         Column {
             visible: !lc.actionsOpen
-            width: parent.width - (list.scrolls ? 10 : 0)
+            width: parent.width - list.scrollInset
             spacing: list.gap
             Repeater {
                 model: lc.results.slice(lc.first, lc.first + lc.numResults)
@@ -712,30 +746,32 @@ ModalMenu {
                     rowH: lc.rowH
                     radius: Theme.radiusModal
                     readonly property string avatar: modelData.avatar || ""      // local image (twitch profile picture), drawn in the icon slot
-                    icon: iconPath === "" && avatar === "" ? (modelData.glyph || (modelData.keys ? "" : "")) : ""
-                    iconSize: 16
+                    // the leading glyph: the item's own (an emoji row's character: Qt's font fallback draws it), circle-info for a
+                    // status row without one, else a cube; a brand mark (Twitch) comes from the brand font
+                    icon: iconPath === "" && avatar === "" ? (modelData.glyph || (modelData.keys ? "" : modelData.kind === "info" ? Icons.info : Icons.cube)) : ""
+                    iconFamily: modelData.brand ? Theme.brandFont : Theme.iconFont
+                    iconSize: Theme.iconLg
+                    // the dim ink at rest, accent on the selected row, muted for what is off, red / green only with meaning
                     iconColor: modelData.iconColor === "red" ? Theme.red : modelData.iconColor === "green" ? Theme.green : sel ? Theme.accent : modelData.iconColor === "muted" ? Theme.muted : Theme.fgDim
-                    outlined: sel
-                    border.color: Theme.alpha(Theme.accent, 0.8)
-                    color: sel ? Theme.alpha(Theme.accent, 0.26) : hovered ? Theme.alpha(Theme.fg, 0.10) : "transparent"
+                    color: !sel && hovered ? Theme.itemHover : Theme.alpha(Theme.itemHover, 0)   // selected: the GlideHighlight under it
                     onClicked: { lc.sel = lc.first + index; lc.runIndex(lc.sel) }
 
                     IconImage {
                         visible: row.iconPath !== ""
                         source: row.iconPath
-                        implicitSize: 24
-                        Layout.preferredWidth: 22
-                        Layout.preferredHeight: 22
+                        implicitSize: Theme.iconCol
+                        Layout.preferredWidth: Theme.iconCol
+                        Layout.preferredHeight: Theme.iconCol
                     }
                     Item {
                         visible: row.avatar !== ""
-                        Layout.preferredWidth: 22
-                        Layout.preferredHeight: 22
+                        Layout.preferredWidth: Theme.iconCol
+                        Layout.preferredHeight: Theme.iconCol
                         Image {
                             id: avatarImg
                             anchors.fill: parent
                             source: row.avatar !== "" ? "file://" + row.avatar : ""
-                            sourceSize: Qt.size(44, 44)
+                            sourceSize: Qt.size(2 * Theme.iconCol, 2 * Theme.iconCol)
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
                             visible: false
@@ -760,21 +796,20 @@ ModalMenu {
                     RowText { title: row.modelData.name; sub: row.modelData.subtitle || "" }
                     Meter {                                  // progress rows (VM downloads): item.progress 0..1
                         visible: row.modelData.progress !== undefined
-                        Layout.preferredWidth: 90; Layout.preferredHeight: 4; Layout.alignment: Qt.AlignVCenter
-                        implicitHeight: 4
+                        Layout.preferredWidth: lc.progressW; Layout.alignment: Qt.AlignVCenter
                         value: row.modelData.progress ?? 0
-                        animMs: 300
+                        animMs: Motion.emphasisMs
                     }
                     Row {                                    // keybinds section: the key combination instead of source label / number badge
                         visible: !!row.modelData.keys
-                        spacing: 4
+                        spacing: Theme.gapTight
                         Repeater { model: row.modelData.keys || []; KeyBadge { required property string modelData; text: modelData; sel: row.sel } }
                     }
                     Row {                                    // the item's Hyprland shortcut: keycap chips, same names as the Keybinds section
                         readonly property var hint: lc.hintFor(row.modelData)
                         visible: hint.length > 0 && !row.modelData.keys
-                        spacing: 3
-                        Layout.rightMargin: 6
+                        spacing: Theme.gapTight
+                        Layout.rightMargin: Theme.controlGap
                         Repeater { model: parent.hint; KeyBadge { required property string modelData; text: modelData; outlined: true; sel: row.sel } }
                     }
                     Label {
@@ -802,14 +837,12 @@ ModalMenu {
                     readonly property bool sel: index === lc.asel
                     readonly property bool arming: lc.actionConfirm === modelData.id
                     width: parent.width
-                    rowH: 40
+                    rowH: lc.rowH
                     radius: Theme.radiusModal
-                    icon: arming ? "\uf071" : modelData.glyph
-                    iconSize: 14
-                    iconColor: sel ? Theme.accent : Theme.fgDim
-                    outlined: sel
-                    border.color: Theme.alpha(Theme.accent, 0.8)
-                    color: sel ? Theme.alpha(Theme.accent, 0.26) : hovered ? Theme.alpha(Theme.fg, 0.10) : "transparent"
+                    icon: arming ? Icons.warning : modelData.glyph
+                    iconSize: Theme.iconLg
+                    iconColor: arming ? Theme.red : sel ? Theme.accent : Theme.fgDim
+                    color: !sel && hovered ? Theme.itemHover : Theme.alpha(Theme.itemHover, 0)   // selected: the GlideHighlight under it
                     onClicked: lc.doAction(modelData.id)
                     RowText {
                         title: arow.arming ? (arow.modelData.confirmText || "Confirm: " + arow.modelData.label) : arow.modelData.label
@@ -819,23 +852,24 @@ ModalMenu {
             }
         }
 
-        // scroll position
+        // scroll position: a tertiary-ink mark at the right edge
         Rectangle {
             visible: list.scrolls && !lc.actionsOpen
             anchors.right: parent.right
-            width: 3
-            radius: Math.min(1.5, Theme.radius)
-            color: Theme.alpha(Theme.fg, 0.25)
-            height: Math.max(16, list.height * lc.numResults / Math.max(1, lc.results.length))
+            width: lc.scrollW
+            radius: Math.min(lc.scrollW / 2, Theme.radius)
+            color: Theme.muted
+            height: Math.max(Theme.iconLg, list.height * lc.numResults / Math.max(1, lc.results.length))
             y: lc.results.length <= lc.numResults ? 0
                 : (list.height - height) * lc.first / (lc.results.length - lc.numResults)
+            Behavior on y { NumberAnimation { duration: Motion.hoverMs; easing.type: Motion.easeMove } }
         }
 
-        Label {
+        EmptyState {
             visible: lc.results.length === 0 && !lc.actionsOpen
-            anchors.centerIn: parent
+            anchors { left: parent.left; right: parent.right; top: parent.top }
+            icon: Icons.search
             text: "No matches"
-            color: Theme.muted
         }
     }
 

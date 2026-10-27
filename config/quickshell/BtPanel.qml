@@ -9,10 +9,10 @@ import Quickshell.Services.Pipewire
 // just the header and the list.
 ColumnLayout {
     id: bt
-    spacing: 8
-    // the list gives up a third of its room while the AirPods section shows, so the popup stays short-screen sized
-    readonly property int listMax: pods.visible ? 200 : 300
-    implicitHeight: Math.min(460, 70 + Math.min(listMax, list.contentHeight) + 20) + (pods.visible ? pods.implicitHeight + spacing + pods.Layout.topMargin + pods.Layout.bottomMargin : 0)
+    spacing: Theme.gapRow
+    // the list shows whole rows (no half row at the card's edge): 6, or 4 while the AirPods section takes its share
+    readonly property int listRows: pods.visible ? 4 : 6
+    readonly property int listMax: listRows * (Theme.rowH + Theme.gapTight) - Theme.gapTight
 
     readonly property var adapter: Bluetooth.defaultAdapter   // qmllint disable unresolved-type
     // scanning is manual (the Scan button): auto start/stop on open/close races BlueZ ("operation already in progress")
@@ -36,7 +36,7 @@ ColumnLayout {
     AirPodsSection {
         id: pods
         Layout.fillWidth: true
-        Layout.bottomMargin: 8
+        Layout.bottomMargin: Theme.gapRow
         // connected AirPods, or (daemon down, so nothing is known) an AirPods-looking default output: then the notice
         visible: AirPods.connected || (!AirPods.daemon && AirPods.looksLike(Pipewire.defaultAudioSink))
     }
@@ -58,8 +58,8 @@ ColumnLayout {
         }
     }
 
-    Label { visible: bt.adapter === null; text: "No Bluetooth adapter"; color: Theme.muted }
-    Label { visible: bt.adapter !== null && !bt.adapter.enabled; text: "Bluetooth is off"; color: Theme.muted }
+    EmptyState { visible: bt.adapter === null; icon: Icons.bluetooth; text: "No Bluetooth adapter" }
+    EmptyState { visible: bt.adapter !== null && !bt.adapter.enabled; icon: Icons.bluetooth; text: "Bluetooth is off" }
 
     ListView {
         id: list
@@ -67,7 +67,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: Math.min(bt.listMax, contentHeight)
         clip: true
-        spacing: 4
+        spacing: Theme.gapTight
         // connected first, then paired, then the rest (by name); skip nameless discovery noise
         model: bt.adapter
             ? bt.adapter.devices.values
@@ -78,8 +78,7 @@ ColumnLayout {
             id: devRow
             required property var modelData
             width: list.width
-            rowH: 46
-            icon: "\uf293"
+            icon: Icons.bluetooth
             iconColor: modelData.connected ? Theme.accent : Theme.fg
             selected: modelData.connected
             rightClick: true

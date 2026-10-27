@@ -16,9 +16,11 @@ Item {
     property bool enabledLook: true
     signal toggled(bool wantOn)
 
-    implicitWidth: 42
-    implicitHeight: 22
-    opacity: enabledLook ? 1 : 0.45
+    readonly property int trackW: 42       // the switch: two knobs wide, one knob + padding tall
+    readonly property int trackH: 22
+    implicitWidth: trackW
+    implicitHeight: trackH
+    opacity: enabledLook ? 1 : Theme.disabledOpacity
 
     readonly property real r: Math.min(height / 2, Theme.radius * 2)   // follows the theme: square at radius 0
 
@@ -29,8 +31,8 @@ Item {
         color: sw.checked ? Theme.alpha(Theme.accent, 0.38) : Theme.alpha(Theme.fg, 0.10)
         border.width: 1
         border.color: sw.checked ? Theme.alpha(Theme.accent, 0.9) : Theme.alpha(Theme.overlay, 0.7)
-        Behavior on color { ColorAnimation { duration: 160 } }
-        Behavior on border.color { ColorAnimation { duration: 160 } }
+        Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
+        Behavior on border.color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
         HoverGlow { area: tap; radius: sw.r }
     }
 
@@ -44,7 +46,7 @@ Item {
         x: sw.checked ? sw.width - width - pad - 1 : pad + 1
         color: sw.checked ? Theme.accent : Theme.muted
         Behavior on x { NumberAnimation { id: slide; duration: Theme.popupMoveMs; easing.type: Theme.popupEaseMove } }
-        Behavior on color { ColorAnimation { duration: 160 } }
+        Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
 
         SequentialAnimation on opacity {
             running: sw.busy
@@ -93,7 +95,7 @@ Item {
 
     MouseArea {
         id: tap
-        anchors { fill: parent; margins: -4 }
+        anchors { fill: parent; margins: -Theme.gapTight }
         enabled: sw.enabledLook && !sw.busy
         cursorShape: Qt.PointingHandCursor
         onClicked: { sw.userFlip = true; flipWait.restart(); sw.toggled(!sw.checked) }

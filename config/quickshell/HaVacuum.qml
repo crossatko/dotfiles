@@ -47,20 +47,21 @@ Rectangle {
             : "Clean all") + (hasCycles && cycles > 1 ? " · " + cycles + "×" : "")
 
     function pretty(s) { return s ? String(s.charAt(0).toUpperCase() + s.slice(1)).replace(/_/g, " ") : "" }
-    function batteryIcon(p) { return p >= 88 ? "" : p >= 63 ? "" : p >= 38 ? "" : p >= 13 ? "" : "" }
+
+    readonly property int tileExtra: 40      // icon + padding of a room tile: a name needs its width plus this
 
     implicitHeight: body.implicitHeight + 24
     radius: Theme.radiusItem
     color: cleaning ? Theme.alpha(Theme.accent, 0.10) : Theme.alpha(Theme.fg, 0.05)
     border.width: cleaning ? 1 : 0
     border.color: Theme.alpha(Theme.accent, 0.45)
-    opacity: hiddenNow || unavailable ? 0.45 : 1
+    opacity: hiddenNow || unavailable ? Theme.disabledOpacity : 1
 
     // ---- building blocks ----
     // small label above a control
     component Caption: Label { color: Theme.fgDim; font.pixelSize: Theme.fontCaption; font.letterSpacing: 0.6 }
 
-    // icon + text button; `primary` is the filled accent one
+    // icon + text button, Btn's look (fills, radius, press) with a leading glyph; `primary` is the filled accent one
     component ActBtn: Rectangle {
         id: ab
         property string icon: ""
@@ -69,24 +70,24 @@ Rectangle {
         property bool active: false
         property bool enabledLook: true
         signal clicked()
-        implicitHeight: 34
-        implicitWidth: row.implicitWidth + 24
-        radius: Theme.inner(Theme.radiusItem, 12)    // inside the card's 12 px padding
-        opacity: enabledLook ? 1 : 0.5
-        color: primary ? (abGlow.hovered ? Theme.alpha(Theme.accent, 0.42) : Theme.alpha(Theme.accent, 0.3))
-             : active ? Theme.alpha(Theme.accent, 0.3)
-             : abGlow.hovered ? Theme.alpha(Theme.fg, 0.14) : Theme.alpha(Theme.fg, 0.07)
+        implicitHeight: Theme.controlH
+        implicitWidth: row.implicitWidth + 2 * Theme.pad
+        radius: Theme.inner(Theme.radiusItem, Theme.pad)    // inside the card's padding
+        opacity: enabledLook ? 1 : Theme.disabledOpacity
+        color: primary || active ? (abGlow.hovered ? Theme.accentHover : Theme.accentFill)
+             : abGlow.hovered ? Theme.itemActive : Theme.itemFill
         border.width: primary || active ? 1 : 0
-        border.color: Theme.alpha(Theme.accent, 0.8)
-        Behavior on color { ColorAnimation { duration: 100 } }
+        border.color: Theme.accentEdge
+        Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
+        PressFeedback { area: abArea }
         Row {
             id: row
             anchors.centerIn: parent
-            spacing: 8
+            spacing: Theme.gapRow
             Icon {
                 visible: ab.icon !== ""
                 text: ab.icon
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSize      // Btn's icon glyph size
                 color: ab.primary || ab.active ? Theme.accent : Theme.fg
                 anchors.verticalCenter: parent.verticalCenter
             }
@@ -116,9 +117,9 @@ Rectangle {
         property var labels: []             // display text per option
         property var current: undefined
         signal picked(var value)
-        implicitHeight: 30
+        implicitHeight: Theme.controlH
         color: "transparent"
-        radius: Theme.inner(Theme.radiusItem, 12)    // inside the card's 12 px padding
+        radius: Theme.inner(Theme.radiusItem, Theme.pad)    // inside the card's padding
         border.width: 1
         border.color: Theme.alpha(Theme.overlay, 0.6)
         Row {
@@ -140,7 +141,7 @@ Rectangle {
                     topRightRadius: index === seg.options.length - 1 ? endR : 0
                     bottomRightRadius: index === seg.options.length - 1 ? endR : 0
                     color: on ? Theme.alpha(Theme.accent, 0.3) : cellGlow.hovered ? Theme.alpha(Theme.fg, 0.12) : Theme.alpha(Theme.fg, 0.04)
-                    Behavior on color { ColorAnimation { duration: 100 } }
+                    Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
                     Rectangle {                      // hairline between cells
                         visible: cell.index > 0
                         width: 1; height: parent.height
@@ -157,7 +158,7 @@ Rectangle {
                     }
                     Label {
                         anchors.fill: parent
-                        anchors.leftMargin: 4; anchors.rightMargin: 4
+                        anchors.leftMargin: Theme.gapTight; anchors.rightMargin: Theme.gapTight
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideRight
                         text: seg.labels[cell.index] !== undefined ? seg.labels[cell.index] : String(cell.modelData)
@@ -184,18 +185,18 @@ Rectangle {
 
     ColumnLayout {
         id: body
-        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
-        spacing: 12
+        anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.pad }
+        spacing: Theme.pad
 
         // ---- header: icon, name / status, battery ----
         RowLayout {
             Layout.fillWidth: true
-            spacing: 14
+            spacing: Theme.pad          // icon column -> text, as ListRow
             Icon {
-                text: ""
-                font.pixelSize: 18
+                text: Icons.vacuum
+                font.pixelSize: Theme.iconLg
                 horizontalAlignment: Text.AlignHCenter
-                Layout.preferredWidth: 22
+                Layout.preferredWidth: Theme.iconCol
                 color: vac.cleaning ? Theme.accent : Theme.fgDim
             }
             RowText {
@@ -205,17 +206,17 @@ Rectangle {
             }
             Row {
                 visible: !vac.editing && vac.battery >= 0
-                spacing: 6
+                spacing: Theme.controlGap
                 Icon {
-                    text: vac.charging ? "" : ""
+                    text: vac.charging ? Icons.bolt : ""
                     visible: vac.charging
-                    font.pixelSize: 11
-                    color: Theme.accent
+                    font.pixelSize: Theme.iconSm
+                    color: Theme.green           // charging
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Icon {
-                    text: vac.batteryIcon(vac.battery)
-                    font.pixelSize: 15
+                    text: Icons.batteryGlyph(vac.battery, false)
+                    font.pixelSize: Theme.iconMd
                     color: vac.battery < 20 ? Theme.red : Theme.fgDim
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -225,7 +226,7 @@ Rectangle {
                 outerRadius: vac.radius        // inside the card's 12 px padding
                 visible: vac.editing
                 icon: true
-                text: vac.hiddenNow ? "" : ""
+                text: vac.hiddenNow ? Icons.eyeOff : Icons.eye
                 active: !vac.hiddenNow
                 onClicked: HomeAssistant.setHidden(vac.entityId, !vac.hiddenNow)
             }
@@ -235,11 +236,11 @@ Rectangle {
         RowLayout {
             visible: !vac.editing && !vac.unavailable
             Layout.fillWidth: true
-            spacing: 6
+            spacing: Theme.controlGap
             ActBtn {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
-                icon: ""
+                icon: Icons.play
                 text: vac.st === "paused" ? "Resume" : "Start"
                 active: vac.cleaning
                 enabledLook: !vac.busy
@@ -248,7 +249,7 @@ Rectangle {
             ActBtn {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
-                icon: ""
+                icon: Icons.pause
                 text: "Pause"
                 active: vac.st === "paused"
                 enabledLook: !vac.busy
@@ -257,7 +258,7 @@ Rectangle {
             ActBtn {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
-                icon: ""
+                icon: Icons.dock
                 text: "Dock"
                 active: vac.st === "returning"
                 enabledLook: !vac.busy
@@ -269,10 +270,10 @@ Rectangle {
         ColumnLayout {
             visible: !vac.editing && !vac.unavailable && vac.rooms.length > 0
             Layout.fillWidth: true
-            spacing: 6
+            spacing: Theme.controlGap
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 6
+                spacing: Theme.controlGap
                 Caption { text: "Rooms" + (vac.selRooms.length > 0 ? " · " + vac.selRooms.length + " selected" : ""); Layout.fillWidth: true }
                 Repeater {
                     model: [["All", true], ["None", false]]
@@ -284,7 +285,7 @@ Rectangle {
                         font.underline: linkArea.containsMouse
                         MouseArea {
                             id: linkArea
-                            anchors.fill: parent; anchors.margins: -4
+                            anchors.fill: parent; anchors.margins: -Theme.gapTight
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: vac.selRooms = parent.modelData[1] ? vac.rooms.map(r => r.id) : []
@@ -296,10 +297,10 @@ Rectangle {
             GridLayout {
                 id: roomGrid
                 Layout.fillWidth: true
-                // three columns when every name fits a third of the row (icon + padding = 40 px), else two
-                columns: vac.rooms.every(r => fm.advanceWidth(r.name) + 40 <= (roomGrid.width - 12) / 3) ? 3 : 2
-                rowSpacing: 6
-                columnSpacing: 6
+                // three columns when every name fits a third of the row (icon + padding = tileExtra), else two
+                columns: vac.rooms.every(r => fm.advanceWidth(r.name) + vac.tileExtra <= (roomGrid.width - 2 * roomGrid.columnSpacing) / 3) ? 3 : 2
+                rowSpacing: Theme.controlGap
+                columnSpacing: Theme.controlGap
                 Repeater {
                     model: vac.rooms
                     Rectangle {
@@ -308,18 +309,18 @@ Rectangle {
                         readonly property bool sel: vac.selRooms.indexOf(modelData.id) >= 0
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1                    // equal columns
-                        implicitHeight: 34
-                        radius: Theme.inner(Theme.radiusItem, 12)    // inside the card's 12 px padding
-                        color: sel ? Theme.alpha(Theme.accent, 0.3) : roomGlow.hovered ? Theme.alpha(Theme.fg, 0.14) : Theme.alpha(Theme.fg, 0.07)
+                        implicitHeight: Theme.controlH              // as the action buttons above
+                        radius: Theme.inner(Theme.radiusItem, Theme.pad)    // inside the card's padding
+                        color: sel ? (roomGlow.hovered ? Theme.accentHover : Theme.accentFill) : roomGlow.hovered ? Theme.itemActive : Theme.itemFill
                         border.width: sel ? 1 : 0
-                        border.color: Theme.alpha(Theme.accent, 0.8)
-                        Behavior on color { ColorAnimation { duration: 100 } }
+                        border.color: Theme.accentEdge
+                        Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
                         RowLayout {
-                            anchors { fill: parent; leftMargin: 10; rightMargin: 8 }
-                            spacing: 8
+                            anchors { fill: parent; leftMargin: Theme.padSm; rightMargin: Theme.gapRow }
+                            spacing: Theme.gapRow
                             Icon {
-                                text: tile.sel ? "" : ""
-                                font.pixelSize: 12
+                                text: tile.sel ? Icons.squareCheck : Icons.square
+                                font.pixelSize: Theme.iconSm
                                 color: tile.sel ? Theme.accent : Theme.muted
                             }
                             Label {
@@ -347,7 +348,7 @@ Rectangle {
         ColumnLayout {
             visible: !vac.editing && !vac.unavailable && vac.hasCycles
             Layout.fillWidth: true
-            spacing: 6
+            spacing: Theme.controlGap
             Caption { text: "Cycles" }
             Segmented {
                 Layout.fillWidth: true
@@ -363,7 +364,7 @@ Rectangle {
             visible: !vac.editing && !vac.unavailable
             Layout.fillWidth: true
             primary: true
-            icon: ""
+            icon: Icons.play
             text: vac.cleanText
             enabledLook: !vac.busy
             onClicked: vac.clean()

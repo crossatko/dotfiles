@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Layouts
 import Quickshell.Io
 import Quickshell.Services.Pipewire
 
@@ -9,10 +8,9 @@ import Quickshell.Services.Pipewire
 // from `pactl -f json list cards` (this card's profiles, `off` hidden) and a choice runs `pactl set-card-profile`;
 // WirePlumber saves it (default-profile state) and restores it on the next connect. A2DP entries are named by codec,
 // best first; headset (HSP/HFP) entries are last and marked "mic on, low quality".
-ColumnLayout {
+DropSelect {
     id: bp
 
-    property bool open: false
     property bool busy: false
     property var profiles: []                  // [{id, label, headset}]
     property string active: ""
@@ -20,15 +18,19 @@ ColumnLayout {
     readonly property var sink: Pipewire.defaultAudioSink
     readonly property string address: sink && sink.properties ? (sink.properties["api.bluez5.address"] || "") : ""
     readonly property string card: address !== "" ? "bluez_card." + address.replace(/:/g, "_") : ""
-    readonly property var current: profiles.find(p => p.id === active) || null
+    readonly property var profile: profiles.find(p => p.id === active) || null
 
     visible: card !== "" && profiles.length > 0
-    spacing: 4
+    options: profiles.map(p => ({ label: p.label, note: p.headset ? "mic on, low quality" : undefined, noteTint: Theme.yellow }))
+    currentIndex: profiles.findIndex(p => p.id === active)
+    headIcon: Icons.bluetooth
+    headText: busy ? "Switching…" : (profile ? "" : active)
+    onToggled: o => { if (o) refresh() }
+    onPicked: i => choose(profiles[i])
 
     function codec(desc) { const m = /codec ([^)]+)\)/.exec(desc || ""); return m ? m[1] : (desc || "") }
     function refresh() { if (card !== "" && !list.running) list.running = true }
     function choose(p) {
-        open = false
         if (p.id === active || busy) return
         busy = true
         set.command = ["pactl", "set-card-profile", card, p.id]
@@ -72,75 +74,4 @@ ColumnLayout {
         onExited: { bp.busy = false; bp.refresh(); later.restart() }
     }
     Timer { id: later; interval: 1500; onTriggered: bp.refresh() }   // the new node settles a moment after pactl returns
-
-    Rectangle {
-        Layout.fillWidth: true
-        implicitHeight: 30
-        radius: Theme.radiusItem
-        color: headGlow.hovered ? Theme.alpha(Theme.fg, 0.13) : Theme.alpha(Theme.fg, 0.07)
-        border.width: bp.open ? 1 : 0
-        border.color: Theme.alpha(Theme.accent, 0.8)
-        Behavior on color { ColorAnimation { duration: 100 } }
-        RowLayout {
-            anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
-            spacing: 8
-            Icon { text: ""; font.pixelSize: 12; color: Theme.fgDim }
-            Label {
-                text: bp.busy ? "Switching…" : bp.current ? bp.current.label : bp.active
-                Layout.fillWidth: true
-                elide: Text.ElideRight
-                font.pixelSize: Theme.fontSmall
-            }
-            Label {
-                visible: !bp.busy && bp.current !== null && bp.current.headset
-                text: "mic on, low quality"
-                color: Theme.yellow
-                font.pixelSize: Theme.fontCaption
-            }
-            Icon {
-                text: ""
-                font.pixelSize: 12
-                color: Theme.fgDim
-                rotation: bp.open ? 180 : 0
-                Behavior on rotation { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-            }
-        }
-        HoverGlow { id: headGlow; area: head; radius: Theme.radiusItem }
-        MouseArea { id: head; anchors.fill: parent; hoverEnabled: true; onClicked: { bp.open = !bp.open; if (bp.open) bp.refresh() } }
-    }
-
-    // dropdown list; collapses to zero height so the panel resizes around it
-    Item {
-        Layout.fillWidth: true
-        implicitHeight: bp.open ? opts.implicitHeight : 0
-        clip: true
-        Behavior on implicitHeight { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-
-        ColumnLayout {
-            id: opts
-            width: parent.width
-            spacing: 3
-            Repeater {
-                model: bp.profiles
-                Rectangle {
-                    id: optRow
-                    required property var modelData
-                    readonly property bool isCurrent: modelData.id === bp.active
-                    Layout.fillWidth: true
-                    implicitHeight: 30
-                    radius: Theme.radiusItem
-                    color: isCurrent ? Theme.alpha(Theme.accent, 0.22) : optGlow.hovered ? Theme.alpha(Theme.fg, 0.12) : "transparent"
-                    RowLayout {
-                        anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
-                        spacing: 8
-                        Label { text: optRow.modelData.label; Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: Theme.fontSmall; color: optRow.isCurrent ? Theme.accent : Theme.fg }
-                        Label { visible: optRow.modelData.headset; text: "mic on, low quality"; color: Theme.muted; font.pixelSize: Theme.fontCaption }
-                        Icon { visible: optRow.isCurrent; text: ""; font.pixelSize: 12; color: Theme.accent }
-                    }
-                    HoverGlow { id: optGlow; area: opt; radius: Theme.radiusItem }
-                    MouseArea { id: opt; anchors.fill: parent; hoverEnabled: true; onClicked: bp.choose(optRow.modelData) }
-                }
-            }
-        }
-    }
 }

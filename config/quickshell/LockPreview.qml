@@ -1,14 +1,13 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
-import Quickshell
 
 // Settings > Lock: the real lock visuals of `screen` (LockView in preview mode: its wallpaper still, cropped like the
-// lock does, blur, dim, glass clock (or none: Settings > Lock "Screens"), date, `dots` sample beads and a sample
+// lock does, blur, dim, glass clock (or none: Settings > Monitors), date, `dots` sample beads and a sample
 // playback card; no input, no video, never a session lock), always 16:9: rendered at a virtual 1920 x 1080 and scaled down uniformly into this item, with rounded corners. Follows LockPrefs live; replay() plays the lock's opening again.
 Item {
     id: pv
-    property var screen: Quickshell.screens[0]
+    property var screen: Monitors.primary
     property int dots: 4
     readonly property Item cornerMask: corners
     readonly property real sw: 1920

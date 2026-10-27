@@ -24,7 +24,7 @@ ColumnLayout {
         implicitHeight: head.implicitHeight
         MouseArea {
             id: headArea
-            anchors { fill: parent; topMargin: -6; bottomMargin: -6 }
+            anchors { fill: parent; topMargin: -Theme.controlGap; bottomMargin: -Theme.controlGap }
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: fs.open = !fs.open
@@ -35,12 +35,12 @@ ColumnLayout {
             title: fs.title
             detail: fs.detail
             Icon {
-                text: "\uf078"
-                font.pixelSize: 11
+                text: Icons.chevronDown
+                font.pixelSize: Theme.iconSm
                 color: headArea.containsMouse ? Theme.fg : Theme.fgDim
                 rotation: fs.open ? 180 : 0
                 Behavior on rotation { NumberAnimation { duration: Theme.popupMoveMs; easing.type: Easing.OutCubic } }
-                Behavior on color { ColorAnimation { duration: 120 } }
+                Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
             }
             RowLayout { id: tail; spacing: Theme.controlGap }
         }
@@ -56,9 +56,9 @@ ColumnLayout {
         visible: k > 0
         opacity: k
         clip: true
-        spacing: 6
+        spacing: Theme.controlGap
         Layout.fillWidth: true
-        Layout.topMargin: 6 * k
+        Layout.topMargin: Theme.controlGap * k
         Layout.fillHeight: k >= 1
         Layout.minimumHeight: k >= 1 ? -1 : 0
         Layout.preferredHeight: k >= 1 ? -1 : implicitHeight * k

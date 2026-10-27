@@ -47,6 +47,13 @@ Singleton {
     // strength whatever the card's opacity, so it would stay as a dark empty box after the content has faded and
     // vanish in one frame (measured 2026-10-21); glassScaleAt() then shrinks the glass instead in the last part.
     property bool glassFades: false
+    // per-surface glass (Settings > Glass > Surfaces, GlassSurfaces.qml): the running Hyprland knows the `glass` rule
+    // effect (fork option decoration:blur:solid_glass:per_surface exists and is on); the group bar pills / window-frame
+    // glass have their own options (group:groupbar:solid_glass, decoration:blur:solid_glass:border). All false on stock
+    // and on fork builds without them.
+    property bool glassPerSurface: false
+    property bool glassGroupbarOpt: false
+    property bool glassBorderOpt: false
     // fill alpha of glass cards (popups, OSD, toasts): low enough for the lens / rim to show; else the original fill
     // Per colour mode (theme.toml [settings] = dark, [settings_light] = light; palette.json carries the active mode's):
     // card_fill on solid_glass (light: a pale card needs a much stronger fill to keep its dark text readable; theme.py
@@ -89,10 +96,10 @@ Singleton {
         readonly property color fg: root.tone(root.fg, 0.92, 0.97, 0.25)
         readonly property color fgDim: root.tone(root.fgDim, 0.82, 0.92, 0.35)
         readonly property color muted: root.tone(root.muted, 0.76, 0.88, 0.4)
-        readonly property color accent: root.tone(root.accent, 0.66, 0.85, 1)
-        readonly property color accent2: root.tone(root.accent2, 0.66, 0.85, 1)
-        readonly property color red: root.tone(root.red, 0.66, 0.85, 1)
-        readonly property color green: root.tone(root.green, 0.62, 0.85, 1)
+        readonly property color accent: root.tone(root.accent, 0.5, 0.85, 1)   // lower bound 0.5: a mid-lightness accent (the popups' own) must pass through unchanged
+        readonly property color accent2: root.tone(root.accent2, 0.5, 0.85, 1)
+        readonly property color red: root.tone(root.red, 0.5, 0.85, 1)
+        readonly property color green: root.tone(root.green, 0.5, 0.85, 1)
         readonly property color yellow: root.tone(root.yellow, 0.62, 0.85, 1)
         readonly property color overlay: root.tone(root.overlay, 0.2, 0.4, 0.5)
     }
@@ -111,7 +118,7 @@ Singleton {
     function checkGlass() { glassProbe.running = true }
     Process {
         id: glassProbe
-        command: ["hyprctl", "-j", "--batch", "getoption decoration:blur:enabled ; getoption decoration:blur:variant ; getoption decoration:blur:solid_glass:layer_alpha_ref"]
+        command: ["hyprctl", "-j", "--batch", "getoption decoration:blur:enabled ; getoption decoration:blur:variant ; getoption decoration:blur:solid_glass:layer_alpha_ref ; getoption decoration:blur:solid_glass:per_surface ; getoption group:groupbar:solid_glass ; getoption decoration:blur:solid_glass:border"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const en = /"decoration:blur:enabled",\s*"(?:bool|int)":\s*(true|1)\b/.test(text)
@@ -119,6 +126,9 @@ Singleton {
                 root.glass = en && va !== null && va[1] === "11"      // 11 = solid_glass
                 const rf = /"decoration:blur:solid_glass:layer_alpha_ref",\s*"float":\s*([\d.eE+-]+)/.exec(text)
                 root.glassFades = rf !== null && parseFloat(rf[1]) > 0
+                root.glassPerSurface = /"decoration:blur:solid_glass:per_surface",\s*"(?:bool|int)":\s*(true|1)\b/.test(text)
+                root.glassGroupbarOpt = /"option":\s*"group:groupbar:solid_glass"/.test(text)
+                root.glassBorderOpt = /"option":\s*"decoration:blur:solid_glass:border"/.test(text)
                 root.glassKnown = true
             }
         }
@@ -171,13 +181,52 @@ Singleton {
     readonly property int popupGap: barFloating ? Math.max(4, gapOut) : 8     // popup card <-> bar
     // gap between adjacent controls (the 6 of Settings rows / button groups, = chipGap; blocks are 2x apart)
     readonly property int controlGap: 6
+
+    // ---- Design language (DESIGN.md): the scales every popup / chip / Settings row is built from. Rules and roles live there. ----
+    // type scale: fontTitle 17 / fontLead 15 / fontSize 13 / fontSmall 12 / fontCaption 11 / fontTiny 10 (Paper Mono: digits line up by themselves)
+    readonly property int fontLead: 15      // the one prominent line of a card (media title, a big value)
+    // icon scale (glyph pixel sizes): iconSm inline markers (check, chevron, pill glyph) / iconMd default = bar chips, buttons /
+    // iconLg leading icon of a row or tile / iconXl the OSD glyph. iconCol = the leading icon column of rows and tiles.
+    readonly property int iconSm: 12
+    readonly property int iconMd: iconSize
+    readonly property int iconLg: 18
+    readonly property int iconXl: 22
+    readonly property int iconCol: 22
+    // spacing scale: gapTight 4 (items of a list, label <-> value) / controlGap 6 / gapRow 8 (rows, head <-> list) /
+    // padSm 10 (inset of a compact control) / pad 12 (card padding, row insets, between blocks)
+    readonly property int gapTight: 4
+    readonly property int gapRow: 8
+    readonly property int padSm: 10
+    readonly property int pad: 12
+    // heights: controlH compact rows, buttons, dropdown options / rowH list rows / rowTallH two-line tiles
+    readonly property int controlH: 30
+    readonly property int rowH: 44
+    readonly property int rowTallH: 54
+    // popup card widths (Popups.panels): the narrow one for lists and controls, the wide one for grids and cards
+    readonly property int popupW: 380
+    readonly property int popupWide: 420
+    // elevation: L0 chip = flat on the bar (Chip.qml, BarInk colour sets); L1 item = a raised block inside a card
+    // (rows, tiles, boxes): fill only, no outline; L2 card = the glass popup / OSD / toast / modal: cardFill + a hairline
+    // edge (GlassEdge / RimLight). Colour carries meaning (DESIGN.md "Colour"): accent = selected / on / open, red = danger.
+    readonly property color itemFill: alpha(fg, 0.06)
+    readonly property color itemHover: alpha(fg, 0.10)
+    readonly property color itemActive: alpha(fg, 0.14)        // pressed / an open dropdown head
+    readonly property color accentFill: alpha(accent, 0.18)     // selected / on
+    readonly property color accentHover: alpha(accent, 0.24)
+    readonly property color accentEdge: alpha(accent, 0.8)      // outline of an open / focused / active control
+    readonly property color edge: alpha(overlay, 0.5)           // hairline of an L2 card, dividers
+    readonly property color dangerFill: alpha(red, 0.16)
+    readonly property color dangerEdge: alpha(red, 0.7)
+    // state opacities: disabled controls / a dimmed chip (nothing to interact with: no network, muted)
+    readonly property real disabledOpacity: 0.45
+    readonly property real dimOpacity: 0.6
     // popup motion (PopupHost.qml), ms: open fade/scale-in, close fade-out, card glide + resize when switching chips,
     // old content fading out / new content fading in during a switch
     // Base values at speed 1 (Settings -> Animations: Motion.qml, animations.json): duration = base / popupSpeed,
     // style "none" = 0 (instant)
-    readonly property real popupSpeedK: Motion.popupStyle === "none" ? 0 : 1 / Motion.popupSpeed
-    // floor of one frame (16 ms) for any animated value, so 10x never gives 1-7 ms steps
-    function popupMs(base) { return popupSpeedK === 0 ? 0 : Math.max(16, Math.round(base * popupSpeedK)) }
+    readonly property real popupSpeedK: Motion.k
+    // floor of one frame (16 ms) for any animated value, so 10x never gives 1-7 ms steps (= Motion.ms, the shell motion language)
+    function popupMs(base) { return Motion.ms(base) }
     // 1x = Motion.baseMs (shared with Hyprland); the switch's content fades are 35 % / 65 % of it
     readonly property int popupOpenMs: popupMs(Motion.baseMs)
     readonly property int popupCloseMs: popupMs(Motion.baseMs * 0.75)    // close = 0.75 x open
@@ -187,6 +236,7 @@ Singleton {
     // feedback motion: one half of the "busy" pulse (Toggle knob, RowState glyph, lock dots; not speed-scaled: it is a
     // state, not a transition) and the wrong-password shake (whole run, speed-scaled) with its amplitude
     readonly property int busyPulseMs: 380
+    readonly property int heartbeatMs: 2 * busyPulseMs   // one half of a slow attention pulse (the recording dot)
     readonly property int shakeMs: popupMs(Motion.baseMs * 1.5)
     readonly property int shakePx: 10
     // how much the lock screen darkens the wallpaper (x (1 - dim), a black veil in LockView): the blurred backdrop and what the glass
@@ -196,8 +246,8 @@ Singleton {
     // curve (Motion.popupCurve): open / move ease out (Back overshoots); close = the same family decelerating WITHOUT
     // overshoot (Back closes with OutCubic), so it is visible to the very end: no last-frame drop from an ease-in, no
     // crossing of 0 before the end (2026-10-20; before: In* curves, and Back closed early, see PopupHost)
-    readonly property int popupEaseOpen: ({ quint: Easing.OutQuint, expo: Easing.OutExpo, back: Easing.OutBack, linear: Easing.Linear })[Motion.popupCurve] ?? Easing.OutCubic
-    readonly property int popupEaseClose: ({ quint: Easing.OutQuint, expo: Easing.OutExpo, linear: Easing.Linear })[Motion.popupCurve] ?? Easing.OutCubic
+    readonly property int popupEaseOpen: Motion.easeEnter
+    readonly property int popupEaseClose: Motion.easeExit
     readonly property int popupEaseMove: popupEaseOpen
     // Glass of a card in open / close motion at progress t (1 = open), as a scale of the card's glass region about its
     // centre (Glass.qml `glassScale`). With a fading glass (glassFades) always 1: the glass fades with the card. Without

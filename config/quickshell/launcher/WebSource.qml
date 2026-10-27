@@ -14,7 +14,7 @@ QtObject {
         if (q === "") return []
         return engines.map(e => ({
             id: "web:" + e.id, name: "Search " + e.name + " for \"" + q + "\"", subtitle: "",
-            kind: "web", source: "Web", glyph: "", url: e.url + encodeURIComponent(q)
+            kind: "web", source: "Web", glyph: "\uf0ac", url: e.url + encodeURIComponent(q)   // globe
         }))
     }
 

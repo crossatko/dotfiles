@@ -93,31 +93,6 @@ PanelWindow {
     BarInk { id: inkR; base: bar.inkBase; flat: bar.inkFlat; mode: bar.inkMode; sens: bar.inkSens; fill: bar.inkFill; seg: bar.secSeg(rightSec, [0.66, 1]) }
 
     // ---- shared state -------------------------------------------------------
-    property string cpu: "0%"
-    property string mem: "0%"
-    property var cpuHist: []                 // last HIST_N samples, 0..100
-    property var memHist: []
-    readonly property int histN: 14
-
-    // reserve the width of the widest value / full graph so chips never resize as numbers or history change
-    TextMetrics { id: pctMetrics; text: "100%"; font.family: Theme.font; font.pixelSize: Theme.fontSize }
-    TextMetrics { id: sparkMetrics; text: "▁".repeat(bar.histN); font.family: Theme.font; font.pixelSize: Theme.fontSize }
-
-    function pushSample(arr, v) {
-        const a = arr.concat([v])
-        return a.length > histN ? a.slice(a.length - histN) : a
-    }
-    // ▁▂▃▄▅▆▇█ sparkline. floor = smallest top-of-scale, so an idle CPU stays a flat low line instead of
-    // being stretched to full height; memory passes a `lo` (its own minimum) since its changes are tiny.
-    function spark(arr, floorSpan, useMin) {
-        const blocks = "▁▂▃▄▅▆▇█"
-        const hi0 = Math.max.apply(null, arr)
-        const lo = useMin ? Math.min.apply(null, arr) : 0
-        const span = Math.max(floorSpan, hi0 - lo)
-        let s = " ".repeat(histN - arr.length)        // not enough history yet: pad on the left, graph grows in from the right
-        for (const v of arr) s += blocks[Math.max(0, Math.min(7, Math.floor((v - lo) / span * 7.999)))]
-        return s
-    }
     property bool inhibit: false
 
     readonly property var kana: ({
@@ -144,7 +119,10 @@ PanelWindow {
     Component.onCompleted: { BarContrast.bars[bar.screen.name] = bar; BarContrast.request(lumaKey); Popups.barObjs[bar.screen.name] = bar; Popups.setBarGap(bar.screen.name, gapNow) }
 
     // the playing MPRIS player wins; a paused one only shows while the Twitch app isn't playing
+    // (media chip only: nothing below runs while the widget is in no layout)
+    readonly property bool mediaOn: BarWidgets.shown("media")
     readonly property var player: {
+        if (!mediaOn) return null
         const ps = Mpris.players.values
         const twitchPlaying = twitchActive && twitchNow.playing
         return ps.find(p => p.isPlaying) || (twitchPlaying ? null : ps.find(p => p.trackTitle)) || null
@@ -153,9 +131,13 @@ PanelWindow {
     // file instead. Shown when no MPRIS player is active; ignored once it is older than 45 s (player gone).
     property var twitchNow: null
     property double twitchClock: Date.now()
-    Timer { interval: 10000; running: true; repeat: true; onTriggered: bar.twitchClock = Date.now() }
+    Timer {
+        interval: 10000; running: bar.mediaOn; repeat: true
+        onRunningChanged: if (running) bar.twitchClock = Date.now()
+        onTriggered: bar.twitchClock = Date.now()
+    }
     FileView {
-        path: Quickshell.env("XDG_RUNTIME_DIR") + "/twitch-qs-mpv-now.json"
+        path: bar.mediaOn ? Quickshell.env("XDG_RUNTIME_DIR") + "/twitch-qs-mpv-now.json" : ""
         watchChanges: true
         printErrors: false
         onFileChanged: reload()
@@ -166,14 +148,15 @@ PanelWindow {
     // Brand glyph (Font Awesome Brands) for whatever is playing; "" = fall back to plain play/pause.
     // The service (YouTube, Twitch, ...) wins over the browser playing it. Browsers' MPRIS has no URL, so
     // the service comes from the browser window title minus the track title ("<track> - YouTube - Brave").
-    readonly property var services: [["spotify", "\uf1bc"], ["youtube", "\uf167"], ["youtu.be", "\uf167"], ["twitch", "\uf1e8"],
-        ["soundcloud", "\uf1be"], ["deezer", "\ue077"], ["tidal", "\ue7dc"], ["apple music", "\uf179"], ["music.apple", "\uf179"],
-        ["bandcamp", "\uf2d5"], ["vimeo", "\uf40a"], ["mixcloud", "\uf289"], ["last.fm", "\uf202"], ["pandora", "\ue7da"],
-        ["tiktok", "\ue07b"], ["reddit", "\uf1a1"]]
-    readonly property var browsers: [["brave", "\ue63c"], ["firefox", "\uf269"], ["chrom", "\uf268"], ["edge", "\uf282"]]
+    readonly property var services: [["spotify", Icons.spotify], ["youtube", Icons.youtube], ["youtu.be", Icons.youtube], ["twitch", Icons.twitch],
+        ["soundcloud", Icons.soundcloud], ["deezer", Icons.deezer], ["tidal", Icons.tidal], ["apple music", Icons.apple], ["music.apple", Icons.apple],
+        ["bandcamp", Icons.bandcamp], ["vimeo", Icons.vimeo], ["mixcloud", Icons.mixcloud], ["last.fm", Icons.lastfm], ["pandora", Icons.pandora],
+        ["tiktok", Icons.tiktok], ["reddit", Icons.reddit]]
+    readonly property var browsers: [["brave", Icons.brave], ["firefox", Icons.firefox], ["chrom", Icons.chrome], ["edge", Icons.edge]]
     function brandIn(list, s) { for (const m of list) if (s.indexOf(m[0]) >= 0) return m[1]; return "" }
     readonly property string mediaBrand: {
-        if (!player) return twitchNow && twitchNow.playing ? "\uf1e8" : ""
+        if (!mediaOn) return ""
+        if (!player) return twitchNow && twitchNow.playing ? Icons.twitch : ""
         const md = player.metadata || {}
         const app = ((player.identity || "") + " " + (player.desktopEntry || "")).toLowerCase()
         const title = player.trackTitle || ""
@@ -185,46 +168,8 @@ PanelWindow {
         const where = (app + " " + (md["xesam:url"] || "") + " " + win).toLowerCase()
         return brandIn(services, where) || brandIn(services, title.toLowerCase()) || brandIn(browsers, app)
     }
-    readonly property bool showTwitch: twitchActive && player === null
-    // Screen recording (~/.config/hypr/scripts/screenrec.sh, SHIFT+Print & co.): the script writes key=value
-    // lines (pid, comm, started, file, mode, audio) to $XDG_RUNTIME_DIR/screenrec/state while its recorder runs
-    // and removes the file when it exits. Polled once a second (the file comes and goes, so a watch alone
-    // misses its creation); the recorder's /proc/<pid>/comm is checked too, so a recorder that died without
-    // its wrapper cleaning up doesn't leave the chip on. SCREENREC_RUNTIME_DIR = the script's test override.
-    readonly property string recScript: Quickshell.env("HOME") + "/.config/hypr/scripts/screenrec.sh"
-    readonly property string recDir: Quickshell.env("SCREENREC_RUNTIME_DIR") || (Quickshell.env("XDG_RUNTIME_DIR") + "/screenrec")
-    property var recState: null              // parsed state file, null = no recording
-    property bool recAlive: false
-    readonly property bool recording: recState !== null && recAlive
-    property double recClock: Date.now()
-    readonly property string recElapsed: {
-        if (!recording) return ""
-        const s = Math.max(0, Math.floor(recClock / 1000) - (parseInt(recState.started) || 0))
-        const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, ss = s % 60
-        return (h > 0 ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(ss).padStart(2, "0")
-    }
-    Timer {
-        interval: 1000; running: BarWidgets.shown("recording"); repeat: true
-        onTriggered: { recStateFile.reload(); if (bar.recState) recComm.reload(); bar.recClock = Date.now() }
-    }
-    FileView {
-        id: recStateFile
-        path: bar.recDir + "/state"
-        printErrors: false
-        onLoaded: {
-            const o = {}
-            for (const l of text().split("\n")) { const i = l.indexOf("="); if (i > 0) o[l.slice(0, i)] = l.slice(i + 1) }
-            bar.recState = o.pid ? o : null
-        }
-        onLoadFailed: bar.recState = null
-    }
-    FileView {
-        id: recComm
-        path: bar.recState ? "/proc/" + bar.recState.pid + "/comm" : ""
-        printErrors: false
-        onLoaded: bar.recAlive = bar.recState !== null && text().trim() === bar.recState.comm
-        onLoadFailed: bar.recAlive = false
-    }
+    readonly property bool showTwitch: mediaOn && twitchActive && player === null
+    readonly property int mediaLabelMax: 460    // the media ticker's title never grows past this (elided)
     // network: wired link wins, else Wi-Fi; dimmed when nothing is connected
     readonly property var netDevs: Networking.devices.values
     readonly property bool wiredUp: netDevs.some(d => d.type === DeviceType.Wired && d.connected)
@@ -244,54 +189,6 @@ PanelWindow {
     Process { id: runner }
 
     IdleInhibitor { window: bar; enabled: bar.inhibit }
-
-    // CPU / memory: pure QML (FileView on procfs + Timer), no child processes (a shell loop in a Process orphans
-    // to systemd when qs exits). CPU needs the PREVIOUS /proc/stat sample for a percentage.
-    property real cpuPrevBusy: 0
-    property real cpuPrevTot: 0
-    Timer {
-        interval: 2000; running: BarWidgets.shown("cpu"); repeat: true; triggeredOnStart: true
-        onTriggered: statFile.reload()
-    }
-    FileView {
-        id: statFile
-        path: "/proc/stat"
-        printErrors: false
-        onLoaded: {
-            const a = text().split("\n")[0].trim().split(/\s+/).map(Number)   // cpu user nice system idle iowait irq softirq steal
-            const busy = a[1] + a[2] + a[3]
-            const tot = busy + a[4] + a[5] + a[6] + a[7] + a[8]
-            if (bar.cpuPrevTot > 0 && tot > bar.cpuPrevTot) {
-                const v = Math.trunc((busy - bar.cpuPrevBusy) * 100 / (tot - bar.cpuPrevTot))
-                bar.cpu = v + "%"
-                bar.cpuHist = bar.pushSample(bar.cpuHist, v)
-            }
-            bar.cpuPrevBusy = busy
-            bar.cpuPrevTot = tot
-        }
-    }
-    Timer {
-        interval: 3000; running: BarWidgets.shown("memory"); repeat: true; triggeredOnStart: true
-        onTriggered: memFile.reload()
-    }
-    FileView {
-        id: memFile
-        path: "/proc/meminfo"
-        printErrors: false
-        onLoaded: {
-            const t = text()
-            const total = parseInt((t.match(/MemTotal:\s+(\d+)/) || [])[1])
-            const avail = parseInt((t.match(/MemAvailable:\s+(\d+)/) || [])[1])
-            if (total > 0 && avail >= 0) {
-                const v = Math.trunc((total - avail) * 100 / total)
-                bar.mem = v + "%"
-                bar.memHist = bar.pushSample(bar.memHist, v)
-            }
-        }
-    }
-    // Not SystemClock: it re-arms a QTimer with a negative interval during the repeated local hour at the end of DST (fires every 1 ms, ~2000 warnings/s, ~9% CPU)
-    property date clockNow: new Date()
-    Timer { interval: 5000; running: true; repeat: true; onTriggered: bar.clockNow = new Date() }
 
     PwObjectTracker { objects: [Pipewire.defaultAudioSink] }
     readonly property var sink: Pipewire.defaultAudioSink
@@ -350,7 +247,7 @@ PanelWindow {
             id: leftSec
             readonly property var barInk: inkL
             anchors { left: parent.left; leftMargin: bar.padSide; verticalCenter: parent.verticalCenter }
-            spacing: 4
+            spacing: Theme.gapTight
             Repeater {
                 model: bar.layout.left
                 Loader {
@@ -365,10 +262,10 @@ PanelWindow {
             id: centerSec
             readonly property var barInk: inkC
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 4
+            spacing: Theme.gapTight
             x: {
-                const lo = leftSec.x + leftSec.width + (leftSec.width > 0 ? 8 : 0)
-                const hi = rightSec.x - (rightSec.width > 0 ? 8 : 0) - width
+                const lo = leftSec.x + leftSec.width + (leftSec.width > 0 ? Theme.gapRow : 0)
+                const hi = rightSec.x - (rightSec.width > 0 ? Theme.gapRow : 0) - width
                 return Math.round(Math.max(lo, Math.min((frame.width - width) / 2, hi)))
             }
             Repeater {
@@ -384,7 +281,7 @@ PanelWindow {
             id: rightSec
             readonly property var barInk: inkR
             anchors { right: parent.right; rightMargin: bar.padSide; verticalCenter: parent.verticalCenter }
-            spacing: 4
+            spacing: Theme.gapTight
             Repeater {
                 model: bar.layout.right
                 Loader {
@@ -397,10 +294,15 @@ PanelWindow {
     }
 
     // ---- widgets --------------------------------------------------------------
+    // Icon colours carry STATE (DESIGN.md "Colour"): `ink.accent` while the chip's feature is connected / on / live (a
+    // wired or Wi-Fi link, a Bluetooth device, unmuted audio, a playing player, a running VM, a usable AI account,
+    // caffeine on, lights on, the focused workspace), `ink.muted` while it is off / missing / muted, red / green where
+    // they mean something (recording, battery), plain `ink.fg` only for always-present informational items (clock,
+    // calendar, control center, a Bluetooth adapter that is merely on). Each BarInk set carries its own variant.
     Component {
         id: wsComp
         Row {
-            spacing: 4
+            spacing: Theme.gapTight
             Repeater {
                 model: bar.shownWorkspaces
                 Chip {
@@ -421,19 +323,11 @@ PanelWindow {
         id: recComp
         Chip {
             id: recChip
-            show: bar.recording
-            onClicked: bar.run([bar.recScript, "stop"])
-            Rectangle {
-                implicitWidth: 8; implicitHeight: 8; radius: 4
-                color: recChip.ink.red
-                SequentialAnimation on opacity {
-                    running: bar.recording; loops: Animation.Infinite
-                    NumberAnimation { to: 0.35; duration: 700; easing.type: Easing.InOutSine }
-                    NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
-                }
-            }
-            BarLabel { text: bar.recElapsed; color: ink.red }
-            BarIcon { visible: bar.recording && bar.recState.audio === "1"; text: "\uf028"; color: ink.fgDim }
+            show: Recording.recording
+            onClicked: bar.run([Recording.script, "stop"])
+            StatusDot { tint: recChip.ink.red; pulse: Recording.recording; Layout.alignment: Qt.AlignVCenter }
+            BarLabel { text: Recording.elapsed; color: ink.red }
+            BarIcon { visible: Recording.recording && Recording.state.audio === "1"; text: Icons.volumeHigh; color: ink.fgDim }
         }
     }
     // virtual machines (VmService.qml): only while a VM runs or a VM download / install prep is in progress; icon + count of
@@ -461,15 +355,15 @@ PanelWindow {
                 else bar.pop("media", mediaChip)
             }
             BarIcon {
-                text: bar.mediaBrand ? bar.mediaBrand : bar.player ? (bar.player.isPlaying ? "\uf04b" : "\uf04c") : "\uf04c"
-                color: bar.player && !bar.player.isPlaying ? ink.muted : ink.accent
+                text: bar.mediaBrand ? bar.mediaBrand : bar.player ? (bar.player.isPlaying ? Icons.play : Icons.pause) : Icons.pause
+                color: bar.player && !bar.player.isPlaying ? ink.muted : ink.accent   // the brand mark follows the chip's role too
                 family: bar.mediaBrand ? Theme.brandFont : Theme.iconFont
             }
             BarLabel {
                 text: bar.player ? bar.player.trackTitle + (bar.player.trackArtist ? "  ·  " + bar.player.trackArtist : "")
                     : bar.showTwitch ? bar.twitchNow.channel + (bar.twitchNow.game ? "  ·  " + bar.twitchNow.game : "") : ""
                 elide: Text.ElideRight
-                Layout.maximumWidth: 460
+                Layout.maximumWidth: bar.mediaLabelMax
             }
         }
     }
@@ -479,23 +373,23 @@ PanelWindow {
         Chip {
             active: bar.inhibit
             onClicked: bar.inhibit = !bar.inhibit
-            BarIcon { text: bar.inhibit ? "\uf7b6" : "\uf0f4"; color: bar.inhibit ? ink.accent : ink.muted }
+            BarIcon { text: bar.inhibit ? Icons.caffeineOn : Icons.caffeineOff; color: bar.inhibit ? ink.accent : ink.muted }
         }
     }
     Component {
         id: cpuComp
         Chip {
-            BarIcon { text: "\uf2db"; color: ink.fgDim }
-            BarLabel { text: bar.cpu; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
-            BarLabel { text: bar.spark(bar.cpuHist, 25, false); color: ink.accent; Layout.preferredWidth: sparkMetrics.width }
+            BarIcon { text: Icons.cpu; color: ink.fgDim }
+            BarLabel { text: SystemStats.cpu; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: SystemStats.pctWidth }
+            BarLabel { text: SystemStats.cpuSpark; color: ink.accent; Layout.preferredWidth: SystemStats.sparkWidth }
         }
     }
     Component {
         id: memComp
         Chip {
-            BarIcon { text: "\uf538"; color: ink.fgDim }
-            BarLabel { text: bar.mem; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
-            BarLabel { text: bar.spark(bar.memHist, 10, true); color: ink.accent2; Layout.preferredWidth: sparkMetrics.width }
+            BarIcon { text: Icons.memory; color: ink.fgDim }
+            BarLabel { text: SystemStats.mem; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: SystemStats.pctWidth }
+            BarLabel { text: SystemStats.memSpark; color: ink.accent2; Layout.preferredWidth: SystemStats.sparkWidth }
         }
     }
     // Home Assistant (HomeAssistant.qml): opens the control popup; shows how many lights are on
@@ -507,7 +401,8 @@ PanelWindow {
             active: bar.isOpen("ha")
             dim: !HomeAssistant.configured || (HomeAssistant.status !== "ok" && HomeAssistant.status !== "loading")
             onClicked: bar.pop("ha", haChip)
-            BarIcon { text: HomeAssistant.lightsOn > 0 ? "\uf672" : "\uf015"; color: HomeAssistant.lightsOn > 0 ? ink.accent : HomeAssistant.configured && HomeAssistant.status === "ok" ? ink.fg : ink.muted }
+            // lights on = accent + count; connected = plain ink; not configured / unreachable = muted (and the chip dims)
+            BarIcon { text: HomeAssistant.lightsOn > 0 ? Icons.lightOn : Icons.home; color: HomeAssistant.lightsOn > 0 ? ink.accent : HomeAssistant.configured && HomeAssistant.status === "ok" ? ink.fg : ink.muted }
             BarLabel { visible: HomeAssistant.lightsOn > 0; text: HomeAssistant.lightsOn }
         }
     }
@@ -521,7 +416,7 @@ PanelWindow {
             active: bar.isOpen("ai")
             dim: AiUsage.loaded && AiUsage.profiles.length === 0 && AiUsage.others.length === 0
             onClicked: bar.pop("ai", aiChip)
-            BarIcon { text: "\uf890"; color: AiUsage.anyExpired ? ink.muted : ink.accent }
+            BarIcon { text: Icons.ai; color: AiUsage.anyExpired ? ink.muted : ink.accent }
             // limit reached: time until the agent is usable again (AiUsage.blockedUntil), fixed width so the
             // minute countdown does not make the chip jitter; else the percentage
             BarLabel {
@@ -553,8 +448,8 @@ PanelWindow {
                 if (bar.sink && bar.sink.audio)
                     bar.sink.audio.volume = Math.max(0, Math.min(1.0, bar.sink.audio.volume + (dy > 0 ? 0.03 : -0.03)))
             }
-            BarIcon { measure: "\uf028"; text: Icons.volumeGlyph(bar.muted, bar.volume); color: bar.muted ? ink.muted : ink.accent }
-            BarLabel { text: Math.round(bar.volume * 100) + "%"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
+            BarIcon { measure: Icons.volumeHigh; text: Icons.volumeGlyph(bar.muted, bar.volume); color: bar.muted ? ink.muted : ink.accent }
+            BarLabel { text: Math.round(bar.volume * 100) + "%"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: SystemStats.pctWidth }
         }
     }
     Component {
@@ -565,7 +460,7 @@ PanelWindow {
             active: bar.isOpen("net")
             dim: !bar.wiredUp && !bar.wifiUp
             onClicked: bar.pop("net", netChip)
-            BarIcon { text: bar.wiredUp ? "\uf796" : bar.wifiUp ? "\uf1eb" : "\uf6ac"; color: bar.wiredUp || bar.wifiUp ? ink.accent : ink.muted }
+            BarIcon { text: bar.wiredUp ? Icons.ethernet : bar.wifiUp ? Icons.wifi : Icons.wifiOff; color: bar.wiredUp || bar.wifiUp ? ink.accent : ink.muted }
         }
     }
     Component {
@@ -580,15 +475,15 @@ PanelWindow {
             // (the count stays when something else is connected too); green while charging, red at 15 % and below
             readonly property bool pods: AirPods.lowest >= 0
             readonly property color podsColor: AirPods.lowestCharging ? ink.green : AirPods.lowest <= 15 ? ink.red : ink.fgDim
-            BarIcon { text: "\uf293"; color: bar.btConnected > 0 || btChip.pods ? ink.accent : bar.btOn ? ink.fg : ink.muted }
+            BarIcon { text: Icons.bluetooth; color: bar.btConnected > 0 || btChip.pods ? ink.accent : bar.btOn ? ink.fg : ink.muted }
             BarLabel { visible: bar.btConnected > (btChip.pods ? 1 : 0); text: bar.btConnected }
             BarIcon {
                 visible: btChip.pods
                 Layout.leftMargin: 2
                 family: Theme.iconFontPro
                 styleName: "Solid"
-                measure: "\uf240"
-                text: AirPods.lowestCharging ? "\uf376" : AirPods.lowest >= 88 ? "\uf240" : AirPods.lowest >= 63 ? "\uf241" : AirPods.lowest >= 38 ? "\uf242" : AirPods.lowest >= 13 ? "\uf243" : "\uf244"
+                measure: Icons.batteryFull
+                text: AirPods.lowestCharging ? Icons.batteryBolt : AirPods.lowest >= 88 ? Icons.batteryFull : AirPods.lowest >= 63 ? Icons.batteryThreeQuarters : AirPods.lowest >= 38 ? Icons.batteryHalf : AirPods.lowest >= 13 ? Icons.batteryQuarter : Icons.batteryEmpty
                 color: btChip.podsColor
             }
             BarLabel { visible: btChip.pods; text: AirPods.lowest + "%"; color: btChip.podsColor }
@@ -653,8 +548,9 @@ PanelWindow {
                 if (mouse.button === Qt.RightButton) Notifs.setDnd(!Notifs.dnd)
                 else if (Notifs.liveCount > 0 || bar.isOpen("notif")) bar.pop("notif", clockChip)
             }
-            BarLabel { text: Qt.formatDateTime(bar.clockNow, "yyyy-MM-dd HH:mm"); color: Notifs.dnd ? ink.muted : ink.fg }
-            BarIcon { visible: Notifs.dnd || Notifs.count > 0; Layout.leftMargin: Theme.chipGap; text: Notifs.dnd ? "\uf1f6" : "\uf8fa"; color: Notifs.dnd ? ink.muted : ink.accent }
+            BarLabel { text: Qt.formatDateTime(SystemStats.clockNow, "yyyy-MM-dd HH:mm"); color: Notifs.dnd ? ink.muted : ink.fg }
+            // unread badge: bell + count in accent; a muted bell-slash under do-not-disturb
+            BarIcon { visible: Notifs.dnd || Notifs.count > 0; Layout.leftMargin: Theme.chipGap; text: Notifs.dnd ? Icons.bellOff : Icons.bellOn; color: Notifs.dnd ? ink.muted : ink.accent }
             BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: ink.accent; font.pixelSize: Theme.fontCaption }
         }
     }
@@ -665,7 +561,7 @@ PanelWindow {
         Chip {
             show: Notifs.dnd
             onClicked: Notifs.setDnd(false)
-            BarIcon { text: "\uf1f6"; color: ink.muted }
+            BarIcon { text: Icons.bellOff; color: ink.muted }
         }
     }
 
@@ -676,7 +572,7 @@ PanelWindow {
             Component.onCompleted: bar.reg("cal", calChip)
             active: bar.isOpen("cal")
             onClicked: mouse => mouse.button === Qt.RightButton ? bar.run(["sh", "-c", "command -v omacal >/dev/null && exec omacal || notify-send omacal \"omacal is not installed\""]) : bar.pop("cal", calChip)
-            BarIcon { text: "\uf073"; color: ink.fg }
+            BarIcon { text: Icons.calendar }
         }
     }
 
@@ -687,7 +583,7 @@ PanelWindow {
             Component.onCompleted: bar.reg("center", bellChip)
             active: bar.isOpen("center")
             onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("center", bellChip)
-            BarIcon { text: "\uf0c9"; color: Notifs.dnd ? ink.muted : ink.fg }
+            BarIcon { text: Icons.menu; color: Notifs.dnd ? ink.muted : ink.fg }
         }
     }
 }

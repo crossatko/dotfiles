@@ -4,16 +4,16 @@ import Quickshell
 import "launcher/js/NotifGlyph.js" as Glyphs
 
 // Notification icon, Adwaita style: generic freedesktop names (dialog-information, mail-unread,
-// network-transmit, ...) have a *symbolic* Adwaita icon, which is drawn in a palette color.
-// App-specific names (steam, discord) have no symbolic variant and keep their own colored icon.
-// Real image data sent with the notification (avatars, album art) is shown untouched.
+// network-transmit, ...) have a *symbolic* Adwaita icon, which is drawn in a palette color (`tint`: accent, red /
+// yellow with meaning). App-specific names (steam, discord) have no symbolic variant and keep their own colored
+// icon. Real image data sent with the notification (avatars, album art) is shown untouched.
 Item {
     id: ico
 
     property string name: ""
     property string image: ""
     property color tint: Theme.accent
-    property int size: 40
+    property int size: Theme.iconCol + Theme.iconLg   // 40: the box of a card's app icon (NotifCard sets its own)
 
     implicitWidth: size
     implicitHeight: size

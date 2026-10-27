@@ -7,7 +7,7 @@ import Quickshell
 // clock and the password field, nothing else. The password lives in Lock.qml (`password`), so every screen shows the
 // same dots; the screen that has keyboard focus is the one being typed on. Look and motion: LockPrefs (Settings > Lock).
 // `preview` (Settings > Lock, LockPreview): the same visuals with no keyboard focus, no input, no video and
-// `previewDots` sample beads. Per screen (LockPrefs.clockOn, Settings > Lock "Screens"): the clock and date may be off;
+// `previewDots` sample beads. Per screen (LockPrefs.clockOn, Settings > Monitors): the clock and date may be off;
 // the password dots stay where they would be. Under the dots: the playback card (LockMedia) on the screens with the clock.
 Item {
     id: view

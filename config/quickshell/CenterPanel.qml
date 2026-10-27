@@ -9,7 +9,7 @@ import Quickshell.Services.Pipewire
 GridLayout {
     id: cc
     columns: 1
-    rowSpacing: 12
+    rowSpacing: Theme.pad
     columnSpacing: 0
 
     PwObjectTracker { objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource] }
@@ -25,23 +25,23 @@ GridLayout {
     ColumnLayout {
         id: controlSec
         Layout.fillWidth: true
-        spacing: 12
+        spacing: Theme.pad
 
         PanelHeader {
             title: "Control center"
             // gear: Settings window (bar layout, monitors); opens on this popup's monitor
-            Btn { icon: true; text: "\uf013"; onClicked: Popups.settingsRequest("open", "") }
+            Btn { icon: true; text: Icons.gear; onClicked: Popups.settingsRequest("open", "") }
         }
 
         GridLayout {
             Layout.fillWidth: true
             columns: 2
-            rowSpacing: 8
-            columnSpacing: 8
+            rowSpacing: Theme.gapRow
+            columnSpacing: Theme.gapRow
 
             Tile {
                 Layout.fillWidth: true
-                icon: Networking.wifiEnabled ? "\uf1eb" : "\uf6ac"
+                icon: Networking.wifiEnabled ? Icons.wifi : Icons.wifiOff
                 title: "Wi-Fi"
                 sub: cc.wiredUp > 0 ? cc.wiredUp + " wired up" : (Networking.wifiEnabled ? "On" : "Off")
                 on: Networking.wifiEnabled
@@ -51,7 +51,7 @@ GridLayout {
             Tile {
                 Layout.fillWidth: true
                 visible: cc.adapter !== null
-                icon: "\uf293"
+                icon: Icons.bluetooth
                 title: "Bluetooth"
                 sub: !cc.adapter || !cc.adapter.enabled ? "Off" : cc.btConnected > 0 ? cc.btConnected + " connected" : "On"
                 on: cc.adapter !== null && cc.adapter.enabled
@@ -60,7 +60,7 @@ GridLayout {
             }
             Tile {
                 Layout.fillWidth: true
-                icon: Notifs.dnd ? "\uf1f6" : "\uf0f3"
+                icon: Notifs.dnd ? Icons.bellOff : Icons.bell
                 title: "Do not disturb"
                 sub: Notifs.dnd ? "On" : "Off"
                 on: Notifs.dnd

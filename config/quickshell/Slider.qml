@@ -13,7 +13,7 @@ Item {
     signal moved(real v)
 
     implicitHeight: 24
-    opacity: dim ? 0.5 : 1
+    opacity: dim ? Theme.disabledOpacity : 1
 
     // `held` follows the press but is set in onDownChanged AFTER `settling`, so the switch from the pointer to `value`
     // on release already runs with the settle Behavior on

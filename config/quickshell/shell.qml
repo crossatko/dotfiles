@@ -6,7 +6,7 @@ import Quickshell.Io
 // Entry point. Colors: ~/.config/theme/theme.toml -> Theme.qml (live).
 ShellRoot {
     id: root
-    // Which screens get a bar and on which edge: BarConfig (Settings -> Bar, monitor cards).
+    // Which screens get a bar and on which edge: BarConfig (on / off: Settings -> Monitors; edge and look: Settings -> Bar).
     readonly property var bars: BarConfig.bars
     Binding { target: Popups; property: "bars"; value: root.bars }
 

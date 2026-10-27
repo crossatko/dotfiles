@@ -7,7 +7,7 @@ import QtQuick.Layouts
 // while this panel exists (it is created on open and destroyed on close).
 ColumnLayout {
     id: vp
-    spacing: 10
+    spacing: Theme.padSm
 
     Binding { target: VmService; property: "panelOpen"; value: true }
     Component.onCompleted: VmService.poll()
@@ -27,16 +27,15 @@ ColumnLayout {
             readonly property var job: VmService.jobByKey(modelData) || ({ id: "", label: "", state: "done", pct: -1, speed: 0, eta: -1, bytes: 0, total: 0, name: "", error: "", phase: "" })
             readonly property bool running: job.state === "running"
             danger: job.state === "failed"
-            spacing: 6
+            spacing: Theme.controlGap
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 8
-                Label { text: ""; font.family: Theme.iconFont; font.styleName: "Regular"; color: Theme.accent; font.pixelSize: 14 }
+                spacing: Theme.gapRow
+                Icon { text: Icons.download; color: Theme.accent; font.pixelSize: Theme.iconMd }
                 Label { text: jc.job.label; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
                 Btn {
                     text: jc.running ? "Cancel" : "Dismiss"
-                    outerRadius: Theme.radiusItem; inset: 12
-                    implicitHeight: 24
+                    outerRadius: Theme.radiusItem; inset: Theme.pad
                     onClicked: VmService.cancel(jc.job.id)
                 }
             }
@@ -45,7 +44,7 @@ ColumnLayout {
                 Layout.fillWidth: true
                 value: jc.job.pct >= 0 ? jc.job.pct / 100 : 0
                 fillColor: jc.job.state === "done" ? Theme.green : Theme.accent
-                animMs: 300
+                animMs: Motion.emphasisMs
             }
             Label {
                 Layout.fillWidth: true
@@ -60,33 +59,26 @@ ColumnLayout {
     // running VMs
     Repeater {
         model: VmService.vmNames
-        delegate: Rectangle {
+        delegate: Notice {
             id: card
             required property string modelData
             readonly property var vm: VmService.vmByName(modelData) || ({ name: modelData, monitor: false, ram: 0, rss: 0, cpu: -1, cores: 0, uptime: 0, display: "", diskUsed: 0, diskTotal: 0 })
-            Layout.fillWidth: true
-            implicitHeight: body.implicitHeight + 24
-            radius: Theme.radiusItem
-            color: Theme.alpha(Theme.fg, 0.06)
-            border.width: 1
-            border.color: Theme.alpha(Theme.overlay, 0.6)
-
             readonly property real memFrac: vm.ram > 0 ? Math.min(1, vm.rss / vm.ram) : 0
             readonly property real diskFrac: vm.diskTotal > 0 ? Math.min(1, vm.diskUsed / vm.diskTotal) : 0
             readonly property real cpuFrac: vm.cpu >= 0 && vm.cores > 0 ? Math.min(1, vm.cpu / 100 / vm.cores) : 0
 
             RowLayout {
                 id: body
-                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 12 }
-                spacing: 12
+                Layout.fillWidth: true
+                spacing: Theme.pad
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 5
+                    spacing: Theme.controlGap
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 6
-                        Rectangle { implicitWidth: 8; implicitHeight: 8; radius: 4; color: Theme.green }
+                        spacing: Theme.controlGap
+                        StatusDot { tint: Theme.green }
                         Label { text: card.vm.name; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
                     }
                     Label {
@@ -111,18 +103,18 @@ ColumnLayout {
                     }
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 6
+                        spacing: Theme.controlGap
                         Label {
                             Layout.fillWidth: true
                             text: card.vm.cores > 0 ? card.vm.cores + " vCPU" : ""
                             color: Theme.muted; font.pixelSize: Theme.fontCaption
                         }
                         Btn {
-                            text: "Show"; outerRadius: Theme.radiusItem; inset: 12; implicitHeight: 26
+                            text: "Show"; outerRadius: Theme.radiusItem; inset: Theme.pad
                             onClicked: { VmService.focus(card.vm.name); Popups.close() }
                         }
                         Btn {
-                            text: "Shut down"; outerRadius: Theme.radiusItem; inset: 12; implicitHeight: 26
+                            text: "Shut down"; outerRadius: Theme.radiusItem; inset: Theme.pad
                             onClicked: VmService.stop(card.vm.name)
                         }
                     }
@@ -133,8 +125,9 @@ ColumnLayout {
 
     MissingPackage { bundle: "virtualization" }   // quickemu / quickget not installed: copy the install command
 
-    Notice {
+    EmptyState {
         visible: VmService.vms.length === 0 && VmService.allJobs.length === 0
-        Label { text: "Nothing running"; font.bold: true }
+        icon: Icons.vm
+        text: "Nothing running"
     }
 }

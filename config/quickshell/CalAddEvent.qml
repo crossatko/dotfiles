@@ -20,13 +20,16 @@ Rectangle {
     property var calendars: []              // writable calendars [{id, name, color, primary}]
     property int lastCalendar: -1           // id used last time
     readonly property alias calendarIndex: picker.index
-    readonly property real pad: 12
+    readonly property real pad: Theme.pad
+    readonly property int saveMinW: 72      // the Save button never shrinks below this
+    readonly property int stripW: 3         // width of the calendar-colour strip
+    readonly property int timeW: 62         // width of an HH:MM field
     signal submit(string title, string start, string end, bool allDay, string endDate, int calendarId)
     signal cancelled()
 
     implicitHeight: col.implicitHeight + 2 * pad
     radius: Theme.radiusItem
-    color: Theme.alpha(Theme.fg, 0.06)
+    color: Theme.itemFill
 
     // picking another day in the grid moves the last day along
     onDateChanged: if (until < date || !CalEvent.validDate(until)) until = date
@@ -54,20 +57,20 @@ Rectangle {
     // the chosen calendar's colour, like the agenda cards (clear of the rounded corners)
     Rectangle {
         x: 0; y: form.radius
-        width: 3; height: form.height - form.radius * 2
+        width: form.stripW; height: form.height - form.radius * 2
         color: picker.cal ? picker.cal.color : Theme.accent
-        Behavior on color { ColorAnimation { duration: 140 } }
+        Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
     }
 
     ColumnLayout {
         id: col
         anchors { left: parent.left; right: parent.right; top: parent.top; margins: form.pad; leftMargin: form.pad + 2 }
-        spacing: 8
+        spacing: Theme.gapRow
 
         FieldBox {
             id: title
             Layout.fillWidth: true
-            Layout.bottomMargin: 4
+            Layout.bottomMargin: Theme.gapTight
             flat: true
             pixelSize: Theme.fontSize + 2
             placeholder: "Event title"
@@ -79,10 +82,10 @@ Rectangle {
         }
 
         FormRow {
-            icon: "\uf017"      // clock
+            icon: Icons.clock      // clock
             FieldBox {
                 id: start
-                Layout.preferredWidth: 62
+                Layout.preferredWidth: form.timeW
                 enabled: !allDay.checked            // dimmed and read-only while All day is on
                 horizontalAlignment: TextInput.AlignHCenter
                 maximumLength: 5
@@ -93,10 +96,10 @@ Rectangle {
                 onAccepted: form.save()
                 onCancelled: form.cancelled()
             }
-            Icon { text: "\uf061"; font.pixelSize: 10; color: Theme.muted; opacity: allDay.checked ? 0.4 : 1 }
+            Icon { text: Icons.arrowRight; font.pixelSize: Theme.fontTiny; color: Theme.muted; opacity: allDay.checked ? 0.4 : 1 }
             FieldBox {
                 id: end
-                Layout.preferredWidth: 62
+                Layout.preferredWidth: form.timeW
                 enabled: !allDay.checked            // dimmed and read-only while All day is on
                 horizontalAlignment: TextInput.AlignHCenter
                 maximumLength: 5
@@ -114,13 +117,13 @@ Rectangle {
                 font.pixelSize: Theme.fontSmall
                 MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: allDay.toggled(!allDay.checked) }
             }
-            Toggle { id: allDay; Layout.leftMargin: 2; onToggled: wantOn => { checked = wantOn; form.edited() } }
+            Toggle { id: allDay; Layout.leftMargin: Theme.gapTight / 2; onToggled: wantOn => { checked = wantOn; form.edited() } }
         }
 
         FormRow {
-            icon: "\uf133"      // calendar
+            icon: Icons.calendarPlain      // calendar
             Label { text: Qt.formatDate(form.day, "ddd d MMM"); font.pixelSize: Theme.fontSmall }
-            Icon { text: "\uf061"; font.pixelSize: 10; color: Theme.muted }
+            Icon { text: Icons.arrowRight; font.pixelSize: Theme.fontTiny; color: Theme.muted }
             DateStepper {
                 id: lastDay
                 value: form.until
@@ -133,7 +136,7 @@ Rectangle {
         }
 
         FormRow {
-            icon: "\uf5fd"      // layer group: which calendar
+            icon: Icons.layerGroup      // layer group: which calendar
             CalPicker { id: picker; Layout.fillWidth: true; calendars: form.calendars; onIndexChanged: form.edited() }
         }
 
@@ -144,18 +147,18 @@ Rectangle {
             opacity: form.error !== "" ? 1 : 0
             visible: implicitHeight > 0
             clip: true
-            Behavior on implicitHeight { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on implicitHeight { NumberAnimation { duration: Motion.moveMs; easing.type: Motion.easeMove } }
+            Behavior on opacity { NumberAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
             FormRow {
                 id: errRow
                 width: parent.width
                 readonly property bool status: form.busy && form.localError === ""     // "Starting omacal…" is progress, not a failure
-                icon: status ? "\uf110" : "\uf06a"
+                icon: status ? Icons.spinner : Icons.error
                 iconColor: status ? Theme.fgDim : Theme.red
                 Label {
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
-                    Layout.minimumHeight: 30
+                    Layout.minimumHeight: Theme.controlH
                     text: form.error
                     color: errRow.iconColor
                     font.pixelSize: Theme.fontSmall
@@ -168,12 +171,12 @@ Rectangle {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.topMargin: 4
-            spacing: 6
+            Layout.topMargin: Theme.gapTight
+            spacing: Theme.controlGap
             Item { Layout.fillWidth: true }
             Btn { text: "Cancel"; onClicked: form.cancelled() }
             Btn {
-                Layout.preferredWidth: Math.max(implicitWidth, 72)
+                Layout.preferredWidth: Math.max(implicitWidth, form.saveMinW)
                 text: form.busy ? "Saving…" : "Save"
                 active: true
                 enabledLook: !form.busy

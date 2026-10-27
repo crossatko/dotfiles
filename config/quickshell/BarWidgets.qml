@@ -21,23 +21,23 @@ Singleton {
 
     // registry; `section` = where the widget goes by default, order = default order within that section
     readonly property var widgets: [
-        { id: "workspaces", title: "Workspaces",   icon: "\uf00a", section: "left" },
-        { id: "recording",  title: "Screen recording", icon: "\uf03d", section: "right" },   // visible only while recording
-        { id: "vm",         title: "Virtual machines", icon: "\uf108", section: "right", before: "media" },   // visible only while a VM runs or a VM download is in progress
-        { id: "media",      title: "Now playing",  icon: "\uf001", section: "right" },
-        { id: "caffeine",   title: "Keep awake",   icon: "\uf0f4", section: "right" },
-        { id: "cpu",        title: "CPU",          icon: "\uf2db", section: "right" },
-        { id: "memory",     title: "Memory",       icon: "\uf538", section: "right" },
-        { id: "homeassistant", title: "Home Assistant", icon: "\uf015", section: "right" },
-        { id: "ai",         title: "AI usage",     icon: "\uf890", section: "right" },
-        { id: "volume",     title: "Volume",       icon: "\uf028", section: "right" },
-        { id: "network",    title: "Network",      icon: "\uf1eb", section: "right" },
-        { id: "bluetooth",  title: "Bluetooth",    icon: "\uf293", section: "right" },
-        { id: "tray",       title: "Tray",         icon: "\uf0c9", section: "right" },
-        { id: "dnd",        title: "Do not disturb", icon: "\uf1f6", section: "right", before: "clock" },   // visible only while do-not-disturb is on
-        { id: "calendar",   title: "Calendar",     icon: "\uf073", section: "right", before: "clock" },   // icon-only chip; a layout file without it gets it right before the clock
-        { id: "clock",      title: "Clock",        icon: "\uf017", section: "right" },   // opens the notification center
-        { id: "controlcenter", title: "Control center", icon: "\uf0f3", section: "right" }   // last = rightmost by default; never hideable
+        { id: "workspaces", title: "Workspaces",   icon: Icons.workspaces, section: "left" },
+        { id: "recording",  title: "Screen recording", icon: Icons.recording, section: "right" },   // visible only while recording
+        { id: "vm",         title: "Virtual machines", icon: Icons.vm, section: "right", before: "media" },   // visible only while a VM runs or a VM download is in progress
+        { id: "media",      title: "Now playing",  icon: Icons.music, section: "right" },
+        { id: "caffeine",   title: "Keep awake",   icon: Icons.caffeineOff, section: "right" },
+        { id: "cpu",        title: "CPU",          icon: Icons.cpu, section: "right" },
+        { id: "memory",     title: "Memory",       icon: Icons.memory, section: "right" },
+        { id: "homeassistant", title: "Home Assistant", icon: Icons.home, section: "right" },
+        { id: "ai",         title: "AI usage",     icon: Icons.ai, section: "right" },
+        { id: "volume",     title: "Volume",       icon: Icons.volumeHigh, section: "right" },
+        { id: "network",    title: "Network",      icon: Icons.wifi, section: "right" },
+        { id: "bluetooth",  title: "Bluetooth",    icon: Icons.bluetooth, section: "right" },
+        { id: "tray",       title: "Tray",         icon: Icons.ellipsis, section: "right" },   // a row of app indicators
+        { id: "dnd",        title: "Do not disturb", icon: Icons.bellOff, section: "right", before: "clock" },   // visible only while do-not-disturb is on
+        { id: "calendar",   title: "Calendar",     icon: Icons.calendar, section: "right", before: "clock" },   // icon-only chip; a layout file without it gets it right before the clock
+        { id: "clock",      title: "Clock",        icon: Icons.clock, section: "right" },   // opens the notification center
+        { id: "controlcenter", title: "Control center", icon: Icons.menu, section: "right" }   // last = rightmost by default; never hideable
     ]
     readonly property string pinnedId: "controlcenter"
     readonly property var sections: ["left", "center", "right", "hidden"]

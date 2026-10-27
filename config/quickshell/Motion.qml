@@ -74,6 +74,30 @@ Singleton {
     readonly property string popupCurve: value("popupCurve")
     readonly property string popupStyle: value("popupStyle")
     readonly property bool launcherMotion: value("launcherMotion")
+
+    // ---- shell motion language (every shell transition; Theme.popup* are the popup-card names for the same tokens) ----
+    // Durations are base values at speed 1 divided by the popup speed (Settings > Animations); style "none" = reduced
+    // motion: every token is 0 (instant) and PressFeedback / Reveal / GlideHighlight do not move at all.
+    // One easing family: cubic ease-out for everything that arrives or moves (enter / move follow the Curve setting),
+    // the same family without overshoot to leave, a plain OutCubic for colour / hover. Overshoot only where it is a
+    // reward for the user's own action (press release, a toast landing); springs are not used: a SpringAnimation has no
+    // duration, so it could follow neither the speed slider nor "none".
+    readonly property real k: popupStyle === "none" ? 0 : 1 / popupSpeed
+    readonly property bool reduced: k === 0
+    // base ms -> ms at the current speed; floor of one frame (16 ms) so 10x never gives 1-7 ms steps; 0 when reduced
+    function ms(base) { return k === 0 ? 0 : Math.max(16, Math.round(base * k)) }
+    readonly property int pressMs: ms(baseMs * 0.4)        //  80: press down
+    readonly property int hoverMs: ms(baseMs * 0.6)        // 120: hover / colour / focus ring / small state flips
+    readonly property int moveMs: ms(baseMs)               // 200: position / size / selection glide / enter
+    readonly property int exitMs: ms(baseMs * 0.75)        // 150: leave (shorter than enter)
+    readonly property int emphasisMs: ms(baseMs * 1.5)     // 300: press release spring-back, large surfaces
+    readonly property int easeEnter: ({ quint: Easing.OutQuint, expo: Easing.OutExpo, back: Easing.OutBack, linear: Easing.Linear })[popupCurve] ?? Easing.OutCubic
+    readonly property int easeExit: ({ quint: Easing.OutQuint, expo: Easing.OutExpo, linear: Easing.Linear })[popupCurve] ?? Easing.OutCubic
+    readonly property int easeMove: easeEnter
+    readonly property int easeHover: Easing.OutCubic
+    // delay of the i-th item of a group that enters one after another (top down), capped at `max` steps
+    function stagger(i, max) { return i <= 0 || k === 0 ? 0 : ms(baseMs * 0.2) * Math.min(i, max ?? 6) }
+
     // Quickshell-only keys (bar popups + launcher); everything else goes to Hyprland
     function isShellKey(k) { return k.startsWith("popup") || k.startsWith("launcher") }
 

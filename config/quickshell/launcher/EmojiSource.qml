@@ -11,7 +11,7 @@ QtObject {
 
     readonly property var items: []               // nothing in the normal list
     readonly property string modeTitle: "Emoji"   // launcher header in prefix mode
-    readonly property string modeGlyph: "\uf118"
+    readonly property string modeGlyph: "\uf118"   // face-smile
     property var table: []                        // ranker items {id, name, keywords, char}
 
     function exclusive(q) { return q.startsWith(":") }
@@ -22,9 +22,9 @@ QtObject {
         let list
         if (t === "") list = table.slice(0, 50)
         else list = Ranker.rank(table, t, {}, 0, { limit: 50 }).map(r => r.item)
-        return list.map(e => ({
-            id: e.id, name: e.char + "  " + e.name, subtitle: e.keywords.join(" "),
-            kind: "emoji", source: "Emoji", glyph: "\uf118", transient: true, char: e.char
+        return list.map(e => ({                   // the character itself is the row's leading glyph (drawn by the font fallback)
+            id: e.id, name: e.name, subtitle: e.keywords.join(" "),
+            kind: "emoji", source: "Emoji", glyph: e.char, transient: true, char: e.char
         }))
     }
 

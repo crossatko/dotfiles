@@ -24,7 +24,7 @@ RowLayout {
         Layout.preferredWidth: Math.ceil(Math.max(labelCpu.advanceWidth, labelRam.advanceWidth, labelDisk.advanceWidth))
         Layout.rightMargin: Theme.controlGap          // on top of the row spacing: the label never crowds the bar
     }
-    Meter { Layout.fillWidth: true; value: r.value; animMs: 300; implicitHeight: 4; fillColor: r.fillColor }
+    Meter { Layout.fillWidth: true; value: r.value; animMs: Motion.emphasisMs; implicitHeight: Theme.gapTight; fillColor: r.fillColor }
     Label {
         text: r.text
         font.pixelSize: Theme.fontCaption

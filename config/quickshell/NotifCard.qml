@@ -53,11 +53,15 @@ Rectangle {
         return out
     }
 
-    implicitHeight: content.implicitHeight + 24
+    readonly property bool low: n.urgency === NotificationUrgency.Low
+    readonly property int iconBox: 40           // app icon / image box (a square the glyph or picture is centred in)
+    readonly property int stripeW: 3            // the critical card's red mark
+
+    implicitHeight: content.implicitHeight + 2 * Theme.pad
     radius: Theme.radius
     color: Theme.alpha(Theme.bg, Theme.cardFill)
     border.width: 1
-    border.color: critical ? Theme.alpha(Theme.red, 0.8) : Theme.alpha(Theme.overlay, 0.5)
+    border.color: critical ? Theme.dangerEdge : Theme.edge
     GlassEdge { anchors.fill: parent; radius: parent.radius }   // the rim without the compositor's glass
 
     // the one dismiss path (close button, right click, swipe, click): the owner animates the card out and then closes
@@ -99,28 +103,29 @@ Rectangle {
         onTapped: card.dismiss()
     }
 
-    // urgency stripe: flush with the left edge when square; with rounded corners a straight stripe looks cut off
-    // by the curve, so it becomes an inset pill (inside the border, level with the content padding)
+    // urgency stripe (red critical / muted low / accent normal): flush with the left edge when square; with rounded
+    // corners a straight stripe looks cut off by the curve, so it becomes an inset pill (inside the border, level with
+    // the content padding)
     Rectangle {
         readonly property bool inset: card.radius > 0
-        x: inset ? 6 : 0
-        y: inset ? 12 : 0
-        width: 3
-        height: parent.height - (inset ? 24 : 0)
+        x: inset ? Theme.controlGap : 0
+        y: inset ? Theme.pad : 0
+        width: card.stripeW
+        height: parent.height - (inset ? 2 * Theme.pad : 0)
         radius: inset ? width / 2 : 0
-        color: card.critical ? Theme.red : card.n.urgency === NotificationUrgency.Low ? Theme.muted : Theme.accent
+        color: card.critical ? Theme.red : card.low ? Theme.muted : Theme.accent
     }
 
     RowLayout {
         id: content
-        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12; leftMargin: 16 }
-        spacing: 12
+        anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.pad; leftMargin: Theme.pad + Theme.gapTight }
+        spacing: Theme.pad
 
         NotifIcon {
             Layout.alignment: Qt.AlignTop
             name: card.iconName
             image: card.realImage
-            size: 40
+            size: card.iconBox
             // semantic color: errors/critical red, warnings yellow, everything else the accent
             tint: card.critical || /error|critical/.test(card.iconName) ? Theme.red
                 : /warning/.test(card.iconName) ? Theme.yellow : Theme.accent
@@ -128,10 +133,11 @@ Rectangle {
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 3
+            spacing: Theme.gapTight
 
             RowLayout {
                 Layout.fillWidth: true
+                spacing: Theme.controlGap
                 Label {
                     text: card.n.appName
                     color: Theme.fgDim
@@ -152,10 +158,11 @@ Rectangle {
                     font.pixelSize: Theme.fontCaption
                 }
                 Icon {
-                    text: "\uf00d"
+                    text: Icons.xmark
                     color: closeArea.containsMouse ? Theme.accent : Theme.muted
-                    font.pixelSize: 13
-                    MouseArea { id: closeArea; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true; onClicked: card.dismiss() }
+                    font.pixelSize: Theme.iconSm
+                    Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
+                    MouseArea { id: closeArea; anchors.fill: parent; anchors.margins: -Theme.controlGap; hoverEnabled: true; onClicked: card.dismiss() }
                 }
             }
             Label {
@@ -179,21 +186,18 @@ Rectangle {
             }
             Flow {
                 Layout.fillWidth: true
-                spacing: 6
+                Layout.topMargin: Theme.gapTight
+                spacing: Theme.controlGap
                 visible: card.buttons.length > 0
                 Repeater {
                     id: actions
                     model: card.buttons
-                    Rectangle {
-                        id: actBtn
+                    Btn {
                         required property var modelData
-                        radius: Math.min(Theme.inner(card.radius, 12), Math.floor(height / 3))   // like Btn: concentric, never a pill
-                        color: btnGlow.hovered ? Theme.alpha(Theme.accent, 0.3) : Theme.alpha(Theme.fg, 0.1)
-                        implicitWidth: label.implicitWidth + 20
-                        implicitHeight: 28
-                        Label { id: label; anchors.centerIn: parent; text: actBtn.modelData.text; elide: Text.ElideRight; width: Math.min(implicitWidth, card.width - 100); font.pixelSize: Theme.fontSmall }
-                        HoverGlow { id: btnGlow; area: btn; radius: parent.radius }
-                        MouseArea { id: btn; anchors.fill: parent; hoverEnabled: true; onClicked: actBtn.modelData.run() }
+                        outerRadius: card.radius
+                        inset: Theme.pad
+                        text: modelData.text
+                        onClicked: modelData.run()
                     }
                 }
             }

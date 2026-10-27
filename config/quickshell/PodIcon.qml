@@ -43,7 +43,7 @@ Item {
     Icon {
         visible: !pi.drawn
         anchors.centerIn: parent
-        text: "\uf025"                     // headphones
+        text: Icons.headphones                     // headphones
         font.pixelSize: pi.size - 6
         color: pi.color
     }

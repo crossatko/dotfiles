@@ -44,7 +44,7 @@ QtObject {
     }
     function urlRow() {
         return base("url", { name: url === "" ? "Enter the web app address" : "Change the address", subtitle: url === "" ? "e.g. example.com or https://example.com/app" : url,
-                             kind: "webapp-url", glyph: "", argument: "Address", argInit: url, argVerb: "look it up", runLabel: "Enter address" })
+                             kind: "webapp-url", glyph: "\uf0ac", argument: "Address", argInit: url, argVerb: "look it up", runLabel: "Enter address" })   // globe
     }
     // The name prompt opens right after the address (the lookup runs meanwhile), so whatever the user types there is never
     // replaced: the suggestion only fills an empty field (Launcher: onSuggest). Bug 2026-10-21: the prompt used to open
@@ -53,18 +53,18 @@ QtObject {
         const looking = phase === "probing"
         // the row title is the prompt header: never the suggestion, so it cannot read as if a different name would be used
         return base("name", { name: "Name the web app",
-                              subtitle: looking ? "Looking up " + host + "...  \u00b7  type a name now or wait for a suggestion"
-                                                : (suggestion !== "" ? ["Suggested: " + suggestion] : []).concat([url, iconNote], warn ? [warn] : []).join("  \u00b7  "),
-                              kind: "webapp-name", glyph: "\uf019", argument: looking ? "Name (looking up a suggestion...)" : "Name",
-                              argInit: looking ? "" : suggestion, argVerb: "install", runLabel: "Install", argGlyph: "\uf044" })
+                              subtitle: looking ? "Looking up " + host + "...  \u00b7  type a name now or wait for a suggestion"   // zero-width-space
+                                                : (suggestion !== "" ? ["Suggested: " + suggestion] : []).concat([url, iconNote], warn ? [warn] : []).join("  \u00b7  "),   // zero-width-space
+                              kind: "webapp-name", glyph: "\uf019", argument: looking ? "Name (looking up a suggestion...)" : "Name",   // download
+                              argInit: looking ? "" : suggestion, argVerb: "install", runLabel: "Install", argGlyph: "\uf044" })   // pen-to-square
     }
     function rows() {
-        if (phase === "probing" && pendingName !== "") return [info("installing", "Installing " + pendingName + "...", "After the lookup of " + host, "\uf110")]
-        if (phase === "probing") return [nameRow(), info("probing", "Looking up " + host + "...", "Title, name and icon from the site itself", "\uf110")]
-        if (phase === "installing") return [info("installing", "Installing " + lastName + "...", "Icon and launcher entry", "")]
+        if (phase === "probing" && pendingName !== "") return [info("installing", "Installing " + pendingName + "...", "After the lookup of " + host, "\uf110")]   // spinner
+        if (phase === "probing") return [nameRow(), info("probing", "Looking up " + host + "...", "Title, name and icon from the site itself", "\uf110")]   // spinner
+        if (phase === "installing") return [info("installing", "Installing " + lastName + "...", "Icon and launcher entry", "\uf110")]   // spinner
         if (phase === "name") return [nameRow(), urlRow()]
         const out = []
-        if (phase === "error" || error !== "") out.push(info("error", "Could not install", error, "", true))
+        if (phase === "error" || error !== "") out.push(info("error", "Could not install", error, "\uf071", true))   // triangle-exclamation
         out.push(urlRow())
         return out
     }

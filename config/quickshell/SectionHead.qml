@@ -22,12 +22,13 @@ RowLayout {
     // the rule takes all the width the title, detail and trailing items leave
     Item {
         Layout.fillWidth: true
-        Layout.leftMargin: 8
-        Layout.minimumWidth: 8
+        Layout.leftMargin: Theme.gapRow
+        Layout.minimumWidth: Theme.gapRow
         Layout.preferredHeight: 1
-        Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; height: 1; color: Theme.alpha(Theme.overlay, 0.55) }
+        Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; height: 1; color: Theme.edge }
     }
-    Label { visible: head.detail !== ""; Layout.leftMargin: 8; text: head.detail; color: Theme.muted; font.pixelSize: Theme.fontCaption }
+    // the detail gives way first on a narrow page (elided), the rule after it (minimum 8)
+    Label { visible: head.detail !== ""; Layout.leftMargin: Theme.gapRow; Layout.maximumWidth: Math.max(80, head.width * 0.45); elide: Text.ElideRight; text: head.detail; color: Theme.muted; font.pixelSize: Theme.fontCaption }
     // No slot (or gap) while the trailing items are hidden. The slot itself stays visible: binding its own
     // `visible` to `visibleChildren` latched it off for good whenever it was evaluated while the children were
     // still hidden (a hidden parent makes every child report visible = false), e.g. the Wi-Fi switch before
@@ -35,8 +36,8 @@ RowLayout {
     RowLayout {
         id: extra
         readonly property bool used: visibleChildren.length > 0
-        spacing: 6
-        Layout.leftMargin: used ? 8 : 0
+        spacing: Theme.controlGap
+        Layout.leftMargin: used ? Theme.gapRow : 0
         Layout.preferredWidth: used ? implicitWidth : 0
         Layout.maximumWidth: used ? implicitWidth : 0
     }

@@ -21,8 +21,10 @@ Item {
     id: stack
 
     property bool open: false
-    property real maxHeight: 600            // room for the cards + the bottom row
-    readonly property real cardWidth: 400
+    property real maxHeight: 600            // room for the cards + the bottom row (Toasts sets the screen's)
+    readonly property real cardWidth: Theme.popupW   // a card is as wide as a list popup
+    readonly property real gap: Theme.gapRow         // between cards, and between the last card and the bottom row
+    readonly property real off: cardWidth + Theme.rowH   // where the bottom row parks past the screen edge (NotifSlot.off for the cards)
     signal cardAdded()                      // a card was created: the window refreshes its glass regions at once
 
     width: cardWidth
@@ -52,7 +54,7 @@ Item {
         NumberAnimation { id: footTo; target: stack; property: "footProgress"; duration: Theme.popupMoveMs; easing.type: Easing.OutCubic }
     }
     Connections { target: items; function onCountChanged() { stack.syncFoot() } }
-    readonly property real footFull: foot.implicitHeight + 8
+    readonly property real footFull: foot.implicitHeight + gap
     // the window must stay up while anything is still sliding
     readonly property bool animating: progress > 0.001 || footProgress > 0.001
     // stagger between cards that enter / leave one after another (top down); Settings > Animations scales it
@@ -73,7 +75,7 @@ Item {
 
     property int scroll: 0                                   // index of the first card shown
     readonly property bool overflow: open && column.height - tail > view.height + 1
-    readonly property real tail: items.count > 0 ? 8 : 0     // the last slot's trailing gap
+    readonly property real tail: items.count > 0 ? gap : 0   // the last slot's trailing gap
     // the largest `scroll` that still fills the view (no gap at the bottom after the last card)
     function maxFirst() {
         void column.height; void view.height
@@ -90,7 +92,7 @@ Item {
         let b = 0
         for (let i = 0; i < rep.count; i++) {
             const it = rep.itemAt(i)
-            if (it && it.shown) b = Math.max(b, it.y + Math.max(0, it.height - 8) - view.topY)
+            if (it && it.shown) b = Math.max(b, it.y + Math.max(0, it.height - gap) - view.topY)
         }
         return b
     }
@@ -197,8 +199,8 @@ Item {
     // --- bottom row (list mode): count, scroll hint, Clear; plain, no glass ---
     NotifHeader {
         id: foot
-        y: stack.shownBottom + 8
-        x: (1 - stack.footProgress) * (stack.width + 40)  // slides in from / out to the right like the cards
+        y: stack.shownBottom + stack.gap
+        x: (1 - stack.footProgress) * stack.off           // slides in from / out to the right like the cards
         width: stack.width
         opacity: Math.min(1, stack.footProgress * 1.6)
         visible: stack.footProgress > 0.001

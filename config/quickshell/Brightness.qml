@@ -42,7 +42,7 @@ Singleton {
     // the display the keys act on: the focused monitor if we control it, else the first one
     function focused() {
         const m = Popups.focusedName()
-        return displays.indexOf(m) >= 0 ? m : (displays.length ? displays[0] : "")
+        return displays.indexOf(m) >= 0 ? m : displays.indexOf(Monitors.primaryName) >= 0 ? Monitors.primaryName : (displays.length ? displays[0] : "")
     }
 
     function refresh() {

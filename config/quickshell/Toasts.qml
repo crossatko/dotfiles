@@ -20,7 +20,7 @@ PanelWindow {
     id: win
 
     property var bars: ({})
-    property var target: Quickshell.screens[0]
+    property var target: Monitors.primary
 
     screen: target
     // the center is open on this window's screen

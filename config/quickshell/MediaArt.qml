@@ -9,12 +9,12 @@ Rectangle {
     property string url: ""
     property bool placeholder: false
     radius: Theme.radiusItem
-    color: Theme.alpha(Theme.fg, 0.08)
+    color: Theme.itemHover
     clip: true
     Icon {
         anchors.centerIn: parent
         visible: art.placeholder && img.status !== Image.Ready
-        text: ""
+        text: Icons.music
         font.pixelSize: Math.round(art.height * 0.32)
         color: Theme.muted
     }

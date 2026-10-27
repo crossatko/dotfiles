@@ -10,7 +10,8 @@ Item {
     property real value: -1                  // < 0: no marker (state unknown)
     signal moved(real v)
 
-    implicitHeight: 16
+    readonly property int thumbW: 6          // width of the position marker
+    implicitHeight: 16                       // strip thickness
     readonly property real shown: drag.pressed ? drag.live : value
     // rounded ends: only the first / last gradient segment gets the outer corners (per-corner radii, Qt >= 6.7)
     readonly property real r: Math.min(height / 2, Theme.radiusDeep)
@@ -39,16 +40,16 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: strip.r
-        color: "transparent"
+        color: Theme.alpha(Theme.fg, 0)
         border.width: 1
-        border.color: Theme.alpha(Theme.overlay, 0.7)
+        border.color: Theme.edge
     }
     Rectangle {
         visible: strip.shown >= 0
-        width: 6; height: strip.height + 6
+        width: strip.thumbW; height: strip.height + strip.thumbW
         anchors.verticalCenter: parent.verticalCenter
         x: Math.max(0, Math.min(1, strip.shown)) * (strip.width - width)
-        color: "transparent"
+        color: Theme.alpha(Theme.fg, 0)
         border.width: 2
         border.color: Theme.fg
     }

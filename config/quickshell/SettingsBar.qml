@@ -3,7 +3,8 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 
-// Settings -> Bar: per-monitor layout editor (BarWidgets). Pick a monitor, then drag widget chips between
+// Settings -> Bar: per-monitor look and layout editor (BarWidgets). The MonitorChooser only picks whose bar is edited
+// (the shared Settings pick) and links neighbours; bar on / off per monitor lives on Settings > Monitors ("On / off"). Drag widget chips between
 // Left / Center / Right / Hidden to move, reorder or hide them; the eye button hides / shows a chip in place.
 // The control center chip can be moved but not hidden.
 Item {
@@ -11,8 +12,11 @@ Item {
     implicitHeight: col.implicitHeight
 
     // ---- which monitor ----
-    property string selName: (Quickshell.screens.find(s => BarConfig.enabled(s)) || Quickshell.screens[0] || { name: "" }).name
-    readonly property var sel: Quickshell.screens.find(s => s.name === selName) || Quickshell.screens[0]
+    readonly property var sel: Monitors.selected
+    readonly property bool barOn: sel ? BarConfig.enabled(sel) : false
+    readonly property string look: Presets.barLookOf(sel)
+    // the wallpaper behind the picked monitor's bar: what the look previews draw on
+    readonly property string wallpaper: LockWallpapers.stillFor(sel)
     readonly property string key: sel ? BarWidgets.keyOf(sel) : ""
     readonly property var lay: BarWidgets.layoutFor(key)
     readonly property bool own: BarWidgets.hasOwn(key)
@@ -21,7 +25,7 @@ Item {
     readonly property var groupScreens: group.map(k => BarConfig.screenFor(k)).filter(s => s !== null)
     readonly property bool linkedGroup: groupScreens.length > 1
     function toggleLink(i) {
-        const a = Quickshell.screens[i], b = Quickshell.screens[i + 1]
+        const a = Monitors.ordered[i], b = Monitors.ordered[i + 1]
         if (!a || !b) return
         const ka = BarConfig.keyOf(a), kb = BarConfig.keyOf(b)
         if (BarConfig.linked(ka, kb)) { BarConfig.unlink(ka, kb); return }
@@ -30,7 +34,7 @@ Item {
         BarConfig.link(ka, kb, from)
         BarWidgets.syncGroup(from)
     }
-    function screenTitle(s) { return s.model || s.name }
+    function screenTitle(s) { return Monitors.title(s) }
 
     // ---- drag state (the proxy below follows the pointer; DropAreas are the section boxes) ----
     property string dragId: ""
@@ -48,7 +52,7 @@ Item {
     function dragTo(px, py) { proxy.x = px - proxy.Drag.hotSpot.x; proxy.y = py - proxy.Drag.hotSpot.y }
     function endDrag() { if (dragging) proxy.Drag.drop(); dragId = "" }
 
-    // concentric radii: monitor cards, section boxes and the preview are page-level (Theme.radiusPage);
+    // concentric radii: monitor chips, section boxes and the preview are page-level (Theme.radiusPage);
     // chips sit 8 px inside a section box; preview minis sit 6 px inside the preview strip (like bar chips)
     readonly property int chipRadius: Theme.inner(Theme.radiusPage, 8)
 
@@ -56,8 +60,8 @@ Item {
         property string glyph: ""
         width: 26; height: 22
         radius: Theme.inner(Theme.radiusPage, 6)
-        color: Theme.alpha(Theme.fg, 0.08)
-        Icon { anchors.centerIn: parent; text: parent.glyph; font.pixelSize: 12; color: Theme.fgDim }
+        color: Theme.itemFill
+        Icon { anchors.centerIn: parent; text: parent.glyph; font.pixelSize: Theme.iconSm; color: Theme.fgDim }
     }
 
     component Mb: Btn {
@@ -75,11 +79,11 @@ Item {
         required property string section
         property var editor
         readonly property var w: BarWidgets.info(wid)
+        // an L1 item: fill only, one ink; a hidden chip is muted
+        readonly property bool hidden: section === "hidden"
         implicitHeight: 34
         radius: editor.chipRadius
-        color: chipGlow.hovered ? Theme.alpha(Theme.fg, 0.12) : Theme.alpha(Theme.fg, 0.06)
-        border.width: 1
-        border.color: section === "hidden" ? Theme.alpha(Theme.overlay, 0.5) : Theme.alpha(Theme.accent, 0.45)
+        color: chipGlow.hovered ? Theme.itemHover : Theme.itemFill
         opacity: editor.dragId === wid ? 0.35 : 1
 
         HoverGlow { id: chipGlow; area: chipArea; radius: chip.radius }
@@ -102,13 +106,13 @@ Item {
             onCanceled: chip.editor.dragId = ""
         }
         RowLayout {
-            anchors { fill: parent; leftMargin: 8; rightMargin: 6 }
-            spacing: 6
-            Icon { text: "\uf58e"; font.pixelSize: 11; color: Theme.muted }
-            Icon { text: chip.w.icon; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: chip.section === "hidden" ? Theme.muted : Theme.accent }
-            Label { text: chip.w.title; Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: Theme.fontSmall; color: chip.section === "hidden" ? Theme.fgDim : Theme.fg }
+            anchors { fill: parent; leftMargin: Theme.gapRow; rightMargin: Theme.controlGap }
+            spacing: Theme.controlGap
+            Icon { text: Icons.grip; font.pixelSize: Theme.iconSm; color: Theme.muted }
+            Icon { text: chip.w.icon; font.pixelSize: Theme.iconMd; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: Theme.iconLg; color: chip.hidden ? Theme.muted : Theme.fg }
+            Label { text: chip.w.title; Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: Theme.fontSmall; color: chip.hidden ? Theme.muted : Theme.fg }
             Mb {
-                text: chip.section === "hidden" ? "\uf06e" : "\uf070"
+                text: chip.hidden ? Icons.eye : Icons.eyeOff
                 enabledLook: chip.wid !== BarWidgets.pinnedId        // the control center can't be hidden
                 onClicked: chip.section === "hidden" ? BarWidgets.show(chip.editor.key, chip.wid) : BarWidgets.hide(chip.editor.key, chip.wid)
             }
@@ -188,7 +192,7 @@ Item {
                         model: box.horizontal ? box.ids : []
                         WChip { required property string modelData; wid: modelData; section: box.section; editor: box.editor; width: 200 }
                     }
-                    Label { visible: box.ids.length === 0; text: "Nothing hidden. Drop a chip here to hide it."; color: Theme.muted; font.pixelSize: Theme.fontCaption; height: 34 }
+                    Label { visible: box.ids.length === 0; text: "drop here"; color: Theme.muted; font.pixelSize: Theme.fontCaption; height: 34 }
                 }
                 Rectangle {                   // insertion marker
                     visible: drop.containsDrag && !box.horizontal
@@ -212,253 +216,173 @@ Item {
         width: parent.width
         spacing: 12
 
-        // ---- monitors: one card each = bar on/off + edge; clicking a card picks the layout edited below ----
-        SectionHead { title: "Monitors"; detail: BarConfig.enabledCount + " of " + Quickshell.screens.length + " with a bar" }
-        MonitorCardRow {
-            id: monRow
-            Layout.fillWidth: true
-            count: Quickshell.screens.length
-            minCardW: 260
-            cardH: 70
-            linkedAt: i => Quickshell.screens[i + 1] ? BarConfig.linked(BarConfig.keyOf(Quickshell.screens[i]), BarConfig.keyOf(Quickshell.screens[i + 1])) : false
-            linkTip: i => (linkedAt(i) ? "Unlink " : "Link ") + ed.screenTitle(Quickshell.screens[i]) + " and " + ed.screenTitle(Quickshell.screens[i + 1])
+
+        // ---- monitors: the chooser picks the bar edited below (on / off: Settings > Monitors) ----
+        MonitorChooser {
+            objectName: "bar-monitors"
+            screens: Monitors.ordered                   // toggleLink indexes the same list
+            linkable: true
+            linkedAt: i => Monitors.ordered[i + 1] ? BarConfig.linked(BarConfig.keyOf(Monitors.ordered[i]), BarConfig.keyOf(Monitors.ordered[i + 1])) : false
+            linkTip: i => (linkedAt(i) ? "Unlink " : "Link ") + ed.screenTitle(Monitors.ordered[i]) + " and " + ed.screenTitle(Monitors.ordered[i + 1])
             onLinkToggled: i => ed.toggleLink(i)
-            Repeater {
-                model: Quickshell.screens
-                Rectangle {
-                    id: mon
-                    required property var modelData
-                    required property int index
-                    readonly property bool on: BarConfig.enabled(modelData)
-                    readonly property bool onlyOne: on && !BarConfig.canDisable(modelData)   // the last bar (or the last linked group with a bar) is the way back into Settings
-                    readonly property bool picked: modelData.name === ed.selName
-                    readonly property bool grouped: !picked && ed.group.indexOf(BarConfig.keyOf(modelData)) >= 0   // linked to the picked one
-                    readonly property string edge: BarConfig.edge(modelData)
-                    x: monRow.xOf(index); y: monRow.yOf(index)
-                    width: monRow.cardW
-                    height: monRow.cardH
-                    radius: Theme.radiusPage
-                    color: picked ? Theme.alpha(Theme.accent, 0.12) : grouped ? Theme.alpha(Theme.accent, 0.06) : monGlow.hovered ? Theme.alpha(Theme.fg, 0.08) : Theme.alpha(Theme.fg, 0.04)
-                    border.width: 1
-                    border.color: picked ? Theme.alpha(Theme.accent, 0.85) : grouped ? Theme.alpha(Theme.accent, 0.5) : Theme.alpha(Theme.overlay, 0.45)
-                    // round cut-outs for the link buttons (MonitorCardRow)
-                    readonly property var notches: monRow.notchesOf(index)
-                    layer.enabled: notches.length > 0
-                    layer.effect: NotchMask { notches: mon.notches; radius: mon.radius; borderWidth: mon.border.width; borderColor: mon.border.color }
-
-                    HoverGlow { id: monGlow; area: monArea; radius: mon.radius }
-                    // below the toggle / edge buttons, so those keep their own clicks
-                    MouseArea { id: monArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ed.selName = mon.modelData.name }
-
-                    ColumnLayout {
-                        anchors { fill: parent; leftMargin: 12; rightMargin: 12; topMargin: 9; bottomMargin: 9 }
-                        spacing: 6
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-                            Icon { text: "\uf390"; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 18; color: mon.picked ? Theme.accent : Theme.fgDim; opacity: mon.on ? 1 : 0.55 }
-                            Label { text: ed.screenTitle(mon.modelData); Layout.fillWidth: true; elide: Text.ElideRight; font.bold: mon.picked; color: mon.on ? Theme.fg : Theme.fgDim; opacity: mon.on ? 1 : 0.7 }
-                            Label { visible: !mon.on; text: "no bar"; font.pixelSize: Theme.fontCaption; color: Theme.muted }
-                            Toggle {
-                                checked: mon.on
-                                enabledLook: !mon.onlyOne
-                                onToggled: want => BarConfig.set(mon.modelData, "enabled", want)
-                            }
-                        }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-                            Label { text: mon.modelData.name + "  ·  " + mon.modelData.width + "×" + mon.modelData.height; Layout.fillWidth: true; Layout.leftMargin: 26; elide: Text.ElideRight; font.pixelSize: Theme.fontCaption; color: Theme.muted }
-                            Segmented {
-                                values: ["top", "bottom"]
-                                labels: ["Top", "Bottom"]
-                                current: mon.on ? mon.edge : ""
-                                enabledLook: mon.on
-                                outerRadius: Theme.radiusPage
-                                inset: 9
-                                segHeight: 22
-                                segWidth: 58
-                                onPicked: v => BarConfig.set(mon.modelData, "edge", v)
-                            }
-                        }
-                    }
-                }
+            groupedFor: s => ed.group.indexOf(BarConfig.keyOf(s)) >= 0
+            subtitleFor: s => BarConfig.enabled(s) ? "" : "no bar"
+            Btn {
+                objectName: "btn-bar-monitors"
+                text: "On / off"
+                outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26
+                onClicked: Popups.settingsRequest("open", "monitors")
             }
         }
 
-        // ---- backdrop of the picked monitor's bar (linked monitors share it, like on/off and edge) ----
-        // ---- docked or floating, per bar (bars.json `floating`; linked monitors share it) ----
+        // ---- bar look of the picked monitor (bars.json floating / transparentFlush; linked monitors share it) ----
         SectionHead {
             Layout.topMargin: 6
-            title: "Style · " + (ed.linkedGroup ? ed.groupScreens.map(s => ed.screenTitle(s)).join(" + ") : ed.sel ? ed.screenTitle(ed.sel) : "")
+            title: "Look"
+            detail: ed.barOn ? (ed.linkedGroup ? "linked" : "") : "bar off"
+            Icon { visible: !ed.barOn; text: Icons.lock; font.pixelSize: 11; color: Theme.yellow }
         }
-        SettingRow {
-            title: "Bar mode"
-            titleWidth: 120
-            opacity: ed.sel && BarConfig.enabled(ed.sel) ? 1 : 0.45
-            Segmented {
-                values: [true, false]
-                labels: ["Floating", "Docked"]
-                objectNames: ["btn-floating", "btn-docked"]
-                current: ed.sel ? BarConfig.floating(ed.sel) : false
-                enabledLook: ed.sel ? BarConfig.enabled(ed.sel) : false
-                inset: 18
-                segHeight: 24
-                segWidth: 78
-                onPicked: v => { if (ed.sel && BarConfig.enabled(ed.sel)) BarConfig.set(ed.sel, "floating", v) }
-            }
-            Label {
-                text: ed.sel && BarConfig.floating(ed.sel) ? "gap to the edges, rounded" : "flush, square"
-                color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.fillWidth: true; elide: Text.ElideRight
-            }
-        }
-        SettingRow {
-            title: "Reserved area"
-            titleWidth: 120
-            opacity: ed.sel && BarConfig.enabled(ed.sel) ? 1 : 0.45
-            Toggle {
-                checked: ed.sel ? BarConfig.respectReserved(ed.sel) : false
-                enabledLook: ed.sel ? BarConfig.enabled(ed.sel) : false
-                onToggled: want => { if (ed.sel && BarConfig.enabled(ed.sel)) BarConfig.set(ed.sel, "respectReserved", want) }
-            }
-            Label {
-                text: "inside the reserved margins, not at the screen edge"
-                color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.fillWidth: true; elide: Text.ElideRight
-            }
-        }
-        SectionHead {
-            Layout.topMargin: 6
-            title: "Backdrop · " + (ed.linkedGroup ? ed.groupScreens.map(s => ed.screenTitle(s)).join(" + ") : ed.sel ? ed.screenTitle(ed.sel) : "")
-            detail: "transparent when flush"
-            Toggle {
-                checked: ed.sel ? BarConfig.transparentFlush(ed.sel) : false
-                enabledLook: ed.sel ? BarConfig.enabled(ed.sel) : false
-                onToggled: want => { if (ed.sel) BarConfig.set(ed.sel, "transparentFlush", want) }
-            }
-        }
-        Label {
+        PresetCards {
+            id: lookCards
             Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.muted
-            font.pixelSize: Theme.fontCaption
-            text: "When on, the bar draws no glass, fill, border or blur while it sits flush with the screen edge (docked bar, or compacted by a maximized window); the chips stay. A floating bar looks as usual. With a docked bar the padding below also applies."
+            objectPrefix: "barlook"
+            model: Presets.barLook
+            current: ed.look
+            enabled: ed.barOn
+            opacity: ed.barOn ? 1 : 0.45
+            previewHeight: Math.round(cardW * 9 / 16)
+            preview: BarLookSample {
+                wallpaper: ed.wallpaper
+                edge: ed.sel ? BarConfig.edge(ed.sel) : "top"
+                contrast: ed.sel ? BarConfig.contrast(ed.sel) : "auto"
+            }
+            onPicked: id => Presets.applyBarLook(ed.sel, id)
         }
-
-        // padding of the bar in that mode (docked + transparent when flush): Auto = 3 x the window gap, or a manual total
-        SettingRow {
-            id: padRow
-            readonly property bool active: ed.sel ? BarConfig.flushMode(ed.sel) : false
-            readonly property bool auto: ed.sel ? BarConfig.flushPadding(ed.sel) === "auto" : true
-            readonly property int total: ed.sel ? BarConfig.padTotal(ed.sel) : 0
-            title: "Bar padding"
+        ChoiceRow {
+            title: "Edge"
             titleWidth: 120
-            opacity: active ? 1 : 0.45
-            Segmented {
-                values: [true, false]
-                labels: ["Auto", "Manual"]
-                objectNames: ["btn-pad-auto", "btn-pad-manual"]
-                current: padRow.auto
-                enabledLook: padRow.active
-                inset: 18
-                segHeight: 24
-                segWidth: 70
-                onPicked: v => { if (padRow.active && ed.sel) BarConfig.set(ed.sel, "flushPadding", v ? "auto" : padRow.total) }
-            }
-            Slider {
-                wheel: false
-                objectName: "slider-pad"
-                Layout.fillWidth: true
-                dim: padRow.auto || !padRow.active
-                value: padRow.total / BarConfig.flushPadManualMax
-                onMoved: v => { if (padRow.active && ed.sel) BarConfig.set(ed.sel, "flushPadding", Math.round(v * BarConfig.flushPadManualMax / 2) * 2) }
-            }
-            Label { text: padRow.total + " px"; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
+            values: ["top", "bottom"]
+            labels: ["Top", "Bottom"]
+            objectNames: ["bar-edge-top", "bar-edge-bottom"]
+            segWidth: 70
+            current: ed.sel ? BarConfig.edge(ed.sel) : "top"
+            enabled: ed.barOn
+            opacity: ed.barOn ? 1 : 0.45
+            onPicked: v => { if (ed.sel && ed.barOn) BarConfig.set(ed.sel, "edge", v) }
         }
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.muted
-            font.pixelSize: Theme.fontCaption
-            text: "Total space above and below the chips while the backdrop is gone (docked bar). Auto is three times the gap between windows (4 to 16 px per side); Manual is 0 to 48 px. The bar is chip height plus this, windows start right at its edge."
-        }
-
-        // ---- text contrast: the bar's colours follow the wallpaper behind it (BarInk.qml / BarContrast.qml) ----
-        SectionHead {
-            Layout.topMargin: 6
-            title: "Text contrast · " + (ed.linkedGroup ? ed.groupScreens.map(s => ed.screenTitle(s)).join(" + ") : ed.sel ? ed.screenTitle(ed.sel) : "")
-            detail: ed.sel && BarConfig.flushMode(ed.sel) ? "adaptive" : "needs a bar without backdrop"
-        }
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.muted
-            font.pixelSize: Theme.fontCaption
-            text: "While the bar has no backdrop its text sits on the wallpaper. Auto measures the wallpaper behind the left, centre and right of the bar (once per wallpaper change, from the picture or a video's frames) and uses dark text on a bright wallpaper and light text on a dark one, whatever the theme. Dark / Light force one; Theme keeps the palette. Popups are not affected."
-        }
-        SettingRow {
+        ChoiceRow {
             id: ctrRow
-            readonly property bool active: ed.sel ? BarConfig.enabled(ed.sel) : false
             readonly property string mode: ed.sel ? BarConfig.contrast(ed.sel) : "auto"
+            visible: ed.look === "transparent"
             title: "Text"
             titleWidth: 120
-            opacity: active ? 1 : 0.45
-            Segmented {
-                values: BarConfig.contrastModes
-                labels: ["Auto", "Dark", "Light", "Theme"]
-                objectNames: ["btn-contrast-auto", "btn-contrast-dark", "btn-contrast-light", "btn-contrast-off"]
-                current: ctrRow.mode
-                enabledLook: ctrRow.active
-                inset: 18
-                segHeight: 24
-                segWidth: 70
-                onPicked: v => { if (ctrRow.active && ed.sel) BarConfig.set(ed.sel, "contrast", v) }
-            }
+            values: BarConfig.contrastModes
+            labels: ["Auto", "Dark", "Light", "Theme"]
+            objectNames: ["bar-text-auto", "bar-text-dark", "bar-text-light", "bar-text-off"]
+            segWidth: 70
+            current: mode
+            hint: ""
+            onPicked: v => { if (ed.sel && ed.barOn) BarConfig.set(ed.sel, "contrast", v) }
         }
         SettingRow {
-            id: sensRow
-            readonly property real sens: ed.sel ? BarConfig.contrastSens(ed.sel) : 50
-            title: "Switch point"
+            visible: ed.look !== "transparent"
+            title: "Text"
             titleWidth: 120
-            opacity: ctrRow.active && ctrRow.mode === "auto" ? 1 : 0.45
-            Slider {
-                wheel: false
-                objectName: "slider-contrast-sens"
-                Layout.fillWidth: true
-                dim: !(ctrRow.active && ctrRow.mode === "auto")
-                value: sensRow.sens / 100
-                onMoved: v => { if (ctrRow.active && ctrRow.mode === "auto" && ed.sel) BarConfig.set(ed.sel, "contrastSens", Math.round(v * 100)) }
-            }
-            Label { text: sensRow.sens < 40 ? "light text" : sensRow.sens > 60 ? "dark text" : "balanced"; Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
+            opacity: 0.55
+            Label { text: "Theme"; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
+            InfoTip { icon: Icons.lock; text: "Text follows the theme. Pick Transparent to adapt it to the wallpaper." }
         }
-        SettingRow {
-            id: fillRow
-            readonly property real fill: ed.sel ? BarConfig.hoverFill(ed.sel) : 35
-            title: "Hover fill"
-            titleWidth: 120
-            opacity: ctrRow.active ? 1 : 0.45
-            Slider {
-                wheel: false
-                objectName: "slider-hover-fill"
-                Layout.fillWidth: true
-                dim: !ctrRow.active
-                value: fillRow.fill / 100
-                onMoved: v => { if (ctrRow.active && ed.sel) BarConfig.set(ed.sel, "hoverFill", Math.round(v * 100)) }
+        AdvancedFold {
+            objectName: "fold-bar"
+            label: "Customise…"
+            detail: ""
+            SettingRow {
+                title: "Reserved area"
+                titleWidth: 120
+                opacity: ed.barOn ? 1 : 0.45
+                Toggle {
+                    checked: ed.sel ? BarConfig.respectReserved(ed.sel) : false
+                    enabledLook: ed.barOn
+                    onToggled: want => { if (ed.sel && ed.barOn) BarConfig.set(ed.sel, "respectReserved", want) }
+                }
+                InfoTip { objectName: "tip-reserved"; text: "Sit inside the reserved margins, not at the screen edge." }
+                Item { Layout.fillWidth: true }
             }
-            Label { text: fillRow.fill + " %"; Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
-        }
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.muted
-            font.pixelSize: Theme.fontCaption
-            text: "Switch point: how readily dark text is chosen on a wallpaper in between. Hover fill: how strong the hovered chip's fill is while the bar has no backdrop (chips are transparent at rest there; active ones keep their accent fill). A bar with a backdrop keeps its own look."
+            // padding of a docked transparent bar: Auto = 3 x the window gap, or a manual total
+            SettingRow {
+                id: padRow
+                readonly property bool active: ed.sel ? BarConfig.flushMode(ed.sel) : false
+                readonly property bool auto: ed.sel ? BarConfig.flushPadding(ed.sel) === "auto" : true
+                readonly property int total: ed.sel ? BarConfig.padTotal(ed.sel) : 0
+                title: "Bar padding"
+                titleWidth: 120
+                opacity: active ? 1 : 0.45
+                Segmented {
+                    values: [true, false]
+                    labels: ["Auto", "Manual"]
+                    objectNames: ["btn-pad-auto", "btn-pad-manual"]
+                    current: padRow.auto
+                    enabledLook: padRow.active
+                    outerRadius: Theme.radiusPage; inset: 9
+                    segHeight: 26
+                    segWidth: 70
+                    onPicked: v => { if (padRow.active && ed.sel) BarConfig.set(ed.sel, "flushPadding", v ? "auto" : padRow.total) }
+                }
+                Slider {
+                    wheel: false
+                    objectName: "slider-pad"
+                    Layout.fillWidth: true
+                    dim: padRow.auto || !padRow.active
+                    value: padRow.total / BarConfig.flushPadManualMax
+                    onMoved: v => { if (padRow.active && ed.sel) BarConfig.set(ed.sel, "flushPadding", Math.round(v * BarConfig.flushPadManualMax / 2) * 2) }
+                }
+                Label { text: padRow.total + " px"; Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
+                InfoTip { icon: padRow.active ? Icons.info : Icons.lock; text: "Transparent look only. Auto is 3x the window gap; Manual is 0 to 48 px." }
+            }
+            SettingRow {
+                id: sensRow
+                readonly property bool active: ed.barOn && ctrRow.mode === "auto" && ed.look === "transparent"
+                readonly property real sens: ed.sel ? BarConfig.contrastSens(ed.sel) : 50
+                title: "Switch point"
+                titleWidth: 120
+                opacity: active ? 1 : 0.45
+                Slider {
+                    wheel: false
+                    objectName: "slider-contrast-sens"
+                    Layout.fillWidth: true
+                    dim: !sensRow.active
+                    value: sensRow.sens / 100
+                    onMoved: v => { if (sensRow.active && ed.sel) BarConfig.set(ed.sel, "contrastSens", Math.round(v * 100)) }
+                }
+                Label { text: sensRow.sens < 40 ? "light text" : sensRow.sens > 60 ? "dark text" : "balanced"; Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
+                InfoTip { icon: sensRow.active ? Icons.info : Icons.lock; text: "How readily dark text is picked on a mid-tone wallpaper. Needs Transparent look with Auto text." }
+            }
+            SettingRow {
+                id: fillRow
+                readonly property bool active: ed.barOn && ed.look === "transparent"
+                readonly property real fill: ed.sel ? BarConfig.hoverFill(ed.sel) : 35
+                title: "Hover fill"
+                titleWidth: 120
+                opacity: active ? 1 : 0.45
+                Slider {
+                    wheel: false
+                    objectName: "slider-hover-fill"
+                    Layout.fillWidth: true
+                    dim: !fillRow.active
+                    value: fillRow.fill / 100
+                    onMoved: v => { if (fillRow.active && ed.sel) BarConfig.set(ed.sel, "hoverFill", Math.round(v * 100)) }
+                }
+                Label { text: fillRow.fill + " %"; Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
+                InfoTip { icon: fillRow.active ? Icons.info : Icons.lock; text: "Fill of a hovered chip when the bar has no backdrop. Transparent look only." }
+            }
         }
 
         // ---- layout of the picked monitor: actions, preview, editor ----
         SectionHead {
             Layout.topMargin: 6
-            title: "Layout · " + (ed.linkedGroup ? ed.groupScreens.map(s => ed.screenTitle(s)).join(" + ") : ed.sel ? ed.screenTitle(ed.sel) : "")
-            detail: (ed.linkedGroup ? "linked, " : "") + (ed.own ? "own layout" : "default layout")
+            title: "Layout"
+            detail: (ed.linkedGroup ? "linked · " : "") + (ed.own ? "own" : "default")
+            InfoTip { objectName: "tip-layout"; text: "Drag chips between columns to move or reorder, onto Hidden to hide (or use the eye). The control center chip can't be hidden, and the last bar can't be turned off: it is the way back into Settings." }
             Btn { inset: 18; implicitHeight: 24; text: "Reset"; enabledLook: ed.own; onClicked: if (ed.own) BarWidgets.reset(ed.key) }
         }
         // "Copy from <other monitor>": a wrapping row of its own (with 3 monitors the names do not fit next to the head at 920 px)
@@ -468,23 +392,22 @@ Item {
             spacing: 6
             Repeater {
                 id: copyRep
-                model: Quickshell.screens.filter(s => ed.group.indexOf(BarConfig.keyOf(s)) < 0)   // copying from a linked monitor would change nothing
+                model: Monitors.ordered.filter(s => ed.group.indexOf(BarConfig.keyOf(s)) < 0)   // copying from a linked monitor would change nothing
                 Btn {
                     required property var modelData
-                    inset: 18                 // page level, like the monitor cards (radiusPage)
+                    inset: 18                 // page level, like the monitor chips (radiusPage)
                     implicitHeight: 24
                     text: "Copy from " + ed.screenTitle(modelData)
                     onClicked: BarWidgets.copyFrom(ed.key, BarWidgets.keyOf(modelData))
                 }
             }
         }
-        Label {
+        RowLayout {
             visible: ed.sel ? !BarConfig.enabled(ed.sel) : false
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.fgDim
-            font.pixelSize: Theme.fontCaption
-            text: "The bar is off on this monitor. The layout is kept and used again when you turn it back on."
+            spacing: 6
+            Icon { text: Icons.lock; font.pixelSize: 11; color: Theme.yellow }
+            Label { text: "bar off"; color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
+            InfoTip { text: "The layout is kept for when the bar is back on." }
         }
 
         // ---- preview ----
@@ -526,13 +449,6 @@ Item {
         }
         SectionBox { Layout.fillWidth: true; section: "hidden"; title: "Hidden"; editor: ed }
 
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.muted
-            font.pixelSize: Theme.fontCaption
-            text: "Drag chips between the columns to move or reorder them, onto Hidden to hide them (or use the eye). Monitors without their own layout use the default one; changes apply to the bar right away. Linked monitors (the chain button between two cards) share one layout, one on/off switch and one edge: an edit on any of them applies to all. The control center chip can be moved like the others but not hidden, and the last bar can't be turned off: the control center is the way back into Settings."
-        }
 
     }
 
@@ -551,10 +467,10 @@ Item {
         Drag.active: ed.dragging
         Drag.keys: ["barwidget"]
         Row {
-            anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 10 }
-            spacing: 8
-            Icon { text: proxy.icon; font.pixelSize: 13; color: Theme.accent }
-            Label { text: proxy.text; font.pixelSize: Theme.fontSmall }
+            anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: Theme.padSm }
+            spacing: Theme.gapRow
+            Icon { text: proxy.icon; font.pixelSize: Theme.iconMd; color: Theme.accent }
+            Label { text: proxy.text; font.pixelSize: Theme.fontSmall; color: Theme.accent }
         }
     }
 }

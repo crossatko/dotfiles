@@ -13,12 +13,14 @@ ColumnLayout {
     readonly property real pct: typeof win.percent === "number" ? win.percent : 0
 
     Layout.fillWidth: true
-    spacing: 5
-    opacity: stale ? 0.5 : 1
+    spacing: Theme.controlGap
+    opacity: stale ? Theme.disabledOpacity : 1
+
+    TextMetrics { id: pctW; font.family: Theme.font; font.pixelSize: Theme.fontSmall; font.bold: true; text: "100%" }   // widest percent value
 
     RowLayout {
         Layout.fillWidth: true
-        spacing: 6
+        spacing: Theme.controlGap
         Label { text: lim.win.title || ""; font.pixelSize: Theme.fontSmall }
         Label { text: lim.win.detail || ""; color: Theme.fgDim; font.pixelSize: Theme.fontCaption; elide: Text.ElideRight; Layout.fillWidth: true }
         Label { text: lim.resetText; color: Theme.muted; font.pixelSize: Theme.fontCaption }
@@ -27,12 +29,13 @@ ColumnLayout {
             color: Theme.fg
             font.pixelSize: Theme.fontSmall; font.bold: true
             horizontalAlignment: Text.AlignRight
-            Layout.preferredWidth: 38
+            Layout.preferredWidth: Math.ceil(pctW.advanceWidth)
         }
     }
     Meter {
         Layout.fillWidth: true
         value: lim.pct / 100
-        animMs: 160
+        fillColor: lim.pct >= 100 ? Theme.red : Theme.accent     // red = the limit is hit
+        animMs: Motion.moveMs
     }
 }

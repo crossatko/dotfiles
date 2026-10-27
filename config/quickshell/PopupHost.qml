@@ -136,7 +136,7 @@ PanelWindow {
     Rectangle {
         id: card
         // (the notification center is not a popup of this window: it is the notification stack, see Toasts.qml)
-        readonly property real pad: 12
+        readonly property real pad: Theme.pad
         readonly property bool isGlassItem: true
         readonly property bool atTop: Popups.edgeOf(host.modelData.name) === "top"
         // Glass: the card's glass region is the card itself (Glass.qml maps it through the Scale / Translate below, so
@@ -150,7 +150,7 @@ PanelWindow {
         readonly property real side: BarConfig.floating(host.modelData) ? BarConfig.edgeGapOf(host.modelData) : 8
 
         // target size; the card itself follows it with a Behavior while `morphing`
-        readonly property real targetW: host.content === "center" ? 420 : host.content === "cal" ? 390 : host.content === "ha" || host.content === "ai" ? 400 : host.content === "vm" ? 440 : 380
+        readonly property real targetW: Popups.panels[host.content]?.width ?? Theme.popupW
         readonly property real targetH: Math.min(host.height - inset - side, ((loader.item as Item)?.implicitHeight ?? 60) + 2 * pad)
         // x is computed from the TARGET width, so x and width animate together (same curve) instead of x chasing a
         // moving width. y hangs off the bar edge, so the card grows away from the bar.
@@ -169,7 +169,7 @@ PanelWindow {
         radius: Theme.radius
         color: Theme.alpha(Theme.bg, Theme.cardFill)
         border.width: 1
-        border.color: Theme.alpha(Theme.overlay, 0.5)
+        border.color: Theme.edge
         GlassEdge { anchors.fill: parent; radius: parent.radius }   // the rim without the compositor's glass
 
         opacity: Math.max(0, Math.min(1, host.t))
@@ -189,6 +189,7 @@ PanelWindow {
         ]
 
         MouseArea { anchors.fill: parent }   // clicks on the card don't reach the close-scrim
+        RimLight { anchors.fill: parent; radius: parent.radius; z: 1 }   // the rim near the pointer catches a light
 
         // Content keeps its TARGET size (not the animating card size), so it never re-lays out per frame while the
         // card resizes; the card just reveals / crops it. Clipped only while morphing (dropdowns may overhang otherwise).
@@ -200,11 +201,7 @@ PanelWindow {
             Loader {
                 id: loader
                 width: card.targetW - 2 * card.pad; height: card.targetH - 2 * card.pad
-                source: ({
-                    center: "CenterPanel.qml", net: "NetPanel.qml", bt: "BtPanel.qml",
-                    cal: "CalPanel.qml", media: "MediaPanel.qml", audio: "AudioPanel.qml", ha: "HaPanel.qml",
-                    ai: "AiPanel.qml", vm: "VmPanel.qml"
-                })[host.content] || ""
+                source: Popups.panels[host.content]?.source ?? ""
             }
         }
     }

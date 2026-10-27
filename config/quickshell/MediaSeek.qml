@@ -11,7 +11,7 @@ ColumnLayout {
     readonly property bool usable: player !== null && !!player.lengthSupported && player.length > 0 && player.length < 100000
     function fmt(s) { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2) }
     visible: usable
-    spacing: 3
+    spacing: Theme.gapTight
 
     Timer {
         interval: 1000
@@ -21,7 +21,7 @@ ColumnLayout {
     }
     Meter {
         Layout.fillWidth: true
-        color: Theme.alpha(Theme.fg, 0.15)
+        color: Theme.itemActive
         value: seek.player && seek.player.length > 0 ? seek.player.position / seek.player.length : 0
         MouseArea {
             anchors { fill: parent; topMargin: -8; bottomMargin: -8 }

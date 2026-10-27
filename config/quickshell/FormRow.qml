@@ -10,17 +10,17 @@ RowLayout {
     default property alias content: body.data
 
     Layout.fillWidth: true
-    spacing: 10
+    spacing: Theme.padSm
 
     Item {
-        Layout.preferredWidth: 18
-        Layout.preferredHeight: 30
+        Layout.preferredWidth: Theme.iconCol - Theme.gapTight
+        Layout.preferredHeight: Theme.controlH
         Layout.alignment: Qt.AlignTop
-        Icon { anchors.centerIn: parent; text: fr.icon; font.pixelSize: 13; color: fr.iconColor }
+        Icon { anchors.centerIn: parent; text: fr.icon; font.pixelSize: Theme.iconMd; color: fr.iconColor }
     }
     RowLayout {
         id: body
         Layout.fillWidth: true
-        spacing: 6
+        spacing: Theme.controlGap
     }
 }

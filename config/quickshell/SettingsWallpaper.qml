@@ -6,18 +6,19 @@ import Quickshell.Io
 
 // Settings -> Wallpaper & theme. Top to bottom:
 //  - title row (`headerItem`): the theme source's file name + the current palette swatches (stays put while scrolling);
-//  - with 2+ monitors: "Monitors" cards (WallpaperMonitorCard) pick the monitor being edited, and a box under them
-//    says what that means: the primary monitor's wallpaper sets the colour theme, any other one only gets its own
-//    wallpaper ("Follow primary" = `theme.py clear`, "Make primary" = `theme.py primary`);
-//  - "Wallpaper for <monitor>" with two tabs, Images (wallpaper_dirs) and Videos (video_dirs), and the thumbnail
-//    grid (WallpaperTile) of that library. The Videos tab adds the Playback row (Play once / Loop): the mode of the
-//    video the monitor plays (switching re-applies it) and of the next video clicked.
+//  - with 2+ monitors: the MonitorChooser (primary first; the shared Settings pick, Monitors.selected) picks the monitor
+//    being edited; the palette glyph marks the palette source (the monitor whose wallpaper sets the colour theme), the
+//    link buttons between chips link neighbours, and the row ends in the monitor-level actions: "Follow primary"
+//    (`theme.py clear`, a monitor with its own wallpaper) and "Use for palette" (`theme.py primary`);
+//  - "Wallpaper" with two tabs, Images (wallpaper_dirs) and Videos (video_dirs), and the thumbnail grid (WallpaperTile)
+//    of that library. The Videos tab adds the Playback row (Play once / Loop): the mode of the video the monitor plays
+//    (switching re-applies it) and of the next video clicked.
 // A click (or arrows + Enter) runs `theme.py apply <file> [--mode once|loop] [--monitor <key>]` detached; for the
 // primary that is the full re-theme, for another monitor hyprpaper / the video player only. theme.py owns the state
 // (wallpapers.json, AGENTS.md "Wallpapers (per monitor, videos, links)"); this page only reads it.
-// Tabs: Tab / Shift+Tab. The page opens on the tab matching what the edited monitor shows; a tab picked by hand and
-// the edited monitor are kept for the session (Settings' `memory` page hook).
-// Monitor links: a MonitorLinkButton between neighbouring cards (MonitorCardRow) links them; a linked group always gets the
+// Tabs: Tab / Shift+Tab. The page opens on the tab matching what the edited monitor shows; a tab picked by hand is kept
+// for the session (Settings' `memory` page hook).
+// Monitor links: a MonitorLinkButton between neighbouring chips links them; a linked group always gets the
 // same wallpaper: every apply / mode / timing / "Follow primary" goes out as ONE theme.py call naming every monitor of the
 // group (`--monitor k` repeated; the links live in wallpapers.json `links`, written by `theme.py link|unlink`).
 // Test hook: `qs ipc call wallpaperpage tab images|videos`, `... monitor <key>` (only while the page is open).
@@ -44,7 +45,6 @@ ColumnLayout {
     function unreadable(p) { return isVideo(p) && thumbsDone && !thumbs[p] }
     function isVideo(p) { return /\.(mp4|webm|mkv)$/i.test(p) }
     function baseName(p) { return String(p).split("/").pop() }
-    function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") }
     readonly property string currentPath: Theme.wallpaper.replace(/^~/, Theme.home)   // the primary's (a video's still)
 
     // ---- per-monitor state (theme.py's wallpapers.json: { primary, monitors: { key: image|video }, primary_video }) ----
@@ -87,16 +87,18 @@ ColumnLayout {
     Timer { interval: 1000; repeat: true; running: page.visible && page.tab === "videos"; triggeredOnStart: true; onTriggered: optView.reload() }
     property var wpPrimaryVideo: null          // {video, mode, still} when the primary holds a video
     property string wpPrimary: ""
-    // connected screens with a usable key (same key as Appearance / managed.lua use)
-    readonly property var monitors: Quickshell.screens.filter(s => Appearance.monitorKey(s) !== "")
-    // stored primary if it is connected, else the screen at 0,0 (theme.py's rule), else the first one
+    // connected screens with a usable key (same key as Appearance / managed.lua use), primary first
+    readonly property var monitors: Monitors.ordered.filter(s => s.width > 0 && Appearance.monitorKey(s) !== "")
+    // the palette source ("primary" in wallpapers.json): the stored one if it is connected, else the shell's primary
+    // monitor (theme.py primary_key / shell_primary_key: the same rule)
     readonly property string primaryKey: {
         const ms = monitors
         if (ms.length === 0) return ""
         if (wpPrimary !== "" && ms.some(s => Appearance.monitorKey(s) === wpPrimary)) return wpPrimary
-        return Appearance.monitorKey(ms.find(s => s.x === 0 && s.y === 0) || ms[0])
+        return ms.some(s => Appearance.monitorKey(s) === Monitors.primaryKey) ? Monitors.primaryKey : Appearance.monitorKey(ms[0])
     }
-    property string pickedKey: ""              // monitor card chosen by the user, "" = the primary
+    // the monitor being edited: the shared Settings pick (MonitorChooser / Monitors.selected), else the palette source
+    readonly property string pickedKey: Monitors.selected ? Appearance.monitorKey(Monitors.selected) : ""
     readonly property string target: monitors.some(s => Appearance.monitorKey(s) === pickedKey) ? pickedKey : primaryKey
     readonly property bool multi: monitors.length > 1
     readonly property bool targetIsPrimary: target === primaryKey
@@ -116,7 +118,6 @@ ColumnLayout {
     // the group of the monitor being edited, as connected monitors only (an unplugged member is applied to too, but not shown)
     readonly property var group: groupKeys(target).filter(k => k === target || monitors.some(s => Appearance.monitorKey(s) === k))
     readonly property bool linkedGroup: group.length > 1
-    readonly property string groupTitle: group.map(k => titleOf(screenOf(k))).join(" + ")
     function toggleLink(i) {
         const a = keyAt(i), b = keyAt(i + 1)
         if (a === "" || b === "") return
@@ -128,8 +129,6 @@ ColumnLayout {
     }
     function screenOf(key) { return monitors.find(s => Appearance.monitorKey(s) === key) || null }
     function titleOf(s) { return s ? (s.model || s.name) : "" }
-    readonly property string targetTitle: titleOf(screenOf(target))
-    readonly property string primaryTitle: titleOf(screenOf(primaryKey))
     // a non-primary monitor with its own entry; without one it shows whatever the primary shows
     function ownFor(key) { return key !== primaryKey && wpMonitors[key] !== undefined && wpMonitors[key] !== null }
     function entryFor(key) {      // image path or video object
@@ -306,19 +305,6 @@ ColumnLayout {
     readonly property string playMode: shownVideo !== "" ? shownMode : newMode   // what the Playback row shows
     readonly property bool switchingMode: applying !== "" && applying === shownVideo && applyingMode !== shownMode
 
-    // ---- light / dark: one `theme.py mode <m>` call (state file, full re-render + reload); the switch shows the wanted
-    // value until palette.json reports it (Theme.mode), or for 20 s at most ----
-    property string colorWant: ""
-    function setColorMode(m) {
-        if (colorWant !== "" || m === Theme.mode) return   // one switch at a time
-        colorWant = m
-        colorGuard.restart()
-        // detached, not a Process: closing Settings (page unloaded) must not kill a half-done render
-        Quickshell.execDetached(["python3", "-I", Theme.themeDir + "/theme.py", "mode", m])
-    }
-    Connections { target: Theme; function onModeChanged() { if (Theme.mode === page.colorWant) page.colorWant = "" } }
-    Timer { id: colorGuard; interval: 20000; onTriggered: page.colorWant = "" }
-
     // ---- tabs: "images" | "videos". Default = what the edited monitor shows; a hand-picked tab wins for the session ----
     property var chosen: ({})                  // monitor key -> tab picked by hand
     readonly property string tab: chosen[target] !== undefined ? chosen[target] : (shownVideo !== "" ? "videos" : "images")
@@ -330,13 +316,9 @@ ColumnLayout {
         chosen = c
         if (memory) memory.tabs = c
     }
-    function pick(key) {
-        pickedKey = key
-        if (memory) memory.target = key
-    }
+    function pick(key) { const s = screenOf(key); if (s) Monitors.select(s) }
     onMemoryChanged: if (memory) {
         if (memory.tabs) chosen = memory.tabs
-        if (memory.target) pickedKey = memory.target
         if (memory.mode) newMode = memory.mode
         syncTiming()
     }
@@ -548,112 +530,43 @@ ColumnLayout {
         }
     }
 
-    // ---- light / dark: theme.py mode re-renders every themed app from the same wallpaper ----
-    SectionHead {
-        title: "Color mode"
-        detail: page.colorWant !== "" ? "switching…" : "dark or light, from this wallpaper"
-        Segmented {
-            values: ["dark", "light"]
-            labels: ["Dark", "Light"]
-            objectNames: ["mode-dark", "mode-light"]
-            current: page.colorWant !== "" ? page.colorWant : Theme.mode
-            outerRadius: Theme.radiusPage; inset: 9
-            segHeight: 26
-            segWidth: 72
-            onPicked: v => page.setColorMode(v)
-        }
-    }
 
-    // ---- monitors (only with 2+ screens: one screen needs no target) ----
-    SectionHead {
-        visible: page.multi
-        title: "Monitors"
-        detail: "pick the one to edit"
-    }
-    MonitorCardRow {
-        id: monRow
-        visible: page.multi
-        Layout.fillWidth: true
-        count: page.monitors.length
-        minCardW: 200                                    // 3 across at the 920 px minimum
-        cardH: 62
+    // ---- monitors (only with 2+ screens): which one is edited, links, palette source; actions at the row's end ----
+    MonitorChooser {
+        objectName: "wallpaper-monitors"
+        screens: page.monitors
+        current: page.screenOf(page.target) ? page.screenOf(page.target).name : ""
+        linkable: true
         linkedAt: i => page.linkedKeys(page.keyAt(i), page.keyAt(i + 1))
         linkTip: i => (page.linkedKeys(page.keyAt(i), page.keyAt(i + 1)) ? "Unlink " : "Link ") + page.titleOf(page.monitors[i]) + " and " + page.titleOf(page.monitors[i + 1])
         onLinkToggled: i => page.toggleLink(i)
-        Repeater {
-            model: page.monitors
-            WallpaperMonitorCard {
-                required property var modelData
-                required property int index
-                readonly property string key: Appearance.monitorKey(modelData)
-                x: monRow.xOf(index); y: monRow.yOf(index)
-                width: monRow.cardW
-                notches: monRow.notchesOf(index)
-                title: page.titleOf(modelData)
-                connector: modelData.name
-                detail: page.detailFor(key)
-                thumb: page.shownFor(key)
-                video: page.videoFor(key) !== ""
-                picked: key === page.target
-                grouped: key !== page.target && page.group.indexOf(key) >= 0
-                primary: key === page.primaryKey
-                onClicked: page.pick(key)
-            }
+        groupedFor: s => page.group.indexOf(Appearance.monitorKey(s)) >= 0
+        thumbFor: s => page.shownFor(Appearance.monitorKey(s))
+        markFor: s => Appearance.monitorKey(s) === page.primaryKey ? Icons.palette : ""
+        markTipFor: s => Appearance.monitorKey(s) === page.primaryKey ? "Palette source" : ""
+        Label { visible: page.busyState; text: "Updating…"; font.pixelSize: Theme.fontCaption; color: Theme.muted }
+        Btn {
+            objectName: "btn-wp-follow"
+            visible: !page.targetIsPrimary && page.group.some(k => page.ownFor(k))
+            text: "Follow primary"
+            outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26
+            onClicked: page.monitorCmd("clear", page.target)
         }
-    }
-    // what editing this monitor means, and the monitor-level actions
-    Rectangle {
-        visible: page.multi
-        Layout.fillWidth: true
-        implicitHeight: Math.max(roleRow.implicitHeight, 30) + 20
-        radius: Theme.radiusPage
-        color: Theme.alpha(Theme.fg, 0.04)
-        border.width: 1
-        border.color: Theme.alpha(Theme.overlay, 0.45)
-        RowLayout {
-            id: roleRow
-            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 10 }
-            spacing: 10
-            Icon {
-                Layout.alignment: Qt.AlignTop
-                Layout.topMargin: 1
-                text: page.targetIsPrimary ? "" : ""
-                font.pixelSize: 13
-                color: page.targetIsPrimary ? Theme.accent : Theme.fgDim
-            }
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                textFormat: Text.StyledText
-                font.pixelSize: Theme.fontSmall
-                color: Theme.fgDim
-                text: page.busyState ? "Updating monitors…" : (page.targetIsPrimary
-                    ? "<b>" + page.esc(page.targetTitle) + "</b> is the primary monitor: its wallpaper also sets the colour theme of every app. Monitors without their own wallpaper show it too."
-                    : page.ownFor(page.target)
-                    ? "<b>" + page.esc(page.targetTitle) + "</b> has its own wallpaper. Only the primary, <b>" + page.esc(page.primaryTitle) + "</b>, sets the colour theme."
-                    : "<b>" + page.esc(page.targetTitle) + "</b> shows the primary's wallpaper. Pick one below to give it its own; the colour theme stays with <b>" + page.esc(page.primaryTitle) + "</b>."
-                    ) + (page.linkedGroup ? " Linked with <b>" + page.esc(page.group.slice(1).map(k => page.titleOf(page.screenOf(k))).join(" + ")) + "</b>: whatever you pick here is applied to all of them." : "")
-            }
-            Btn {
-                visible: !page.targetIsPrimary && page.group.some(k => page.ownFor(k))
-                text: "Follow primary"
-                outerRadius: Theme.radiusPage; inset: 9
-                onClicked: page.monitorCmd("clear", page.target)
-            }
-            Btn {
-                visible: !page.targetIsPrimary
-                text: "Make primary"
-                outerRadius: Theme.radiusPage; inset: 9
-                onClicked: page.monitorCmd("primary", page.target)
-            }
+        Btn {
+            objectName: "btn-wp-palette"
+            visible: !page.targetIsPrimary
+            text: "Use for palette"
+            outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26
+            onClicked: page.monitorCmd("primary", page.target)
         }
     }
 
     // ---- library: Images / Videos tabs over one grid ----
     SectionHead {
         Layout.topMargin: page.multi ? 6 : 0
-        title: page.multi ? "Wallpaper for " + page.groupTitle : "Wallpaper"
+        title: "Wallpaper"
         detail: page.scanned ? "" : "scanning…"
+        InfoTip { text: "Arrows + Enter apply; Tab switches tabs." }
         Segmented {
             values: ["images", "videos"]
             labels: ["Images  " + page.images.length, "Videos  " + page.videos.length]
@@ -695,33 +608,40 @@ ColumnLayout {
             Icon {
                 Layout.alignment: Qt.AlignTop
                 Layout.topMargin: 1
-                text: page.playMode === "loop" ? "\uf363" : "\uf04b"
-                font.pixelSize: 13
-                color: page.shownVideo !== "" ? Theme.accent : Theme.fgDim
+                text: page.playMode === "loop" ? Icons.repeat : Icons.play
+                font.pixelSize: Theme.iconMd
+                color: page.shownVideo !== "" ? Theme.accent : Theme.fgDim    // accent = a video is playing on this monitor
             }
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 3
-                Label {
+                RowLayout {
                     Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    textFormat: Text.StyledText
-                    font.pixelSize: Theme.fontSmall
-                    text: "Playback" + (page.multi ? " on <b>" + page.esc(page.groupTitle) + "</b>" : "")
+                    spacing: 6
+                    Label {
+                        Layout.fillWidth: false
+                        elide: Text.ElideRight
+                        font.pixelSize: Theme.fontSmall
+                        text: "Playback"
+                    }
+                    InfoTip {
+                        readonly property string name: page.baseName(page.shownVideo)
+                        text: page.shownVideo !== "" && !page.targetIsPrimary && !page.ownFor(page.target)
+                            ? "Plays the primary's video, " + name + " (" + page.playMode + "). Switching gives this monitor its own copy."
+                            : page.shownVideo !== ""
+                            ? name + (page.playMode === "loop" ? " loops." : " plays once and holds its last frame.") + " Switching restarts it" + (page.targetIsPrimary ? " and re-themes" : "") + "."
+                            : "Videos you click " + (page.playMode === "loop" ? "loop." : "play once, then hold their last frame.")
+                    }
+                    Item { Layout.fillWidth: true }
                 }
                 Label {
+                    visible: page.switchingMode
                     Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
+                    elide: Text.ElideRight
                     font.pixelSize: Theme.fontCaption
                     color: Theme.muted
                     readonly property string name: page.baseName(page.shownVideo)
-                    text: page.switchingMode ? "Restarting " + name + (page.applyingMode === "loop" ? " in a loop…" : " to play once…")
-                        : page.shownVideo !== "" && !page.targetIsPrimary && !page.ownFor(page.target)
-                        ? "Plays the primary's video, " + name + (page.playMode === "loop" ? " (loop)" : " (once)") + ". Switching gives this monitor its own copy in that mode."
-                        : page.shownVideo !== ""
-                        ? name + (page.playMode === "loop" ? " is looping." : " plays once and holds its last frame.") + " Switching restarts it"
-                          + (page.targetIsPrimary ? " and re-themes" : "") + "; videos you pick play the same way."
-                        : "Videos you click " + (page.playMode === "loop" ? "loop." : "play once, then hold their last frame.")
+                    text: "Restarting " + name + "…"
                 }
             }
             Segmented {
@@ -735,129 +655,127 @@ ColumnLayout {
                 onPicked: v => page.setMode(v)
             }
         }
-        SettingRow {
-            title: "Optimize"
-            titleWidth: 84
-            Toggle {
-                objectName: "toggle-optimize"
-                checked: page.optimize
-                busy: page.optBusy || (page.optimize && page.optJob.state === "encoding")
-                onToggled: on => page.setOptimize(on)
+        AdvancedFold {
+            objectName: "fold-video"
+            label: "Customise playback…"
+            detail: page.optimize && page.optJob.state === "encoding" ? "encoding " + page.optJob.pct + " %" : ""
+            SettingRow {
+                title: "Optimize"
+                titleWidth: 84
+                Toggle {
+                    objectName: "toggle-optimize"
+                    checked: page.optimize
+                    busy: page.optBusy || (page.optimize && page.optJob.state === "encoding")
+                    onToggled: on => page.setOptimize(on)
+                }
+                Label {
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                    font.pixelSize: Theme.fontCaption
+                    color: page.optimize && page.optJob.state === "encoding" ? Theme.accent : Theme.muted
+                    text: page.optimize && page.optJob.state === "encoding" ? "encoding " + page.optJob.pct + " %" : ""
+                }
+                InfoTip {
+                    icon: !page.optimize && page.softwareDecode && page.shownVideo !== "" ? Icons.warning : Icons.info
+                    color: icon === Icons.warning ? Theme.yellow : Theme.muted
+                    text: !page.optimize ? (page.softwareDecode && page.shownVideo !== "" ? "Off: no hardware decoding for this video, so it plays in software (high CPU)."
+                                                                                           : "Off: videos play from the original file.")
+                        : page.optJob.state === "encoding" ? "Encoding " + page.optJob.label
+                        : "One copy per monitor at its resolution and frame rate: less GPU."
+                }
             }
-            Label {
-                Layout.fillWidth: true
-                elide: Text.ElideRight
-                font.pixelSize: Theme.fontCaption
-                color: page.optimize && page.optJob.state === "encoding" ? Theme.accent : Theme.muted
-                text: !page.optimize ? (page.softwareDecode && page.shownVideo !== "" ? "Off: this video has no hardware decoding here, so the original plays in software (high CPU)."
-                                                                                       : "Off: videos play from the original file.")
-                    : page.optJob.state === "encoding" ? "Optimizing " + page.optJob.label + " … " + page.optJob.pct + " %"
-                    : "One copy per monitor at its resolution and a fitting frame rate: less GPU."
+            SettingRow {
+                visible: page.optimize
+                title: "Speed"
+                titleWidth: 84
+                Segmented {
+                    values: ["background", "balanced", "fast"]
+                    labels: ["Background", "Balanced", "Fast"]
+                    objectNames: ["optspeed-background", "optspeed-balanced", "optspeed-fast"]
+                    current: page.optSpeed
+                    outerRadius: Theme.radiusPage; inset: 10
+                    segHeight: 26
+                    segWidth: 96
+                    onPicked: v => page.setOptSpeed(v)
+                }
+                InfoTip {
+                    text: page.optSpeed === "fast" ? "All cores, normal priority: done soonest, the desktop may stutter."
+                        : page.optSpeed === "balanced" ? "About 60 % of the machine at low priority."
+                        : "Idle CPU time only: the desktop stays smooth."
+                }
+                Item { Layout.fillWidth: true }
             }
-        }
-        SettingRow {
-            visible: page.optimize
-            title: "Speed"
-            titleWidth: 84
-            Segmented {
-                values: ["background", "balanced", "fast"]
-                labels: ["Background", "Balanced", "Fast"]
-                objectNames: ["optspeed-background", "optspeed-balanced", "optspeed-fast"]
-                current: page.optSpeed
-                outerRadius: Theme.radiusPage; inset: 10
-                segHeight: 26
-                segWidth: 96
-                onPicked: v => page.setOptSpeed(v)
+            // play-once timing: full speed for N s, then ease to a stop over M s and hold that frame (mpv/winddown.lua)
+            SettingRow {
+                visible: page.playMode === "once"
+                title: "Play for"
+                titleWidth: 84
+                Slider {
+                    wheel: false
+                    id: playSlider
+                    objectName: "slider-play"
+                    onDownChanged: if (!down) page.flushTiming()
+                    Layout.fillWidth: true
+                    value: page.uiFull ? 1 : page.uiPlay / page.maxPlay
+                    onMoved: v => { const p = Math.round(v * page.maxPlay); page.setTiming(p, page.uiWind, p >= page.maxPlay) }
+                }
+                Label {
+                    text: page.uiFull ? "Full length" : page.fmtSec(page.uiPlay)
+                    Layout.preferredWidth: 118; horizontalAlignment: Text.AlignRight
+                    color: page.uiFull ? Theme.fgDim : Theme.fg; font.pixelSize: Theme.fontSmall
+                }
+                InfoTip { text: page.loopText }
             }
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                font.pixelSize: Theme.fontCaption
-                color: Theme.muted
-                text: page.optSpeed === "fast" ? "Encodes on every core at normal priority: done soonest, the desktop may stutter meanwhile."
-                    : page.optSpeed === "balanced" ? "Uses about 60 % of the machine at low priority: quicker, the desktop stays responsive."
-                    : "Encodes slowly on idle CPU time only, so the desktop stays smooth. Same result in every mode."
+            SettingRow {
+                visible: page.playMode === "once"
+                title: "Wind down"
+                titleWidth: 84
+                Slider {
+                    wheel: false
+                    id: windSlider
+                    objectName: "slider-wind"
+                    onDownChanged: if (!down) page.flushTiming()
+                    Layout.fillWidth: true
+                    dim: page.uiFull
+                    value: page.maxWind > 0 ? page.uiWind / page.maxWind : 0
+                    onMoved: v => { if (!page.uiFull) page.setTiming(page.uiPlay, v * page.maxWind, false) }
+                }
+                Label {
+                    text: page.uiFull ? "lower Play for" : (page.uiWind > 0 ? page.fmtSec(page.uiWind) : "none") + " / max " + page.fmtSec(page.maxWind)
+                    Layout.preferredWidth: 118; horizontalAlignment: Text.AlignRight
+                    color: !page.uiFull && page.uiWind > 0 ? Theme.fg : Theme.fgDim; font.pixelSize: Theme.fontSmall
+                }
             }
-        }
-        // play-once timing: full speed for N s, then ease to a stop over M s and hold that frame (mpv/winddown.lua)
-        SettingRow {
-            visible: page.playMode === "once"
-            title: "Play for"
-            titleWidth: 84
-            Slider {
-                wheel: false
-                id: playSlider
-                objectName: "slider-play"
-                onDownChanged: if (!down) page.flushTiming()
-                Layout.fillWidth: true
-                value: page.uiFull ? 1 : page.uiPlay / page.maxPlay
-                onMoved: v => { const p = Math.round(v * page.maxPlay); page.setTiming(p, page.uiWind, p >= page.maxPlay) }
+            SettingRow {
+                visible: page.playMode === "once"
+                title: "Ease-in"
+                titleWidth: 84
+                Slider {
+                    wheel: false
+                    id: easeSlider
+                    objectName: "slider-ease"
+                    onDownChanged: if (!down) page.flushTiming()
+                    Layout.fillWidth: true
+                    value: page.uiEase / page.easeMax
+                    onMoved: v => page.setEase(v * page.easeMax)
+                }
+                Label {
+                    text: page.fmtEase(page.uiEase)
+                    Layout.preferredWidth: 118; horizontalAlignment: Text.AlignRight
+                    color: page.uiEase > 0 ? Theme.fg : Theme.fgDim; font.pixelSize: Theme.fontSmall
+                }
             }
-            Label {
-                text: page.uiFull ? "Full length" : page.fmtSec(page.uiPlay)
-                Layout.preferredWidth: 118; horizontalAlignment: Text.AlignRight
-                color: page.uiFull ? Theme.fgDim : Theme.fg; font.pixelSize: Theme.fontSmall
-            }
-        }
-        SettingRow {
-            visible: page.playMode === "once"
-            title: "Wind down"
-            titleWidth: 84
-            Slider {
-                wheel: false
-                id: windSlider
-                objectName: "slider-wind"
-                onDownChanged: if (!down) page.flushTiming()
-                Layout.fillWidth: true
-                dim: page.uiFull
-                value: page.maxWind > 0 ? page.uiWind / page.maxWind : 0
-                onMoved: v => { if (!page.uiFull) page.setTiming(page.uiPlay, v * page.maxWind, false) }
-            }
-            Label {
-                text: page.uiFull ? "lower Play for" : (page.uiWind > 0 ? page.fmtSec(page.uiWind) : "none") + " / max " + page.fmtSec(page.maxWind)
-                Layout.preferredWidth: 118; horizontalAlignment: Text.AlignRight
-                color: !page.uiFull && page.uiWind > 0 ? Theme.fg : Theme.fgDim; font.pixelSize: Theme.fontSmall
-            }
-        }
-        SettingRow {
-            visible: page.playMode === "once"
-            title: "Ease-in"
-            titleWidth: 84
-            Slider {
-                wheel: false
-                id: easeSlider
-                objectName: "slider-ease"
-                onDownChanged: if (!down) page.flushTiming()
-                Layout.fillWidth: true
-                value: page.uiEase / page.easeMax
-                onMoved: v => page.setEase(v * page.easeMax)
-            }
-            Label {
-                text: page.fmtEase(page.uiEase)
-                Layout.preferredWidth: 118; horizontalAlignment: Text.AlignRight
-                color: page.uiEase > 0 ? Theme.fg : Theme.fgDim; font.pixelSize: Theme.fontSmall
-            }
-        }
-        Label {
-            visible: page.playMode === "once" && page.loopText !== ""
-            Layout.fillWidth: true
-            leftPadding: 96
-            text: page.loopText
-            color: Theme.fgDim; font.pixelSize: Theme.fontSmall
-            elide: Text.ElideRight
         }
         }
     }
 
-    Label {
+    // nothing in the library folders
+    EmptyState {
+        big: true
         visible: page.scanned && page.list.length === 0
-        Layout.fillWidth: true
-        Layout.topMargin: 6
-        wrapMode: Text.WordWrap
-        color: Theme.fgDim
-        text: page.tab === "videos"
-            ? "No videos found in " + page.videoDirs.join(", ") + ". Add mp4, webm or mkv files there (video_dirs in ~/.config/theme/theme.toml)."
-            : "No images found in " + page.dirs.join(", ") + " (wallpaper_dirs in ~/.config/theme/theme.toml)."
+        icon: page.tab === "videos" ? Icons.video : Icons.image
+        text: page.tab === "videos" ? "No videos" : "No images"
+        hint: (page.tab === "videos" ? page.videoDirs : page.dirs).join("\n")
     }
 
     Grid {
@@ -880,24 +798,9 @@ ColumnLayout {
                 cursor: index === page.sel
                 busy: modelData === page.applying
                 unreadable: page.unreadable(modelData)
-                badge: video && current ? "▶ " + (page.shownMode === "loop" ? "LOOP" : "ONCE") : ""
+                badge: video && current ? (page.shownMode === "loop" ? "LOOP" : "ONCE") : ""
                 onClicked: { page.sel = index; page.apply(modelData) }
             }
         }
-    }
-
-    Label {
-        Layout.fillWidth: true
-        Layout.topMargin: 4
-        wrapMode: Text.WordWrap
-        color: Theme.muted
-        font.pixelSize: Theme.fontCaption
-        readonly property string effect: !page.targetIsPrimary
-            ? "only this monitor changes"
-            : "the theme is re-extracted from it and every app restyles"
-        text: page.tab === "videos"
-            ? "Click a video (or arrows + Enter) to play it behind the desktop" + (page.targetIsPrimary ? "; the theme follows a still of it (last frame for Play once, middle frame for Loop)" : "; only this monitor changes")
-              + ". Folders: video_dirs in ~/.config/theme/theme.toml. Tab switches to Images."
-            : "Click an image (or arrows + Enter) to apply it; " + effect + ". Folders: wallpaper_dirs in ~/.config/theme/theme.toml. Tab switches to Videos."
     }
 }

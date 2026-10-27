@@ -28,15 +28,18 @@ Rectangle {
     implicitHeight: Theme.chipHeight
     implicitWidth: Math.max(Theme.chipHeight, iconOnly ? Theme.chipHeight : Math.ceil(row.implicitWidth) + 2 * padX)   // never narrower than tall (min 1:1)
     radius: Theme.radiusChip   // inset barPad inside the bar
+    // active (its popup is open, or the state it stands for is on): a soft accent fill with an accent outline; hover:
+    // the ink set's wash; rest: nothing on a flat bar, a faint fill on a backdrop
     color: active ? Theme.alpha(ink.accent, 0.28)
          : hover.containsMouse ? Theme.alpha(ink.hoverColor ?? ink.fg, ink.hoverAlpha ?? 0.10)
          : ink.bare ? Theme.alpha(ink.fg, 0)            // BarInk: flat bar, nothing at rest (only active / hovered chips are filled)
          : Theme.alpha(ink.bg, Theme.glass ? 0.10 : 0.35)
     border.width: active ? 1 : 0
     border.color: Theme.alpha(ink.accent, 0.8)
-    opacity: dim ? 0.55 : 1
+    opacity: dim ? Theme.dimOpacity : 1
 
-    Behavior on color { ColorAnimation { duration: Theme.popupMs(120) } }
+    Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
+    PressFeedback { area: hover; depth: 1.5 }
 
     // Blank px between the row edges and the visible ink of its first / last visible item. BarIcon and BarLabel
     // report their own ink insets (InkMeter); other items (tray images, the record dot) count as solid.

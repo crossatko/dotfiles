@@ -36,13 +36,14 @@ Item {
     readonly property bool listed: listMode ? Notifs.all.values.some(v => v.id === nid) : Notifs.popups.some(p => p.id === nid)
     readonly property bool gone: dismissing || !listed
     readonly property Item cardItem: card
+    readonly property real off: stackWidth + Theme.rowH   // where a card parks past the screen edge before it slides in / after it slides out
     property real appear: lead ? 1 : 0       // 0 = not there yet, 1 = fully in (drives height too; a lead row is in from the start)
-    property real slideX: stackWidth + 40    // distance from its resting place
+    property real slideX: off                // distance from its resting place
     // how far in the card is, for its fade: a single new card slides in while its gap opens (the gap drives it); the
     // cards of a list opening are in their place at once (no vertical motion at all) and only slide in from the right
-    readonly property real reveal: lead ? 1 - slideX / (stackWidth + 40) : appear
+    readonly property real reveal: lead ? 1 - slideX / off : appear
 
-    readonly property real fullHeight: n ? card.implicitHeight + 8 : 0
+    readonly property real fullHeight: n ? card.implicitHeight + Theme.gapRow : 0   // the card and the gap under it
     width: stackWidth
     height: Math.max(0, Math.round(fullHeight * appear))
     opacity: shown ? 1 : 0
@@ -94,18 +95,19 @@ Item {
         function onClosed() { Notifs.dismissPopup(slot.n); slot.removeRequested() }
     }
 
-    // enter: slide in from the right with a slight overshoot while the space opens up
+    // enter: slide in from the right with a slight overshoot while the space opens up (Motion.moveMs: the one
+    // delight overshoot of the motion language besides the press release; reduced motion = in place at once)
     function startEnter() { if (lead) enterLead.restart(); else enter.restart() }
     Component.onCompleted: startEnter()
     ParallelAnimation {
         id: enter
-        NumberAnimation { target: slot; property: "slideX"; to: 0; duration: 200; easing.type: Easing.OutBack; easing.overshoot: 0.7 }
-        NumberAnimation { target: slot; property: "appear"; to: 1; duration: 200; easing.type: Easing.OutCubic }
+        NumberAnimation { target: slot; property: "slideX"; to: 0; duration: Motion.moveMs; easing.type: Easing.OutBack; easing.overshoot: 0.7 }
+        NumberAnimation { target: slot; property: "appear"; to: 1; duration: Motion.moveMs; easing.type: Easing.OutCubic }
     }
     SequentialAnimation {
         id: enterLead
         PauseAnimation { duration: slot.enterDelay }
-        NumberAnimation { target: slot; property: "slideX"; to: 0; duration: 200; easing.type: Easing.OutBack; easing.overshoot: 0.7 }
+        NumberAnimation { target: slot; property: "slideX"; to: 0; duration: Motion.moveMs; easing.type: Easing.OutBack; easing.overshoot: 0.7 }
     }
 
     // exit: slide out to the right, then collapse the gap and leave the model (a swiped card is already out: only the
@@ -119,7 +121,7 @@ Item {
     SequentialAnimation {
         id: leave
         PauseAnimation { duration: slot.dismissing ? 0 : slot.leaveDelay }
-        NumberAnimation { target: slot; property: "slideX"; to: slot.stackWidth + 40; duration: card.swipedOut ? 0 : 200; easing.type: Easing.InQuad }
+        NumberAnimation { target: slot; property: "slideX"; to: slot.off; duration: card.swipedOut ? 0 : Motion.moveMs; easing.type: Easing.InQuad }
         NumberAnimation { target: slot; property: "appear"; to: 0; duration: Theme.popupMoveMs; easing.type: Theme.popupEaseClose }
         ScriptAction {
             script: {

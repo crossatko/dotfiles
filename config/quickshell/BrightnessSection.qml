@@ -7,7 +7,7 @@ import QtQuick.Layouts
 // created (the control center opens), so changes made elsewhere (keys, steam-tv-dim, hypridle) show up.
 ColumnLayout {
     id: bs
-    spacing: 6
+    spacing: Theme.controlGap
     visible: Brightness.available
 
     Component.onCompleted: Brightness.refresh()
@@ -26,7 +26,7 @@ ColumnLayout {
             id: row
             required property string modelData
             readonly property int pct: Brightness.percentOf(modelData)
-            icon: "\uf185"
+            icon: Icons.sun
             label: modelData
             labelWidth: Math.ceil(longest.advanceWidth)
             value: pct / 100

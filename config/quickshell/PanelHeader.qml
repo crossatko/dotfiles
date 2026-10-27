@@ -12,7 +12,7 @@ RowLayout {
     property color statusColor: Theme.fgDim
 
     Layout.fillWidth: true
-    spacing: 6
+    spacing: Theme.controlGap
 
     Label { text: head.title; font.pixelSize: Theme.fontTitle; font.bold: true; Layout.fillWidth: !head.showStatus }
     Label {

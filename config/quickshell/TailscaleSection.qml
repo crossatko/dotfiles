@@ -11,11 +11,13 @@ import "launcher/js/Vpn.js" as Vpn
 // every 4 s while visible and not at all otherwise. `QS_TAILSCALE` replaces the binary (tests).
 ColumnLayout {
     id: ts
-    spacing: 6
+    spacing: Theme.controlGap
 
     readonly property string bin: Quickshell.env("QS_TAILSCALE") ? String(Quickshell.env("QS_TAILSCALE")) : "tailscale"
-    readonly property int rowH: 44
-    readonly property int maxListH: 5 * rowH + 4 * 6 + 22      // ~5.5 rows, then it scrolls
+    readonly property int rowH: Theme.rowH
+    readonly property int listGap: Theme.gapTight                                    // items of a list
+    readonly property int maxListH: 5 * rowH + 4 * listGap                           // 5 whole rows, then it scrolls (as BtPanel)
+    readonly property int keyColW: 64     // width of the key column in a machine's details
 
     property bool loaded: false
     property bool daemonDown: false
@@ -134,8 +136,8 @@ ColumnLayout {
     // ---- helpers -------------------------------------------------------------------------------------------
     function osGlyph(os) {
         const o = os.toLowerCase()
-        return o === "linux" ? "" : o === "ios" || o === "macos" || o === "tvos" ? ""
-             : o === "android" ? "" : o === "windows" ? "" : ""
+        return o === "linux" ? Icons.linux : o === "ios" || o === "macos" || o === "tvos" ? Icons.apple
+             : o === "android" ? Icons.android : o === "windows" ? Icons.windows : ""
     }
     function ago(iso) { return Vpn.ago(iso) }
     function stateLine() {
@@ -212,8 +214,8 @@ ColumnLayout {
         Notice {
             visible: ts.needOperator
             danger: true
-            padX: 8
-            padY: 8
+            padX: Theme.gapRow
+            padY: Theme.gapRow
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
@@ -222,11 +224,11 @@ ColumnLayout {
             }
             Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: 30
-                radius: Theme.inner(Theme.radiusItem, 8)
+                implicitHeight: Theme.controlH
+                radius: Theme.inner(Theme.radiusItem, Theme.gapRow)
                 color: Theme.alpha(Theme.bg, 0.6)
                 Label {
-                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 10 }
+                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: Theme.padSm; rightMargin: Theme.padSm }
                     text: ts.copied === "operator" ? "Copied" : "sudo tailscale set --operator=$USER"
                     color: ts.copied === "operator" ? Theme.accent : Theme.fg
                     font.pixelSize: Theme.fontSmall
@@ -234,9 +236,9 @@ ColumnLayout {
                 }
             }
             RowLayout {
-                spacing: 6
-                Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Dismiss"; onClicked: ts.needOperator = false }
-                Btn { outerRadius: Theme.radiusItem; inset: 8; text: "Copy command"; active: true; onClicked: ts.copy("operator", "sudo tailscale set --operator=$USER") }
+                spacing: Theme.controlGap
+                Btn { outerRadius: Theme.radiusItem; inset: Theme.gapRow; text: "Dismiss"; onClicked: ts.needOperator = false }
+                Btn { outerRadius: Theme.radiusItem; inset: Theme.gapRow; text: "Copy command"; active: true; onClicked: ts.copy("operator", "sudo tailscale set --operator=$USER") }
             }
         }
 
@@ -247,9 +249,9 @@ ColumnLayout {
             Layout.fillHeight: true
             Layout.preferredHeight: Math.min(ts.maxListH, contentHeight)
             Layout.maximumHeight: Math.min(ts.maxListH, contentHeight)
-            Layout.minimumHeight: Math.min(2 * ts.rowH + 6, contentHeight)
+            Layout.minimumHeight: Math.min(2 * ts.rowH + ts.listGap, contentHeight)
             clip: true
-            spacing: 6
+            spacing: ts.listGap
             boundsBehavior: Flickable.StopAtBounds
             model: ts.peers
             delegate: ListRow {
@@ -261,7 +263,7 @@ ColumnLayout {
                 readonly property string brand: ts.osGlyph(p.os)
                 width: list.width
                 rowH: ts.rowH
-                icon: brand || "\uf390"
+                icon: brand || Icons.monitor
                 iconFamily: brand ? Theme.brandFont : Theme.iconFont
                 iconSize: 16
                 iconColor: p.online ? Theme.accent : Theme.muted
@@ -270,7 +272,7 @@ ColumnLayout {
                 onClicked: ts.expanded = card.open ? "" : card.p.id
                 // expanded details under the text column
                 expanded: open
-                bodyLeft: 48
+                bodyLeft: Theme.pad + Theme.iconCol + Theme.pad
                 onHeightChanged: if (open) list.positionViewAtIndex(index, ListView.Contain)
 
                 RowText {
@@ -288,14 +290,9 @@ ColumnLayout {
                     text: done ? "Copied" : card.p.ipv4
                     font.pixelSize: Theme.fontSmall
                     color: done ? Theme.accent : ipArea.containsMouse ? Theme.fg : Theme.fgDim
-                    MouseArea { id: ipArea; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ts.copy(card.p.id + "/4", card.p.ipv4) }
+                    MouseArea { id: ipArea; anchors.fill: parent; anchors.margins: -Theme.gapTight; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ts.copy(card.p.id + "/4", card.p.ipv4) }
                 }
-                Rectangle {
-                    Layout.preferredWidth: 8
-                    Layout.preferredHeight: 8
-                    radius: 4
-                    color: card.p.online ? Theme.green : Theme.alpha(Theme.muted, 0.6)
-                }
+                StatusDot { tint: card.p.online ? Theme.green : Theme.alpha(Theme.muted, 0.6) }
 
                 body: ColumnLayout {
                     id: details
@@ -317,8 +314,8 @@ ColumnLayout {
                             required property var modelData
                             readonly property bool done: modelData.c !== "" && ts.copied === card.p.id + modelData.c
                             Layout.fillWidth: true
-                            spacing: 8
-                            Label { text: kv.modelData.k; color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.preferredWidth: 64 }
+                            spacing: Theme.gapRow
+                            Label { text: kv.modelData.k; color: Theme.muted; font.pixelSize: Theme.fontCaption; Layout.preferredWidth: ts.keyColW }
                             Label {
                                 Layout.fillWidth: true
                                 text: kv.done ? "Copied" : kv.modelData.v
@@ -338,8 +335,8 @@ ColumnLayout {
                     }
                     RowLayout {
                         visible: !card.p.self && (card.p.exitOption || card.p.exitNode)
-                        Layout.topMargin: 4
-                        spacing: 6
+                        Layout.topMargin: Theme.gapTight
+                        spacing: Theme.controlGap
                         Btn {
                             outerRadius: card.radius
                             text: card.p.exitNode ? "Stop using exit node" : "Use as exit node"

@@ -9,10 +9,13 @@ import Quickshell.Io
 GridLayout {
     id: cal
     columns: 1
-    rowSpacing: 8
+    rowSpacing: Theme.gapRow
     columnSpacing: 0
     // The grid sits next to the bar and the agenda beyond it: panel at the bottom -> agenda on top,
     // grid at the bottom; bar at the top -> grid on top, agenda below. Same rule as the control center.
+    readonly property int agendaH: 156          // fixed height of the agenda list (nothing moves when you pick a day)
+    readonly property int agendaEmptyH: 60      // the agenda while the whole month has no events: just the empty-state row, no dead box
+    readonly property int cellH: 38             // one day cell of the month grid
     readonly property bool barBottom: Popups.edgeOf(Popups.screen) !== "top"
 
     // Not SystemClock: it re-arms a QTimer with a negative interval during the repeated local hour at the end of DST (fires every 1 ms, ~2000 warnings/s, ~9% CPU)
@@ -23,7 +26,9 @@ GridLayout {
     readonly property date today: clockNow
 
     property var dayMap: ({})                 // "YYYY-MM-DD" -> [event]
+    readonly property bool monthEmpty: Object.keys(dayMap).length === 0
     property bool loaded: false
+    property string error: ""                 // calendar-events' error (omacal missing / not answering): shown in the agenda's empty state
     property var writable: []                 // calendars events can be added to (omacal only)
     property string source: ""                // "omacal" (calendar-events); events can only be added with omacal
 
@@ -62,11 +67,12 @@ GridLayout {
             onStreamFinished: {
                 try {
                     const d = JSON.parse(text)
+                    cal.error = d.error ? String(d.error) : ""
                     cal.source = d.source || ""
                     cal.writable = d.writable || []
                     cal.index(d.events || [])
                     cal.loaded = true
-                } catch (e) { cal.loaded = true }
+                } catch (e) { cal.error = "No reply"; cal.loaded = true }
             }
         }
     }
@@ -89,7 +95,7 @@ GridLayout {
         id: agendaSec
         Layout.fillWidth: true
         Layout.row: cal.barBottom ? 0 : 1
-        spacing: 8
+        spacing: Theme.gapRow
 
         // ---- agenda for the selected day (ABOVE the grid, fixed height: nothing moves when you pick a day) ----
         SectionHead {
@@ -102,7 +108,7 @@ GridLayout {
                 Layout.preferredHeight: 22
                 Layout.preferredWidth: 28
                 icon: true
-                text: "\uf08e"
+                text: Icons.externalLink
                 onClicked: { creator.openDay(cal.key(cal.selected)); Popups.close() }
             }
         }
@@ -118,8 +124,8 @@ GridLayout {
         // card's far edge moves, the grid stays put under the pointer), and the two cross-fade.
         Item {
             id: agendaArea
-            readonly property real agendaH: 156
-            readonly property real openH: addForm.implicitHeight + 6      // a little air before the month header
+            readonly property real agendaH: cal.monthEmpty ? cal.agendaEmptyH : cal.agendaH
+            readonly property real openH: addForm.implicitHeight + Theme.controlGap      // a little air before the month header
             Layout.fillWidth: true
             Layout.preferredHeight: expanded ? Math.max(agendaH, openH) : agendaH
             // only the open / close glides: the form's own changes (calendar list unfolding) are animated inside it
@@ -135,7 +141,7 @@ GridLayout {
             function toggle() { shown = !shown }
             onShownChanged: { agendaArea.morphing = true; morphEnd.restart(); agendaArea.expanded = shown; if (shown) open() }
             anchors { left: parent.left; right: parent.right; top: parent.top }
-            anchors.topMargin: shown ? 0 : -8
+            anchors.topMargin: shown ? 0 : -Theme.gapRow
             Behavior on anchors.topMargin { NumberAnimation { duration: Theme.popupMoveMs; easing.type: Theme.popupEaseMove } }
             opacity: shown ? 1 : 0
             visible: opacity > 0
@@ -157,30 +163,30 @@ GridLayout {
             visible: opacity > 0
             Behavior on opacity { NumberAnimation { duration: Theme.popupFadeInMs; easing.type: Easing.OutCubic } }
             clip: true
-            spacing: 6
+            spacing: Theme.controlGap
             // all-day first, then by time
             model: cal.eventsOn(cal.selected).slice().sort((a, b) => (b.allDay - a.allDay) || a.start.localeCompare(b.start))
             delegate: Rectangle {
                 id: evCard
                 required property var modelData
                 width: agenda.width
-                height: row.implicitHeight + 12
+                height: row.implicitHeight + Theme.pad
                 radius: Theme.radiusItem
-                color: Theme.alpha(Theme.fg, 0.06)
+                color: Theme.itemFill
                 Rectangle { x: 0; y: parent.radius; width: 3; height: parent.height - parent.radius * 2; color: evCard.modelData.color }   // clear of the rounded corners
                 ColumnLayout {
                     id: row
-                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 10 }
+                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: Theme.pad; rightMargin: Theme.padSm }
                     spacing: 1
                     RowLayout {
-                        spacing: 8
+                        spacing: Theme.gapRow
                         Label { text: evCard.modelData.title; Layout.fillWidth: true; elide: Text.ElideRight; font.bold: true }
                         Label { text: cal.when(evCard.modelData); color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
                     }
                     Label {
                         visible: evCard.modelData.location !== ""
                         textFormat: Text.StyledText
-                        text: "<font face=\"" + Theme.iconFont + "\">\uf3c5</font>  " + evCard.modelData.location
+                        text: "<font face=\"" + Theme.iconFont + "\">" + Icons.locationDot + "</font>  " + evCard.modelData.location
                         Layout.fillWidth: true
                         elide: Text.ElideRight
                         color: Theme.fgDim
@@ -189,11 +195,12 @@ GridLayout {
                     Label { text: evCard.modelData.calendar; color: Theme.muted; font.pixelSize: Theme.fontTiny }
                 }
             }
-            Label {
-                anchors.centerIn: parent
+            EmptyState {
+                anchors { left: parent.left; right: parent.right; top: parent.top }   // the first row of the agenda
                 visible: agenda.count === 0
-                text: cal.loaded ? "No events" : "Loading…"
-                color: Theme.muted
+                icon: cal.loaded ? Icons.calendarPlain : Icons.spinner
+                text: !cal.loaded ? "Loading…" : cal.error !== "" ? "No calendar" : "No events"
+                hint: cal.loaded ? cal.error : ""
             }
         }
         }
@@ -205,29 +212,29 @@ GridLayout {
         id: gridSec
         Layout.fillWidth: true
         Layout.row: cal.barBottom ? 1 : 0
-        spacing: 8
+        spacing: Theme.gapRow
 
         // ---- header -------------------------------------------------------------------------------
         RowLayout {
             Layout.fillWidth: true
-            Btn { text: "‹"; onClicked: cal.monthShift(-1) }
+            Btn { icon: true; text: Icons.chevronLeft; onClicked: cal.monthShift(-1) }
             Label {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 text: Qt.formatDate(cal.shown, "MMMM yyyy")
-                font.pixelSize: 16
+                font.pixelSize: Theme.fontLead
                 font.bold: true
             }
             Btn { text: "Today"; onClicked: { cal.shown = new Date(); cal.selected = new Date() } }
-            Btn { text: "›"; onClicked: cal.monthShift(1) }
+            Btn { icon: true; text: Icons.chevronRight; onClicked: cal.monthShift(1) }
         }
 
         // ---- month grid ------------------------------------------------------------------------------
         GridLayout {
             Layout.fillWidth: true
             columns: 7
-            rowSpacing: 2
-            columnSpacing: 2
+            rowSpacing: Theme.gapTight / 2
+            columnSpacing: Theme.gapTight / 2
 
             Repeater {
                 model: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
@@ -252,12 +259,12 @@ GridLayout {
                     readonly property var dotColors: cal.dots(day)
 
                     Layout.fillWidth: true
-                    implicitHeight: 38
+                    implicitHeight: cal.cellH
                     radius: Theme.radiusItem
-                    color: isToday ? Theme.alpha(Theme.accent, 0.32) : cellGlow.hovered ? Theme.alpha(Theme.fg, 0.10) : "transparent"
+                    color: isToday ? Theme.alpha(Theme.accent, 0.32) : cellGlow.hovered ? Theme.itemHover : "transparent"
                     border.width: isSel ? 1 : 0
                     border.color: Theme.accent
-                    Behavior on color { ColorAnimation { duration: 100 } }
+                    Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
 
                     Label {
                         anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 5 }

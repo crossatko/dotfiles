@@ -21,6 +21,20 @@ Singleton {
     function barGapOf(scr) { return barGaps[scr] ?? Theme.barGap }
     // set by shell.qml: {"DP-5": "bottom", ...}, so a popup knows which edge the bar is on
     property var bars: ({})
+    // The bar popups: name -> { source (loaded by PopupHost), width (Theme.popupW = lists and controls; wider cards
+    // name their own width) }. A chip opens one with bar.pop(name, chip); "notif" is the notification stack (Toasts),
+    // not listed. Adding a popup = the panel file + one entry here + the chip.
+    readonly property var panels: ({
+        center: { source: "CenterPanel.qml", width: Theme.popupWide },
+        net:    { source: "NetPanel.qml",    width: Theme.popupW },
+        bt:     { source: "BtPanel.qml",     width: Theme.popupW },
+        cal:    { source: "CalPanel.qml",    width: 390 },               // the month grid
+        media:  { source: "MediaPanel.qml",  width: Theme.popupW },
+        audio:  { source: "AudioPanel.qml",  width: Theme.popupW },
+        ha:     { source: "HaPanel.qml",     width: 400 },               // entity cards with controls
+        ai:     { source: "AiPanel.qml",     width: 400 },               // profile cards
+        vm:     { source: "VmPanel.qml",     width: 440 }                // VM cards with meters
+    })
 
     // the open non-PopupHost thing ("menu", "settings", "tray-...") and its screen
     property string extKind: ""

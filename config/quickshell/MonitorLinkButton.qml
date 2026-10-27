@@ -1,9 +1,9 @@
 import QtQuick
 
-// Link toggle between two neighbouring monitor cards (Settings > Bar and > Wallpaper & theme). Linked = accent chain,
-// unlinked = muted broken chain. It sits in a round notch cut into the cards (MonitorCardRow notchesOf / NotchMask),
-// above them (z), with an opaque base under its tint. Emits `toggled` only; the page decides what linking means
-// (copy the edited monitor's wallpaper / bar layout to the newly linked one).
+// Link toggle between two neighbouring monitor chips (MonitorChooser `linkable`: Settings > Bar and > Wallpaper). Linked
+// = accent chain, unlinked = muted broken chain, an opaque base under its tint. Tab focuses it, Space / Enter toggle.
+// Emits `toggled` only; the page decides what linking means (copy the edited monitor's wallpaper / bar layout to the
+// newly linked one).
 Rectangle {
     id: btn
     property bool linked: false
@@ -16,6 +16,8 @@ Rectangle {
     height: implicitHeight
     radius: height / 2
     z: 5
+    activeFocusOnTab: visible
+    Keys.onPressed: e => { if (e.key === Qt.Key_Space || e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { btn.toggled(); e.accepted = true } }
     Accessible.role: Accessible.CheckBox
     Accessible.name: tip
     Accessible.checked: linked
@@ -23,14 +25,14 @@ Rectangle {
     // this fill, under the glyph) sees one solid colour
     color: Qt.tint(Theme.surface, btn.linked ? Theme.alpha(Theme.accent, glow.hovered ? 0.34 : 0.22) : Theme.alpha(Theme.fg, glow.hovered ? 0.14 : 0.05))
     border.width: 1
-    border.color: linked ? Theme.alpha(Theme.accent, 0.85) : Theme.alpha(Theme.overlay, 0.6)
-    Behavior on color { ColorAnimation { duration: 100 } }
+    border.color: activeFocus ? Theme.accent : linked ? Theme.alpha(Theme.accent, 0.85) : Theme.alpha(Theme.overlay, 0.6)
+    Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
 
     HoverGlow { id: glow; area: hoverArea; radius: btn.radius }
     Icon {
         anchors.centerIn: parent
-        text: btn.linked ? "" : ""            // link / link-slash
-        font.pixelSize: 12
+        text: btn.linked ? Icons.link : Icons.linkOff            // link / link-slash
+        font.pixelSize: Theme.iconSm
         color: btn.linked ? Theme.accent : Theme.muted
     }
     MouseArea {

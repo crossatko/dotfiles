@@ -11,20 +11,22 @@ import "launcher/js/AirPods.js" as Pods
 // (`AirPods.daemon` false) the block is just the header and a setup notice, since there is no state to show or change.
 ColumnLayout {
     id: ap
-    spacing: 10
+    spacing: Theme.padSm
 
+    readonly property int caseRefreshMs: 45000   // case level refresh while on screen
+    readonly property int clockTickMs: 30000     // age of a stale reading is recomputed this often
     readonly property bool live: AirPods.daemon && AirPods.connected
 
     // case level on demand: one refresh when the section comes on screen, then every 45 s while it stays there
     property real now: Date.now() / 1000
     Timer {
         running: ap.visible && ap.live && AirPods.canRefreshCase
-        interval: 45000
+        interval: ap.caseRefreshMs
         repeat: true
         triggeredOnStart: true
         onTriggered: AirPods.refreshCase()
     }
-    Timer { running: ap.visible && ap.live; interval: 30000; repeat: true; triggeredOnStart: true; onTriggered: ap.now = Date.now() / 1000 }
+    Timer { running: ap.visible && ap.live; interval: ap.clockTickMs; repeat: true; triggeredOnStart: true; onTriggered: ap.now = Date.now() / 1000 }
 
     PanelHeader { title: AirPods.title }    // same title style as the popup's own ("Bluetooth" below)
 
@@ -40,7 +42,6 @@ ColumnLayout {
             Layout.fillWidth: true
             text: "systemctl --user enable --now librepods"
             color: Theme.fgDim
-            font.family: "monospace"
             font.pixelSize: Theme.fontCaption
             wrapMode: Text.WrapAnywhere
         }
@@ -50,7 +51,6 @@ ColumnLayout {
     RowLayout {
         visible: ap.live
         Layout.fillWidth: true
-        Layout.topMargin: 2
         spacing: 0
         Item { Layout.fillWidth: true }
         BudRing { visible: !AirPods.headset; part: "left"; name: "Left"; level: AirPods.left.level; charging: AirPods.left.charging; inEar: AirPods.left.inEar }
@@ -80,8 +80,7 @@ ColumnLayout {
     // adaptive level: icon column like the volume rows above, so the sliders line up
     LevelRow {
         visible: ap.live && AirPods.mode === 3
-        icon: "\ue75d"            // ear-waveform
-        iconColor: Theme.fgDim
+        icon: Icons.earWaveform            // ear-waveform
         value: AirPods.adaptive / 100
         valueText: AirPods.adaptive + "%"
         onMoved: v => AirPods.setAdaptive(v * 100)
@@ -91,7 +90,7 @@ ColumnLayout {
     RowLayout {
         visible: ap.live
         Layout.fillWidth: true
-        spacing: 10
+        spacing: Theme.padSm
         Label { text: "Auto-pause"; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
         Item {
             id: earBox

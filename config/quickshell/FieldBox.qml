@@ -15,7 +15,7 @@ Rectangle {
     property int pixelSize: Theme.fontSize
     property alias horizontalAlignment: field.horizontalAlignment
     property real outerRadius: Theme.radius      // radius of whatever the field sits in (see Btn)
-    property real inset: 12
+    property real inset: Theme.pad
     property alias inputMethodHints: field.inputMethodHints
     property alias maximumLength: field.maximumLength
     readonly property alias input: field
@@ -24,15 +24,15 @@ Rectangle {
     signal cancelled()
     function focusField() { field.forceActiveFocus(); field.selectAll() }
 
-    implicitHeight: flat ? pixelSize + 20 : 30
+    implicitHeight: flat ? pixelSize + 20 : Theme.controlH
     implicitWidth: 80
     radius: flat ? 0 : Math.min(Theme.inner(outerRadius, inset), Math.floor(height / 3))
-    color: flat ? "transparent" : Theme.alpha(Theme.bg, field.activeFocus ? 0.7 : 0.45)
+    color: flat ? Theme.alpha(Theme.bg, 0) : Theme.alpha(Theme.bg, field.activeFocus ? 0.7 : 0.45)
     border.width: flat ? 0 : 1
-    border.color: error ? Theme.alpha(Theme.red, 0.9) : field.activeFocus ? Theme.alpha(Theme.accent, 0.9) : Theme.alpha(Theme.overlay, 0.6)
-    opacity: enabled ? 1 : 0.4
-    Behavior on border.color { ColorAnimation { duration: 120 } }
-    Behavior on opacity { NumberAnimation { duration: 120 } }
+    border.color: error ? Theme.dangerEdge : field.activeFocus ? Theme.accentEdge : Theme.edge
+    opacity: enabled ? 1 : Theme.disabledOpacity
+    Behavior on border.color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
+    Behavior on opacity { NumberAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
 
     // flat: underline (hairline at rest, 2 px accent / red while focused or wrong)
     Rectangle {
@@ -40,13 +40,13 @@ Rectangle {
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
         height: field.activeFocus || box.error ? 2 : 1
         radius: height / 2
-        color: box.error ? Theme.alpha(Theme.red, 0.9) : field.activeFocus ? Theme.alpha(Theme.accent, 0.9) : Theme.alpha(Theme.overlay, 0.7)
-        Behavior on color { ColorAnimation { duration: 120 } }
+        color: box.error ? Theme.dangerEdge : field.activeFocus ? Theme.accentEdge : Theme.edge
+        Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
     }
 
     TextInput {
         id: field
-        anchors { fill: parent; leftMargin: box.flat ? 2 : 10; rightMargin: box.flat ? 2 : 10; bottomMargin: box.flat ? 2 : 0 }
+        anchors { fill: parent; leftMargin: box.flat ? 2 : Theme.padSm; rightMargin: box.flat ? 2 : Theme.padSm; bottomMargin: box.flat ? 2 : 0 }
         verticalAlignment: TextInput.AlignVCenter
         color: Theme.fg
         selectionColor: Theme.accent

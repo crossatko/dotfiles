@@ -257,19 +257,25 @@ Item {
                 }
             }
         }
+        // the date in the UI font: with `adapt` its ink follows the wallpaper under the clock like the bar's (BarInk sets:
+        // dark text with a pale halo on a bright wallpaper, light text with a dark halo on a dark one), else the theme's
         Label {
+            id: date
+            readonly property bool onBright: v.airyAt(0, v.boxW) > 0.5
+            readonly property var ink: !DeskClockPrefs.adapt ? null : onBright ? Theme.barInkDark : Theme.barInkLight
             anchors.horizontalCenter: parent.horizontalCenter
             visible: DeskClockPrefs.showDate
             opacity: reveal.dateShown
             text: face.dateText
             font.pixelSize: Math.max(Theme.fontTitle, Math.round(v.pixelSize * 0.09))
             font.weight: Font.Medium
-            color: Theme.fg
+            color: ink ? ink.fg : Theme.fg
+            Behavior on color { ColorAnimation { duration: Theme.popupMs(Motion.baseMs * 3); easing.type: Easing.InOutSine } }
             layer.enabled: true
             // 2x on a scale-1 output (smooth halo, no colour fringes from the text in the layer), 1x on scaled outputs
             layer.smooth: true
             layer.textureSize: Screen.devicePixelRatio > 1 ? Qt.size(0, 0) : Qt.size(width * 2, height * 2)
-            layer.effect: MultiEffect { shadowEnabled: true; shadowBlur: 0.8; shadowVerticalOffset: 1; shadowHorizontalOffset: 0; shadowColor: Theme.alpha(Theme.bg, 0.9) }
+            layer.effect: MultiEffect { shadowEnabled: true; shadowBlur: 0.8; shadowVerticalOffset: 1; shadowHorizontalOffset: 0; shadowColor: Theme.alpha(date.ink ? date.ink.bg : Theme.bg, 0.9) }
         }
     }
 }

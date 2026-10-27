@@ -16,18 +16,26 @@ ColumnLayout {
 
     // title at its natural width with the badges right after it; when space is short it shrinks (down to 24 px)
     // and elides
+    readonly property int titleMin: 24             // a title shrinks to this before the badges give way
     RowLayout {
         Layout.fillWidth: true
-        spacing: 6
+        spacing: Theme.controlGap
+        // the title's natural width comes from metrics, not implicitWidth: once elided, implicitWidth feeds the
+        // shortened layout back (short titles kept eliding); fillWidth + the same maximum lets a long title take the
+        // free width and elide there instead of pushing the trailing items (state mark, value) out of the row
+        TextMetrics { id: titleMetrics; font: titleLabel.font; text: rt.title }
         Label {
+            id: titleLabel
             text: rt.title
             color: rt.titleColor
             font.bold: rt.titleBold
             elide: Text.ElideRight
-            Layout.preferredWidth: implicitWidth
-            Layout.minimumWidth: 24
+            Layout.fillWidth: true
+            Layout.preferredWidth: Math.ceil(titleMetrics.advanceWidth) + 1
+            Layout.maximumWidth: Math.ceil(titleMetrics.advanceWidth) + 1
+            Layout.minimumWidth: rt.titleMin
         }
-        RowLayout { id: line; spacing: 6 }
+        RowLayout { id: line; spacing: Theme.controlGap }
         Item { Layout.fillWidth: true }
     }
     Label {

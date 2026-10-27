@@ -17,6 +17,9 @@ Item {
     // qmllint disable missing-property
     property var ink: parent?.parent?.ink ?? Theme   // colour set of the enclosing Chip (see BarLabel)
     // qmllint enable missing-property
+    // colour carries state (DESIGN.md "Colour"): the chip sets `ink.accent` while its feature is connected / on / live,
+    // `ink.muted` while off or missing, a semantic red / green where it means something; plain `ink.fg` (the default)
+    // only for always-present informational items
     property color color: ink.fg
     property string family: Theme.iconFont
     property string styleName: "Regular"
