@@ -12,6 +12,9 @@ import Quickshell.Io
 // end, where the desktop player stops too (end=). Only a station that does not follow the parked one (a burst missed
 // while the shell was not running, a new bake) seeks once, at that burst's start. `ready` once a real frame arrived.
 // Cost: idle none (inotify watch); a burst decodes the clip (hardware decoding where the FFmpeg backend has it).
+// A LOOPING video wallpaper (mode "loop") is DeskClockLoop's (loaded only then): the same clip played continuously,
+// kept in step with the desktop player over its mpv socket (decodes while the clock is shown: ~3 % of a core per
+// 1440p HEVC copy, VA-API). Image wallpapers: nothing loaded, no cost.
 Item {
     id: v
     property string connector: ""
@@ -20,20 +23,23 @@ Item {
     property bool playing: false
     property real endMs: 0
     property bool hadFrame: false
-    readonly property bool ready: info !== null && hadFrame
+    property var loopInfo: null          // { mode: "loop", socket, pid, file }
+    readonly property var loopCopy: loop.item          // DeskClockLoop (loaded by url: not a module type)
+    readonly property bool ready: (info !== null && hadFrame) || (loopCopy !== null && loopCopy.ready)
     readonly property var bursts: info ? info.bursts : []
     readonly property int count: Math.max(0, bursts.length - 1)
-    readonly property alias output: out
+    readonly property Item output: loopCopy !== null && loopCopy.ready ? loopCopy.output : out
 
     function probe() { if (connector !== "") Qt.callLater(() => { probeProc.running = true }) }
     onConnectorChanged: probe()
     Process {
         id: probeProc
-        command: ["python3", "-I", "-S", Quickshell.shellDir + "/bin/lock-video", v.connector]
+        command: ["python3", "-I", "-S", Quickshell.shellDir + "/bin/lock-video", "--desk", v.connector]
         stdout: StdioCollector {
             onStreamFinished: {
                 let o = null
                 try { o = JSON.parse(text) } catch (e) { o = null }
+                v.loopInfo = o && o.mode === "loop" && o.socket && o.file ? o : null
                 if (!o || !o.file || !o.bursts || o.bursts.length < 2) { v.info = null; v.hadFrame = false; return }
                 const same = v.info && v.info.file === o.file
                 v.idx = o.idx
@@ -109,6 +115,21 @@ Item {
     Connections {
         target: out.videoSink
         function onVideoFrameChanged() { if (!v.hadFrame && v.info !== null) v.hadFrame = true }
+    }
+    Loader {
+        id: loop
+        anchors.fill: parent
+        active: v.loopInfo !== null
+        source: "DeskClockLoop.qml"
+        onLoaded: v.feedLoop()
+    }
+    onLoopInfoChanged: feedLoop()
+    function feedLoop() {
+        if (!loopCopy || !loopInfo) return
+        loopCopy.connector = connector
+        loopCopy.probeFile = loopInfo.file
+        loopCopy.pid = loopInfo.pid
+        loopCopy.socketPath = loopInfo.socket
     }
     VideoOutput {
         id: out

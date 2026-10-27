@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Wallpaper brightness under a screen rectangle, for the desktop clock's wallpaper-aware glass (DeskClockView.qml).
+
+  region-luma <image> <screenW> <screenH> <x> <y> <w> <h> [video [at]]
+
+Prints one JSON line {"cols": [mean, ...]}: COLS columns across the rectangle (screen px) of the wallpaper as the desktop
+shows it (cover-cropped, centred, like hyprpaper's fit_mode = cover; mpvpaper panscan=1.0 is the same crop), per column the
+mean linear relative luminance 0..1 of its pixels. `video` (optional): FRAMES evenly spaced clip frames are averaged in with
+the still (the clip's overall look, never one frame), as bin/bar-luma does for the bar strip. `at` (seconds): only that
+one frame of the video instead (a play-once wallpaper's held frame: what the desktop shows between bursts). Runs once per wallpaper /
+geometry change (the shell caches it); exit 1 and no output when the image cannot be read. Needs ImageMagick (magick);
+ffmpeg / ffprobe only for `video`."""
+import json
+import subprocess
+import sys
+
+COLS = 16
+SW = 640          # working width of the whole screen: plenty for a clock-sized mean
+FRAMES = 5
+
+
+def lut():
+    f = lambda c: c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    return [f(i / 255) for i in range(256)]
+
+
+def still_pixels(path, sw, sh, crop):
+    return subprocess.run(["magick", f"{path}[0]", "-auto-orient", "-background", "black", "-alpha", "remove",
+                           "-colorspace", "sRGB", "-type", "TrueColor", "-resize", f"{sw}x{sh}^", "-gravity", "center",
+                           "-extent", f"{sw}x{sh}", "+gravity", "+repage", "-crop", "%dx%d+%d+%d" % crop, "+repage",
+                           "-depth", "8", "rgb:-"], check=True, capture_output=True, timeout=30).stdout
+
+
+def video_frames(path, sw, sh, crop, at=None):
+    if at is None:
+        try:
+            d = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+                                     check=True, capture_output=True, timeout=15).stdout.decode().strip())
+        except (subprocess.SubprocessError, OSError, ValueError):
+            return []
+        times = [d * (i + 0.5) / FRAMES for i in range(FRAMES)]
+    else:
+        times = [at]
+    cw, ch, cx, cy = crop
+    res = []
+    for t in times:
+        try:
+            res.append(subprocess.run(["ffmpeg", "-v", "error", "-ss", "%.3f" % t, "-i", path,
+                                       "-frames:v", "1", "-vf", f"scale={sw}:{sh}:force_original_aspect_ratio=increase,"
+                                       f"crop={sw}:{sh},crop={cw}:{ch}:{cx}:{cy}", "-pix_fmt", "rgb24", "-f", "rawvideo", "-"],
+                                      check=True, capture_output=True, timeout=20).stdout)
+        except (subprocess.SubprocessError, OSError):
+            continue
+    return res
+
+
+def main(argv):
+    if len(argv) < 8:
+        return 2
+    try:
+        w, h, x, y, rw, rh = (float(a) for a in argv[2:8])
+    except ValueError:
+        return 2
+    if w < 16 or h < 16 or rw < 1 or rh < 1:
+        return 2
+    sh = max(2, round(SW * h / w))
+    k = SW / w
+    cx = max(0, min(SW - 1, int(x * k)))
+    cy = max(0, min(sh - 1, int(y * k)))
+    cw = max(COLS, min(SW - cx, round(rw * k)))
+    chh = max(1, min(sh - cy, round(rh * k)))
+    if cx + cw > SW:
+        cx = SW - cw
+    crop = (cw, chh, cx, cy)
+    raws = []
+    at = None
+    if len(argv) > 9 and argv[9]:
+        try:
+            at = max(0.0, float(argv[9]))
+        except ValueError:
+            return 2
+    if at is None:
+        try:
+            raws.append(still_pixels(argv[1], SW, sh, crop))
+        except (subprocess.SubprocessError, OSError):
+            pass
+    if len(argv) > 8 and argv[8]:
+        raws += video_frames(argv[8], SW, sh, crop, at)
+    raws = [r for r in raws if len(r) >= cw * chh * 3]
+    if not raws:
+        return 1
+    t = lut()
+    cols = []
+    for c in range(COLS):
+        x0, x1 = c * cw // COLS, (c + 1) * cw // COLS
+        s, n = 0.0, 0
+        for raw in raws:
+            for r in range(chh):
+                base = (r * cw) * 3
+                for xx in range(x0, x1):
+                    i = base + xx * 3
+                    s += 0.2126 * t[raw[i]] + 0.7152 * t[raw[i + 1]] + 0.0722 * t[raw[i + 2]]
+                    n += 1
+        cols.append(round(s / max(1, n), 4))
+    print(json.dumps({"cols": cols}, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

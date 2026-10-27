@@ -136,7 +136,8 @@ config/aerospace karabiner swiftbar  macOS only
   documented in its header). New bar widget: registry entry in `BarWidgets.qml`. Bar chips: never set `implicitWidth`, never `BarLabel` with the icon font (use
   `BarIcon`).
 - **Lock screen** (replaces hyprlock; `Lock.qml` service + `LockView/LockClock/LockField/LockDots/LockVideo/LockReveal.qml`, glass in
-  `GlassShape/GlassText/GlassBead.qml`, `qs ipc call lock lock|locked|secure|status`): an ext-session-lock inside the main shell. Callers go
+  `GlassShape/GlassText/GlassBead.qml`, `qs ipc call lock lock|locked|secure|status`; `status` lists per screen the still's file name and, while locked, the clip, `videoReady`
+  and what the surface shows: still / video / none): an ext-session-lock inside the main shell. Callers go
   through `bin/lock-now` (hypridle `lock_cmd`, SUPER+SHIFT+L; falls back to hyprlock when the shell or the PAM service is missing), hypridle
   `before_sleep_cmd` (workstation) = `bin/lock-wait` (blocks until `secure`, 4 s cap). Password = PAM service `quickshell-lock`
   (`system/etc/pam.d/`, installed only by `install.sh --system`; until then the lock refuses with `missing-pam`). A crashed shell leaves
@@ -151,7 +152,8 @@ config/aerospace karabiner swiftbar  macOS only
   checks, red + shake + clear when wrong). Glass = `shaders/glassfield.frag` (once per mask, RGBA16F: coverage, smooth multi-radius blurred
   height clipped to the glyph, shadow blur) + `glasstext.frag` (normals from that height, refraction of the SHARP scene, fresnel
   reflection, soft highlights, shadow); rebuild with `qsb --qt6`. Masks render 2x (mipmapped) on scale-1 outputs. Driven by Settings > Glass
-  (`GlassTuneCtl.effective`) but mapped: frost/clarity ignored, tint/darkening faint. No compositor glass on a lock surface; without
+  (`GlassTuneCtl.effective`) but mapped: frost/clarity ignored, tint/darkening faint, aberration at half scale (0 = none, else >= 0.01:
+  the full value fringed every stroke on high-contrast wallpapers). No compositor glass on a lock surface; without
   `Theme.glass`: `GlassTextFlat` + flat dots. All motion goes through `Theme.popupMs` (animation speed; off = instant).
   Lock/unlock transition: right before the lock is taken, `grim -t ppm` snapshots every output into `$XDG_RUNTIME_DIR/qs-lock` (0700,
   deleted on unlock; skipped on a stranded takeover; ~15 ms, 120 ms cap, a late one is dropped). The snapshot covers the surface from its first frame, a glass ring
@@ -159,9 +161,13 @@ config/aerospace karabiner swiftbar  macOS only
   `locked = false` (`Theme.lockRevealMs`). No snapshot = instant. Caveat: the desktop may have changed while locked (e.g. the video
   wallpaper advanced), so the last transition frame can differ from the real desktop.
   Settings > Lock screen (`SettingsLock.qml`, rows `PrefSlider`/`PrefToggle`) edits `LockPrefs` (lock.json next to animations.json,
-  same storage pattern as Motion; `qs ipc call lockprefs ...`): dim (`Theme.lockDim`, blurred backdrop and what the glass refracts), blur,
-  clock/dot size, date, 24h, clock reveal, snapshot, unlock ring, video bursts; defaults = the stock look. Its preview (`LockPreview`) is
-  a real `LockView` with `preview: true` (no input/video/lock) at a virtual 1920x1080, 16:9. Per-monitor stills: `LockWallpapers`. Backdrop chain is
+  same storage pattern as Motion; `qs ipc call lockprefs ...`): dim (`Theme.lockDim`, blurred backdrop and what the glass refracts; MULTIPLIES by 1 - dim: a black veil
+  over the blur and `glasstext.frag` `seen()`. MultiEffect `brightness` subtracts and turned a dark blurred video frame fully black on one
+  monitor), blur,
+  clock/dot size, date, 24h, seconds, morph time, clock screens (`hidden` map by `Appearance.monitorKey`, same scheme as the desktop
+  clock; `ipc call lockprefs hideClockOn|showClockOn <key>`; off = no clock/date/playback card there, the dots keep their place), playback
+  card, clock reveal, snapshot, unlock ring, video bursts; defaults = the stock look. Its preview (`LockPreview`) is
+  a real `LockView` with `preview: true` (no input/video/lock, sample playback card) at a virtual 1920x1080, 16:9. Per-monitor stills: `LockWallpapers`. Backdrop chain is
   `bleed` px larger than the screen (no dark blur edges); the video goes in as its own layer (a ShaderEffectSource of the
   VideoOutput inside another layer stays empty). Play-once video wallpapers: `LockVideo` plays the same baked clip (QtMultimedia, paused =
   no decode, ~0 % CPU; `ready` only after a real decoded frame, else the still stays; re-parks if the backend stops a player on its own, seen on a
@@ -172,6 +178,17 @@ config/aerospace karabiner swiftbar  macOS only
   the desktop is really on. Image/loop wallpapers show the still. Test hooks: `QS_LOCK_PAM_DIR`,
   `QS_LOCK_PAM_SERVICE`, `QS_LOCK_WALLPAPER`, `QS_LOCK_VIDEO`, `QS_LOCK_ARGS`, `QS_LOCK_CLOCK` (fixed clock text; several separated by spaces cycle every 3 s), `QS_WALLPAPERS_FILE`. Revert to hyprlock: point
   the two `lock_cmd`s and the bind back at `hyprlock` (`hyprlock.conf` is untouched).
+  Playback card (`LockMedia`, under the dots, only while an MPRIS player exists): the media panel's parts `MediaPick` / `MediaArt` /
+  `MediaSeek` / `MediaTransport` (shared with `MediaPanel`); glass slab = `GlassShape` over a rounded-rect mask, flat card without
+  `Theme.glass`. Pointer clicks work on the ext-session-lock surface and do not take the password field's focus (nested test: virtual
+  pointer + mpv/mpris.so on the nested shell's bus; play/pause/next/previous reached the player, typing went on).
+- **Glass clocks: time, seconds, morph** (`ClockFace.qml`, used by LockClock and DeskClockView): text HH:mm[:ss] (12 h: h:mm[:ss]),
+  `morphMs` = popup motion of `Motion.baseMs * 3` x the page's morph time (0 = plain swap), capped at 450 ms with seconds; `fitSize`
+  shrinks the digits only if the row would not fit (lock: screen - 2 edgeGap; desktop: screen - 2 margins, posX/posY unchanged). Every
+  character is its own GlassText; GlassShape keeps one field layer per mask and `flip` only swaps which one the optics read, so a tick
+  re-renders just the changed glyph's mask + field (measured with `qt.scenegraph.time.renderer`: 3 layer renders per tick, 6 on a tens
+  change, ~31 window frames for the 450 ms morph at the 60 Hz animation driver). Desktop clock with seconds, nested 2560x1440: shell
+  ~1.1 % of a core + ~2.2 ms/s GPU (morph 0: ~0.4 % / ~0.8 ms/s); seconds off = idle as before (~0.2 %, ~0.05 ms/s).
 - **Shell glass** (all optics from Settings > Glass, `GlassTuneCtl.effective`): `GlassLens.qml` = the shared lens (`shaders/sliderlens.frag`,
   refracts the shell's own card, same on stock), only alive while `amount` > 0 (Slider handle while dragged, Toggle knob while pressed /
   sliding after a click, OSD level while it changes; `qs ipc call osd level volume|brightness <0-100>` shows the pill for tests).
@@ -189,7 +206,55 @@ config/aerospace karabiner swiftbar  macOS only
   held frame (paused, no decode), the station file write (burst start, winddown.lua) plays the same burst from the same frame, a timer
   re-aimed by each position report pauses at the burst end (measured in the nested session against mpv time-pos: within ~1 frame during
   the burst, end within 0-2 frames; ~4 % CPU of one core while a burst plays, 0 at rest). Nothing is drawn behind the lettering.
+  Looping video wallpaper (theme.py mode "loop", mpvpaper `loop-file=inf`): `bin/lock-video --desk <conn>` -> `{"mode":"loop",
+  socket, pid, file}` (`burst` = the play-once record + mode, `still` otherwise; without `--desk` the lock's output is unchanged, so
+  the lock keeps the still) and DeskClockVideo loads `DeskClockLoop.qml`: the same clip looping in QtMultimedia (VA-API), synced over
+  the player's mpv socket (observe pause/path/duration/fps, `time-pos` every 2.5 s and after each wrap). Within half a frame: nothing;
+  <=120 ms: playbackRate +-3 % or a hold (pause exactly the time it is early); beyond: a CUE = paused seek 1 s ahead, play when mpv
+  gets there (a seek while playing stalls 0.35-1.4 s and lands 0-0.45 s late at random). Wrap: the copy holds its last frame as long
+  as mpv's loop seek (~30-50 ms, learned). Decodes only while shown and not fullscreen-covered / DPMS off (monitors re-read every 3 s:
+  no event) / mpv paused or not advancing; locked = hidden = paused. Socket retry 6x (theme.py writes the state file before mpv opens
+  its socket); the source is set only while the socket answers (a broken file the player rejects is not looped: the FFmpeg backend
+  spins and floods stderr on one). Nested, 2560x1440, frame-matched screenshots vs the clip: 60 fps clip 37/45 same frame, rest +-1;
+  30 fps -1..+1, across 3 wraps; resume after pause/cover/DPMS within ~1 frame after 1-2 s. Cost: +~3 % of one core per copy (shell
+  6.0 % vs 0.1-0.2 % for two copies), mpvpaper unchanged, GPU busy within noise. `QS_DESKCLOCK_SYNC_LOG=1` logs every sample.
   `DeskClockPreview` = 16:9 Settings preview (still only). Without `Theme.glass` the lettering is GlassTextFlat (as the lock).
+  Reveal = the lock clock's, shared: `GlassReveal` (timing, date fade) + `GlassGlyph` (one forming GlassText), used by LockClock and
+  DeskClockView; the desktop clock forms on window creation (shell start, enabled, monitor added) and after an unlock (`Lock.unlocked`
+  signal: the `locked` binding did not report the unlock), never on minute changes or bursts. Lock: the clock stays on screen and
+  in the desktop snapshot; at the lock request `DeskClockView.grabClean` grabs its rect WITHOUT the clock (the backdrop it refracts;
+  still / held video within ~0.5/255, a loop video ~2-3/255 at the rect edge: a frame or two apart) and `LockClockPatch` fades that
+  over the snapshot once the lock is up (`Theme.popupMs(Motion.baseMs)`) and keeps it through the unlock ring. The grab must finish
+  before the lock is up (the compositor stops the clock window's frames; a grab after the snapshot missed it under load = no patch
+  = no ring). Once secure the clock windows are UNMAPPED: content opacity 0 under the lock was never presented while the clock
+  redrew every frame (video), so the old clock flashed after the unlock. A clock covered by a window (6 px margin) / top or
+  overlay layer (`bin/lock-clock-cover`, hyprctl JSON, run alongside the hold; it gets `DeskClockView.ink` = what the clock
+  really paints: glyph box + 0.2 x pixelSize left/right, max(28 px, 0.06 x pixelSize) top/bottom, measured; NOT the layer window,
+  whose GlassText pads are mostly empty; the clean rect is that same `ink` rect) or any clock while a video was held mid-burst is
+  hidden BEFORE the snapshot instead (old snap; `Lock.snapHideS` 0.035 s). Hyprland's `no_screen_share` layer rule cannot exclude
+  the clock from grim: it paints a black box. Nested: snapshot step ~38 ms (was ~55), lock -> secure ~135 ms. Caveat: the clock's first frame after an unlock comes ~0.3-0.4 s after the ring ends (nested measurement); starting the reveal
+  earlier made the digits pop in half-formed. Wallpaper-aware glass (`adapt`, `adaptStrength`, Settings > Desktop clock):
+  `bin/region-luma` samples the wallpaper under the clock box (16 columns, cover crop; a play-once video by its held frame,
+  other videos still + clip average), each digit gets `airy` 0..1 (smoothstep of mean^(1/2.2) over 0.42-0.72 x strength) ->
+  `glasstext.frag` `airy`: tint -> faint cool white, darkening / steep band / dark outline fade, brighter rim / highlights /
+  body, stronger wider shadow; airy 0 = exactly the Settings > Glass look (the lock never sets it). Shader changes need a shell restart. `QS_DESKCLOCK_CLOCK` = test clock text
+  (as `QS_LOCK_CLOCK`). GlassText morph caveat: its two mask texts are set, not bound to `text` (a binding changed both masks at once:
+  no morph, the digit just switched), and a text change bumps `GlassShape.refresh` / `refresh2` so that mask's shape field re-renders.
+  Desktop clock page: seconds, morph time ("Show morph" / a changed slider steps the preview a minute ahead and back), monitors
+  (`MonitorToggles`, shared with the lock page). Glyphs created after the reveal (character count changed) start formed.
+- **Bar text contrast** (Settings > Bar > Text contrast; bars.json per bar `contrast` auto|dark|light|off, `contrastSens` 0..100, `hoverFill` 0..100): while
+  the bar has no backdrop (flush + "transparent when flush", `Bar.inkFlat`) its text sits on the wallpaper, so each section (left / centre / right)
+  gets a `BarInk.qml` colour set, whatever the theme mode: dark text on a bright wallpaper, light on a dark one (`Theme.barInkDark/barInkLight` = the
+  palette's hues clamped in lightness), chips are fully transparent at rest (no pill, no outline; contrast comes from the ink only), the hovered one gets a soft wash (grey-blue 0.26 x `hoverFill` behind dark text, white 0.32 x behind light text; default 35 % = ~9 / ~11 %), active
+  chips keep their accent fill; with a backdrop (glass look unchanged) the palette as before (`Theme.inkOn`, theme.py `wall_ink`). The section Rows in `Bar.qml` hand it down as `barInk`; `Chip` finds it, `BarIcon` /
+  `BarLabel` read `ink` of their chip (`ink.accent`, never `bar.ink`). Sampling = `BarContrast.qml` + `bin/bar-luma` (ImageMagick; python3 stdlib):
+  64 columns {mean, darkest/brightest tenth} of the wallpaper strip under the bar, cover-cropped like hyprpaper, from `LockWallpapers.stillFor` (a video
+  wallpaper: the still plus 5 clip frames via ffmpeg, ~0.2-0.8 s once), cached per (wallpaper, video, screen size, bar px, edge); runs only when that key
+  changes (wallpapers.json / palette.json, size, bar height), 0 cost at rest (idle CPU unchanged, measured). Verdict: contrast of each ink over the
+  section's columns, 15 % hysteresis, `Switch point` biases it; colours / fill animate with `Theme.popupMs(1.5 x base)`. Test hooks: `qs ipc call
+  barcontrast status|refresh`, `QS_BAR_LUMA`, `QS_WALLPAPERS_FILE`; helper tests `bin/tests/test_bar_luma.py`. New types: restart the shell. Caveats: a clip
+  that swings from very dark to very bright cannot be read in both states (decided on the clip's mean/extremes); neighbouring sections on a wallpaper right at
+  the threshold can pick different inks; popups / tray menus keep the theme.
 - `Theme.edgeGap` is NOT the user's `edgeGap` key (that is `Theme.gapOut`).
 - Appearance (`appearance.json`) is written only by `Appearance.qml`; Hyprland side is `hypr/hyprland/managed.lua` (loaded last via `pcall(require)`, no
   hand-written settings there). Adding keys: deploy theme files, then Hyprland files, then Quickshell files (every intermediate state must load). Animation base

@@ -7,8 +7,9 @@
 // chromatic split), a broad soft highlight along each stroke where it faces the light plus a weaker back reflection,
 // fresnel towards the rim, an inner glow, a darker band where the glass is steep, and behind it a soft shadow with a
 // faint caustic; `glow` fills it with a state colour. Driven by Settings > Glass (GlassTuneCtl.effective), mapped for
-// small glass: tint / darkening only tint the body faintly, aberration and the light have floors, and the body is kept
-// a little brighter than dark surroundings, so it never vanishes or goes black. Shell sRGB pixels, sizes in item px.
+// small glass: tint / darkening only tint the body faintly, the light has a floor, aberration follows the setting at half
+// scale (a hair of split when it is low, none at 0), and the body is kept a little brighter than dark
+// surroundings, so it never vanishes or goes black. Shell sRGB pixels, sizes in item px.
 // Build: /usr/lib/qt6/bin/qsb --qt6 -o glasstext.frag.qsb glasstext.frag
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
@@ -34,7 +35,10 @@ layout(std140, binding = 0) uniform buf {
     float sharpInset;   // px the sharp backdrop extends past the blurred one on every side
     vec4 glow;          // rgb + strength: a coloured light inside the glass (state feedback, e.g. an error)
     float morph;        // 0 = `field`, 1 = `field2`: the glass flows from one shape to the other
-    float dim;          // subtracted from the sharp scene, as the blurred backdrop's MultiEffect brightness (Theme.lockDim)
+    float dim;          // darkens the sharp scene by (1 - dim), as the blurred backdrop is (LockView, Theme.lockDim)
+    float airy;         // 0 = as tuned (dark surroundings), 1 = light, clear glass for a bright backdrop (desktop clock):
+                        // tint -> faint cool white, darkening / steep band / dark outline fade, brighter rim, highlights and
+                        // body, a stronger and wider contact shadow. 0 = exactly the look without it (the lock).
 };
 layout(binding = 1) uniform sampler2D backdrop;   // blurred
 layout(binding = 2) uniform sampler2D sharp;      // unblurred
@@ -44,7 +48,7 @@ layout(binding = 4) uniform sampler2D field2;     // the shape it morphs into (=
 vec4 over(vec4 top, vec4 bottom) { return top + bottom * (1.0 - top.a); }
 vec2 buv(vec2 p) { return clamp((origin + p) / backdropSize, vec2(0.0), vec2(1.0)); }
 vec2 suv(vec2 p) { return clamp((origin + p + sharpInset) / (backdropSize + 2.0 * sharpInset), vec2(0.0), vec2(1.0)); }
-vec3 seen(vec2 p) { return max(texture(sharp, suv(p)).rgb - dim, 0.0); }   // clear glass: the unblurred scene (dimmed like the backdrop), only bent
+vec3 seen(vec2 p) { return texture(sharp, suv(p)).rgb * (1.0 - dim); }   // clear glass: the unblurred scene (dimmed like the backdrop), only bent
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 // the (morphed) field at uv: coverage from an interpolated implicit shape, anti-aliased by its screen derivative (aa),
 // height clipped to it, wide blur. The implicit is the crisp outline field (a) at the ends of a morph and, towards the
@@ -84,10 +88,10 @@ void main() {
     // behind the glass, away from the light: a soft shadow, and a faint caustic (light focused by the tubes, in the
     // colour of what they refract) a little further out
     vec2 away = -L * radius;
-    float sh = fieldAt(uv - away * 0.35 * px, aaw).b;
+    float sh = fieldAt(uv - away * (0.35 + 0.25 * airy) * px, aaw).b;
     float ca = fieldAt(uv - away * 0.9 * px, aaw).b;
     float outside = 1.0 - cov;
-    float shadowA = shade * mix(0.5, 0.4, lightBg) * smoothstep(0.0, 0.8, sh) * outside;
+    float shadowA = shade * mix(0.5, 0.4, lightBg) * (1.0 + 0.8 * airy) * smoothstep(0.0, 0.8, sh) * outside;
     float caustic = 0.12 * smoothstep(0.15, 0.6, ca) * (1.0 - smoothstep(0.1, 0.7, sh)) * outside;
     vec3 causticC = clamp(around * 2.2 + 0.05, 0.0, 1.0);
     vec4 behind = over(vec4(causticC * caustic, caustic), vec4(0.0, 0.0, 0.0, shadowA));
@@ -110,19 +114,25 @@ void main() {
     vec2 disp = N.xy * refraction;
     vec2 sp = p + disp;
     vec3 col = seen(sp);
-    float ab = max(aberration, 0.08) * 2.0;
-    col.r = seen(sp + disp * ab).r;
-    col.b = seen(sp - disp * ab).b;
+    // chromatic split: half the setting (0..0.25; this glass bends far more than a card for its size, so the full value
+    // fringed every stroke), at least a hair so the rim is not razor-flat; 0 = none
+    float ab = aberration > 0.0 ? max(aberration * 0.5, 0.01) : 0.0;
+    if (ab > 0.0) {
+        col.r = seen(sp + disp * ab).r;
+        col.b = seen(sp - disp * ab).b;
+    }
 
     // material, light-handed: saturation, a thin tint (denser where the glass is steep), a little darkening
     col = mix(vec3(luma(col)), col, clamp(saturation, 0.0, 3.0));
-    float transmission = exp(-tint.a * 0.15 * mix(0.6, 1.0, t));
-    col = col * transmission + tint.rgb * (1.0 - transmission);
-    col *= 1.0 - 0.12 * clamp(darkening, 0.0, 1.0);
+    vec4 tn = mix(tint, vec4(0.96, 0.98, 1.0, tint.a * 0.35), airy);
+    float transmission = exp(-tn.a * 0.15 * mix(0.6, 1.0, t));
+    col = col * transmission + tn.rgb * (1.0 - transmission);
+    col *= 1.0 - 0.12 * clamp(darkening, 0.0, 1.0) * (1.0 - airy);
+    col = mix(col, 1.0 - (1.0 - col) * 0.82, 0.3 * airy);             // airy: a lighter body
 
     // steep glass bends light away: a darker band towards the rim (stronger on light backdrops)
     float steep = smoothstep(0.45, 0.92, t);
-    col *= 1.0 - steep * (0.18 + 0.3 * lightBg);
+    col *= 1.0 - steep * (0.18 + 0.3 * lightBg) * (1.0 - 0.8 * airy);
 
     // state colour (glow), under the light
     col = mix(col, glow.rgb * (0.75 + 0.5 * (1.0 - t)), glow.a);
@@ -133,7 +143,8 @@ void main() {
     vec3 R = vec3(2.0 * N.z * N.xy, 2.0 * N.z * N.z - 1.0);
     float env = 1.25 * smoothstep(0.0, 0.95, dot(R, normalize(vec3(L, 0.35)))) + 0.15 * smoothstep(0.1, -0.9, R.y);
     float F = 0.02 + 0.98 * pow(t, 7.0);   // by tilt, steep: only the rim mirrors, the body stays clear
-    col += vec3(env * F) * (1.0 - 0.5 * lightBg);
+    col += vec3(env * F) * (1.0 - 0.5 * lightBg * (1.0 - airy));
+    col += vec3(0.16 * airy) * smoothstep(0.55, 0.95, t);              // airy: a bright rim
     // inner glow: light carried along inside the tube, on its far wall
     float back = max(dot(N, normalize(vec3(-L, 0.6))), 0.0);
     col += vec3(1.0) * pow(back, 3.0) * smoothstep(0.3, 0.9, t) * 0.08 * (1.0 - 0.5 * lightBg);
@@ -142,7 +153,7 @@ void main() {
     vec3 H = normalize(L3 + vec3(0.0, 0.0, 1.0));
     float ndh = max(dot(N, H), 0.0);
     float shin = clamp(specPower, 8.0, 200.0);
-    float hiAmt = 0.16 + 0.22 * clamp(specular, 0.0, 3.0);
+    float hiAmt = (0.16 + 0.22 * clamp(specular, 0.0, 3.0)) * (1.0 + 0.8 * airy);
     float hi = pow(ndh, shin * 0.6) * 0.45 + pow(ndh, shin * 2.0) * 0.35;
     vec3 H2 = normalize(vec3(-L, 0.75) + vec3(0.0, 0.0, 1.0));
     float hi2 = pow(max(dot(N, H2), 0.0), shin * 1.0) * 0.12;
@@ -150,7 +161,7 @@ void main() {
     col += vec3(1.0) * sheen * 0.2 * max(dot(N, L3), 0.0) * (1.0 - t);
     // over light backdrops the very outline turns dark (the bent edge), as glass reads on a bright ground
     float outline = smoothstep(0.9, 0.99, t);
-    col = mix(col, around * 0.4, outline * lightBg * 0.5);
+    col = mix(col, around * 0.4, outline * lightBg * 0.5 * (1.0 - 0.6 * airy));
 
     vec4 body = vec4(clamp(col, 0.0, 1.0) * cov, cov);
     vec4 outc = over(body, behind);

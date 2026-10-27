@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""Which desktop clocks (qs-deskclock layers) are covered by something drawn above them?
+
+  lock-clock-cover [RECTS] prints the connectors whose clock is covered, space separated (empty line = none)
+
+RECTS = JSON {connector: [x, y, w, h]} in global layout px: what each clock really paints (DeskClockView.ink, from
+Lock.qml). Without it (or for a connector it lacks) the whole qs-deskclock layer window is used, which also holds the
+glass's empty margins.
+
+Lock.qml asks this right before the desktop snapshot. An uncovered clock stays on screen and is in the snapshot; the
+lock surface then fades it out by laying the clean backdrop (DeskClockView.grabClean) over its rect. A covered clock
+(a window, or a top / overlay layer such as a popup, overlapping its rect) is hidden first instead, as the backdrop
+would be painted over the window. Any error = "*" (every clock is hidden first: the safe old path).
+"""
+import json
+import subprocess
+import sys
+
+MARGIN = 6    # window borders reach past the window's own box (the clock rect already includes its shadow)
+
+
+def batch():
+    out = subprocess.run(["hyprctl", "--batch", "j/monitors;j/clients;j/layers"], capture_output=True, text=True,
+                         timeout=1).stdout
+    dec, objs, i = json.JSONDecoder(), [], 0
+    while True:
+        while i < len(out) and out[i].isspace():
+            i += 1
+        if i >= len(out):
+            break
+        obj, i = dec.raw_decode(out, i)
+        objs.append(obj)
+    return objs
+
+
+def hits(a, b, m=0):
+    return a[0] < b[0] + b[2] + m and b[0] < a[0] + a[2] + m and a[1] < b[1] + b[3] + m and b[1] < a[1] + a[3] + m
+
+
+def main():
+    rects = json.loads(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1] else {}
+    monitors, clients, layers = batch()
+    covered = []
+    for mon in monitors:
+        name = mon.get("name", "")
+        levels = layers.get(name, {}).get("levels", {})
+        clocks = [(l["x"], l["y"], l["w"], l["h"]) for l in levels.get("1", []) if l.get("namespace") == "qs-deskclock"]
+        if not clocks:
+            continue
+        r = rects.get(name)
+        if isinstance(r, list) and len(r) == 4:
+            clocks = [tuple(r)]
+        shown = {(mon.get("activeWorkspace") or {}).get("id"), (mon.get("specialWorkspace") or {}).get("id")} - {None, 0}
+        boxes = []
+        for c in clients:
+            if c.get("hidden") or c.get("mapped") is False:
+                continue
+            on = c.get("monitor") == mon.get("id") and (c.get("workspace") or {}).get("id") in shown
+            if on or (c.get("pinned") and c.get("monitor") == mon.get("id")):
+                boxes.append((c["at"][0], c["at"][1], c["size"][0], c["size"][1]))
+        above = [(l["x"], l["y"], l["w"], l["h"]) for lvl in ("2", "3") for l in levels.get(lvl, []) if l.get("alpha", 1) > 0]
+        if any(hits(k, b, MARGIN) for k in clocks for b in boxes) or any(hits(k, b) for k in clocks for b in above):
+            covered.append(name)
+    print(" ".join(covered))
+
+
+try:
+    main()
+except Exception:   # noqa: BLE001  no answer = treat every clock as covered
+    print("*")
+sys.exit(0)

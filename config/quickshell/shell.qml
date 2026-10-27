@@ -30,7 +30,19 @@ ShellRoot {
     Osd { id: osd; bars: root.bars }
     BtNotifier {}
     Lock { id: lockService }
-    DeskClock {}       // opt-in glass clock on the desktop (Settings > Desktop clock)
+    // opt-in glass clock on the desktop (Settings > Desktop clock): stays in the lock's desktop snapshot and fades out on
+    // the lock surface (its clean rect, DeskClock.patches); hidden while locked, forms again after the unlock
+    // (its first digit starts when the unlock is done: the ring was the pause)
+    DeskClock { id: deskClock; hidden: lockService.clockHidden; hiddenOn: lockService.clockHideOn }
+    Connections {
+        target: lockService
+        function onUnlocked() { deskClock.dropPatches(); deskClock.formAll(0) }
+        function onClockGrab() { deskClock.grabClean() }
+    }
+    Binding { target: lockService; property: "snapHideS"; value: DeskClockPrefs.enabled ? 0.035 : 0 }
+    Binding { target: lockService; property: "clockPatches"; value: deskClock.patches }
+    Binding { target: lockService; property: "clockScreens"; value: deskClock.shownOn }
+    Binding { target: lockService; property: "clockRects"; value: deskClock.inkRects }
 
     // one popup host per screen; Popups.* says which is open
     Variants {

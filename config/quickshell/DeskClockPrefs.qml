@@ -11,6 +11,10 @@ import Quickshell.Io
 //   size (0.08-0.30)        digit size, share of the screen's short side
 //   posX, posY (0-1)        where the clock box sits: 0 = left / top edge, 1 = right / bottom edge (a 3 % margin kept)
 //   clock24h, showDate      bool
+//   seconds                 HH:mm:ss (bool, default off; the digits shrink only if the clock would not fit the screen)
+//   morph (0-3)             the digits' morph time, x the default (Animations speed); 0 = a plain swap (ClockFace)
+//   adapt                   wallpaper-aware glass (default on): over a bright wallpaper the glass turns light and clear
+//   adaptStrength (0-1)     how far it goes there (1 = fully light glass on a white wallpaper)
 //   hidden                  { "<monitor key>": true } monitors without the clock (Appearance.monitorKey)
 //   qs ipc call deskclock get | set <key> <value> | unset <key> | reset | hideOn <monitor key> | showOn <monitor key>
 Singleton {
@@ -25,12 +29,12 @@ Singleton {
     // key -> [min, max, decimals] for numbers, "bool" for booleans, "map" for { string: true }
     readonly property var spec: ({
         enabled: "bool", size: [0.08, 0.3, 3], posX: [0, 1, 3], posY: [0, 1, 3],
-        clock24h: "bool", showDate: "bool", hidden: "map"
+        clock24h: "bool", showDate: "bool", seconds: "bool", morph: [0, 3, 2], adapt: "bool", adaptStrength: [0, 1, 2], hidden: "map"
     })
     readonly property var keys: Object.keys(spec)
     readonly property var defaults: ({
         enabled: false, size: 0.16, posX: 0.04, posY: 0.9,
-        clock24h: true, showDate: true, hidden: ({})
+        clock24h: true, showDate: true, seconds: false, morph: 1, adapt: true, adaptStrength: 1, hidden: ({})
     })
 
     property var data: ({})
@@ -43,6 +47,10 @@ Singleton {
     readonly property real posY: value("posY")
     readonly property bool clock24h: value("clock24h")
     readonly property bool showDate: value("showDate")
+    readonly property bool seconds: value("seconds")
+    readonly property real morph: value("morph")
+    readonly property bool adapt: value("adapt")
+    readonly property real adaptStrength: value("adaptStrength")
     readonly property var hidden: value("hidden")
     function shownOn(screen) { return enabled && !!screen && hidden[Appearance.monitorKey(screen)] !== true }
 

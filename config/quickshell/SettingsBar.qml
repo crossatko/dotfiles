@@ -382,6 +382,78 @@ Item {
             text: "Total space above and below the chips while the backdrop is gone (docked bar). Auto is three times the gap between windows (4 to 16 px per side); Manual is 0 to 48 px. The bar is chip height plus this, windows start right at its edge."
         }
 
+        // ---- text contrast: the bar's colours follow the wallpaper behind it (BarInk.qml / BarContrast.qml) ----
+        SectionHead {
+            Layout.topMargin: 6
+            title: "Text contrast · " + (ed.linkedGroup ? ed.groupScreens.map(s => ed.screenTitle(s)).join(" + ") : ed.sel ? ed.screenTitle(ed.sel) : "")
+            detail: ed.sel && BarConfig.flushMode(ed.sel) ? "adaptive" : "needs a bar without backdrop"
+        }
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            color: Theme.muted
+            font.pixelSize: Theme.fontCaption
+            text: "While the bar has no backdrop its text sits on the wallpaper. Auto measures the wallpaper behind the left, centre and right of the bar (once per wallpaper change, from the picture or a video's frames) and uses dark text on a bright wallpaper and light text on a dark one, whatever the theme. Dark / Light force one; Theme keeps the palette. Popups are not affected."
+        }
+        SettingRow {
+            id: ctrRow
+            readonly property bool active: ed.sel ? BarConfig.enabled(ed.sel) : false
+            readonly property string mode: ed.sel ? BarConfig.contrast(ed.sel) : "auto"
+            title: "Text"
+            titleWidth: 120
+            opacity: active ? 1 : 0.45
+            Segmented {
+                values: BarConfig.contrastModes
+                labels: ["Auto", "Dark", "Light", "Theme"]
+                objectNames: ["btn-contrast-auto", "btn-contrast-dark", "btn-contrast-light", "btn-contrast-off"]
+                current: ctrRow.mode
+                enabledLook: ctrRow.active
+                inset: 18
+                segHeight: 24
+                segWidth: 70
+                onPicked: v => { if (ctrRow.active && ed.sel) BarConfig.set(ed.sel, "contrast", v) }
+            }
+        }
+        SettingRow {
+            id: sensRow
+            readonly property real sens: ed.sel ? BarConfig.contrastSens(ed.sel) : 50
+            title: "Switch point"
+            titleWidth: 120
+            opacity: ctrRow.active && ctrRow.mode === "auto" ? 1 : 0.45
+            Slider {
+                wheel: false
+                objectName: "slider-contrast-sens"
+                Layout.fillWidth: true
+                dim: !(ctrRow.active && ctrRow.mode === "auto")
+                value: sensRow.sens / 100
+                onMoved: v => { if (ctrRow.active && ctrRow.mode === "auto" && ed.sel) BarConfig.set(ed.sel, "contrastSens", Math.round(v * 100)) }
+            }
+            Label { text: sensRow.sens < 40 ? "light text" : sensRow.sens > 60 ? "dark text" : "balanced"; Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
+        }
+        SettingRow {
+            id: fillRow
+            readonly property real fill: ed.sel ? BarConfig.hoverFill(ed.sel) : 35
+            title: "Hover fill"
+            titleWidth: 120
+            opacity: ctrRow.active ? 1 : 0.45
+            Slider {
+                wheel: false
+                objectName: "slider-hover-fill"
+                Layout.fillWidth: true
+                dim: !ctrRow.active
+                value: fillRow.fill / 100
+                onMoved: v => { if (ctrRow.active && ed.sel) BarConfig.set(ed.sel, "hoverFill", Math.round(v * 100)) }
+            }
+            Label { text: fillRow.fill + " %"; Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
+        }
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            color: Theme.muted
+            font.pixelSize: Theme.fontCaption
+            text: "Switch point: how readily dark text is chosen on a wallpaper in between. Hover fill: how strong the hovered chip's fill is while the bar has no backdrop (chips are transparent at rest there; active ones keep their accent fill). A bar with a backdrop keeps its own look."
+        }
+
         // ---- layout of the picked monitor: actions, preview, editor ----
         SectionHead {
             Layout.topMargin: 6

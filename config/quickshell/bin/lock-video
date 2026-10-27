@@ -1,37 +1,54 @@
 #!/usr/bin/env python3
-"""Lock screen video wallpaper info: `lock-video <connector>` prints one JSON line
+"""Video wallpaper info for the lock screen and the desktop clock.
+
+`lock-video <connector>` (the lock: LockVideo.qml; the desktop clock's play-once path) prints one JSON line
 {"file", "bursts": [t0..tK], "idx", "cyc", "station", "tag"} for the play-once video wallpaper (mpvpaper + theme/mpv/winddown.lua) of that
 output, or nothing (exit 1) when it has none (image / loop wallpaper, no baked file, player gone).
 While an ext-session-lock is held the compositor draws only the lock surfaces, so the lock plays the same baked clip
 itself (LockVideo.qml; the desktop clock, DeskClockVideo.qml, follows the desktop player with the same info): `file` = the player's file, burst i = bursts[i]..bursts[i+1], `idx` = the NEXT burst (the held
-frame is bursts[idx]). Read-only: the state file written by theme.py ($XDG_RUNTIME_DIR/theme-video/<conn>.json), the
-player's /proc cmdline (script-opts winddown-bursts / -cyc / -station) and its station file."""
+frame is bursts[idx]).
+
+`lock-video --desk <connector>` (the desktop clock) always prints one line with a "mode":
+  "burst" = the play-once record above plus "mode";
+  "loop"  = a looping player (theme.py mode "loop": mpvpaper loop-file=inf): {"mode", "socket" (its mpv input-ipc-server),
+            "pid", "file" (what the player plays now, from its socket; else the state file's)};
+  "still" = an image wallpaper / no player / anything unreadable (exit 1).
+Read-only: the state file written by theme.py ($XDG_RUNTIME_DIR/theme-video/<conn>.json), the player's /proc cmdline
+(script-opts winddown-bursts / -cyc / -station, input-ipc-server, loop-file), its station file and (loop) one
+`get_property path` on its socket."""
 import json
 import os
+import socket
 import sys
 
 OK = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-")
 
 
-def main(conn):
+def player(conn):
+    """(state file dict, mpv option list) of the live mpvpaper of `conn`, or None."""
     if not 0 < len(conn) <= 40 or not OK.issuperset(conn):
-        return 1
+        return None
     d = (os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/theme-{os.getuid()}") + "/theme-video/"
     try:
         with open(d + conn + ".json") as f:
             st = json.load(f)
-        if st.get("mode") != "once" or not st.get("baked") or not os.path.isfile(st["file"]):
-            return 1
         pid = int(st["pid"])
         with open(f"/proc/{pid}/comm") as f:
             if f.read().strip() != "mpvpaper":
-                return 1
+                return None
         with open(f"/proc/{pid}/cmdline", "rb") as f:
             args = f.read().decode("utf-8", "replace").split("\0")
     except (OSError, ValueError, KeyError, TypeError):
-        return 1
+        return None
+    # mpvpaper -o takes ONE argument holding every mpv option (split on spaces)
+    return st, " ".join(args).split(" ")
+
+
+def burst_info(st, mpv):
+    if st.get("mode") != "once" or not st.get("baked") or not isinstance(st.get("file"), str) or not os.path.isfile(st["file"]):
+        return None
     opts = {}
-    for a in " ".join(args).split(" "):   # mpvpaper -o takes ONE argument holding every mpv option
+    for a in mpv:
         if a.startswith("script-opts="):
             for kv in a[len("script-opts="):].split(","):
                 k, _, v = kv.partition("=")
@@ -40,9 +57,9 @@ def main(conn):
         bursts = [float(x) for x in opts.get("winddown-bursts", "").split("/") if x]
         cyc = int(opts.get("winddown-cyc", "0"))
     except ValueError:
-        return 1
+        return None
     if len(bursts) < 2:
-        return 1
+        return None
     k = len(bursts) - 1
     idx = 0
     try:
@@ -52,10 +69,72 @@ def main(conn):
             idx = int(n) % k
     except OSError:
         pass
-    print(json.dumps({"file": st["file"], "bursts": bursts, "idx": idx, "cyc": cyc,
-                      "station": opts.get("winddown-station", ""), "tag": opts.get("winddown-tag", "")}))
-    return 0
+    return {"file": st["file"], "bursts": bursts, "idx": idx, "cyc": cyc,
+            "station": opts.get("winddown-station", ""), "tag": opts.get("winddown-tag", "")}
+
+
+def mpv_get(sock, prop):
+    """One get_property on an mpv JSON-IPC socket (0.5 s cap); the value or None."""
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(0.5)
+    try:
+        s.connect(sock)
+        s.sendall((json.dumps({"command": ["get_property", prop], "request_id": 7}) + "\n").encode())
+        buf = b""
+        while True:   # events may come before the reply
+            chunk = s.recv(4096)
+            if not chunk:
+                return None
+            buf += chunk
+            *lines, buf = buf.split(b"\n")
+            for line in lines:
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if r.get("request_id") == 7:
+                    return r.get("data") if r.get("error") == "success" else None
+    except (OSError, ValueError):
+        return None
+    finally:
+        s.close()
+
+
+def loop_info(st, mpv):
+    if st.get("mode") != "loop" or "loop-file=inf" not in mpv:
+        return None
+    sock = next((a[len("input-ipc-server="):] for a in mpv if a.startswith("input-ipc-server=")), "")
+    if not sock:
+        return None
+    path = mpv_get(sock, "path")   # a `swap` (winddown.lua, at the wrap) changes the file without a new state file
+    f = path if isinstance(path, str) and os.path.isfile(path) else st.get("file")
+    if not isinstance(f, str) or not os.path.isfile(f):
+        return None
+    return {"mode": "loop", "socket": sock, "pid": int(st["pid"]), "file": f}
+
+
+def main(argv):
+    desk = argv[:1] == ["--desk"]
+    if desk:
+        argv = argv[1:]
+    p = player(argv[0]) if argv else None
+    if not desk:
+        b = burst_info(*p) if p else None
+        if not b:
+            return 1
+        print(json.dumps(b))
+        return 0
+    b = burst_info(*p) if p else None
+    if b:
+        print(json.dumps({"mode": "burst", **b}))
+        return 0
+    lp = loop_info(*p) if p else None
+    if lp:
+        print(json.dumps(lp))
+        return 0
+    print(json.dumps({"mode": "still"}))
+    return 1
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1]) if len(sys.argv) > 1 else 1)
+    sys.exit(main(sys.argv[1:]))

@@ -63,6 +63,14 @@ Singleton {
     // per bar: no glass / fill / border / blur behind the bar while it is flush with the screen edge (docked, or compacted
     // by a fullscreen window). Absent = false, so old files and other readers behave as before.
     function transparentFlush(s) { return entry(s).transparentFlush === true }
+    // per bar: adaptive contrast (Settings > Bar > Text contrast, BarInk.qml). While the bar has no backdrop its text is judged against the
+    // wallpaper behind each section. bars.json `contrast`: "auto" (default), "dark" / "light" (force the text colour), "off" (theme colours);
+    // `contrastSens` 0..100 (default 50; higher = dark text chosen more readily); `hoverFill` 0..100 (strength of the hovered chip's fill while the bar
+    // has no backdrop, default 35; chips are transparent at rest there, active ones keep their accent fill; glass bars keep their look).
+    readonly property var contrastModes: ["auto", "dark", "light", "off"]
+    function contrast(s) { const v = entry(s).contrast; return contrastModes.indexOf(v) >= 0 ? v : "auto" }
+    function contrastSens(s) { const v = entry(s).contrastSens; return typeof v === "number" && isFinite(v) ? Math.max(0, Math.min(100, Math.round(v))) : 50 }
+    function hoverFill(s) { const v = entry(s).hoverFill; return typeof v === "number" && isFinite(v) ? Math.max(0, Math.min(100, Math.round(v))) : 35 }
     // "Flush mode": option on and the bar docked. The bar has no backdrop then (Bar.qml), Hyprland's outer gap on the bar's side
     // is 0 on that monitor (hypr/hyprland/managed.lua apply_bar_gaps) and the bar's height follows the window gap: chip height +
     // 3 x the visible gap between windows (2 x gaps_in), clamped to flushPadMin..flushPadMax in total, split evenly above and
@@ -146,7 +154,7 @@ Singleton {
         const outside = Quickshell.screens.some(o => enabled(o) && g.indexOf(keyOf(o)) < 0)
         const on = src.enabled === true || !outside
         const d2 = JSON.parse(JSON.stringify(data))
-        for (const k of g) d2[k] = { enabled: on, edge: src.edge === "top" ? "top" : "bottom", transparentFlush: src.transparentFlush === true, flushPadding: src.flushPadding, floating: src.floating, respectReserved: src.respectReserved }
+        for (const k of g) d2[k] = { enabled: on, edge: src.edge === "top" ? "top" : "bottom", transparentFlush: src.transparentFlush === true, flushPadding: src.flushPadding, floating: src.floating, respectReserved: src.respectReserved, contrast: src.contrast, contrastSens: src.contrastSens, hoverFill: src.hoverFill }
         data = d2
         saver.restart()
     }

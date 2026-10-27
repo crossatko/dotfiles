@@ -13,8 +13,12 @@ import Quickshell.Io
 //   dotSize (0.06-0.14)  password bead size, share of the digit size
 //   showDate, clock24h, clockReveal (digits form after the lock is up), snapshot (desktop snapshot: the ring
 //   transitions; off = nothing of the desktop is captured), unlockRing (the ring on unlock), burstOnLock /
-//   burstOnType / burstOnSubmit (video wallpaper bursts)   all bool
-//   qs ipc call lockprefs get | set <key> <value> | unset <key> | reset
+//   burstOnType / burstOnSubmit (video wallpaper bursts), seconds (HH:mm:ss), mediaCard (playback card under the
+//   password dots while an MPRIS player exists)   all bool
+//   morph (0-3)          the digits' morph time, x the default (Animations speed); 0 = a plain swap (ClockFace)
+//   hidden               { "<monitor key>": true } monitors without the clock and date (Appearance.monitorKey; a new
+//                        monitor shows it). The password dots stay where they would be.
+//   qs ipc call lockprefs get | set <key> <value> | unset <key> | reset | hideClockOn <monitor key> | showClockOn <monitor key>
 Singleton {
     id: root
 
@@ -24,17 +28,19 @@ Singleton {
     }
     readonly property string dir: filePath.substring(0, filePath.lastIndexOf("/")) || "/"
 
-    // key -> [min, max, decimals] for numbers, "bool" for booleans
+    // key -> [min, max, decimals] for numbers, "bool" for booleans, "map" for { string: true }
     readonly property var spec: ({
         dim: [0, 0.7, 2], blur: [0, 64, 0], clockSize: [0.14, 0.34, 3], dotSize: [0.06, 0.14, 3],
         showDate: "bool", clock24h: "bool", clockReveal: "bool", snapshot: "bool", unlockRing: "bool",
-        burstOnLock: "bool", burstOnType: "bool", burstOnSubmit: "bool"
+        burstOnLock: "bool", burstOnType: "bool", burstOnSubmit: "bool",
+        seconds: "bool", morph: [0, 3, 2], hidden: "map", mediaCard: "bool"
     })
     readonly property var keys: Object.keys(spec)
     readonly property var defaults: ({
         dim: 0.5, blur: 0, clockSize: 0.24, dotSize: 0.08,
         showDate: true, clock24h: true, clockReveal: true, snapshot: true, unlockRing: true,
-        burstOnLock: true, burstOnType: true, burstOnSubmit: true
+        burstOnLock: true, burstOnType: true, burstOnSubmit: true,
+        seconds: false, morph: 1, hidden: ({}), mediaCard: true
     })
     readonly property int blurMax: 64           // the largest blur: the lock's backdrop chain is this much larger than the screen
 
@@ -54,11 +60,29 @@ Singleton {
     readonly property bool burstOnLock: value("burstOnLock")
     readonly property bool burstOnType: value("burstOnType")
     readonly property bool burstOnSubmit: value("burstOnSubmit")
+    readonly property bool seconds: value("seconds")
+    readonly property real morph: value("morph")
+    readonly property var hidden: value("hidden")
+    readonly property bool mediaCard: value("mediaCard")
+    function clockOn(screen) { return !screen || hidden[Appearance.monitorKey(screen)] !== true }
+    function setClockOn(monitorKey, on) {
+        if (!monitorKey) return
+        const h = Object.assign({}, hidden)
+        if (on) delete h[monitorKey]
+        else h[monitorKey] = true
+        set("hidden", h)
+    }
 
     function clean(key, v) {
         const s = spec[key]
         if (s === undefined) return undefined
         if (s === "bool") return typeof v === "boolean" ? v : undefined
+        if (s === "map") {
+            if (v === null || typeof v !== "object" || Array.isArray(v)) return undefined
+            const o = {}
+            for (const k of Object.keys(v)) if (k.length > 0 && k.length <= 200 && v[k] === true) o[k] = true
+            return o
+        }
         if (typeof v !== "number" || !isFinite(v)) return undefined
         const p = Math.pow(10, s[2])
         return Math.round(Math.max(s[0], Math.min(s[1], v)) * p) / p
@@ -83,11 +107,12 @@ Singleton {
         return JSON.stringify(o) + "\n"
     }
 
+    function same(a, b) { return a === b || (typeof a === "object" && typeof b === "object" && JSON.stringify(a) === JSON.stringify(b)) }
     function set(key, v) {
         const c = clean(key, v)
-        if (c === undefined || root.data[key] === c) return
+        if (c === undefined || same(root.data[key], c)) return
         const d = Object.assign({}, root.data)
-        if (c === root.defaults[key]) delete d[key]          // the default is not an override
+        if (same(c, root.defaults[key])) delete d[key]          // the default is not an override
         else d[key] = c
         commit(d)
     }
@@ -134,7 +159,7 @@ Singleton {
         function get(): string { return root.serialize(root.data).trim() }
         function set(key: string, value: string): string {
             const s = root.spec[key]
-            if (s === undefined) return "bad key"
+            if (s === undefined || s === "map") return "bad key"
             const v = s === "bool" ? (value === "true" ? true : value === "false" ? false : undefined) : Number(value)
             if (root.clean(key, v) === undefined) return "bad value"
             root.set(key, v)
@@ -142,5 +167,7 @@ Singleton {
         }
         function unset(key: string): string { root.unset(key); return "ok" }
         function reset(): string { root.reset(); return "ok" }
+        function hideClockOn(monitor: string): string { root.setClockOn(monitor, false); return "ok" }
+        function showClockOn(monitor: string): string { root.setClockOn(monitor, true); return "ok" }
     }
 }

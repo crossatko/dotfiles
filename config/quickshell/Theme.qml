@@ -78,6 +78,36 @@ Singleton {
         const e = w[screenName] ?? w["*"] ?? {}
         return (atTop ? e.top : e.bottom) === "light" ? root : darkInk
     }
+    // Bar text on a bare wallpaper (BarInk.qml, wallpaper aware, any theme mode): the theme's own hues clamped to a lightness
+    // that reads on a dark wallpaper (barInkLight: light text, dark chip pill) or a bright one (barInkDark: dark text,
+    // light chip pill). Same property names as Theme / darkInk.
+    function tone(c, lo, hi, maxSat) {
+        return Qt.hsla(Math.max(0, c.hslHue), Math.min(maxSat, c.hslSaturation), Math.max(lo, Math.min(hi, c.hslLightness)), 1)
+    }
+    readonly property QtObject barInkLight: QtObject {
+        readonly property color bg: root.tone(root.bg, 0.05, 0.14, 0.5)
+        readonly property color fg: root.tone(root.fg, 0.92, 0.97, 0.25)
+        readonly property color fgDim: root.tone(root.fgDim, 0.82, 0.92, 0.35)
+        readonly property color muted: root.tone(root.muted, 0.76, 0.88, 0.4)
+        readonly property color accent: root.tone(root.accent, 0.66, 0.85, 1)
+        readonly property color accent2: root.tone(root.accent2, 0.66, 0.85, 1)
+        readonly property color red: root.tone(root.red, 0.66, 0.85, 1)
+        readonly property color green: root.tone(root.green, 0.62, 0.85, 1)
+        readonly property color yellow: root.tone(root.yellow, 0.62, 0.85, 1)
+        readonly property color overlay: root.tone(root.overlay, 0.2, 0.4, 0.5)
+    }
+    readonly property QtObject barInkDark: QtObject {
+        readonly property color bg: root.tone(root.bg, 0.92, 0.99, 0.5)
+        readonly property color fg: root.tone(root.fg, 0.04, 0.09, 0.25)
+        readonly property color fgDim: root.tone(root.fgDim, 0.10, 0.18, 0.35)
+        readonly property color muted: root.tone(root.muted, 0.14, 0.24, 0.4)
+        readonly property color accent: root.tone(root.accent, 0.18, 0.32, 1)
+        readonly property color accent2: root.tone(root.accent2, 0.18, 0.32, 1)
+        readonly property color red: root.tone(root.red, 0.20, 0.34, 1)
+        readonly property color green: root.tone(root.green, 0.16, 0.28, 1)
+        readonly property color yellow: root.tone(root.yellow, 0.16, 0.26, 1)
+        readonly property color overlay: root.tone(root.overlay, 0.6, 0.8, 0.5)
+    }
     function checkGlass() { glassProbe.running = true }
     Process {
         id: glassProbe
@@ -159,7 +189,7 @@ Singleton {
     readonly property int busyPulseMs: 380
     readonly property int shakeMs: popupMs(Motion.baseMs * 1.5)
     readonly property int shakePx: 10
-    // how much the lock screen darkens the wallpaper (MultiEffect brightness, additive): the blurred backdrop and what the glass
+    // how much the lock screen darkens the wallpaper (x (1 - dim), a black veil in LockView): the blurred backdrop and what the glass
     // clock / dots refract (GlassShape `dim`) use the same amount
     readonly property real lockDim: LockPrefs.dim    // Settings > Lock "Wallpaper dim" (default 0.5)
     readonly property int lockRevealMs: popupMs(Motion.baseMs * 2.5)   // lock screen -> desktop transition after unlock

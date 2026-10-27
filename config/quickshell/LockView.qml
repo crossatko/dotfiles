@@ -1,12 +1,14 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
+import Quickshell
 
 // One lock surface (one per screen, Lock.qml): blurred wallpaper (or the paused / bursting video), the glass-lettered
 // clock and the password field, nothing else. The password lives in Lock.qml (`password`), so every screen shows the
 // same dots; the screen that has keyboard focus is the one being typed on. Look and motion: LockPrefs (Settings > Lock).
 // `preview` (Settings > Lock, LockPreview): the same visuals with no keyboard focus, no input, no video and
-// `previewDots` sample beads.
+// `previewDots` sample beads. Per screen (LockPrefs.clockOn, Settings > Lock "Screens"): the clock and date may be off;
+// the password dots stay where they would be. Under the dots: the playback card (LockMedia) on the screens with the clock.
 Item {
     id: view
     property string wallpaper: ""
@@ -33,6 +35,9 @@ Item {
     // unlock transition (Lock.qml): `snapshot` = this output's desktop as it was when the lock was taken (a file in
     // $XDG_RUNTIME_DIR); it is decoded but never drawn until `revealing` (after a correct password) runs LockReveal
     property string snapshot: ""
+    // the desktop clock's clean rect (DeskClock.patches entry) when the snapshot still shows the clock: it fades out
+    // over the snapshot once the lock is up (LockClockPatch)
+    property var clockPatch: null
     property bool revealing: false
     property real revealProgress: 0
     onRevealingChanged: if (revealing && snap.status === Image.Ready) { closeAnim.stop(); revealAnim.restart() }
@@ -45,12 +50,22 @@ Item {
         onRunningChanged: if (running) left = 40
         onTriggered: if (view.backdropReady || --left <= 0) { stop(); closeAnim.restart() }
     }
+    // this surface's screen (by connector): whether it shows the clock (LockPrefs.hidden)
+    readonly property var screen: Quickshell.screens.find(s => s && s.name === screenName) ?? null
+    readonly property bool clockShown: LockPrefs.clockOn(screen)
     signal passwordEdited(string p)
     signal submit(string p)
 
     readonly property real unit: Math.min(width, height)
     property bool wallReady: false
     readonly property bool backdropReady: wallReady || video.ready
+    // what this surface's backdrop is made of (Lock.status(), `qs ipc call lock status`): file names only
+    function demo() { clockBox.demo() }    // Settings preview: one minute ahead and back (the morph)
+    function wallState() {
+        const base = p => p ? String(p).replace(/^.*\//, "") : ""
+        return { screen: screenName, still: base(wallpaper), stillReady: wallReady, video: base(video.info ? video.info.file : ""),
+                 videoReady: video.ready, playing: video.playing, shows: video.ready ? "video" : wallReady ? "still" : "none" }
+    }
 
     // ---- backdrop: wallpaper (or video), blurred and dimmed, kept as a static texture while nothing moves ----
     // Everything up to the blur is `bleed` px larger than the screen on each side and cropped afterwards, so the blur
@@ -104,18 +119,23 @@ Item {
                 onStatusChanged: if (status === Image.Ready) { view.wallReady = true; settle.restart() }
             }
         }
-        MultiEffect {
+        // dimmed by a black veil (x (1 - dim), as glasstext.frag dims the sharp scene), not MultiEffect brightness: that
+        // SUBTRACTS dim, and a dark wallpaper (a play-once clip's held frame, blurred) went entirely black at 0.5
+        Item {
             id: blurred
             x: -view.bleed; y: -view.bleed
             width: view.width + 2 * view.bleed; height: view.height + 2 * view.bleed
             visible: false
-            source: view.scene
-            autoPaddingEnabled: false
-            blurEnabled: LockPrefs.blur > 0
-            blur: 1.0
-            blurMax: Math.max(1, LockPrefs.blur)
-            brightness: -Theme.lockDim
-            saturation: -0.1
+            MultiEffect {
+                anchors.fill: parent
+                source: view.scene
+                autoPaddingEnabled: false
+                blurEnabled: LockPrefs.blur > 0
+                blur: 1.0
+                blurMax: Math.max(1, LockPrefs.blur)
+                saturation: -0.1
+            }
+            Rectangle { anchors.fill: parent; color: "black"; opacity: Theme.lockDim }
         }
         ShaderEffectSource {
             id: backdropTex
@@ -131,6 +151,8 @@ Item {
             x: Math.round((view.width - width) / 2)
             y: Math.round(view.height * 0.42 - height / 2)
             pixelSize: Math.round(view.unit * LockPrefs.clockSize)
+            maxWidth: view.width - 2 * Theme.edgeGap     // seconds: the digits shrink only if the clock would not fit
+            visible: view.clockShown                     // off: the dots keep their place
             backdrop: backdropTex
             sharpBackdrop: view.scene       // bleed px larger than the screen (a cropping ShaderEffectSource of it stayed empty)
             sharpInset: view.bleed
@@ -160,6 +182,20 @@ Item {
                 function onFailureMessageChanged() { if (view.failureMessage !== "") field.reject(field.submitted) }
             }
         }
+        LockMedia {
+            id: media
+            width: Math.min(view.width - 2 * Theme.edgeGap, Math.round(view.unit * 0.42))
+            x: Math.round((view.width - width) / 2)
+            y: Math.round(field.y + field.height + view.unit * 0.04)
+            shown: LockPrefs.mediaCard && view.clockShown
+            sample: view.preview
+            dim: Theme.lockDim
+            backdrop: backdropTex
+            sharpBackdrop: view.scene
+            sharpInset: view.bleed
+            origin: Qt.point(x, y)
+            backdropSize: Qt.size(view.width, view.height)
+        }
     }
     Image {
         id: snap
@@ -171,10 +207,17 @@ Item {
         // from the first frame until the lock is up (engage() then closes the ring over it): no blank / half-drawn frames
         onStatusChanged: if (status === Image.Ready && !view.engaged && !view.revealing && Theme.lockRevealMs > 0) view.revealProgress = 1
     }
+    LockClockPatch {
+        id: snapNoClock
+        anchors.fill: parent
+        snapshot: snap
+        patch: view.clockPatch
+        fading: view.engaged || view.revealing
+    }
     LockReveal {
         anchors.fill: parent
         source: content
-        snapshot: snap
+        snapshot: snapNoClock.active ? snapNoClock : snap
         progress: view.revealProgress
         centre: Qt.point(field.x + field.width / 2, field.y + field.height / 2)
     }

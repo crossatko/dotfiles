@@ -12,8 +12,11 @@ import QtQuick.Window
 Item {
     id: g
     property Item mask: null
-    property Item mask2: null             // morph target (GlassText's other mask); null = no morph
-    property real morph: 0                // 0 = mask, 1 = mask2: the glass flows between the two shapes
+    property Item mask2: null             // morph partner (GlassText's other mask); null = no morph
+    property real morph: 0                // 0 = the shown shape, 1 = the other one: the glass flows between the two
+    // which mask is shown (false: mask, true: mask2). Each mask keeps its own field layer for good: a morph only swaps
+    // which field the optics read, so nothing but the field of the mask that got new content renders again
+    property bool flip: false
     property int pad: 0
     property real strokeHalf: 10
     property Item backdrop: null
@@ -25,6 +28,13 @@ Item {
     property color glow: "transparent"
     property real dim: 0                  // darkening of the sharp scene, to match a dimmed blurred backdrop
     property real strength: 1             // the glass forming: 0 = flat and clear, 1 = full; > 1 briefly over-inflates
+    property real airy: 0                 // 0 = the Settings > Glass look, 1 = light clear glass for a bright backdrop (glasstext.frag)
+    // bumped by GlassText when a mask's text changed: that mask's shape field renders again (`refresh` = mask's,
+    // `refresh2` = mask2's; the masks are layers of invisible items, and a content change of the same mask texture did
+    // not always reach the field's own layer, so a morph could run between two stale, identical fields and the new digit
+    // only appeared at its end, see GlassText)
+    property int refresh: 0
+    property int refresh2: 0
     readonly property var gv: GlassTuneCtl.effective
     readonly property bool refracting: mask !== null && backdrop !== null && Theme.glass && fx.status !== ShaderEffect.Error && fieldFx.status !== ShaderEffect.Error && fieldFx2.status !== ShaderEffect.Error
     // the mask (GlassMask / the bead disc) renders at 2x, mipmapped, on a scale-1 output (per screen; 1x on scaled
@@ -46,7 +56,7 @@ Item {
         property var mask: g.mask
         property size itemSize: Qt.size(width, height)
         property real radius: g.strokeHalf
-        property real level: 0.5
+        property real level: 0.5 + 1e-6 * (g.refresh % 2)   // a no-op change: re-renders the field
         property real maskScale: g.ss
     }
 
@@ -62,7 +72,7 @@ Item {
         property var mask: g.mask2 ?? g.mask
         property size itemSize: Qt.size(width, height)
         property real radius: g.strokeHalf
-        property real level: 0.5
+        property real level: 0.5 + 1e-6 * (g.refresh2 % 2)   // a no-op change: re-renders the field
         property real maskScale: g.ss
     }
 
@@ -72,8 +82,8 @@ Item {
         fragmentShader: Qt.resolvedUrl("shaders/glasstext.frag.qsb")
         property var backdrop: g.backdrop
         property var sharp: g.sharpBackdrop ?? g.backdrop
-        property var field: fieldFx
-        property var field2: g.mask2 ? fieldFx2 : fieldFx
+        property var field: g.mask2 && g.flip ? fieldFx2 : fieldFx
+        property var field2: !g.mask2 ? fieldFx : g.flip ? fieldFx : fieldFx2
         property real morph: g.mask2 ? g.morph : 0
         property size itemSize: Qt.size(width, height)
         property point origin: g.origin
@@ -96,5 +106,6 @@ Item {
         property real dim: g.sharpBackdrop ? g.dim : 0
         property real shade: g.shade * g.strength
         property real sharpInset: g.sharpBackdrop ? g.sharpInset : 0
+        property real airy: g.airy
     }
 }

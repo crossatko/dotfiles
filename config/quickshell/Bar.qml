@@ -64,9 +64,33 @@ PanelWindow {
     readonly property bool transparentFlush: BarConfig.transparentFlush(bar.screen)
     readonly property real backdropOpacity: !transparentFlush ? 1 : barGap > 0 ? Math.max(0, Math.min(1, gapNow / barGap)) : 0
     Glass { id: glass; root: bar.contentItem; hidden: bar.backdropOpacity <= 0.004 }
-    // colours of everything on the bar: the palette, or in light mode while the bar has no backdrop the set that reads
-    // on the wallpaper strip under it (Theme.inkOn: the dark palette's light text on a dark wallpaper)
-    readonly property var ink: backdropOpacity < 0.5 ? Theme.inkOn(bar.screen?.name ?? "", atTop) : Theme
+    // Wallpaper aware colours of everything on the bar (BarContrast.qml samples the wallpaper strip behind the bar once per
+    // wallpaper / size change, BarInk.qml decides per section). Each section Row hands its set down as `barInk`; Chip, BarIcon
+    // and BarLabel find it. Without a backdrop (flat) and with adaptive contrast on, the text is dark on a bright wallpaper and
+    // light on a dark one, whatever the theme mode; otherwise the palette (light mode and no backdrop: Theme.inkOn as before).
+    readonly property bool inkFlat: backdropOpacity < 0.5
+    readonly property string inkMode: BarConfig.contrast(bar.screen)
+    readonly property real inkSens: BarConfig.contrastSens(bar.screen)
+    readonly property real inkFill: BarConfig.hoverFill(bar.screen) / 100
+    readonly property var inkBase: inkFlat ? Theme.inkOn(bar.screen?.name ?? "", atTop) : Theme
+    // the strip under the bar: its pixel height (the window's bar part) and edge pick the cache entry
+    readonly property string lumaKey: inkFlat && inkMode === "auto" ? BarContrast.keyFor(bar.screen, atTop, barH + barGap) : ""
+    onLumaKeyChanged: BarContrast.request(lumaKey)
+    readonly property var lumaCols: lumaKey !== "" ? BarContrast.cols[lumaKey] ?? null : null
+    Connections { target: BarContrast; function onBumpedChanged() { BarContrast.request(bar.lumaKey) } }
+    // sections' extents as fractions of the screen width (chips appearing / hiding move them: only a recompute)
+    function secSeg(sec, fallback) {
+        if (!lumaCols) return null
+        const w = Math.max(1, bar.width)
+        const wide = sec.width > 0
+        return BarContrast.segment(lumaCols, wide ? (frame.x + sec.x) / w : fallback[0], wide ? (frame.x + sec.x + sec.width) / w : fallback[1])
+    }
+    readonly property var inkLeft: inkL     // (IPC status of BarContrast)
+    readonly property var inkCenter: inkC
+    readonly property var inkRight: inkR
+    BarInk { id: inkL; base: bar.inkBase; flat: bar.inkFlat; mode: bar.inkMode; sens: bar.inkSens; fill: bar.inkFill; seg: bar.secSeg(leftSec, [0, 0.33]) }
+    BarInk { id: inkC; base: bar.inkBase; flat: bar.inkFlat; mode: bar.inkMode; sens: bar.inkSens; fill: bar.inkFill; seg: bar.secSeg(centerSec, [0.33, 0.66]) }
+    BarInk { id: inkR; base: bar.inkBase; flat: bar.inkFlat; mode: bar.inkMode; sens: bar.inkSens; fill: bar.inkFill; seg: bar.secSeg(rightSec, [0.66, 1]) }
 
     // ---- shared state -------------------------------------------------------
     property string cpu: "0%"
@@ -117,7 +141,7 @@ PanelWindow {
         reg(name, item)
         Popups.toggle(name, bar.screen.name, centerOf(item))
     }
-    Component.onCompleted: { Popups.barObjs[bar.screen.name] = bar; Popups.setBarGap(bar.screen.name, gapNow) }
+    Component.onCompleted: { BarContrast.bars[bar.screen.name] = bar; BarContrast.request(lumaKey); Popups.barObjs[bar.screen.name] = bar; Popups.setBarGap(bar.screen.name, gapNow) }
 
     // the playing MPRIS player wins; a paused one only shows while the Twitch app isn't playing
     readonly property var player: {
@@ -324,6 +348,7 @@ PanelWindow {
         // a Repeater of Loaders over one section's id list (copied per section: an inline component here broke hot reload)
         Row {
             id: leftSec
+            readonly property var barInk: inkL
             anchors { left: parent.left; leftMargin: bar.padSide; verticalCenter: parent.verticalCenter }
             spacing: 4
             Repeater {
@@ -338,6 +363,7 @@ PanelWindow {
         // truly centered on the bar; only pushed aside when it would run into the left / right section
         Row {
             id: centerSec
+            readonly property var barInk: inkC
             anchors.verticalCenter: parent.verticalCenter
             spacing: 4
             x: {
@@ -356,6 +382,7 @@ PanelWindow {
         }
         Row {
             id: rightSec
+            readonly property var barInk: inkR
             anchors { right: parent.right; rightMargin: bar.padSide; verticalCenter: parent.verticalCenter }
             spacing: 4
             Repeater {
@@ -376,14 +403,14 @@ PanelWindow {
             spacing: 4
             Repeater {
                 model: bar.shownWorkspaces
-                Chip { ink: bar.ink;
+                Chip {
                     id: wsChip
                     required property var modelData
                     visible: modelData.id > 0
                     active: modelData.focused
                     dim: !modelData.active && !modelData.focused
                     onClicked: bar.run(["hyprctl", "dispatch", "hl.dsp.focus({workspace=" + modelData.id + "})"])
-                    BarIcon { text: String(bar.kana[wsChip.modelData.id] || wsChip.modelData.id); family: Theme.font; styleName: ""; pixelSize: Theme.fontSize; color: wsChip.modelData.focused ? bar.ink.accent : bar.ink.fg }
+                    BarIcon { text: String(bar.kana[wsChip.modelData.id] || wsChip.modelData.id); family: Theme.font; styleName: ""; pixelSize: Theme.fontSize; color: wsChip.modelData.focused ? ink.accent : ink.fg }
                 }
             }
         }
@@ -392,20 +419,21 @@ PanelWindow {
     // screen recording: only while one runs (see recState); pulsing red dot + elapsed time, click = stop
     Component {
         id: recComp
-        Chip { ink: bar.ink;
+        Chip {
+            id: recChip
             show: bar.recording
             onClicked: bar.run([bar.recScript, "stop"])
             Rectangle {
                 implicitWidth: 8; implicitHeight: 8; radius: 4
-                color: bar.ink.red
+                color: recChip.ink.red
                 SequentialAnimation on opacity {
                     running: bar.recording; loops: Animation.Infinite
                     NumberAnimation { to: 0.35; duration: 700; easing.type: Easing.InOutSine }
                     NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
                 }
             }
-            BarLabel { text: bar.recElapsed; color: bar.ink.red }
-            BarIcon { visible: bar.recording && bar.recState.audio === "1"; text: "\uf028"; color: bar.ink.fgDim }
+            BarLabel { text: bar.recElapsed; color: ink.red }
+            BarIcon { visible: bar.recording && bar.recState.audio === "1"; text: "\uf028"; color: ink.fgDim }
         }
     }
     // virtual machines (VmService.qml): only while a VM runs or a VM download / install prep is in progress; icon + count of
@@ -414,7 +442,6 @@ PanelWindow {
         id: vmComp
         VmChip {
             id: vmChip
-            ink: bar.ink
             Component.onCompleted: bar.reg("vm", vmChip)
             active: bar.isOpen("vm")
             onClicked: bar.pop("vm", vmChip)
@@ -422,7 +449,7 @@ PanelWindow {
     }
     Component {
         id: mediaComp
-        Chip { ink: bar.ink;
+        Chip {
             id: mediaChip
             Component.onCompleted: bar.reg("media", mediaChip)
             show: bar.player !== null || bar.showTwitch
@@ -435,7 +462,7 @@ PanelWindow {
             }
             BarIcon {
                 text: bar.mediaBrand ? bar.mediaBrand : bar.player ? (bar.player.isPlaying ? "\uf04b" : "\uf04c") : "\uf04c"
-                color: bar.player && !bar.player.isPlaying ? bar.ink.muted : bar.ink.accent
+                color: bar.player && !bar.player.isPlaying ? ink.muted : ink.accent
                 family: bar.mediaBrand ? Theme.brandFont : Theme.iconFont
             }
             BarLabel {
@@ -449,38 +476,38 @@ PanelWindow {
 
     Component {
         id: caffeineComp
-        Chip { ink: bar.ink;
+        Chip {
             active: bar.inhibit
             onClicked: bar.inhibit = !bar.inhibit
-            BarIcon { text: bar.inhibit ? "\uf7b6" : "\uf0f4"; color: bar.inhibit ? bar.ink.accent : bar.ink.muted }
+            BarIcon { text: bar.inhibit ? "\uf7b6" : "\uf0f4"; color: bar.inhibit ? ink.accent : ink.muted }
         }
     }
     Component {
         id: cpuComp
-        Chip { ink: bar.ink;
-            BarIcon { text: "\uf2db"; color: bar.ink.fgDim }
+        Chip {
+            BarIcon { text: "\uf2db"; color: ink.fgDim }
             BarLabel { text: bar.cpu; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
-            BarLabel { text: bar.spark(bar.cpuHist, 25, false); color: bar.ink.accent; Layout.preferredWidth: sparkMetrics.width }
+            BarLabel { text: bar.spark(bar.cpuHist, 25, false); color: ink.accent; Layout.preferredWidth: sparkMetrics.width }
         }
     }
     Component {
         id: memComp
-        Chip { ink: bar.ink;
-            BarIcon { text: "\uf538"; color: bar.ink.fgDim }
+        Chip {
+            BarIcon { text: "\uf538"; color: ink.fgDim }
             BarLabel { text: bar.mem; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
-            BarLabel { text: bar.spark(bar.memHist, 10, true); color: bar.ink.accent2; Layout.preferredWidth: sparkMetrics.width }
+            BarLabel { text: bar.spark(bar.memHist, 10, true); color: ink.accent2; Layout.preferredWidth: sparkMetrics.width }
         }
     }
     // Home Assistant (HomeAssistant.qml): opens the control popup; shows how many lights are on
     Component {
         id: haComp
-        Chip { ink: bar.ink;
+        Chip {
             id: haChip
             Component.onCompleted: bar.reg("ha", haChip)
             active: bar.isOpen("ha")
             dim: !HomeAssistant.configured || (HomeAssistant.status !== "ok" && HomeAssistant.status !== "loading")
             onClicked: bar.pop("ha", haChip)
-            BarIcon { text: HomeAssistant.lightsOn > 0 ? "\uf672" : "\uf015"; color: HomeAssistant.lightsOn > 0 ? bar.ink.accent : HomeAssistant.configured && HomeAssistant.status === "ok" ? bar.ink.fg : bar.ink.muted }
+            BarIcon { text: HomeAssistant.lightsOn > 0 ? "\uf672" : "\uf015"; color: HomeAssistant.lightsOn > 0 ? ink.accent : HomeAssistant.configured && HomeAssistant.status === "ok" ? ink.fg : ink.muted }
             BarLabel { visible: HomeAssistant.lightsOn > 0; text: HomeAssistant.lightsOn }
         }
     }
@@ -488,13 +515,13 @@ PanelWindow {
     // the most recently used account with fresh values (AiUsage.currentPercent), muted when only stale values are known
     Component {
         id: aiComp
-        Chip { ink: bar.ink;
+        Chip {
             id: aiChip
             Component.onCompleted: bar.reg("ai", aiChip)
             active: bar.isOpen("ai")
             dim: AiUsage.loaded && AiUsage.profiles.length === 0 && AiUsage.others.length === 0
             onClicked: bar.pop("ai", aiChip)
-            BarIcon { text: "\uf890"; color: AiUsage.anyExpired ? bar.ink.muted : bar.ink.accent }
+            BarIcon { text: "\uf890"; color: AiUsage.anyExpired ? ink.muted : ink.accent }
             // limit reached: time until the agent is usable again (AiUsage.blockedUntil), fixed width so the
             // minute countdown does not make the chip jitter; else the percentage
             BarLabel {
@@ -502,7 +529,7 @@ PanelWindow {
                 readonly property bool blocked: AiUsage.blockedUntil > 0
                 visible: blocked || AiUsage.currentPercent >= 0
                 text: blocked ? AiUsage.until(AiUsage.blockedUntil) : Math.round(AiUsage.currentPercent) + "%"
-                color: AiUsage.currentStale ? bar.ink.muted : bar.ink.fg
+                color: AiUsage.currentStale ? ink.muted : ink.fg
                 horizontalAlignment: Text.AlignHCenter
                 Layout.preferredWidth: blocked ? Math.max(implicitWidth, aiTm.width) : implicitWidth
                 TextMetrics { id: aiTm; font: aiLbl.font; text: "23h 59m" }
@@ -511,7 +538,7 @@ PanelWindow {
     }
     Component {
         id: volumeComp
-        Chip { ink: bar.ink;
+        Chip {
             id: audioChip
             Component.onCompleted: bar.reg("audio", audioChip)
             active: bar.isOpen("audio")
@@ -526,24 +553,24 @@ PanelWindow {
                 if (bar.sink && bar.sink.audio)
                     bar.sink.audio.volume = Math.max(0, Math.min(1.0, bar.sink.audio.volume + (dy > 0 ? 0.03 : -0.03)))
             }
-            BarIcon { measure: "\uf028"; text: Icons.volumeGlyph(bar.muted, bar.volume); color: bar.muted ? bar.ink.muted : bar.ink.accent }
+            BarIcon { measure: "\uf028"; text: Icons.volumeGlyph(bar.muted, bar.volume); color: bar.muted ? ink.muted : ink.accent }
             BarLabel { text: Math.round(bar.volume * 100) + "%"; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: pctMetrics.width }
         }
     }
     Component {
         id: netComp
-        Chip { ink: bar.ink;
+        Chip {
             id: netChip
             Component.onCompleted: bar.reg("net", netChip)
             active: bar.isOpen("net")
             dim: !bar.wiredUp && !bar.wifiUp
             onClicked: bar.pop("net", netChip)
-            BarIcon { text: bar.wiredUp ? "\uf796" : bar.wifiUp ? "\uf1eb" : "\uf6ac"; color: bar.wiredUp || bar.wifiUp ? bar.ink.accent : bar.ink.muted }
+            BarIcon { text: bar.wiredUp ? "\uf796" : bar.wifiUp ? "\uf1eb" : "\uf6ac"; color: bar.wiredUp || bar.wifiUp ? ink.accent : ink.muted }
         }
     }
     Component {
         id: btComp
-        Chip { ink: bar.ink;
+        Chip {
             id: btChip
             Component.onCompleted: bar.reg("bt", btChip)
             active: bar.isOpen("bt")
@@ -552,8 +579,8 @@ PanelWindow {
             // while AirPods are connected: a Font Awesome Pro Solid battery by level (bolt while charging) + their lowest bud level instead of the device count
             // (the count stays when something else is connected too); green while charging, red at 15 % and below
             readonly property bool pods: AirPods.lowest >= 0
-            readonly property color podsColor: AirPods.lowestCharging ? bar.ink.green : AirPods.lowest <= 15 ? bar.ink.red : bar.ink.fgDim
-            BarIcon { text: "\uf293"; color: bar.btConnected > 0 || btChip.pods ? bar.ink.accent : bar.btOn ? bar.ink.fg : bar.ink.muted }
+            readonly property color podsColor: AirPods.lowestCharging ? ink.green : AirPods.lowest <= 15 ? ink.red : ink.fgDim
+            BarIcon { text: "\uf293"; color: bar.btConnected > 0 || btChip.pods ? ink.accent : bar.btOn ? ink.fg : ink.muted }
             BarLabel { visible: bar.btConnected > (btChip.pods ? 1 : 0); text: bar.btConnected }
             BarIcon {
                 visible: btChip.pods
@@ -569,7 +596,8 @@ PanelWindow {
     }
     Component {
         id: trayComp
-        Chip { ink: bar.ink;
+        Chip {
+            id: trayChip
             show: SystemTray.items.values.some(i => !bar.trayHidden(i))   // qmllint disable missing-property
             padX: 6
             Repeater {
@@ -585,9 +613,9 @@ PanelWindow {
                         anchors { fill: parent; margins: -3 }
                         radius: Theme.radiusChip
                         visible: menu.visible
-                        color: Theme.alpha(bar.ink.accent, 0.28)
+                        color: Theme.alpha(trayChip.ink.accent, 0.28)
                         border.width: 1
-                        border.color: Theme.alpha(bar.ink.accent, 0.8)
+                        border.color: Theme.alpha(trayChip.ink.accent, 0.8)
                     }
                     Image {
                         anchors.fill: parent
@@ -615,7 +643,7 @@ PanelWindow {
     }
     Component {
         id: clockComp
-        Chip { ink: bar.ink;
+        Chip {
             id: clockChip
             // the clock opens the notification center (not when it would be empty, unless it is already open);
             // the calendar is its own chip (calComp)
@@ -625,41 +653,41 @@ PanelWindow {
                 if (mouse.button === Qt.RightButton) Notifs.setDnd(!Notifs.dnd)
                 else if (Notifs.liveCount > 0 || bar.isOpen("notif")) bar.pop("notif", clockChip)
             }
-            BarLabel { text: Qt.formatDateTime(bar.clockNow, "yyyy-MM-dd HH:mm"); color: Notifs.dnd ? bar.ink.muted : bar.ink.fg }
-            BarIcon { visible: Notifs.dnd || Notifs.count > 0; Layout.leftMargin: Theme.chipGap; text: Notifs.dnd ? "\uf1f6" : "\uf8fa"; color: Notifs.dnd ? bar.ink.muted : bar.ink.accent }
-            BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: bar.ink.accent; font.pixelSize: Theme.fontCaption }
+            BarLabel { text: Qt.formatDateTime(bar.clockNow, "yyyy-MM-dd HH:mm"); color: Notifs.dnd ? ink.muted : ink.fg }
+            BarIcon { visible: Notifs.dnd || Notifs.count > 0; Layout.leftMargin: Theme.chipGap; text: Notifs.dnd ? "\uf1f6" : "\uf8fa"; color: Notifs.dnd ? ink.muted : ink.accent }
+            BarLabel { visible: Notifs.count > 0; text: Notifs.count; color: ink.accent; font.pixelSize: Theme.fontCaption }
         }
     }
 
     // do-not-disturb: only while it is on (Notifs.dnd is event-driven); click = turn it off
     Component {
         id: dndComp
-        Chip { ink: bar.ink;
+        Chip {
             show: Notifs.dnd
             onClicked: Notifs.setDnd(false)
-            BarIcon { text: "\uf1f6"; color: bar.ink.muted }
+            BarIcon { text: "\uf1f6"; color: ink.muted }
         }
     }
 
     Component {
         id: calComp
-        Chip { ink: bar.ink;
+        Chip {
             id: calChip
             Component.onCompleted: bar.reg("cal", calChip)
             active: bar.isOpen("cal")
             onClicked: mouse => mouse.button === Qt.RightButton ? bar.run(["sh", "-c", "command -v omacal >/dev/null && exec omacal || notify-send omacal \"omacal is not installed\""]) : bar.pop("cal", calChip)
-            BarIcon { text: "\uf073"; color: bar.ink.fg }
+            BarIcon { text: "\uf073"; color: ink.fg }
         }
     }
 
     Component {
         id: bellComp
-        Chip { ink: bar.ink;
+        Chip {
             id: bellChip               // opens the control center, whose gear opens Settings; popups centre on it wherever it sits
             Component.onCompleted: bar.reg("center", bellChip)
             active: bar.isOpen("center")
             onClicked: mouse => mouse.button === Qt.RightButton ? Notifs.setDnd(!Notifs.dnd) : bar.pop("center", bellChip)
-            BarIcon { text: "\uf0c9"; color: Notifs.dnd ? bar.ink.muted : bar.ink.fg }
+            BarIcon { text: "\uf0c9"; color: Notifs.dnd ? ink.muted : ink.fg }
         }
     }
 }

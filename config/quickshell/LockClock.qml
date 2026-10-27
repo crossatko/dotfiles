@@ -4,7 +4,7 @@ import QtQuick.Effects
 import QtQuick.Window
 import Quickshell
 
-// Clock of the lock screen: the time (HH:mm) in glass lettering, one GlassText per character (each glyph its own
+// Clock of the lock screen: the time (HH:mm or HH:mm:ss, ClockFace) in glass lettering, one GlassText per character (each glyph its own
 // shape field, so neighbours never melt together), spaced apart a little; the date under it in the UI font (glass does
 // not read at that size), with a soft halo of the theme bg for busy or opposite-brightness wallpapers. `pixelSize` =
 // the digits' size; `origin` = this item's top-left in the backdrop (`backdrop`, `sharpBackdrop`, `sharpInset`).
@@ -16,81 +16,55 @@ Column {
     property real sharpInset: 0
     property point origin: Qt.point(0, 0)
     property size backdropSize: Qt.size(1, 1)
-    // form(): after a short pause the digits condense one after the other, left to right, like drops of liquid glass:
-    // each inflates from flat (refraction, rim and highlights grow with it) with a very soft settle and a small scale
-    // (0.96 -> 1); then the date fades in. Calm, ~2.5 s at normal speed; popup motion speed, instant when motion is off.
+    // form(): the shared glass reveal (GlassReveal / GlassGlyph, also the desktop clock's): after a short pause the digits
+    // condense one after the other, left to right, then the date fades in; popup motion speed, instant when motion is off.
     // A changed digit (the minute) morphs into the new one (GlassText); the others stay.
-    readonly property int formMs: LockPrefs.clockReveal ? Theme.popupMs(Motion.baseMs * 8) : 0   // Settings > Lock "Clock reveal"
-    readonly property int staggerMs: Theme.popupMs(Motion.baseMs * 0.6)
-    readonly property int delayMs: Theme.popupMs(Motion.baseMs * 2)
-    property real dateShown: 1
-    function form() {
-        for (let i = 0; i < glyphRepeater.count; i++) {
-            const g = glyphRepeater.itemAt(i)
-            if (g) g.land(delayMs + i * staggerMs)   // qmllint disable missing-property
-        }
-        dateAnim.stop()
-        if (formMs <= 0) { dateShown = 1; return }
-        dateShown = 0
-        dateAnim.restart()
+    GlassReveal { id: reveal; enabled: LockPrefs.clockReveal }   // Settings > Lock "Clock reveal"
+    function form() { reveal.form(glyphRepeater) }
+    // the time (HH:mm[:ss], Settings > Lock "Seconds" / "24-hour clock"), the digits' morph time and the fit; test hook
+    // QS_LOCK_CLOCK (ClockFace)
+    ClockFace {
+        id: face
+        h24: LockPrefs.clock24h
+        seconds: LockPrefs.seconds
+        morphTime: LockPrefs.morph
+        testEnv: Quickshell.env("QS_LOCK_CLOCK") || ""
+        active: c.visible
     }
-    SequentialAnimation {
-        id: dateAnim
-        PauseAnimation { duration: Math.max(0, c.delayMs + (glyphRepeater.count - 1) * c.staggerMs + c.formMs * 0.5) }
-        NumberAnimation { target: c; property: "dateShown"; from: 0; to: 1; duration: c.formMs; easing.type: Easing.InOutSine }
-    }
-    // test hook QS_LOCK_CLOCK: a fixed text, or several separated by spaces, cycled every 3 s (the morph)
-    readonly property var testTimes: String(Quickshell.env("QS_LOCK_CLOCK") || "").split(" ").filter(t => t !== "")
-    property int testIdx: 0
-    Timer { running: c.testTimes.length > 1; interval: 3000; repeat: true; onTriggered: c.testIdx = (c.testIdx + 1) % c.testTimes.length }
-    readonly property string text: testTimes.length > 0 ? testTimes[testIdx] : (LockPrefs.clock24h ? Qt.formatDateTime(clock.date, "HH:mm") : Qt.formatDateTime(clock.date, "h:mm AP").replace(/\s*[AP]M$/i, ""))   // "h" alone is 24 h in Qt
-    spacing: -Math.round(pixelSize * 0.04)     // the glyph box has room for descenders the digits do not use
-
-    SystemClock { id: clock; precision: SystemClock.Minutes }
+    readonly property string text: face.text
+    function demo() { face.demo() }
+    // the widest the clock may be (seconds widen it): the digits shrink only if it would not fit
+    property real maxWidth: 1e6
+    readonly property int glyphSize: face.fitSize(pixelSize, maxWidth)
+    spacing: -Math.round(glyphSize * 0.04)     // the glyph box has room for descenders the digits do not use
 
     Row {
         id: glyphs
         anchors.horizontalCenter: parent.horizontalCenter
-        spacing: Math.round(c.pixelSize * 0.03)
+        spacing: Math.round(c.glyphSize * 0.03)
         Repeater {
             id: glyphRepeater
             model: c.text.length
-            GlassText {
+            GlassGlyph {
                 id: ch
                 required property int index
                 text: c.text.charAt(index)
-                pixelSize: c.pixelSize
+                pixelSize: c.glyphSize
+                morphMs: face.morphMs
                 backdrop: c.backdrop
                 sharpBackdrop: c.sharpBackdrop
                 sharpInset: c.sharpInset
                 dim: Theme.lockDim
                 backdropSize: c.backdropSize
                 origin: Qt.point(c.origin.x + glyphs.x + ch.x, c.origin.y + glyphs.y + ch.y)
-                property real pop: 1
-                strength: pop
-                opacity: Math.min(1, pop * 1.4)
-                scale: 0.96 + 0.04 * pop
-                transformOrigin: Item.Bottom
-                function land(delay) {
-                    landAnim.stop()
-                    if (c.formMs <= 0) { pop = 1; return }
-                    pop = 0
-                    landDelay.duration = delay
-                    landAnim.restart()
-                }
-                SequentialAnimation {
-                    id: landAnim
-                    PauseAnimation { id: landDelay; duration: 0 }
-                    NumberAnimation { target: ch; property: "pop"; from: 0; to: 1; duration: c.formMs; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
-                }
             }
         }
     }
     Label {
         anchors.horizontalCenter: parent.horizontalCenter
         visible: LockPrefs.showDate
-        opacity: c.dateShown
-        text: Qt.formatDateTime(clock.date, "dddd, d MMMM")
+        opacity: reveal.dateShown
+        text: face.dateText
         font.pixelSize: Math.max(Theme.fontTitle, Math.round(c.pixelSize * 0.09))
         font.weight: Font.Medium
         color: Theme.fg

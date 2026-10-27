@@ -12,7 +12,11 @@ Rectangle {
     property bool active: false
     property bool dim: false
     property bool show: true   // read by the section Loaders in Bar.qml: false hides the widget (media without player, empty tray)
-    property var ink: Theme    // colour set: Theme, or Theme.darkInk on a light-mode bar without backdrop (Bar.qml ink)
+    // colour set (BarInk.qml): the one of the bar section this chip sits in (the ancestor with a `barInk`, Bar.qml's section Rows), else Theme
+    // qmllint disable missing-property
+    readonly property var inkOwner: { let p = chip.parent; while (p && p.barInk === undefined) p = p.parent; return p }
+    // qmllint enable missing-property
+    property var ink: inkOwner ? inkOwner.barInk : Theme
     property int padX: Theme.chipPadX
     readonly property real contentW: row.implicitWidth
     readonly property bool iconOnly: contentW <= Theme.chipIcon
@@ -25,13 +29,14 @@ Rectangle {
     implicitWidth: Math.max(Theme.chipHeight, iconOnly ? Theme.chipHeight : Math.ceil(row.implicitWidth) + 2 * padX)   // never narrower than tall (min 1:1)
     radius: Theme.radiusChip   // inset barPad inside the bar
     color: active ? Theme.alpha(ink.accent, 0.28)
-         : hover.containsMouse ? Theme.alpha(ink.fg, 0.10)
+         : hover.containsMouse ? Theme.alpha(ink.hoverColor ?? ink.fg, ink.hoverAlpha ?? 0.10)
+         : ink.bare ? Theme.alpha(ink.fg, 0)            // BarInk: flat bar, nothing at rest (only active / hovered chips are filled)
          : Theme.alpha(ink.bg, Theme.glass ? 0.10 : 0.35)
     border.width: active ? 1 : 0
     border.color: Theme.alpha(ink.accent, 0.8)
     opacity: dim ? 0.55 : 1
 
-    Behavior on color { ColorAnimation { duration: 120 } }
+    Behavior on color { ColorAnimation { duration: Theme.popupMs(120) } }
 
     // Blank px between the row edges and the visible ink of its first / last visible item. BarIcon and BarLabel
     // report their own ink insets (InkMeter); other items (tray images, the record dot) count as solid.

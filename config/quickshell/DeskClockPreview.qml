@@ -13,6 +13,7 @@ Item {
     readonly property real sw: 1920
     readonly property real sh: 1080
     implicitHeight: Math.round(width * sh / sw)
+    function demo() { view.demo() }      // the digits' morph: one minute ahead and back
 
     Item {
         id: frame
@@ -20,12 +21,14 @@ Item {
         layer.enabled: true
         layer.effect: MultiEffect { maskEnabled: true; maskSource: pv.cornerMask }
         DeskClockView {
+            id: view
             width: pv.sw
             height: pv.sh
             scale: pv.width / pv.sw
             transformOrigin: Item.TopLeft
             preview: true
             wallpaper: LockWallpapers.stillFor(pv.screen)
+            screen: pv.screen
         }
     }
     Rectangle { id: corners; anchors.fill: parent; radius: Theme.radiusItem; visible: false; layer.enabled: true }

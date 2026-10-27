@@ -18,6 +18,7 @@ Item {
     property point origin: Qt.point(0, 0)
     property alias backdropSize: shape.backdropSize
     property alias strength: shape.strength
+    property alias airy: shape.airy
     readonly property real strokeHalf: pixelSize * 0.1      // Paper Mono extra bold: stem ~ 0.2 em incl. the inflation
     readonly property int pad: Math.ceil(Math.max(4, Math.min(48, strokeHalf * 1.1)) * 3.5)
     implicitWidth: glyphs.width - 2 * pad
@@ -27,15 +28,32 @@ Item {
 
     // ping-pong: `cur` holds what is shown; a change is written into the other one, morphed to, then becomes `cur`
     property int cur: 0
-    property string textA: text
-    property string textB: text
-    readonly property int morphMs: Theme.popupMs(Motion.baseMs * 3)
+    // set, not bound: a binding to `text` would follow a change in both masks at once (nothing left to morph from)
+    property string textA: ""
+    property string textB: ""
+    property bool started: false
+    Component.onCompleted: { textA = text; textB = text; started = true }
+    // the morph's duration (the clocks set it: Settings morph time, the seconds cap); 0 = the new glyph just replaces the old
+    property int morphMs: Theme.popupMs(Motion.baseMs * 3)
+    // only the mask that took the new text has its field rendered again; the shown one and every other glyph stay
+    property int bumped: 0       // which mask's field (0 = A, 1 = B), again in refreshAgain
+    function bump(i) { bumped = i; if (i === 0) shape.refresh++; else shape.refresh2++ }
     onTextChanged: {
-        if (morphMs <= 0 || !shape.refracting) { morphAnim.stop(); textA = text; textB = text; cur = 0; shape.morph = 0; return }
+        if (!started || morphMs <= 0 || !shape.refracting) {
+            // a plain swap: the shown mask takes the text
+            morphAnim.stop(); shape.morph = 0
+            if (cur === 0) textA = text; else textB = text
+            if (started) { bump(cur); refreshAgain.restart() }
+            return
+        }
         if (morphAnim.running) { morphAnim.complete() }
         if (cur === 0) textB = text; else textA = text
+        bump(1 - cur)
+        refreshAgain.restart()
         morphAnim.restart()
     }
+    // and once more a few frames later, after the new mask's layer surely rendered (layer updates run in no fixed order)
+    Timer { id: refreshAgain; interval: 50; onTriggered: g.bump(g.bumped) }
     SequentialAnimation {
         id: morphAnim
         NumberAnimation { target: shape; property: "morph"; from: 0; to: 1; duration: g.morphMs; easing.type: Easing.InOutSine }
@@ -47,8 +65,9 @@ Item {
         id: shape
         x: -g.pad; y: -g.pad
         width: glyphs.width; height: glyphs.height
-        mask: g.cur === 0 ? glyphs : glyphs2
-        mask2: g.cur === 0 ? glyphs2 : glyphs
+        mask: glyphs
+        mask2: glyphs2
+        flip: g.cur === 1
         pad: g.pad
         strokeHalf: g.strokeHalf
         origin: Qt.point(g.origin.x - g.pad, g.origin.y - g.pad)

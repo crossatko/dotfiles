@@ -9,7 +9,7 @@ import QtQuick.Layouts
 // slack, measured by InkMeter); Chip uses them to pad icon+label chips evenly to the ink.
 Text {
     id: lbl
-    // colour set: the enclosing Chip's (Theme, or Theme.darkInk on a light-mode bar without backdrop, Bar.qml ink), else Theme
+    // colour set: the enclosing Chip's (BarInk.qml via the bar section: wallpaper aware text colours, else Theme), else Theme
     // qmllint disable missing-property
     property var ink: parent?.parent?.ink ?? Theme   // parent = the Chip's row, its parent the Chip
     // qmllint enable missing-property

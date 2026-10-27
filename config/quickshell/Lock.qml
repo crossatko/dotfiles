@@ -111,10 +111,22 @@ Item {
         // first hold any desktop video player that is mid-burst (bin/lock-desktop-video; the connectors it paused go to
         // $d/held for the release at unlock), so the snapshot shows the frame the desktop will still be on at unlock
         // (Settings > Lock "Desktop snapshot" off: only the hold, nothing of the desktop is captured; exit 1 = no snapshots)
-        snapProc.command = ["sh", "-c", 'umask 077; d="$1"; g="$2"; h="$3"; snap="$4"; shift 4; rm -rf "$d"; mkdir -p "$d" || exit 1; '
+        // Desktop clock (snapHideS > 0): it stays on screen and in the snapshot (the lock surface fades it out,
+        // LockClockPatch); only a clock that is covered (bin/lock-clock-cover, asked alongside the hold) is hidden first,
+        // every clock when a video was held (mid-burst: the clock's copy moves on, and a busy compositor answers slowly):
+        // "hide <connectors> | *" on stdout, then snapHideS for the compositor to show that.
+        clockHideOn = []
+        // the clean rects for LockClockPatch, alongside the snapshot: the clock window must still be drawing (the
+        // compositor stops its frames once the lock is up, then a grab never finishes)
+        if (snapHideS > 0 && LockPrefs.snapshot) clockGrab()
+        snapProc.command = ["sh", "-c", 'umask 077; d="$1"; g="$2"; h="$3"; snap="$4"; w="$5"; c="$6"; r="$7"; shift 7; rm -rf "$d"; mkdir -p "$d" || exit 1; '
+            + 'cp=; [ "$w" = 0 ] || [ "$snap" != 1 ] || { python3 -I -S "$c" "$r" > "$d/cover" & cp=$!; }; '
             + 'python3 -I -S "$h" hold "$@" > "$d/held"; [ "$snap" = 1 ] || exit 1; '
+            + 'if [ -n "$cp" ]; then if [ -s "$d/held" ]; then kill "$cp"; hide="*"; else wait "$cp"; hide=$(xargs < "$d/cover"); fi; '
+            + '[ -z "$hide" ] || { echo "hide $hide"; sleep "$w"; }; fi; '
             + 'for o in "$@"; do grim -t ppm -o "$o" "$d/$o-$g.ppm" & done; wait; for o in "$@"; do [ -s "$d/$o-$g.ppm" ] || exit 1; done',
-            "_", snapDir, String(snapGen), Quickshell.shellDir + "/bin/lock-desktop-video", LockPrefs.snapshot ? "1" : "0"].concat(names)
+            "_", snapDir, String(snapGen), Quickshell.shellDir + "/bin/lock-desktop-video", LockPrefs.snapshot ? "1" : "0", String(snapHideS),
+            Quickshell.shellDir + "/bin/lock-clock-cover", JSON.stringify(clockRects)].concat(names)
         snapProc.running = true
         snapCap.restart()
     }
@@ -124,6 +136,13 @@ Item {
     }
     Process {
         id: snapProc
+        stdout: SplitParser {
+            onRead: line => {
+                if (!line.startsWith("hide ")) return
+                const l = line.substring(5).split(" ").filter(c => c !== "")
+                root.clockHideOn = l.indexOf("*") >= 0 ? root.clockScreens.slice() : l
+            }
+        }
         onExited: code => {
             if (root.snapLate) { Quickshell.execDetached(["sh", "-c", 'rm -f "$1"/*.ppm', "_", root.snapDir]); return }   // keep `held`
             root.snapsReady = code === 0
@@ -131,7 +150,9 @@ Item {
         }
     }
     // the lock never waits for the snapshot longer than this; a late one is dropped (it may show the lock itself)
-    Timer { id: snapCap; interval: 120; onTriggered: { root.snapsReady = false; root.snapLate = true; root.engageLock() } }
+    // the late capture is stopped too: a hung grim (an output that draws no frames) kept snapProc running, and every
+    // later lock() returned early in requestSessionLock: the session never locked again
+    Timer { id: snapCap; interval: 120; onTriggered: { root.snapsReady = false; root.snapLate = true; root.engageLock(); snapProc.running = false } }
     property bool snapLate: false
     // after unlock: release the held desktop players (they finish their burst from the frame the reveal ended on), drop
     // the snapshots
@@ -145,11 +166,28 @@ Item {
     function succeed() {
         authenticating = false
         if (!snapsReady || !LockPrefs.unlockRing || Theme.lockRevealMs <= 0) { unlock(); return }
+        // a desktop clock in the snapshot without its clean rect would end the ring on a clock that then vanishes
+        if (snapHideS > 0 && clockScreens.some(c => clockHideOn.indexOf(c) < 0 && !clockPatchFor(c))) { unlock(); return }
         revealing = true
         revealEnd.restart()
     }
     Timer { id: revealEnd; interval: Theme.lockRevealMs + 50; onTriggered: root.unlock() }   // + a few frames: end on the full snapshot
 
+    // the desktop is back (DeskClock forms its clocks again); a signal, not `locked`: that binding once kept "locked"
+    signal unlocked()
+    // seconds the desktop snapshot waits after a desktop clock was hidden for it (covered clocks only, see
+    // requestSessionLock), so it is gone from the screen grim captures (two frames at 60 Hz); 0 = no desktop clock
+    // (shell.qml sets it, and wires the clock: clockGrab -> DeskClock.grabClean, its patches / shownOn back here)
+    property real snapHideS: 0
+    signal clockGrab()
+    property var clockPatches: ({})     // connector -> DeskClock.patches entry
+    property var clockScreens: []       // connectors that show a desktop clock
+    property var clockRects: ({})       // connector -> [x, y, w, h] the clock paints (global px; DeskClock.inkRects)
+    property var clockHideOn: []        // connectors whose clock hides before the snapshot
+    property bool clockHidden: false    // the lock is up: every desktop clock hides (under the lock surface)
+    function clockPatchFor(conn) {
+        return snapsReady && conn !== "" && clockHideOn.indexOf(conn) < 0 ? (clockPatches[conn] || null) : null
+    }
     function unlock() {
         lockRequested = false
         pendingSessionLock = false
@@ -160,7 +198,10 @@ Item {
         sessionLock.locked = false
         revealing = false
         dropSnaps()
+        clockHidden = false
+        clockHideOn = []
         log("unlocked")
+        unlocked()
     }
 
     function submit(password) {
@@ -262,7 +303,7 @@ Item {
         locked: false
         onSecureStateChanged: {
             root.log("secure=" + secure)
-            if (secure) { root.pendingSessionLock = false; stabilize.stop(); poll.stop() }
+            if (secure) { root.pendingSessionLock = false; root.clockHidden = true; stabilize.stop(); poll.stop() }
         }
         // the compositor ended the lock under us (it can, e.g. a restore by another client)
         onLockStateChanged: {
@@ -274,7 +315,10 @@ Item {
             id: surface
             color: Theme.bg
             LockView {
+                id: lockView
                 anchors.fill: parent
+                Component.onCompleted: root.views.push(lockView)
+                Component.onDestruction: root.views = root.views.filter(v => v !== lockView)
                 wallpaper: surface.screen ? root.stillFor(surface.screen) : root.wallpaper   // qmllint disable missing-property
                 // qmllint disable missing-property
                 screenName: surface.screen ? surface.screen.name : ""
@@ -284,6 +328,7 @@ Item {
                 password: root.enteredPassword
                 engaged: sessionLock.secure
                 snapshot: root.snapsReady && screenName !== "" ? "file://" + root.snapDir + "/" + screenName + "-" + root.snapGen + ".ppm" : ""
+                clockPatch: root.clockPatchFor(screenName)
                 revealing: root.revealing
                 onPasswordEdited: p => root.enteredPassword = p
                 onSubmit: p => root.submit(p)
@@ -298,10 +343,17 @@ Item {
 
     Component.onCompleted: checkStranded()
 
+    // the lock surfaces' views (status: per-screen backdrop state while locked)
+    property var views: []
     function status() {
+        // per screen: the still it would show and, while locked, what its surface really shows (still / video / none)
+        const base = p => p ? String(p).replace(/^.*\//, "") : ""
+        const screens = views.length > 0 ? views.map(v => v.wallState())
+            : Quickshell.screens.filter(s => s && s.name).map(s => ({ screen: s.name, still: base(stillFor(s)) }))
         return JSON.stringify({ locked: currentlyLocked(), requested: lockRequested, pending: pendingSessionLock,
                                 sessionLocked: sessionLock.locked, secure: sessionLock.secure, realScreens: realScreenCount(),
-                                pam: pamConfigured, authenticating: authenticating, stranded: stranded, lastEvent: lastEvent })
+                                pam: pamConfigured, authenticating: authenticating, stranded: stranded, lastEvent: lastEvent,
+                                screens: screens })
     }
     function isSecure() { return sessionLock.secure }
 }

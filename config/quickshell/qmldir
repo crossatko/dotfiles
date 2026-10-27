@@ -124,3 +124,15 @@ DeskClockView 1.0 DeskClockView.qml
 DeskClockPreview 1.0 DeskClockPreview.qml
 SettingsDeskClock 1.0 SettingsDeskClock.qml
 DeskClockVideo 1.0 DeskClockVideo.qml
+GlassGlyph 1.0 GlassGlyph.qml
+GlassReveal 1.0 GlassReveal.qml
+BarInk 1.0 BarInk.qml
+singleton BarContrast 1.0 BarContrast.qml
+LockClockPatch 1.0 LockClockPatch.qml
+ClockFace 1.0 ClockFace.qml
+MediaPick 1.0 MediaPick.qml
+MediaArt 1.0 MediaArt.qml
+MediaSeek 1.0 MediaSeek.qml
+MediaTransport 1.0 MediaTransport.qml
+LockMedia 1.0 LockMedia.qml
+MonitorToggles 1.0 MonitorToggles.qml
