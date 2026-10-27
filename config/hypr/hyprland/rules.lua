@@ -110,7 +110,7 @@ elseif is_workstation then
 end
 -- The shell's own modal windows (Settings.qml: title qs-settings): plain
 -- floating cards. The card draws its own border; the window keeps the global rounding (= the Appearance radius, the
--- card's radius too), because the glass of a window is cut to the window's own rounded box, not to the card. Placement (centre, remembered position, SUPER+double-click reset) is
+-- card's radius too), because the glass of a window is cut to the window's own rounded box, not to the card. Placement (always the centre of the focused monitor at the default size, nothing remembered; double-click on the header resets a dragged window) is
 -- scripts/modal-windows.lua; the dragging itself is the normal SUPER+LMB bind.
 hl.window_rule({
 	name = "qs-modal",
@@ -132,7 +132,7 @@ hl.window_rule({
 	match = { class = "^(brave-www\\.twitch\\.tv__popout_.*)$" },
 })
 
--- Scratchpad terminal (SUPER+R, binds.lua): floating, centred, 60% of the monitor, on special:scratchpad.
+-- A scratchpad terminal (ghostty --class=dotfiles.scratchpad; SUPER+R only toggles the workspace, it no longer spawns one): floating, centred, 60% of the monitor, on special:scratchpad.
 hl.window_rule({
 	name = "scratchpad-terminal",
 	float = true,
@@ -148,6 +148,13 @@ hl.window_rule({
 	opaque = true,
 	workspace = "12",
 	match = { class = "^(org.jellyfin.JellyfinDesktop)$" },
+})
+
+-- Figma (figma-linux-next desktop app, or the Brave web app of figma.com) always opens on workspace 2.
+hl.window_rule({
+	name = "figma-workspace",
+	workspace = "2",
+	match = { class = "^(figma-linux-next|brave-www\\.figma\\.com__.*)$" },
 })
 
 hl.window_rule({
@@ -358,6 +365,8 @@ hl.window_rule({
 -- new) is blurred (the pattern must match the whole namespace: `qs-.*`, not `^qs-`) wherever it draws something at least 10% opaque; fully transparent pixels get no blur.
 hl.layer_rule({ match = { namespace = "qs-.*" }, blur = true })
 hl.layer_rule({ match = { namespace = "qs-.*" }, ignore_alpha = 0.1 })
+-- Per-surface glass (Settings > Glass > Surfaces, fork builds with per-surface glass only): managed.lua adds named layer
+-- rules "qs-glass-<id>" with a `glass` string for qs-bar / qs-popup / qs-launcher / qs-osd / qs-toast (M.SURFACE_LAYERS).
 -- Bar popups animate themselves (PopupHost.qml: fade / scale / slide with Settings > Animations speed, curve, style).
 -- Hyprland's own layer fade on map / unmap would run on top of it with the HYPRLAND speed and curve; off for them.
 -- (The launcher's equivalent is switched with its "Like popups" setting in managed.lua.)

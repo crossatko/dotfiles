@@ -60,19 +60,9 @@ bind({ mod, "X" }, "Toggle split direction", hl.dsp.layout("togglesplit"))
 bind({ mod, "G" }, "Toggle group", hl.dsp.group.toggle())
 bind({ mod, "TAB" }, "Next window in group", hl.dsp.group.next())
 
--- Scratchpad terminal: a ghostty with its own class (GTK app ids need a dot, a plain "scratchpad" is ignored; kitty's old "scratchpad" class is still matched) on the special workspace "scratchpad" (rules.lua floats and
--- sizes it, and sends it there). Started on demand: the first press (or the first after it was closed) spawns it
--- and its workspace rule shows it; later presses toggle the special workspace.
-local function toggle_scratchpad()
-	for _, w in ipairs(hl.get_windows()) do
-		if w.class == "dotfiles.scratchpad" or w.class == "scratchpad" then
-			hl.dispatch(hl.dsp.workspace.toggle_special("scratchpad"))
-			return
-		end
-	end
-	hl.dispatch(exec(apps.terminal .. " --class=dotfiles.scratchpad"))
-end
-bind({ mod, "R" }, "Scratchpad terminal", toggle_scratchpad)
+-- Scratchpad: only toggles the special workspace "scratchpad" (nothing is spawned; test windows of nested Hyprland sessions and any window
+-- sent there live on it, see rules.lua).
+bind({ mod, "R" }, "Scratchpad", hl.dsp.workspace.toggle_special("scratchpad"))
 
 bind({ mod, "SHIFT", "E" }, "Power menu", exec("qs ipc call launcher section power"))
 bind({ mod, "SHIFT", "S" }, "Sound output", exec("qs ipc call launcher section sound-output"))

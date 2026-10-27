@@ -46,26 +46,19 @@ hl.config({
 		},
 		groupbar = {
 			enabled = true,
-			gradients = true,
+			-- one glass pill per window, no titles (colours below the blur block)
+			gradients = true, -- the pill fill
 			render_titles = false,
-			height = 6,
-			indicator_height = 0,
+			height = theme.groupbar.height,
+			indicator_height = 0, -- no extra strip under the pills
 			stacked = false,
-			gaps_in = 0,
-			gaps_out = 0,
-			keep_upper_gap = true,
-			rounding = theme.glass.group_rounding,
-			rounding_power = theme.glass.group_rounding_power,
-			gradient_rounding = theme.glass.gradient_rounding,
-			gradient_rounding_power = theme.glass.gradient_rounding_power,
-			round_only_edges = true,
-			gradient_round_only_edges = true,
-			col = {
-				active = theme.active.locked_active,
-				inactive = theme.active.groupbar_inactive,
-				locked_active = theme.active.locked_active,
-				locked_inactive = theme.active.locked_inactive,
-			},
+			gaps_in = theme.groupbar.gap, -- between pills
+			gaps_out = theme.groupbar.gap, -- between the pills and the window
+			keep_upper_gap = false, -- pill tops line up with the neighbours' window tops
+			blur = true, -- solid_glass lens / blur behind the translucent pills
+			gradient_rounding = theme.groupbar_rounding(theme.glass.window_rounding), -- managed.lua follows Settings > Appearance
+			gradient_rounding_power = theme.groupbar.rounding_power,
+			gradient_round_only_edges = false, -- every pill is rounded on its own
 		},
 	},
 })
@@ -273,6 +266,26 @@ end
 -- 	intensity = 0.35,     -- strength of pearlescent sheen, range 0-1, default 0.35
 -- 	iridescence = 0.7,    -- strength of pearlescent color shift, range 0-1, default 0.7
 -- } } } })
+
+-- Group bar colours (theme.lua groupbar_colors): glass fills only where solid_glass is the blur (Theme.qml glass test)
+do
+	local okv, variant = pcall(hl.get_config, "decoration.blur.variant")
+	local oke, enabled = pcall(hl.get_config, "decoration.blur.enabled")
+	local glass = okv and (variant == 11 or variant == "solid_glass") and not (oke and (enabled == false or enabled == 0))
+	local c = theme.groupbar_colors(glass)
+	hl.config({
+		group = {
+			groupbar = {
+				col = {
+					active = c.active,
+					inactive = c.inactive,
+					locked_active = c.locked_active,
+					locked_inactive = c.locked_inactive,
+				},
+			},
+		},
+	})
+end
 
 hl.config({
 	animations = {

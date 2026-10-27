@@ -41,6 +41,9 @@
 -- it wins; the solid_glass block in settings.lua is therefore the default for keys Settings never touched.
 -- Values are clamped to the option ranges (tint: AARRGGBB integer). On a Hyprland without the solid_glass
 -- options (stock) nothing is applied and no option is ever touched (M.glass_supported()).
+-- Per-surface glass (Settings > Glass > Surfaces; fork with decoration:blur:solid_glass:per_surface): a top-level
+-- "surfaces" object in the same file, shared by both colour modes, {"bar":{"depth":0.35,"refraction":10},
+-- "groupbar":{...},"border":{"enabled":true,"depth":0.5}}; see M.apply_surfaces.
 --
 -- Animations (Settings > Animations): a THIRD state file next to appearance.json,
 -- ${XDG_STATE_HOME:-~/.local/state}/quickshell/animations.json (env override ANIM_FILE), flat, written only by
@@ -403,12 +406,12 @@ end
 -- palette bg, so it follows the wallpaper. Which mode is active is read from the palette itself (bg luminance, like
 -- nvim), so it can never disagree with the colours Hyprland / Quickshell show.
 
--- Pure: glass.json text -> dark text, light object text (nil when there is none)
-function M.split_glass(text)
+-- Pure: JSON text -> the text without the object member `key` (first occurrence), that object's text (nil when none)
+local function split_object(text, key)
 	if type(text) ~= "string" then
 		return text, nil
 	end
-	local s, e = text:find('"light"%s*:%s*{')
+	local s, e = text:find('"' .. key .. '"%s*:%s*{')
 	if s == nil then
 		return text, nil
 	end
@@ -417,6 +420,17 @@ function M.split_glass(text)
 		return text:sub(1, s - 1) .. "}", nil
 	end
 	return text:sub(1, s - 1) .. text:sub(e + #obj), obj
+end
+
+-- Pure: glass.json text (without "surfaces", see M.split_surfaces) -> dark text, light object text (nil when none)
+function M.split_glass(text)
+	return split_object(text, "light")
+end
+
+-- Pure: glass.json text -> text without the "surfaces" object, that object's text (nil when none). Must run before
+-- M.split_glass / M.parse_glass: the profiles use the same key names as the global set.
+function M.split_surfaces(text)
+	return split_object(text, "surfaces")
 end
 
 -- Pure: text of ONE mode's glass object -> {key = number} with ONLY the keys that are set and valid (clamped; tint
@@ -526,11 +540,11 @@ end
 function M.read_glass()
 	local r, gr, b, light = M.parse_bg(palette_bg())
 	local ok, g = pcall(function()
-		local text = M.read_small_file(M.glass_path())
+		local text = M.read_small_file(M.glass_path(), M.GLASS_MAX_BYTES)
 		if not text then
 			return {}
 		end
-		local dark_text, light_text = M.split_glass(text)
+		local dark_text, light_text = M.split_glass((M.split_surfaces(text)))
 		return M.parse_glass((light and light_text or (not light and dark_text)) or "{}")
 	end)
 	return ok and type(g) == "table" and g or {}, light == true, r, gr, b
@@ -574,6 +588,156 @@ function M.apply_glass_layer_alpha()
 		return false, "no layer_alpha_ref option"
 	end
 	return pcall(hl.config, { decoration = { blur = { solid_glass = { layer_alpha_ref = M.GLASS_LAYER_ALPHA_REF } } } })
+end
+
+-- ---------------------------------------------------------------- per-surface glass (glass.json "surfaces")
+-- Fork option decoration:blur:solid_glass:per_surface (probe) adds a layer / window rule effect
+-- `glass = "key:value ..."` (unset keys = the global solid_glass value; the LAST matching rule wins, strings are not
+-- merged), group:groupbar:solid_glass (same format, the group bar pills) and decoration:blur:solid_glass:border
+-- ("" / "off", "on" = global look, or a string: glass ring under window borders, only with border_size > 0).
+-- On stock / older fork builds an unknown rule field is a CONFIG ERROR: nothing here runs unless the probe succeeds.
+-- One NAMED layer rule per surface ("qs-glass-<id>"): re-registering a named rule reuses it (no new rule), but appends
+-- its effects (the last one wins), so a spec is only re-sent when it changed (M.surface_applied, reset by a reload,
+-- which also drops every Lua rule). An emptied profile disables its rule.
+M.GLASS_MAX_BYTES = 16384
+-- the keys a profile may override, in the order they are written (GlassSurfaces.qml `keys`)
+M.SURFACE_KEYS = { "depth", "refraction", "aberration", "specular_intensity", "frost", "clarity", "darkening" }
+-- surface id -> layer namespace (whole-name regex, see rules.lua)
+M.SURFACE_LAYERS = { bar = "qs-bar", popup = "qs-popup", launcher = "qs-launcher", osd = "qs-osd", toast = "qs-toast" }
+M.SURFACE_IDS = { "bar", "popup", "launcher", "osd", "toast", "groupbar", "border" }
+M.surface_applied = {}
+
+-- Pure: the "surfaces" object text -> {id = {key = number, enabled = bool (border only)}}, known ids / keys only,
+-- values clamped. Never raises.
+function M.parse_surfaces(text)
+	local out = {}
+	if type(text) ~= "string" or #text > M.GLASS_MAX_BYTES then
+		return out
+	end
+	local body = text:match("^%s*(%b{})%s*$")
+	if body == nil then
+		return out
+	end
+	for _, id in ipairs(M.SURFACE_IDS) do
+		local _, e = body:find('"' .. id .. '"%s*:%s*{')
+		local obj = e and body:match("^%b{}", e)
+		if obj then
+			local p = {}
+			for _, key in ipairs(M.SURFACE_KEYS) do
+				local lim = M.GLASS_LIMITS[key]
+				local tok = last_token(obj, key)
+				local v = tok and tok:match("^%-?%d[%d%.eE+%-]*$") and tonumber(tok)
+				if type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge then
+					p[key] = math.max(lim[1], math.min(lim[2], v))
+				end
+			end
+			if id == "border" then
+				p.enabled = last_token(obj, "enabled") == "true"
+			end
+			out[id] = p
+		end
+	end
+	return out
+end
+
+local function fmt_num(v)
+	local s = string.format("%.4f", v)
+	s = s:gsub("0+$", "")
+	s = s:gsub("%.$", "")
+	return s
+end
+
+-- Pure: one profile ({key = number}) -> the rule string "depth:0.35 refraction:10" ("" = nothing overridden)
+function M.surface_spec(p)
+	local parts = {}
+	if type(p) ~= "table" then
+		return ""
+	end
+	for _, key in ipairs(M.SURFACE_KEYS) do
+		local v, lim = p[key], M.GLASS_LIMITS[key]
+		if type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge then
+			parts[#parts + 1] = key .. ":" .. fmt_num(math.max(lim[1], math.min(lim[2], v)))
+		end
+	end
+	return table.concat(parts, " ")
+end
+
+-- Pure: the border profile -> the decoration:blur:solid_glass:border value ("" = off, "on" = global look)
+function M.border_spec(p)
+	if type(p) ~= "table" or p.enabled ~= true then
+		return ""
+	end
+	local spec = M.surface_spec(p)
+	return spec == "" and "on" or spec
+end
+
+local function option_exists(path)
+	local ok, v = pcall(hl.get_config, path)
+	return ok and v ~= nil
+end
+
+-- Does this Hyprland have per-surface glass (the `glass` rule effect)? Older fork / stock builds do not.
+function M.per_surface_supported()
+	return option_exists("decoration.blur.solid_glass.per_surface")
+end
+
+-- -> {id = profile} from glass.json (shared by both colour modes)
+function M.read_surfaces()
+	local ok, s = pcall(function()
+		local text = M.read_small_file(M.glass_path(), M.GLASS_MAX_BYTES)
+		local _, obj = M.split_surfaces(text)
+		return M.parse_surfaces(obj)
+	end)
+	return ok and type(s) == "table" and s or {}
+end
+
+-- profiles ({id = profile}, as M.read_surfaces returns or Quickshell sends) -> layer rules / options. Only changed
+-- specs are sent; an option is only touched once a profile asked for it (the hand-written value stays otherwise).
+-- -> true, or false plus the first error. Never raises.
+function M.apply_surfaces(profiles)
+	if not M.per_surface_supported() then
+		return false, "no per-surface glass"
+	end
+	profiles = type(profiles) == "table" and profiles or {}
+	local ok_all, first_err = true, nil
+	local function note(ok, err)
+		if not ok and ok_all then
+			ok_all, first_err = false, err
+		end
+		return ok
+	end
+	for id, ns in pairs(M.SURFACE_LAYERS) do
+		local spec, prev = M.surface_spec(profiles[id]), M.surface_applied[id]
+		if spec ~= prev then
+			local ok, err = true, nil
+			if spec ~= "" then
+				ok, err = pcall(hl.layer_rule, { name = "qs-glass-" .. id, match = { namespace = ns }, glass = spec })
+			elseif prev ~= nil then
+				ok, err = pcall(hl.layer_rule, { name = "qs-glass-" .. id, enabled = false })
+			end
+			if note(ok, err) then
+				M.surface_applied[id] = spec
+			end
+		end
+	end
+	local options = {
+		{ "groupbar", "group.groupbar.solid_glass", M.surface_spec(profiles.groupbar), function(v)
+			return { group = { groupbar = { solid_glass = v } } }
+		end },
+		{ "border", "decoration.blur.solid_glass.border", M.border_spec(profiles.border), function(v)
+			return { decoration = { blur = { solid_glass = { border = v } } } }
+		end },
+	}
+	for _, o in ipairs(options) do
+		local id, path, spec = o[1], o[2], o[3]
+		local prev = M.surface_applied[id]
+		if spec ~= prev and (prev ~= nil or spec ~= "") and option_exists(path) then
+			if note(pcall(hl.config, o[4](spec))) then
+				M.surface_applied[id] = spec
+			end
+		end
+	end
+	return ok_all, first_err
 end
 
 -- ---------------------------------------------------------------- animations (animations.json)
@@ -1157,10 +1321,26 @@ function M.apply_options(s)
 	return ok_all, first_err
 end
 
--- settings -> applies them: the four options (M.apply_options), the smart rules (M.apply_smart) and the
--- glass options from glass.json (M.apply_glass). -> true, or false plus the first error.
+-- Group bar pills (settings.lua group.groupbar) keep the radius theme.lua derives from the window radius, so they
+-- follow Settings > Appearance radius. -> true, or false plus a reason. Never raises.
+function M.apply_groupbar()
+	local okt, theme = pcall(require, "hyprland.theme")
+	local okr, R = pcall(hl.get_config, "decoration.rounding")
+	if not okt or type(theme) ~= "table" or type(theme.groupbar_rounding) ~= "function" or not okr then
+		return false, "no theme or rounding"
+	end
+	local okg, r = pcall(theme.groupbar_rounding, R)
+	if not okg then
+		return false, r
+	end
+	return pcall(hl.config, { group = { groupbar = { gradient_rounding = r } } })
+end
+
+-- settings -> applies them: the four options (M.apply_options), the group bar radius (M.apply_groupbar), the smart
+-- rules (M.apply_smart) and the glass options from glass.json (M.apply_glass). -> true, or false plus the first error.
 function M.apply(s)
 	local ok_all, first_err = M.apply_options(s)
+	pcall(M.apply_groupbar)
 	pcall(function()
 		M.apply_glass(M.read_glass())
 	end)
@@ -1179,10 +1359,14 @@ local initial = M.read()
 pcall(M.capture_baseline)
 pcall(M.capture_glass_base)
 pcall(M.apply_options, initial)
+pcall(M.apply_groupbar)
 pcall(function()
 	M.apply_glass(M.read_glass())
 end)
 pcall(M.apply_glass_layer_alpha)
+pcall(function()
+	M.apply_surfaces(M.read_surfaces())
+end)
 pcall(function()
 	M.anim_base_enabled = hl.get_config("animations.enabled")
 end)
@@ -1261,6 +1445,19 @@ function layout_apply()
 	if type(pip_bar_changed) == "function" then
 		pcall(pip_bar_changed)
 	end
+	if not ok then
+		return false, ok2
+	end
+	return ok2, err
+end
+
+-- Global entry point for Settings > Glass > Surfaces: hyprctl eval "if glass_surfaces_apply then return
+-- glass_surfaces_apply({bar = {depth = 0.35}, border = {enabled = true}}) end" (nil = re-read glass.json).
+-- -> true, or false plus the error message.
+function glass_surfaces_apply(profiles)
+	local ok, ok2, err = pcall(function()
+		return M.apply_surfaces(profiles == nil and M.read_surfaces() or profiles)
+	end)
 	if not ok then
 		return false, ok2
 	end
