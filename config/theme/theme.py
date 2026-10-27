@@ -433,8 +433,8 @@ HOST_TEMPLATES = {"gtk3.css", "gtk4.css", "kvantum.kvconfig", "brave-glass.css",
 # everywhere, exactly the old behaviour.
 # VIDEO wallpapers (mpvpaper on top of hyprpaper, see "video wallpapers" below): an entry may instead be
 # {"video": "<file>", "mode": "once"|"loop", "still": "<extracted frame>"}; the primary's lives in the top-level
-# "primary_video" (its still is `wallpaper` in theme.toml, so palette / templates stay image-driven). `primary` unset = the connected monitor at 0,0 (the same "main display" rule
-# as the launcher), else the first one.
+# "primary_video" (its still is `wallpaper` in theme.toml, so palette / templates stay image-driven). `primary` unset = the shell's primary monitor (quickshell/monitors.json, else highest refresh rate; see
+# shell_primary_key).
 KEY_MAX = 96
 
 
@@ -547,7 +547,20 @@ def primary_key(st, mons):
         return st["primary"]
     if not mons:
         return st["primary"]
-    return next((m["key"] for m in mons if m["x"] == 0 and m["y"] == 0), mons[0]["key"])
+    return shell_primary_key(mons)
+
+
+def shell_primary_key(mons):
+    """The shell's primary monitor (quickshell/monitors.json, written by Settings > Monitors) if connected, else the
+    same automatic pick as Monitors.qml: highest refresh rate, most pixels, connector name."""
+    try:
+        base = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "quickshell"
+        saved = json.loads(Path(os.environ.get("QS_MONITORS_FILE") or base / "monitors.json").read_text()).get("primary")
+    except (OSError, ValueError, AttributeError):
+        saved = None
+    if isinstance(saved, str) and any(m["key"] == saved for m in mons):
+        return saved
+    return min(mons, key=lambda m: (-m["hz"], -m["w"] * m["h"], m["name"]))["key"]
 
 
 def tilde(path):
@@ -3580,7 +3593,9 @@ def render_all(pal, cfg, mode=None, dark=None):
     if mode == "light" and dark and not DEFAULT_MODE:
         light = {"dark": {k: dark[k] for k in INK_KEYS}, "wall_ink": wall_inks(wp, pal, dark)}
     write_atomic(OUT / "palette.json", json.dumps({"wallpaper": wp, "wallpaper_dirs": dirs, "video_dirs": [tilde(d) for d in video_dirs(cfg)] if DEFAULT_MODE else video_dirs(cfg), "mode": mode, **ui, **pal, **light}, indent=2) + "\n")
-    lua = "return {\n" + f'  wallpaper = "{wp}",\n  rounding = {ui["rounding"]},\n' + "".join(f'  {k} = "{v}",\n' for k, v in pal.items()) + "}\n"
+    # fill alphas of this mode for Hyprland (hypr/hyprland/theme.lua: group bar tabs, same rules as Theme.qml barFill)
+    fills = "".join(f'  {k} = {float(ui[k])},\n' for k in ("bar_opacity", "card_fill", "plain_fill_min"))
+    lua = "return {\n" + f'  wallpaper = "{wp}",\n  rounding = {ui["rounding"]},\n' + fills + "".join(f'  {k} = "{v}",\n' for k, v in pal.items()) + "}\n"
     write_atomic(OUT / "palette.lua", lua)
 
 

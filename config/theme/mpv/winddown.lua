@@ -16,6 +16,7 @@
 -- while the clip plays and is not winding down, else at the next replay (the held frame stays untouched; a swap that waited
 -- for the replay starts in the burst). `baked` also turns the timer off and sets end= to where burst 0 starts (the first play
 -- stops on H). winddown-loop=yes marks a looping player.
+-- `script-message winddown-hold` / `winddown-release`: freeze / continue around the screen lock (see the handlers below).
 -- winddown-debug=yes logs every tick (wall s, speed, time-pos). winddown-smooth=yes + winddown-fps=<output Hz> turn on display-resample + frame interpolation for the wind only (see begin()).
 local mp = require("mp")
 local o = { timed = "no", play = 0, wind = 0, stop = 0, smooth = "no", debug = "no", fps = 0, loop = "no", bursts = "", cyc = 0, station = "", tag = "" }
@@ -183,6 +184,27 @@ mp.register_script_message("winddown-restart", function()
     end
     mp.set_property_bool("pause", false)
     mp.msg.info("winddown: restarted")
+end)
+
+-- `script-message winddown-hold` / `winddown-release` (quickshell bin/lock-desktop-video, around the screen lock): freeze
+-- the player on the frame it shows and continue from exactly there. hold = pause and stop the wind's clock (the ramp runs
+-- on wall time: left running while locked it finished and seeked to the stop frame, so the wallpaper jumped at unlock);
+-- release = shift the ramp's start by the time held, resume it, unpause (the same speed as when held, no replay).
+local held_at = nil
+mp.register_script_message("winddown-hold", function()
+    if held_at then return end
+    held_at = mp.get_time()
+    if timer then timer:stop() end
+    mp.set_property_bool("pause", true)
+end)
+mp.register_script_message("winddown-release", function()
+    if not held_at then return end
+    if started and not done and timer then
+        t0 = t0 + (mp.get_time() - held_at)
+        timer:resume()
+    end
+    held_at = nil
+    mp.set_property_bool("pause", false)
 end)
 
 -- loop players: switch files right after the wrap (the position jumps back)
