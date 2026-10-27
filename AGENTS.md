@@ -41,7 +41,8 @@ zellij claude-tabs, AeroSpace fork, librepods) live in their own repos, only the
 ## Machines
 
 - Plain Arch Linux (CachyOS repos are only an opt-in), **Hyprland with the native Lua config** (`hl.*`), Quickshell (QML) for
-  bar/popups/launcher/notifications/Settings/lock screen, hyprpaper (hyprlock = fallback only, below).
+  bar/popups/launcher/notifications/Settings/lock screen and the wallpaper image (theme.toml `wallpaper_backend`, default
+  `quickshell`; hyprpaper = optional fallback backend; hyprlock = fallback only, below).
 - **Battlestation** (primary desktop): two 2560x1440 monitors (360 Hz OLED + 60 Hz), RX 9070 XT, a living-room 4K TV output for Steam Big Picture/gamescope
   sessions. Runs the user's **Hyprland fork** at `/usr/local/bin/Hyprland` (glass compositing: `solid_glass`, `layer_alpha_ref`, workspace-created-empty fix).
   Corne keyboard with VIA.
@@ -102,7 +103,8 @@ config/aerospace karabiner swiftbar  macOS only
   covers part of the output; a nested window sometimes starts without an output (log stops after "New wayland pointer"): stop and start it again.
   A test harness (own HOME / runtime dir, pops / look / shape / glass / anim / wall / mode / measure scripts) lived in the agent scratchpad `dl/`.
 - **Theme engine:** temp clone + temp `HOME` with `~/.config/theme` linked, `THEME_OUT_DIR`, PATH shims for `pkill hyprctl gsettings kwriteconfig6 herdr
-  hyprpaper`.
+  hyprpaper`. `apply` returns after the foreground and leaves a detached worker: `--wait` runs it in place, `THEME_ANALYZE=0` stops the library
+  precompute, `THEME_PROFILE=<file>` times every stage; kill leftover workers / players by PID.
 
 ## Workflow shortcuts (save time and tokens)
 
@@ -135,9 +137,17 @@ config/aerospace karabiner swiftbar  macOS only
 - GTK/Kvantum/Brave CSS is rendered per host into `out/host/` (alpha depends on fork vs stock): run `theme.py render` once after pulling on a new host.
 - Toolkit glass: the compositor already tints/blurs behind translucent windows, so app CSS paints only the card fill (tint in CSS would double). `theme.py
   hypr_solid_glass()` and `Theme.qml` use the same test: keep in sync. GTK4 blur needs `backdrop-filter`.
-- Wallpapers: for non-primary monitors the `hyprctl hyprpaper wallpaper` selector must match the config block's (`desc:<key>` vs connector), else it silently
-  does nothing. Video wallpapers (mpvpaper, optimize/bake): see README "Video wallpapers".
+- Wallpapers: who draws the image = `[settings] wallpaper_backend` (README "Wallpaper backend"): `quickshell` (default) = the shell's
+  background layer reads `out/wallpaper.json` (the resolved blocks of `out/hyprpaper.conf`); theme.py never starts / restarts hyprpaper
+  then (`start-hyprpaper.sh` asks `theme.py wallpaper-backend`). `hyprpaper` = the old path: for non-primary monitors the
+  `hyprctl hyprpaper wallpaper` selector must match the config block's (`desc:<key>` vs connector), else it silently does nothing.
+  `steam-tv-dim.lua` / `steam-streaming.lua` still set the TV wallpaper through hyprpaper directly (no effect with the quickshell backend). Video wallpapers (mpvpaper, optimize/bake): see README "Video wallpapers". Play-once without stored
+  timing = play 0 / wind 5 / ease 0 (theme.toml); full length is `"play": "full"`.
 - After theme changes run `selftest.py` and diff a dark render before/after.
+- Wallpaper switch (README "Instant switch"): the foreground only saves the pick and switches hyprpaper / the players (< 100 ms); a detached
+  worker (`apply-bg`, latest click wins via `$XDG_RUNTIME_DIR/theme-apply/status.json`) does stills, analysis (per-file cache, `theme.py analyze`
+  precomputes the library), render, reloads. `blobs/` = `theme-blobs` (Rust, `theme.py build-helper`), bit-identical to the Python standout pass,
+  which stays the fallback and selftest's oracle: change both together and bump `BLOBS_VERSION` / `EXTRACT_VERSION`.
 
 ## Quickshell (`config/quickshell`)
 
@@ -189,8 +199,9 @@ config/aerospace karabiner swiftbar  macOS only
   height clipped to the glyph, shadow blur) + `glasstext.frag` (normals from that height, refraction of the SHARP scene, fresnel
   reflection, soft highlights, shadow); rebuild with `qsb --qt6`. Masks render 2x (mipmapped) on scale-1 outputs. Driven by Settings > Glass
   (`GlassTuneCtl.effective`) but mapped: frost/clarity ignored, tint/darkening faint, aberration at half scale (0 = none, else >= 0.01:
-  the full value fringed every stroke on high-contrast wallpapers). No compositor glass on a lock surface; without
-  `Theme.glass`: `GlassTextFlat` + flat dots. All motion goes through `Theme.popupMs` (animation speed; off = instant).
+  the full value fringed every stroke on high-contrast wallpapers). No compositor glass on a lock surface; the
+  lettering / beads / slab are shell-drawn (`Theme.shellGlass`, also on stock Hyprland); `GlassTextFlat` + flat dots only
+  when the shaders fail (or `QS_SHELL_GLASS=0`). All motion goes through `Theme.popupMs` (animation speed; off = instant).
   Lock/unlock transition: right before the lock is taken, `grim -t ppm` snapshots every output into `$XDG_RUNTIME_DIR/qs-lock` (0700,
   deleted on unlock; skipped on a stranded takeover; ~15 ms, 120 ms cap, a late one is dropped). The snapshot covers the surface from its first frame, a glass ring
   (`LockReveal`, `shaders/lockreveal.frag`) closes over it, and after a correct password the ring opens back onto it before
@@ -219,7 +230,7 @@ config/aerospace karabiner swiftbar  macOS only
   the two `lock_cmd`s and the bind back at `hyprlock` (`hyprlock.conf` is untouched).
   Playback card (`LockMedia`, under the dots, only while an MPRIS player exists): the media panel's parts `MediaPick` / `MediaArt` /
   `MediaSeek` / `MediaTransport` (shared with `MediaPanel`); glass slab = `GlassShape` over a rounded-rect mask, flat card without
-  `Theme.glass`. Pointer clicks work on the ext-session-lock surface and do not take the password field's focus (nested test: virtual
+  `Theme.shellGlass`. Pointer clicks work on the ext-session-lock surface and do not take the password field's focus (nested test: virtual
   pointer + mpv/mpris.so on the nested shell's bus; play/pause/next/previous reached the player, typing went on).
 - **Glass clocks: time, seconds, morph** (`ClockFace.qml`, used by LockClock and DeskClockView): text HH:mm[:ss] (12 h: h:mm[:ss]),
   `morphMs` = popup motion of `Motion.baseMs * 3` x the page's morph time (0 = plain swap), capped at 450 ms with seconds; `fitSize`
@@ -228,6 +239,8 @@ config/aerospace karabiner swiftbar  macOS only
   re-renders just the changed glyph's mask + field (measured with `qt.scenegraph.time.renderer`: 3 layer renders per tick, 6 on a tens
   change, ~31 window frames for the 450 ms morph at the 60 Hz animation driver). Desktop clock with seconds, nested 2560x1440: shell
   ~1.1 % of a core + ~2.2 ms/s GPU (morph 0: ~0.4 % / ~0.8 ms/s); seconds off = idle as before (~0.2 %, ~0.05 ms/s).
+- **Fork vs stock:** compositor glass (`Theme.glass`: solid_glass cards, per-surface profiles, group bar / borders, `GlassEdge`
+  rim when absent) needs the fork; shell-drawn glass (`Theme.shellGlass`: `GlassShape` lettering, beads, lock slab, lenses) does not.
 - **Shell glass** (all optics from Settings > Glass, `GlassTuneCtl.effective`): `GlassLens.qml` = the shared lens (`shaders/sliderlens.frag`,
   refracts the shell's own card, same on stock), only alive while `amount` > 0 (Slider handle while dragged, Toggle knob while pressed /
   sliding after a click, OSD level while it changes; `qs ipc call osd level volume|brightness <0-100>` shows the pill for tests, `volume -1` = muted).
@@ -268,6 +281,19 @@ config/aerospace karabiner swiftbar  macOS only
   once, the blur is the whole window), `FoldBox` + `Chevron` (DropSelect, DevicePicker, BtProfilePicker). Fade colours from
   `Theme.alpha(sameColour, 0)`, not "transparent" (lerps through black). Caveat: the tray menu (xdg popup, compositor blurs the
   whole surface) keeps no open / close motion of its own: a fading card would leave an empty blurred box.
+- **Wallpaper layer** (`Wallpaper.qml` singleton = per-monitor `entryFor/pathFor(screen)` from theme.py's `out/wallpaper.json`, FileView,
+  `qs ipc call wallpaper reload|status`, `QS_WALLPAPER_FILE`; `WallpaperLayer.qml` = one Background-layer window per screen, namespace
+  `qs-wallpaper`, no input / exclusive zone, empty blur region, `no_anim` layer rule in `rules.lua`, maps with its first decoded image;
+  `WallpaperView.qml` = two `WallpaperImage` slots, latest wins, cross-fade `Motion.emphasisMs`, failed / `pending` keeps the old one;
+  `WallpaperImage.qml` = hyprpaper fit modes, decoded at PHYSICAL px = logical x Hyprland scale (Qt does not apply a fractional DPR
+  to `sourceSize`: decoding at logical size blurred a 1.25 monitor), at the file's own size when smaller). Drawn only with the
+  `quickshell` backend and once theme.py has written `out/wallpaper.json` (first render / apply). `LockWallpapers.stillFor` delegates to it (lock, desktop clock, bar contrast, Settings thumbnails);
+  `pathFor` keeps the still the layer shows while an entry is `pending`, so no consumer loads a missing file. Regression
+  (nested session only): `bin/tests/wallpaper-consumers.sh <shell pid> <imgA> <imgB> [video]`.
+  Nested-verified: pixel-exact 1:1 at 1.25 and rotated, crop aligned with hyprpaper, hot-plug, rapid switching, light / dark, stock +
+  fork, motion off = instant, idle 0 % CPU, video (mpvpaper, bottom layer) above it. Caveats: WebP needs `qt6-imageformats`; a shell
+  restart shows Hyprland's background colour for ~350 ms (process start + decode); a portrait monitor decodes a landscape image at
+  cover size (the cropped part too).
 - **Primary monitor** (`Monitors.qml`, singleton): `Monitors.ordered` (primary first, then by x, y, name), `.primary` / `.primaryName` / `.primaryKey`, `isPrimary(screen)`, `title(screen)`; new code uses these
   instead of indexing `Quickshell.screens` wherever order or "the first monitor" matters (Settings window default, Osd / Toasts default target, `Popups.focusedScreen` fallback, launcher default, Settings monitor choosers,
   wallpaper-theme source default). Per-screen windows that just iterate all screens stay on `Quickshell.screens`. Choice = `quickshell/monitors.json` next to appearance.json
@@ -317,7 +343,15 @@ config/aerospace karabiner swiftbar  macOS only
   spins and floods stderr on one). Nested, 2560x1440, frame-matched screenshots vs the clip: 60 fps clip 37/45 same frame, rest +-1;
   30 fps -1..+1, across 3 wraps; resume after pause/cover/DPMS within ~1 frame after 1-2 s. Cost: +~3 % of one core per copy (shell
   6.0 % vs 0.1-0.2 % for two copies), mpvpaper unchanged, GPU busy within noise. `QS_DESKCLOCK_SYNC_LOG=1` logs every sample.
-  `DeskClockPreview` = 16:9 Settings preview (still only). Without `Theme.glass` the lettering is GlassTextFlat (as the lock).
+  `DeskClockPreview` = 16:9 Settings preview (still only). Shell-drawn glass (`Theme.shellGlass`): the same on stock (nested fork vs
+  stock: lock clock 63 dB, portrait clock identical). Backdrop = `stage` (the layer's two-slot `WallpaperView`,
+  the video copy drawn over it, a hand-over snapshot) rendered only into `stageTex` (hideSource SES; a `visible: false`
+  layer missed updates: stale mid-fade frames, jumps). Every switch fades with the desktop: image <-> image by the view
+  itself (pick during a fade waits for its end), any change that swaps the picture (video <-> still, video -> video) by
+  a snapshot armed on the wallpaper.json change, frozen at the swap, faded out (`Motion.emphasisMs`) once DeskClockVideo
+  is not `busy`; motion off = cut. Nested frame sequences (`trans.py`-style: desktop + clock patches, 20-switch runs,
+  images / loop / play-once mixed, 200 ms and 1.2-3 s spacing): no pops; clock 10 % / 90 % within ~1-3 frames of the
+  desktop; loop video CPU 2.6 -> 2.8 %.
   Reveal = the lock clock's, shared: `GlassReveal` (timing, date fade) + `GlassGlyph` (one forming GlassText), used by LockClock and
   DeskClockView; the desktop clock forms on window creation (shell start, enabled, monitor added) and after an unlock (`Lock.unlocked`
   signal: the `locked` binding did not report the unlock), never on minute changes or bursts. Lock: the clock stays on screen and
@@ -361,7 +395,8 @@ config/aerospace karabiner swiftbar  macOS only
 - Popups: never `keyboardFocus: Exclusive` on `PopupHost` (breaks click-away and one-click chip switching). Settings is a `FloatingWindow` (`qs-settings`, rule
   `qs-modal`, which must not set `rounding = 0`); layer surfaces cannot be dragged.
 - Sliders: `wheel: false` inside scrolling Settings pages (a wheel once triggered a full theme apply). Shader edits need the `.qsb` rebuilt (see
-  `shaders/sliderlens.frag` header) and a restart.
+  `shaders/sliderlens.frag` header) and a restart. Every slider has notches (default + extras, magnetic, double-click reset): DESIGN.md
+  "Slider notches". Caveat: in the nested test Tab never moved focus inside Settings (arrow keys were checked with focus forced).
 - Optional bundles: `OptionalPackages.qml`/`launcher/js/Bundles.js` read names from `packages/optional/*.txt` (`bundles.test.js` fails on drift). New bundle:
   txt + `Bundles.BUNDLES` + `MissingPackage` where used.
 - QML gotchas: `pragma ComponentBehavior: Bound` + `required property` in delegates; `??` not `||` where `0`/`false` is valid; `Process` takes argv arrays,

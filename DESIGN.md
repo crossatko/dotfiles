@@ -16,8 +16,12 @@ holds the rules of the look.
 - **One system.** The same row, the same button, the same empty state everywhere. A part that appears twice is a shared file.
 - **Words are labels.** Titles, labels and values; an empty / off state is two to three words; a technical note is an `InfoTip`.
   No sentences in popups, no footnotes.
-- **The wallpaper is part of it.** Glass cards refract it, the flat bar's ink adapts to it (`BarInk`). The look must hold on a
+- **The wallpaper is part of it.** The shell draws it (`WallpaperLayer`, background layer; a change cross-fades over
+  `Motion.emphasisMs`), glass cards refract it, the flat bar's ink adapts to it (`BarInk`). "What does this monitor show"
+  = `Wallpaper.pathFor(screen)` (or `LockWallpapers.stillFor`, which delegates), never a re-derivation. The look must hold on a
   bright, a dark and a busy wallpaper, in light and dark mode, with every glass preset and on stock Hyprland (no glass).
+  Stock has no compositor glass (`Theme.glass`: cards fall back to fills + `GlassEdge`), but the shell's own glass (clocks,
+  beads, lock slab, lenses: `Theme.shellGlass`) is the same there: it refracts the wallpaper in the shell's shaders.
 
 ## 2. Tokens
 
@@ -117,7 +121,7 @@ Fade colours with `Theme.alpha(sameColour, 0)`, never "transparent" (lerps throu
 | `Notice` | the L1 box: a column of children on itemFill, `danger` = red | messages, confirmations, compact cards |
 | `EmptyState` | one inline row, left-aligned with the section: iconSm glyph + two-to-four words, both `muted`, optional wrapping caption `hint`; controlH tall | the only empty / off state (Wi-Fi off, no events, nothing playing, no VMs); never a large centred glyph or a blank box (an empty agenda shrinks to the row). `big` only for a whole empty Settings page |
 | `Btn` | controlH, itemFill, `active` = accentFill + accentEdge; `icon: true` for a glyph | concentric radius via `outerRadius` + `inset` |
-| `Toggle` / `Slider` / `Meter` | the real state is what they show; a change is a signal, never a local flip | `busy` pulses; the knob and the slider handle grow a `GlassLens` |
+| `Toggle` / `Slider` / `Meter` | the real state is what they show; a change is a signal, never a local flip | `busy` pulses; the knob and the slider handle grow a `GlassLens`; every slider has notches (below) |
 | `DropSelect` | the one dropdown (`DevicePicker`, `BtProfilePicker`, `CalPicker` wrap it) | open head = itemActive + accentEdge |
 | `Segmented` / `ResetBtn` | a joined row of equal options (`GlideHighlight` marks the choice); the per-key undo at the end of a Settings row, dim at the default | `KeysReset` in MotionAdvanced wraps ResetBtn for several keys |
 | `StatusDot` / `Pill` / `InfoTip` | 8 px state dot (semantic tint, `pulse`), a caption badge, a hover tooltip glyph | the InfoTip is where a technical note goes |
@@ -126,6 +130,20 @@ Fade colours with `Theme.alpha(sameColour, 0)`, never "transparent" (lerps throu
 
 States: hover = the item's hover fill + `HoverGlow`; press = `PressFeedback`; disabled = `disabledOpacity`; a dimmed chip =
 `dimOpacity`; busy = the pulse tokens; focused / asking = `accentEdge`; selected / on = `accentFill`.
+
+**Slider notches** (`NotchSnap` + `NotchTicks`, used by `Slider` and `HaStrip`):
+- Every slider has one default notch (where it sticks, what a double-click resets to) and at most a few extras (preset
+  values, full scale, centre). Only the media seek bar (a `Meter`) has none.
+- Look: a 2 px tick per notch at the handle centre, default 12 px at `fg` 50 %, extras 8 px at 30 %; on the HA colour
+  strips the ticks sit under the strip.
+- Feel: a drag snaps within max(2 % of the travel, 8 px) and lets go only past max(14 px, capture + 6); wheel and arrow
+  steps stop on a notch they cross, Shift + arrow jumps notch to notch; Tab focuses (accent ring). A snap swells the handle /
+  lens by 3 px for `Motion.moveMs` (none with reduced motion), no sound.
+- Adding: `notches: [default, extras...]` in the track's 0..1 units (a bare number is the default when first, else an
+  extra; or `{ v, kind }`). Shared sets in `Presets.qml`: `volumeNotches` 80 / 100 %, `micNotches` 100 %,
+  `brightnessNotches` 80 / 100 %, `centreNotches` 50 %. `PrefSlider` takes the store default plus `extras` (key units,
+  e.g. `Presets.lockSize.map(p => p.v)`), `GlassOptRow` the option default (a surface profile: the global value via `mark`).
+  A row whose reset means "unset the key" sets `resetToNotch: false` and handles `resetRequested()`.
 
 ## 6. Settings
 
