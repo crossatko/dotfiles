@@ -12,13 +12,16 @@ overrides ──┘                      │   (out/ is git-ignored; default/ is
 | do this | to |
 |---|---|
 | `SUPER+T` | open quickshell Settings on the Wallpaper & theme page (`qs ipc call picker toggle`; again = close); click a wallpaper (or arrows + Enter) to apply it everywhere |
-| `theme.py apply [image]` | re-analyse a wallpaper, render everything, reload apps |
+| `theme.py apply [image]` | show a wallpaper at once, then (background worker) palette, render, reload apps; `--wait` runs the worker in the foreground |
+| `theme.py analyze` | fill the analysis cache for the whole wallpaper library (lowest priority; Settings and login run it) |
+| `theme.py build-helper` | build `theme-blobs` (the native standout pass, `blobs/`, Rust; install.sh does it) |
 | `theme.py render` | re-render after editing `theme.toml`, `theme.local.toml` or a template (no re-analysis) |
 | `theme.py default` | (committer) regenerate the tracked default theme in `default/` from `default/wallpaper.jpg` and `theme.toml` |
 | `bin/theme-seed` (`theme.py seed`) | fill a missing `out/` from `default/` (done by install.sh, the git hooks, theme.py) |
 | `theme.py mode [get\|dark\|light\|toggle]` | switch the light / dark mode (also: Settings > Look & feel > Colour): saves it, re-renders from the cached wallpaper analysis and reloads every app, leaves hyprpaper running |
+| `theme.py accent [get\|standout\|dominant]` | where the accent comes from (also: Settings > Look & feel > Colour > Accent): saves it (`~/.local/state/theme/accent`, default `[settings] accent_pick`, else `standout`), re-renders from the cached analysis like `mode` |
 | `theme.py show` | print the resolved palette (current mode) |
-| `python3 -I selftest.py` | run the extractor against 20 nasty synthetic wallpapers |
+| `python3 -I selftest.py` | run the extractor against 20 nasty synthetic wallpapers, the cache, `theme-blobs` vs Python, a sandboxed two-click switch |
 
 ## Editing
 * **Pin a color**: `[overrides]` in `theme.toml` (e.g. `accent = "#c0392b"`; for this machine only: in `theme.local.toml`), then `render`.
@@ -75,6 +78,94 @@ chromatic region**, not the most common color, so art that is mostly greyscale w
 red streak (like drakengard.jpg) still gets its red. Greyscale images fall back to the
 foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI ≥ 4.5:1.
 
+**Standout accent** (`accent_pick = "standout"`, the default; `standout_accent()` in theme.py, thresholds `SO_*`): small
+but noticeable details (a red eclipse on a blue-grey sky, green eyes and red earrings, neon) win over the dominant
+colour. OKLab, a 3 % border ignored (logos, watermarks); candidates have OKLCH chroma ≥ 0.06 and L 0.22-0.96 and form
+same-hue blobs (4-connected, within ~26° of the seed). Two passes per frame:
+* coarse, 320 px: blobs of 0.04 %-20 % of the frame (smaller = noise, bigger = the dominant colour);
+* fine, 1280 px: ImageMagick keeps only pixels that are chromatic and differ from a 4 px blur (edges, small details),
+  `theme-blobs` (or the Python reference) groups them; a blob needs ≥ 16 px (4x4 at 1280 wide), a compact box (filled ≥ 20 %, thinnest side ≥ 3 px), an
+  isolated neighbourhood (≤ 35 % of the box around it pre-filtered: not noise, grain, foliage; frames over 50 % get no
+  fine pass), and below 0.04 % chroma ≥ 0.10 with a local contrast ≥ 0.09.
+
+Score = chroma² / 0.1 (the most intense spot beats a broad, moderately coloured area) × local contrast (OKLab distance
+to the neighbourhood) × novelty (the share of the blob's colour the frame's mean colour cast does not explain, so a vivid
+red on a dull peach scene counts) × a size ramp (full weight from 0.2 %) × a skin penalty (light orange with C ≤ 0.13). A video wallpaper is judged on its still plus
+8 frames spread over the clip (parallel ffmpeg seeks, ~1 s, ~8 s for 4K AV1; cached per clip, precomputed): a hue (30° bins) must
+show in half of them (flashes lose) and scores its mean over all frames. Hues within 40° of the dominant accent (unless ≥ 1.6× as
+chromatic, C ≥ 0.15 and ≥ 15° away: red robot eyes on an orange-brown scene) and details darker than L 0.4 are skipped; the best remaining hue with score ≥ 0.004 is the accent, else the dominant
+accent stays (monochrome, faint, same-hue). A second hue ≥ 50° away scoring ≥ 35 % of the winner becomes `accent2`
+(else the dominant colour, else the ANSI blue/cyan as before); both are toned and contrast-checked like any accent.
+`out/extracted.json` (`"v": 4`; an older cache is re-analysed once) holds `accent` (dominant), `standout`,
+`standout_score`, `standout2` (`partial`: a video's still only, refined in the background), so switching the accent source is a render only. `"dominant"` reproduces the old output exactly.
+
+## Instant switch (what a click in Settings > Wallpaper costs)
+`apply` (also `link` / `primary` / `clear`) is split (theme.py "instant switch"):
+* **Foreground** (`apply_fast`, ~10-20 ms in Python + ~45 ms interpreter start): saves the pick (`theme.local.toml` / `wallpapers.json`
+  under the short `state.lock`, never `apply.lock`), re-renders `out/hyprpaper.conf` + `out/wallpaper.json` (the shell's wallpaper
+  layer watches it: with the default backend that is the switch, see "Wallpaper backend"; with `hyprpaper` every output that shows
+  something else is switched live, `hyprctl hyprpaper wallpaper <selector>,<image>,cover`, no restart) and starts / stops the video players. Nothing is decoded:
+  a video's still and black-tail hold are only named (a clip whose hold is not cached is assumed to have none).
+* **Worker** (`theme.py apply-bg`, detached, nice 10 / best-effort I/O 7, log `$XDG_RUNTIME_DIR/theme-apply/worker.log`): extracts
+  missing stills (the hold scan runs in parallel; a wrong guess re-makes the entry and restarts its player), checks hyprpaper took the
+  change (else restarts it), then for the primary: analysis (cache first), render (`palette.json` first, so the shell recolours
+  before the apps), deploy, app reloads in parallel; apps whose files did not change are not reloaded (`write_atomic` skips identical
+  content). A new video gets a quick palette from its still, refined once its frames are analysed, only when accent / accent2 move
+  (OKLab ≥ 0.02). Quickshell cross-fades the palette (`Theme.paletteFadeMs`).
+* **Latest wins:** each apply bumps `gen` in `$XDG_RUNTIME_DIR/theme-apply/status.json` (`{gen, state: working|done|failed, stage,
+  pid}`, read by Settings: the palette glyph pulses while `working`) and SIGTERMs the previous worker, which dies with its
+  ffmpeg / ImageMagick children unless it is inside render + reload (it finishes that first). Workers run one at a time and reconcile
+  the whole state, so a superseded one leaves nothing undone. A failing worker (unreadable image) leaves the old palette (`failed`).
+* **Cache:** `$XDG_CACHE_HOME/theme/analysis/` one JSON per file, keyed by path + size + mtime + `EXTRACT_VERSION` (bump = everything
+  re-analysed; `analyze` prunes old versions): `img-*` (dominant colours + the image's / still's own blobs), `frames-*` (a video's 8
+  frames). File probes (duration, codec, size, packet times) persist in `$XDG_CACHE_HOME/theme/video/probes.json`.
+* **Precompute:** `theme.py analyze` (nice 19, idle I/O, 2 frames at a time, waits while a worker runs, one at a time) analyses every
+  library image and video (frames + hold + probes, not the 4K stills); run after each worker, when Settings > Wallpaper scans the
+  folders and 60 s after login (`start-hyprpaper.sh`).
+* **theme-blobs** (`blobs/`, Rust, no dependencies; `theme.py build-helper`, install.sh): the standout blob pass natively, the same
+  algorithm and float operations (CPython's compensated `sum()` and `math.hypot` / `dist` reproduced), so its results equal the Python
+  `frame_blobs` bit for bit (selftest checks it, and both against each other on random input). Not built, stale (`BLOBS_VERSION`) or
+  failing: the Python reference runs (same colours, slower). `THEME_BLOBS=<binary>|0`.
+* **Profile:** `THEME_PROFILE=<file> theme.py apply ...` appends one JSON line per stage (`fast.*`, `worker.*`, `extract.*`,
+  `analyze.*`: `{t, pid, stage, ms}`); `THEME_ANALYZE=0` keeps tests from starting the precompute.
+
+Measured (sandbox with shims, 2 monitors, 16 cores; click = Settings' detached `python3 -I theme.py apply`; new = nothing cached,
+cached = switching back or precomputed; "visible" = theme.py has issued the hyprpaper set / started the player):
+
+| | before: visible | after: visible | after: palette.json | after: apps reloaded |
+|---|---|---|---|---|
+| image 4K / 6K, new | 1.0 s / 1.3 s | 55 ms | 0.35 s / 0.5 s | 0.75 s / 1.0 s |
+| busy image (many details), new / cached | 1.9 s | 55 ms | 0.43 s / 0.13 s | 1.0 s / 0.7 s |
+| video 4K h264 play-once, new / cached | 3.5 s / 2.7 s | 150 ms / 65 ms | 0.9 s, refined 1.7 s / 0.13 s | 2.0 s / 0.6 s |
+| video 4K AV1 play-once, new / cached | 18.2 s / 11.8 s | 125 ms / 70 ms | 3.8 s, refined 11.6 s / 0.14 s | 12 s / 0.7 s |
+
+Then hyprpaper shows the image ~45 ms after the set and mpvpaper its first frame 45-230 ms after start (nested Hyprland). Before =
+`apply` did everything first (analysis 0.27-10 s, render, deploy, reloads incl. a 0.3 s sleep), then restarted hyprpaper and the
+players. Library precompute: 73 files in 2.6 min wall, ~18 CPU-min at nice 19. `hyprctl reload` is a 150 ms shim (not measured live).
+
+## Wallpaper backend (who draws the image)
+`[settings] wallpaper_backend` (theme.toml; per machine in `theme.local.toml`; apply with `theme.py render`):
+* **`quickshell`** (default): the shell draws each monitor's image, and the still under a video, on the background layer
+  (`config/quickshell/Wallpaper.qml` + `WallpaperLayer.qml`, namespace `qs-wallpaper`) from `out/wallpaper.json` = the blocks of
+  `out/hyprpaper.conf` as JSON (`write_wallpaper_json`: monitor rule, path, fit, the image's header size `w`/`h`, `pending` while a
+  video's still is not extracted yet) + `backend`. Written in the click's foreground; the shell's file watch picks it up (no IPC poke
+  needed: file write -> pixels 11-25 ms with motion off), decodes at the monitor's physical size off the UI thread and cross-fades
+  (`Motion.emphasisMs`). theme.py never starts, restarts or waits for hyprpaper; a hyprpaper still answering on the instance socket
+  (left from the old backend) is kept in step, never started. `scripts/start-hyprpaper.sh` starts it only for the `hyprpaper` backend.
+  Until the shell is up (login, shell restart) Hyprland's background colour shows (nested: ~350 ms on a restart).
+* **`hyprpaper`**: the old path (live set, worker listactive check + restart, players wait for it at login). Switching back:
+  set it, `theme.py render`, start hyprpaper (`scripts/start-hyprpaper.sh` or a re-login); the shell then draws nothing.
+* hyprpaper stays in `packages/pacman.txt` as the optional fallback. WebP wallpapers in the shell need `qt6-imageformats`.
+
+Measured in a nested Hyprland (fork and stock; 1600x900 @1.25 + 720x1280 portrait; 4K JPEG; click = detached `theme.py apply`):
+
+| | hyprpaper | quickshell |
+|---|---|---|
+| click -> new image 10 % / 90 % | 90-215 / 175-280 ms (Hyprland's layer fade, the old image dims first) | 84-118 / 231-265 ms (300 ms OutCubic cross-fade); motion off: 81-92 ms |
+| cover crop vs hyprpaper (PSNR) | - | 34-53 dB, aligned (resampling differs: Qt downsamples at decode, hyprpaper on the GPU); 1:1 images pixel-exact at 1.25 and rotated |
+| memory, 4K image on 2 x 1440p | hyprpaper 132 MB RSS | shell +57-63 MB RSS |
+| idle after the fade | - | 0 % CPU (one static texture) |
+
 ## What follows the wallpaper, and how it reloads
 
 | app | how it gets colors | live reload |
@@ -84,7 +175,8 @@ foreground as accent. Contrast is enforced: fg ≥ 9:1, accent ≥ 4.6:1, ANSI �
 | nvim | catppuccin fed from `out/palette.lua` | yes, every running instance (RPC `ThemeReload()`) |
 | zellij | theme file `themes/wall.kdl` | yes (rewrite of config.kdl triggers its watcher) |
 | herdr | `~/.config/herdr/config.toml` is generated (tracked `config/herdr/config.toml` + this machine's `[theme]` block; herdr has no include) | `herdr server reload-config` |
-| hyprland, hyprlock, hyprtoolkit, hyprpaper | `dofile` / `source` / symlink | yes (`hyprctl reload`, hyprpaper restart); hyprlock reads its wallpaper path on each lock |
+| hyprland, hyprlock, hyprtoolkit, hyprpaper | `dofile` / `source` / symlink | yes (`hyprctl reload`, hyprpaper restart with that backend); hyprlock reads its wallpaper path on each lock |
+| desktop wallpaper (quickshell backend) | `out/wallpaper.json` (Wallpaper.qml) | instant, cross-fade |
 | Omarchy apps (omacal, omamail, ...) | `out/omarchy/` is a complete Omarchy theme, linked as `~/.local/state/omarchy/current/theme` (+ `current/theme.name`); see below | their own file watch |
 | quickshell bar + Settings | watches `out/palette.json` | instant |
 | notifications | quickshell `Notifs.qml` server + toasts + notification center | instant, palette-driven |
@@ -237,9 +329,10 @@ separator with 6 px margins). Numbers live in `kvantum_svg.py` (`ALPHA`, shapes)
   toolbars (kdeglobals) and Dolphin's places panel at 16 px (dolphinrc). It is generated with the icons on `apply`.
 
 ## Video wallpapers and per-monitor wallpapers (invariants)
-State is `~/.local/state/theme/wallpapers.json` (written only by `theme.py`; schema in the source). A non-primary `apply` live-sets hyprpaper with `hyprctl hyprpaper wallpaper "<selector>,<path>,cover"`:
-the selector must match the config block's (`desc:<key>` for description keys, connector only for connector keys), else it exits 0 silently (`live_set_wallpaper()` polls `listactive` and restarts hyprpaper).
+State is `~/.local/state/theme/wallpapers.json` (written only by `theme.py`; schema in the source); what each output shows is resolved into `out/hyprpaper.conf` / `out/wallpaper.json` (see "Wallpaper backend"). With the hyprpaper backend every `apply` live-sets hyprpaper with `hyprctl hyprpaper wallpaper "<selector>,<path>,cover"` (`hyprpaper_show`, per output that shows something else):
+the selector must match the config block's (`desc:<key>` for description keys, connector only for connector keys), else it exits 0 silently (the worker polls `listactive` and restarts hyprpaper).
 Videos run as one `mpvpaper` per output (pid files and logs in `$XDG_RUNTIME_DIR/theme-video/`; stop only if `/proc/<pid>/comm` is `mpvpaper`); `MPV_OPTS` keep `load-scripts=no` (else `mpv-mpris`
 makes wallpapers MPRIS players) and `display-fps-override` must equal the real refresh. "Optimize for monitor" builds an HEVC/H.264 copy per (video, monitor) in `$XDG_CACHE_HOME/theme/video/opt/`;
 `hevc_vaapi` + `hvc1` needs `-bsf:v extract_extradata`; stills and the palette always come from the original; with no hardware decode (AV1 on the Workstation GPU) the still stays until the copy exists.
+Play-once timing: an entry without a stored `play` gets the defaults (theme.toml `replay_play_default = 0`, `replay_wind_default = 5`, `replay_ease_in = 0`: wind down at once over 5 s, stop at 2.5 s); full length is stored explicitly as `"play": "full"` (`apply --play full`; Settings: Play for at its maximum); stored values are never rewritten.
 Baked wind-down/replay bursts use RIFE (`rife-ncnn-vulkan`, fallback ffmpeg `minterpolate`); keep `BAKE_VERSION`/`OPT_VERSION` in the cache keys when changing the pipeline. `THEME_BAKE=0` disables baking.

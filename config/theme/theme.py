@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Single-source theming: wallpaper -> palette -> every app's colors.
 
-    theme.py apply [WALLPAPER]   extract palette, render templates, reload apps
+    theme.py apply [WALLPAPER]   show it at once, then (background worker; --wait: here) palette, render, reload apps
+    theme.py analyze             fill the analysis cache for the whole wallpaper library (low priority)
     theme.py render              re-render from current theme.toml (no extraction)
     theme.py show                print the resolved palette
+    theme.py accent [get|standout|dominant]   accent source (standout detail / dominant colour), re-render
     theme.py default             regenerate the tracked default theme (default/), for a committer
     theme.py seed                fill out/ from default/ when it has no real render (bin/theme-seed)
 
@@ -54,7 +56,29 @@ def set_mode(m):
     write_atomic(MODE_FILE, m + "\n")
 
 
+# Where the accent comes from: "standout" (a small salient colour detail when the wallpaper has one, see standout_accent;
+# else the dominant one) or "dominant" (the most chromatic region, the old behaviour). Saved like the mode (per machine);
+# [settings] accent_pick is the default; `theme.py default` uses only theme.toml.
+PICKS = ("standout", "dominant")
+PICK_FILE = MODE_FILE.with_name("accent")
+
+
+def get_pick(cfg):
+    d = cfg.get("settings", {}).get("accent_pick")
+    d = d if d in PICKS else PICKS[0]
+    if DEFAULT_MODE:
+        return d
+    try:
+        m = PICK_FILE.read_text().strip()
+    except OSError:
+        return d
+    return m if m in PICKS else d
+
+
 _LOCK = []
+FAST = [False]       # the foreground of an apply (apply_fast): never extract a still / scan a black tail, name them only
+PROVISIONAL = set()  # videos whose black tail the foreground assumed absent (no cached hold): the worker checks them
+_ASSUME = threading.local()   # .on: this thread assumes no black tail where none is cached (the worker's still prefetch)
 
 
 def apply_lock():
@@ -68,6 +92,25 @@ def apply_lock():
     f = open(MODE_FILE.parent / "apply.lock", "w")
     fcntl.flock(f, fcntl.LOCK_EX)
     _LOCK.append(f)
+
+
+def apply_unlock():
+    while _LOCK:
+        _LOCK.pop().close()
+
+
+class state_lock:
+    """`with state_lock():` short exclusive lock for the read-modify-write of theme.local.toml / wallpapers.json (the
+    foreground of an apply never waits for apply.lock, which a worker holds while it reloads apps)."""
+    def __enter__(self):
+        import fcntl
+        MODE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        self.f = open(MODE_FILE.parent / "state.lock", "w")
+        fcntl.flock(self.f, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        self.f.close()
 
 
 # ---------------------------------------------------------------- color utils
@@ -124,34 +167,240 @@ def to_hls(h):
 
 
 # ----------------------------------------------------------------- extraction
-def load_pixels(path):
-    """Decode any ImageMagick-readable image to a flat list of sRGB tuples.
+def parse_pnm(raw):
+    """Every image of a binary 8-bit PNM stream (P6 colour / P5 grey, as many as are concatenated):
+    [(width, height, channels, data bytes), ...]."""
+    out, i, n = [], 0, len(raw)
+    while i < n:
+        fields = []
+        while len(fields) < 4 and i < n:
+            while i < n and raw[i : i + 1].isspace():
+                i += 1
+            if raw[i : i + 1] == b"#":   # comment line
+                while i < n and raw[i : i + 1] != b"\n":
+                    i += 1
+                continue
+            j = i
+            while j < n and not raw[j : j + 1].isspace():
+                j += 1
+            fields.append(raw[i:j])
+            i = j
+        if len(fields) < 4 or fields[0] not in (b"P5", b"P6") or fields[3] != b"255":
+            break
+        w, h, ch = int(fields[1]), int(fields[2]), 3 if fields[0] == b"P6" else 1
+        data = raw[i + 1 : i + 1 + w * h * ch]
+        if w * h == 0 or len(data) < w * h * ch:
+            break
+        out.append((w, h, ch, data))
+        i += 1 + w * h * ch
+    return out
+
+
+def parse_ppm(raw):
+    """(width, height, [(r, g, b), ...]) of the first image of a binary 8-bit PPM (P6), or None."""
+    imgs = parse_pnm(raw)
+    if not imgs or imgs[0][2] != 3:
+        return None
+    w, h, _, data = imgs[0]
+    return w, h, [tuple(data[k : k + 3]) for k in range(0, w * h * 3, 3)]
+
+
+MAGICK_IN = ["-auto-orient", "-background", "black", "-alpha", "remove", "-alpha", "off", "-colorspace", "sRGB"]
+
+
+def load_image(path, size=240):
+    """Decode any ImageMagick-readable image to (width, height, flat list of sRGB tuples).
     First frame only (gif/webp/pdf), alpha flattened onto black, CMYK/16-bit/
     grey converted, EXIF-rotated, shrunk (never enlarged) for speed."""
     try:
         raw = subprocess.run(
-            ["magick", f"{path}[0]", "-auto-orient", "-background", "black", "-alpha", "remove",
-             "-alpha", "off", "-colorspace", "sRGB", "-resize", "240x240>", "-depth", "8", "rgb:-"],
+            ["magick", f"{path}[0]", *MAGICK_IN, "-resize", f"{size}x{size}>", "-depth", "8", "ppm:-"],
             check=True,
             capture_output=True,
         ).stdout
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         sys.exit(f"theme: cannot read image {path}: {getattr(e, 'stderr', b'').decode()[:200] or e}")
-    px = [tuple(raw[i : i + 3]) for i in range(0, len(raw) - 2, 3)]
-    if not px:
+    img = parse_ppm(raw)
+    if not img:
         sys.exit(f"theme: {path} decoded to zero pixels")
-    return px
+    return img
+
+
+def load_pixels(path):
+    return load_image(path)[2]
 
 
 HUE_BINS = 36
 
 
-def extract(path):
-    """Return {bg, fg, accent|None}. The accent is the most *chromatic* region of
+def extract(path, video=None, frames=True):
+    """Return {bg, fg, accent|None, standout|None, standout_score, standout2|None}. `accent` is the dominant accent
+    (dominant_colors), `standout` the strongest small salient detail and `standout2` a second salient detail of another
+    hue (standout_accent; None = none). A video's (`video`, the clip the still `path` comes from) details are judged over
+    the still plus VIDEO_FRAMES frames spread over the clip (frames=False: the still alone, unless its frames are cached:
+    the quick first pass of a switch). Both halves are cached per file (analysis_cache), so a switch back is a lookup."""
+    with prof("extract.image"):
+        img = image_analysis(path)
+    blobs = [img["blobs"]] if img["blobs"] is not None else []
+    if video:
+        with prof("extract.frames"):
+            fr = frames_analysis(video, compute=frames)
+        blobs += fr or []
+    base = dict(img["base"])
+    found = standout_from_blobs(blobs, base["accent"])
+    base["standout"], base["standout_score"] = (found[0][0], round(found[0][1], 4)) if found else (None, 0.0)
+    base["standout2"] = found[1][0] if len(found) > 1 else None
+    return base
+
+
+# ---- analysis cache: one small JSON per analysed file in $XDG_CACHE_HOME/theme/analysis/, keyed by the file's identity
+# (absolute path, size, mtime) and EXTRACT_VERSION, so a switch back (or to a precomputed wallpaper, `theme.py analyze`)
+# never decodes anything. "img-*": dominant colours + the blobs of the image / still itself; "frames-*": the blobs of a
+# video's VIDEO_FRAMES frames. Blobs are stored as (hue, score, [sum r, sum g, sum b], n) (blob_sums): exactly what
+# standout_from_blobs needs, so a cached result equals a fresh one bit for bit.
+def analysis_dir():
+    return Path(os.environ.get("XDG_CACHE_HOME") or HOME / ".cache") / "theme" / "analysis"
+
+
+def analysis_file(kind, path):
+    import hashlib
+    st = os.stat(path)
+    key = f"{os.path.abspath(path)}|{st.st_size}|{st.st_mtime_ns}|{EXTRACT_VERSION}"
+    return analysis_dir() / f"{kind}-{hashlib.sha1(key.encode()).hexdigest()[:20]}.json"
+
+
+def analysis_get(kind, path):
+    try:
+        d = json.loads(analysis_file(kind, path).read_text())
+        return d if d.get("v") == EXTRACT_VERSION else None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def analysis_put(kind, path, d):
+    try:
+        f = analysis_file(kind, path)
+        f.parent.mkdir(parents=True, exist_ok=True)
+        write_atomic(f, json.dumps({"v": EXTRACT_VERSION, "file": str(path), **d}))
+    except OSError:
+        pass
+
+
+def blob_sums(blobs):
+    """frame_blobs output -> [(hue, score, [sum r, sum g, sum b], n)] (only the vivid pixels' mean is ever used)."""
+    return [(h, sc, [sum(p[c] for p in rgbs) for c in range(3)], len(rgbs)) for h, sc, rgbs in blobs]
+
+
+# ---- theme-blobs: frame_blobs natively (blobs/, Rust, no dependencies; `theme.py build-helper` or install.sh builds it).
+# Same algorithm and float operations (CPython's compensated sum() and math.hypot / dist are reproduced), so its blobs
+# equal frame_blobs' exactly (selftest.py checks it); 30-100x faster on busy frames (the Python fine pass costs up to
+# ~1.3 s per frame). Missing, stale (BLOBS_VERSION) or failing: frame_blobs below, same results. $THEME_BLOBS = the
+# binary to use, "0" = never (tests).
+BLOBS_VERSION = 1
+BLOBS_BIN = ROOT / "blobs" / "target" / "release" / "theme-blobs"
+_BLOBS = {}
+
+
+def blobs_helper():
+    """Path of a usable theme-blobs (protocol BLOBS_VERSION), or None."""
+    if "p" not in _BLOBS:
+        env = os.environ.get("THEME_BLOBS")
+        path = None if env == "0" else (env or str(BLOBS_BIN))
+        try:
+            ok = path and os.access(path, os.X_OK) and subprocess.run([path, "--version"], capture_output=True, text=True,
+                                                                      timeout=5).stdout.strip() == str(BLOBS_VERSION)
+        except (OSError, subprocess.SubprocessError):
+            ok = False
+        _BLOBS["p"] = path if ok else None
+    return _BLOBS["p"]
+
+
+def frames_blobs(frames):
+    """[blob_sums(frame_blobs(f)) for f in frames], by theme-blobs in one run when it is there."""
+    helper = blobs_helper()
+    if helper and frames:
+        params = [SO_MARGIN, SO_MIN_C, SO_L[0], SO_L[1], SO_JOIN, SO_MIN_AREA, SO_MIN_PX, SO_FULL_AREA, SO_MAX_AREA, SO_FINE_MIN_PX,
+                  SO_FINE_MAX_PX, SO_FINE_FILL, SO_FINE_SIDE, SO_FINE_ISOLATION, SO_FINE_BUSY, SO_TINY_C, SO_C_REF, SO_TINY_LOCAL, *_LIN]
+        buf = [f"theme-blobs {BLOBS_VERSION}\n{' '.join(repr(float(x)) for x in params)}\n".encode()]
+        for f in frames:
+            (w, h, px), fine = (f, None) if len(f) == 3 else f
+            buf.append(f"F {w} {h} {fine[0] if fine else 0} {fine[1] if fine else 0} {1 if fine else 0}\n".encode())
+            buf.append(bytes(c for p in px for c in p))
+            if fine:
+                buf += [fine[2], fine[3]]
+        try:
+            r = subprocess.run([helper], input=b"".join(buf), capture_output=True, timeout=120)
+            if r.returncode == 0:
+                out, cur = [], []
+                for line in r.stdout.decode().splitlines():
+                    if line == "E":
+                        out.append(cur)
+                        cur = []
+                    else:
+                        _, hue, sc, sr, sg, sb, n = line.split()
+                        cur.append((float(hue), float(sc), [int(sr), int(sg), int(sb)], int(n)))
+                if len(out) == len(frames):
+                    return out
+        except (OSError, subprocess.SubprocessError, ValueError):
+            pass
+        print("theme: theme-blobs failed, using the Python analysis", file=sys.stderr)
+    return [blob_sums(frame_blobs(f)) for f in frames]
+
+
+def build_helper():
+    """`theme.py build-helper`: build theme-blobs with cargo (offline, no dependencies); without cargo the Python analysis
+    is used (same results, slower)."""
+    if not shutil.which("cargo"):
+        print("theme: cargo not found: theme-blobs not built (the Python analysis is used)")
+        return 0
+    r = subprocess.run(["cargo", "build", "--release", "--offline", "--quiet", "--manifest-path", str(ROOT / "blobs" / "Cargo.toml")])
+    _BLOBS.clear()
+    ok = r.returncode == 0 and blobs_helper()
+    print(f"theme: theme-blobs {'built: ' + str(BLOBS_BIN) if ok else 'build failed (the Python analysis is used)'}")
+    return 0 if ok else 1
+
+
+def image_analysis(path):
+    """{"base": {bg, fg, accent}, "blobs": blob_sums of the image's own frame (None when it cannot be prepared)}; cached.
+    One ImageMagick decode serves both (analysis_frame small=True)."""
+    d = analysis_get("img", path)
+    if d:
+        return d
+    got = analysis_frame([f"{path}[0]"], small=True)
+    if got:
+        frame, small = got
+        base, blobs = dominant_colors(small[2]), frames_blobs([frame])[0]
+    else:   # (cannot be prepared for the standout pass: the plain decode decides, as before)
+        base, blobs = dominant_colors(load_pixels(path)), None
+    d = json.loads(json.dumps({"base": base, "blobs": blobs}))   # (the cached form: fresh == cached)
+    analysis_put("img", path, d)
+    return d
+
+
+def frames_analysis(video, compute=True, par=None):
+    """[blob_sums per decoded frame] of a video (video_frames); cached. compute=False: the cached list or None."""
+    d = analysis_get("frames", video)
+    if d:
+        return d["frames"]
+    if not compute:
+        return None
+    fr = json.loads(json.dumps(frames_blobs(video_frames(video, par=par))))   # (the cached form: fresh == cached)
+    analysis_put("frames", video, {"frames": fr})
+    return fr
+
+
+def oklch_hue_dist(x, y):
+    """Hue distance of two hex colours in OKLCH, degrees (0..180)."""
+    import math
+    (_, a1, b1), (_, a2, b2) = oklab(hex_to_rgb(x)), oklab(hex_to_rgb(y))
+    return abs((math.degrees(math.atan2(b1, a1) - math.atan2(b2, a2)) + 180) % 360 - 180)
+
+
+def dominant_colors(px):
+    """{bg, fg, accent|None} of a pixel list. The accent is the most *chromatic* region of
     the image, not the most common color -- a greyscale piece with one red streak
     would otherwise lose its only color to averaging. None means the image has no
     meaningful color (greyscale/near-black/near-white); the caller falls back."""
-    px = load_pixels(path)
     by_l = sorted(px, key=lambda p: sum(p))
     n = len(by_l)
 
@@ -185,6 +434,351 @@ def extract(path):
             accent = avg(pool)
             break
     return {"bg": bg, "fg": fg, "accent": accent}
+
+
+# ---- standout accent: a small but noticeable colour detail (a red eclipse on a blue-grey sky, green eyes, red
+# earrings, neon) instead of the dominant colour. Two passes per frame, both in OKLab, a SO_MARGIN border ignored
+# (watermarks, logos, letterboxes); candidate pixels are chromatic (OKLCH C >= SO_MIN_C) and not near black / white,
+# and form 4-connected blobs of one hue (within SO_JOIN of the blob's seed):
+#  * coarse (SO_SIZE px): blobs between SO_MIN_AREA (hot pixels, jpeg fringes, stars, noise stay below) and
+#    SO_MAX_AREA (bigger = dominant, not a detail);
+#  * fine (SO_FINE px, ImageMagick pre-filters the pixels that are chromatic AND differ from a 4 px blur of the frame,
+#    so only edges and small details reach Python): blobs of SO_FINE_MIN_PX.. pixels that are compact (bounding box
+#    filled >= SO_FINE_FILL, thinnest side >= SO_FINE_SIDE: not edge fringes / chroma bleeding) and isolated (at most
+#    SO_FINE_ISOLATION of the box around them passes the pre-filter: not noise, grain, foliage; frames where more than
+#    SO_FINE_BUSY passes get no fine pass at all); one smaller than
+#    SO_MIN_AREA must be intense (C >= SO_TINY_C) and stand out from its neighbourhood (local >= SO_TINY_LOCAL).
+# Blob score = chroma^2 / SO_C_REF x local contrast (OKLab distance to the neighbourhood, from the coarse grid) x novelty
+# (share of its colour the frame's mean colour cast does not explain) x a size ramp (full weight from SO_FULL_AREA) x a skin penalty (light low-chroma
+# orange = faces and hands). Hues are pooled in 30-degree bins over frames: a video's detail must show in SO_PERSIST of
+# its frames (one-frame flashes lose), its score is the mean over all frames. Hues within SO_MIN_HUE_GAP of the dominant
+# accent and darker than SO_PICK_MIN_L are skipped; the best other hue >= SO_MIN_SCORE wins, else None (the dominant accent stays); a second hue >= SO_SECOND_GAP
+# away scoring >= SO_SECOND_SHARE of the winner is `standout2` (accent2). Deterministic, stdlib + ImageMagick.
+SO_SIZE = 320
+SO_FINE = 1280
+SO_MARGIN = 0.03
+SO_MIN_C = 0.06
+SO_L = (0.22, 0.96)
+SO_JOIN = 0.45            # radians (~26 deg) from the blob's seed hue
+SO_MIN_AREA = 0.0004      # of the analysed pixels (0.04 %: ~23 px of a 320x180 frame)
+SO_MIN_PX = 6
+SO_FULL_AREA = 0.002      # blobs at least this big get the whole size weight
+SO_MAX_AREA = 0.2
+SO_FINE_MIN_PX = 16       # fine pass: 4x4 px at 1280 wide (~13 px of a 4K frame across)
+SO_FINE_MAX_PX = 4000     # bigger: the coarse pass sees it whole
+SO_FINE_FILL = 0.2
+SO_FINE_SIDE = 3
+SO_FINE_ISOLATION = 0.35  # a fine blob's neighbourhood may hold at most this share of pre-filtered pixels (noise, grain, foliage: everywhere)
+SO_FINE_BUSY = 0.5        # frames where more than this share passes the pre-filter get no fine pass (noise / film grain)
+SO_FINE_PRE = ("7%", "12%")   # ImageMagick pre-filter: local difference (max channel) and HCL chroma thresholds
+SO_TINY_C = 0.10
+SO_C_REF = 0.1            # chroma at which the intensity weight is 1 (score ~ chroma^2 / SO_C_REF)
+SO_TINY_LOCAL = 0.09
+SO_BINS = 12
+SO_PERSIST = 0.5
+SO_MIN_SCORE = 0.004
+SO_MIN_HUE_GAP = 40       # degrees: a standout this close to the dominant accent's hue is no standout ...
+SO_DOM_CHROMA = (1.6, 0.15, 15)   # ... unless it is this many times as chromatic, intense (C >=) and a hue of its own (>= deg):
+                                  # a vivid red glow on a dull orange-brown scene, not a brighter shade of the same colour
+SO_SECOND_GAP = 50        # degrees: accent2 from a second detail at least this far from the first
+SO_SECOND_SHARE = 0.35
+SO_PICK_MIN_L = 0.4       # a picked detail must be luminous (OKLab L): a dark tinted shadow is no detail
+VIDEO_FRAMES = 8
+
+_LIN = [(c / 255) / 12.92 if c <= 10 else ((c / 255 + 0.055) / 1.055) ** 2.4 for c in range(256)]
+
+
+def oklab(rgb):
+    r, g, b = (_LIN[c] for c in rgb)
+    l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
+    m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
+    s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
+    return (0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+            1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+            0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s)
+
+
+def analysis_frame(src, stdin=None, small=False):
+    """One frame for standout_accent from ImageMagick input args `src` (a file `x[0]`, or "ppm:-" with `stdin` bytes):
+    (coarse (w, h, px), fine (W, H, rgb bytes, mask bytes)), or None when it cannot be decoded. small=True: (frame,
+    (w, h, px) at 240 px = load_image's pixels for dominant_colors) from the same decode (one ImageMagick run, not two)."""
+    blur = ["(", "-clone", "0", "(", "-clone", "0", "-blur", "0x4", ")", "-compose", "difference", "-composite",
+            "-separate", "-evaluate-sequence", "max", "-threshold", SO_FINE_PRE[0], ")"]
+    chroma = ["(", "-clone", "0", "-colorspace", "HCL", "-channel", "G", "-separate", "+channel", "-threshold", SO_FINE_PRE[1], ")"]
+    k = 1 if small else 0   # small: the list is [fine, 240 px, coarse, ...]
+    fine = (["(", "-clone", "0", "-resize", "240x240>", ")", "(", "-clone", "0", "-resize", f"{SO_FINE}x{SO_FINE}>", ")", "-delete", "0", "-swap", "0,1"]
+            if small else ["-resize", f"{SO_FINE}x{SO_FINE}>"])
+    a, b = 2 + k, 3 + k
+    try:
+        raw = subprocess.run(["magick", *src, *MAGICK_IN, *fine, "-depth", "8",
+                              "(", "-clone", "0", "-resize", f"{SO_SIZE}x{SO_SIZE}>", ")", *blur, *chroma,
+                              "(", "-clone", f"{a},{b}", "-compose", "multiply", "-composite", ")", "-delete", f"{a},{b}", "-type", "TrueColor", "pnm:-"],
+                             input=stdin, capture_output=True, timeout=60).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    imgs = parse_pnm(raw)
+    if len(imgs) != 3 + k or any(i[2] != 3 for i in imgs[:2 + k]):
+        return None
+    (W, H, _, rgb), (w, h, _, sm), (mw, mh, mc, mask) = imgs[0], imgs[1 + k], imgs[2 + k]
+    if (mw, mh) != (W, H):
+        return None
+    if mc == 3:
+        mask = mask[::3]
+    frame = (w, h, [tuple(sm[i : i + 3]) for i in range(0, w * h * 3, 3)]), (W, H, rgb, mask)
+    if not small:
+        return frame
+    sw, sh, _, sd = imgs[1]
+    return frame, (sw, sh, [tuple(sd[i : i + 3]) for i in range(0, sw * sh * 3, 3)])
+
+
+def _blobs(cand, lab, w, x_lo, x_hi, y_lo, y_hi, max_px=None):
+    """4-connected same-hue blobs over candidate indices (`cand`: index -> anything truthy; `lab`: index -> OKLab)."""
+    import math
+    cosj = math.cos(SO_JOIN)
+    label, blobs = {}, []
+    for i0 in sorted(cand):
+        if i0 in label:
+            continue
+        _, a0, b0 = lab[i0]
+        c0 = math.hypot(a0, b0)
+        ua, ub = a0 / c0, b0 / c0
+        lid = len(blobs) + 1
+        label[i0] = lid
+        stack, mem = [i0], []
+        while stack:
+            i = stack.pop()
+            mem.append(i)
+            if max_px and len(mem) > max_px:
+                break
+            x, y = i % w, i // w
+            for j in (i - 1 if x > x_lo else -1, i + 1 if x < x_hi else -1, i - w if y > y_lo else -1, i + w if y < y_hi else -1):
+                if j >= 0 and j in cand and j not in label:
+                    _, a, b = lab[j]
+                    if a * ua + b * ub >= cosj * math.hypot(a, b):
+                        label[j] = lid
+                        stack.append(j)
+        blobs.append(mem)
+    return blobs, label
+
+
+def frame_blobs(frame):
+    """Salient colour blobs of one frame ((w, h, px) or (coarse, fine|None)): [(hue radians, score, [vivid rgb, ...])]."""
+    import math
+    coarse, fine = (frame, None) if len(frame) == 3 else frame
+    w, h, px = coarse
+    memo = {}
+    lab = [memo.get(p) or memo.setdefault(p, oklab(p)) for p in px]
+    mx, my = int(w * SO_MARGIN), int(h * SO_MARGIN)
+    if w - 2 * mx < 3 or h - 2 * my < 3:
+        return []
+    inner = (w - 2 * mx) * (h - 2 * my)
+    sa = sb = 0.0
+    cand = {}
+    for y in range(my, h - my):
+        for x in range(mx, w - mx):
+            i = y * w + x
+            L, a, b = lab[i]
+            sa += a
+            sb += b
+            if SO_L[0] <= L <= SO_L[1] and a * a + b * b >= SO_MIN_C * SO_MIN_C:
+                cand[i] = 1
+    ma, mb = sa / inner, sb / inner   # the frame's colour cast (mean chroma vector)
+
+    def surround(x0, x1, y0, y1, skip, pad):
+        """Mean OKLab of the coarse grid in the padded box, without the cells `skip(i)` (the blob)."""
+        s0 = s1 = s2 = 0.0
+        sn = 0
+        for y in range(max(0, y0 - pad), min(h, y1 + pad + 1)):
+            for x in range(max(0, x0 - pad), min(w, x1 + pad + 1)):
+                i = y * w + x
+                if not skip(i, x, y):
+                    q = lab[i]
+                    s0 += q[0]
+                    s1 += q[1]
+                    s2 += q[2]
+                    sn += 1
+        return (s0 / sn, s1 / sn, s2 / sn) if sn else None
+
+    def score(k, area, L, a, b, sur):
+        c = math.hypot(a, b)
+        hue = math.atan2(b, a)
+        local = math.dist((L, a, b), sur)
+        # novelty: the share of the blob's colour the frame's cast does not explain (a vivid red on a dull peach scene
+        # is novel although its hue is close; a blob that is just the cast is not)
+        novelty = min(1.0, math.hypot(a - ma, b - mb) / max(c, 0.05))
+        size = min(1.0, k / (SO_FULL_AREA * area)) ** 0.5
+        deg = math.degrees(hue) % 360
+        skin = 0.3 if 35 <= deg <= 80 and L >= 0.55 and c <= 0.13 else 1.0
+        # intensity counts superlinearly (c^2, scaled to 1 at C = SO_C_REF): the most saturated spot of a scene (glowing
+        # eyes, neon, jewellery) beats a broad moderately coloured area (foliage)
+        return hue, c, local, c * (c / SO_C_REF) * local * (0.25 + 0.75 * novelty) * size * skin
+
+    out = []
+    blobs, label = _blobs(cand, lab, w, mx, w - mx - 1, my, h - my - 1)
+    for lid, mem in enumerate(blobs, 1):
+        k = len(mem)
+        if k < max(SO_MIN_PX, SO_MIN_AREA * inner) or k > SO_MAX_AREA * inner:
+            continue
+        L, a, b = (sum(lab[i][c] for i in mem) / k for c in range(3))
+        xs, ys = [i % w for i in mem], [i // w for i in mem]
+        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+        sur = surround(x0, x1, y0, y1, lambda i, x, y: label.get(i) == lid, max(2, (x1 - x0 + y1 - y0) // 2))
+        if not sur:
+            continue
+        hue, _, _, sc = score(k, inner, L, a, b, sur)
+        vivid = sorted(mem, key=lambda i: -(lab[i][1] ** 2 + lab[i][2] ** 2))[: max(4, k // 2)]
+        out.append((hue, sc, [px[i] for i in vivid]))
+    if not fine:
+        return out
+
+    W, H, rgb, mask = fine
+    if len(mask) - mask.count(0) > SO_FINE_BUSY * len(mask):
+        return out
+    MX, MY = int(W * SO_MARGIN), int(H * SO_MARGIN)
+    area = (W - 2 * MX) * (H - 2 * MY)
+    flab, fcand = {}, {}
+    import re
+    for run in re.finditer(rb"[^\x00]+", mask):
+        for i in range(run.start(), run.end()):
+            y = i // W
+            x = i - y * W
+            if x < MX or x >= W - MX or y < MY or y >= H - MY:
+                continue
+            p = tuple(rgb[3 * i : 3 * i + 3])
+            q = memo.get(p) or memo.setdefault(p, oklab(p))
+            if SO_L[0] <= q[0] <= SO_L[1] and q[1] * q[1] + q[2] * q[2] >= SO_MIN_C * SO_MIN_C:
+                flab[i] = q
+                fcand[i] = 1
+    sx, sy = w / W, h / H
+    blobs, _ = _blobs(fcand, flab, W, MX, W - MX - 1, MY, H - MY - 1, SO_FINE_MAX_PX)
+    for mem in blobs:
+        k = len(mem)
+        if k < SO_FINE_MIN_PX or k > SO_FINE_MAX_PX:
+            continue
+        xs, ys = [i % W for i in mem], [i // W for i in mem]
+        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+        bw, bh = x1 - x0 + 1, y1 - y0 + 1
+        if min(bw, bh) < SO_FINE_SIDE or k < SO_FINE_FILL * bw * bh:
+            continue
+        pad = max(4, (bw + bh) // 2)   # isolated: the box around it is mostly smooth (not pre-filtered)
+        own = set(mem)
+        busy = tot = 0
+        for y in range(max(0, y0 - pad), min(H, y1 + pad + 1)):
+            row = y * W
+            for x in range(max(0, x0 - pad), min(W, x1 + pad + 1)):
+                if row + x not in own:
+                    tot += 1
+                    busy += mask[row + x] != 0
+        if busy > SO_FINE_ISOLATION * tot:
+            continue
+        L, a, b = (sum(flab[i][c] for i in mem) / k for c in range(3))
+        # the neighbourhood on the coarse grid: a ring of cells around the blob's box
+        cx0, cx1, cy0, cy1 = int(x0 * sx), int(x1 * sx), int(y0 * sy), int(y1 * sy)
+        sur = surround(cx0, cx1, cy0, cy1, lambda i, x, y: cx0 <= x <= cx1 and cy0 <= y <= cy1,
+                       max(2, (cx1 - cx0 + cy1 - cy0) // 2))
+        if not sur:
+            continue
+        hue, c, local, sc = score(k, area, L, a, b, sur)
+        if k < SO_MIN_AREA * area and (c < SO_TINY_C or local < SO_TINY_LOCAL):
+            continue
+        vivid = sorted(mem, key=lambda i: -(flab[i][1] ** 2 + flab[i][2] ** 2))[: max(4, k // 2)]
+        out.append((hue, sc, [tuple(rgb[3 * i : 3 * i + 3]) for i in vivid]))
+    return out
+
+
+def chroma_of(hexc):
+    _, a, b = oklab(hex_to_rgb(hexc))
+    return (a * a + b * b) ** 0.5
+
+
+def same_as_dominant(hexc, dominant):
+    """A detail that is only the dominant colour again (its hue, not much more vivid): no standout."""
+    if not dominant:
+        return False
+    dh, c = oklch_hue_dist(hexc, dominant), chroma_of(hexc)
+    ratio, intense, own = SO_DOM_CHROMA
+    return dh < SO_MIN_HUE_GAP and not (c >= ratio * chroma_of(dominant) and c >= intense and dh >= own)
+
+
+def standout_accent(frames, dominant=None):
+    """[(hex, score)] of the standout detail and, when there is one, a second detail of another hue, over frames
+    (each (w, h, px) or (coarse, fine), see analysis_frame); [] when nothing stands out. Details within SO_MIN_HUE_GAP
+    of the `dominant` accent's hue are the dominant colour itself (glow, highlights), not standouts. See SO_* above."""
+    return standout_from_blobs(frames_blobs(frames), dominant)
+
+
+def standout_from_blobs(frames, dominant=None):
+    """standout_accent over frames already reduced to blob_sums lists (one per frame; cached or fresh)."""
+    import math
+    nf = len(frames)
+    if not nf:
+        return []
+    per = []   # per frame: {bin: (score, hue, rgb sums, n)} best blob per hue bin
+    for blobs in frames:
+        best = {}
+        for hue, score, sums, n in blobs:
+            k = int((math.degrees(hue) % 360) / (360 / SO_BINS)) % SO_BINS
+            if score > best.get(k, (0,))[0]:
+                best[k] = (score, hue, sums, n)
+        per.append(best)
+    cands = []
+    for k in range(SO_BINS):
+        near = ((k - 1) % SO_BINS, k, (k + 1) % SO_BINS)
+        hits = [max((f[j] for j in near if j in f), key=lambda t: t[0]) for f in per if any(j in f for j in near)]
+        if not hits or len(hits) < SO_PERSIST * nf:
+            continue
+        total = sum(t[0] for t in hits) / nf
+        if total >= SO_MIN_SCORE:
+            wsum = sum(t[0] for t in hits)
+            rgb = [sum(t[0] * t[2][c] / t[3] for t in hits) / wsum for c in range(3)]
+            hexc = rgb_to_hex(tuple(rgb))
+            if oklab(hex_to_rgb(hexc))[0] >= SO_PICK_MIN_L and not same_as_dominant(hexc, dominant):
+                cands.append((total, k, hexc))
+    if not cands:
+        return []
+    cands.sort(key=lambda t: (-t[0], t[1]))   # ties: the lower bin, so the pick is deterministic
+    first = cands[0]
+    res = [(first[2], first[0])]
+    for total, _, hexc in cands[1:]:
+        if total >= SO_SECOND_SHARE * first[0] and oklch_hue_dist(hexc, first[2]) >= SO_SECOND_GAP:
+            res.append((hexc, total))
+            break
+    return res
+
+
+EXTRACT_VERSION = 4   # out/extracted.json + analysis cache format: bump when extract() changes (older caches are re-analysed once)
+BASE_KEYS = ("bg", "fg", "accent", "standout", "standout_score", "standout2")
+
+
+def still_video(still):
+    """The video a wallpaper still was taken from (wallpapers.json: the primary's or any monitor's entry), or None."""
+    st = load_wp_state()
+    for e in (st.get("primary_video"), *st.get("monitors", {}).values()):
+        if isinstance(e, dict) and e.get("still") and os.path.expanduser(e["still"]) == str(still):
+            v = os.path.expanduser(e["video"])
+            return v if os.path.exists(v) else None
+    return None
+
+
+def video_frames(video, n=VIDEO_FRAMES, par=None):
+    """n analysis frames spread over a video (centres of n equal spans): ffmpeg decodes them (`par` at a time with 2
+    threads each: the precompute; default all n at once) at SO_FINE, ImageMagick prepares each (analysis_frame) as soon as its frame is there, in parallel."""
+    from concurrent.futures import ThreadPoolExecutor
+    dur = video_duration(video)
+    if dur <= 0:
+        return []
+
+    def one(i):
+        t = dur * (i + 0.5) / n
+        try:
+            p = subprocess.run(["ffmpeg", "-v", "error", "-nostdin", *(["-threads", "2"] if par else []), "-ss", f"{t:.3f}", "-i", video, "-an", "-frames:v", "1",
+                                "-vf", f"scale={SO_FINE}:{SO_FINE}:force_original_aspect_ratio=decrease", "-f", "image2pipe", "-c:v", "ppm", "-"],
+                               stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return analysis_frame(["ppm:-"], p.stdout) if p.stdout else None
+    with ThreadPoolExecutor(max(1, min(n, par or n))) as ex:
+        return [f for f in ex.map(one, range(n)) if f]
 
 
 # -------------------------------------------------------------------- palette
@@ -223,17 +817,30 @@ def build_palette(base, cfg, mode="dark"):
         fg = hls(fh, max(fl, 0.78), min(fs, 0.25))
         fg = ensure_contrast(fg, bg, 9.0)
 
-    accent = base["accent"]
+    def tone(c):   # an image colour as a readable accent
+        ch, cl, cs = to_hls(c)
+        if light:   # vivid, then only as dark as the pale bg needs (a dark image accent would turn brown / maroon)
+            c = hls(ch, max(0.40, min(cl, 0.50)), max(cs, 0.65))
+        else:
+            c = hls(ch, max(0.42, min(cl, 0.62)), max(cs, 0.55))
+        return ensure_contrast(c, bg, 4.6)  # also lands in an ANSI slot
+
+    dominant = base["accent"]
+    standout = base.get("standout") if s.get("accent_pick", PICKS[0]) == "standout" else None
+    accent = standout or dominant
     if accent is None:
         accent = fg  # no color in the image: the foreground doubles as the accent
     else:
-        ah, al, as_ = to_hls(accent)
-        if light:   # vivid, then only as dark as the pale bg needs (a dark image accent would turn brown / maroon)
-            accent = hls(ah, max(0.40, min(al, 0.50)), max(as_, 0.65))
-        else:
-            accent = hls(ah, max(0.42, min(al, 0.62)), max(as_, 0.55))
-        accent = ensure_contrast(accent, bg, 4.6)  # also lands in an ANSI slot
+        accent = tone(accent)
     ah, _, _ = to_hls(accent)
+    # a standout accent: accent2 = a second standout detail of another hue (green eyes next to red earrings), else the
+    # wallpaper's dominant colour (when it is a different hue), so links etc. carry the image's own colours
+    alt = None
+    if standout:
+        for c in (base.get("standout2"), dominant):
+            if c and hue_dist(to_hls(c)[0], to_hls(standout)[0]) >= 0.08:
+                alt = tone(c)
+                break
 
     p = {"bg": bg, "fg": fg, "accent": accent}
     if light:
@@ -271,7 +878,7 @@ def build_palette(base, cfg, mode="dark"):
     if light:
         for name in (*ANSI_HUES, "orange"):
             p[name] = ensure_contrast(p[name], bg, 4.5)
-    p["accent2"] = p["blue"] if nearest != "blue" else p["cyan"]
+    p["accent2"] = alt or (p["blue"] if nearest != "blue" else p["cyan"])
 
     step = -0.09 if light else 0.09   # bright = further from the bg
     if light:   # ANSI "black" / "white" keep their meaning: a dark and a light grey
@@ -325,10 +932,41 @@ def render(text, pal, extra):
 
 
 def write_atomic(path, text):
-    """Readers that watch these files (quickshell) must never see a half-write."""
-    tmp = path.with_name(path.name + ".tmp")
+    """Readers that watch these files (quickshell) must never see a half-write. An unchanged file is not rewritten (no
+    watcher fires, the reload of an app whose files did not change is skipped); returns True when it was written."""
+    try:
+        if path.read_text() == text:
+            return False
+    except (OSError, ValueError):
+        pass
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")   # per process: a foreground apply and a worker never share one
     tmp.write_text(text)
     os.replace(tmp, path)
+    CHANGED.add(str(path))
+    return True
+
+
+CHANGED = set()   # files write_atomic really changed in this process (reload_apps skips apps whose files are unchanged)
+PROFILE = os.environ.get("THEME_PROFILE")   # a file: one JSON line per timed stage (README "Profiling")
+
+
+class prof:
+    """`with prof("stage"):` appends {t, pid, stage, ms} to $THEME_PROFILE; nothing without it."""
+    def __init__(self, stage):
+        self.stage = stage
+
+    def __enter__(self):
+        self.t = time.perf_counter()
+        return self
+
+    def __exit__(self, *exc):
+        if PROFILE:
+            try:
+                with open(PROFILE, "a") as f:
+                    f.write(json.dumps({"t": round(time.time(), 4), "pid": os.getpid(), "stage": self.stage,
+                                        "ms": round((time.perf_counter() - self.t) * 1000, 1)}) + "\n")
+            except OSError:
+                pass
 
 
 # GTK4 / libadwaita glass (templates/gtk4.css). The window glass behind a GTK window is drawn by the compositor with
@@ -455,10 +1093,13 @@ def norm_entry(v):
         return v
     if isinstance(v, dict) and isinstance(v.get("video"), str) and v["video"]:
         e = {"video": v["video"], "mode": "loop" if v.get("mode") == "loop" else "once", "still": str(v.get("still") or "")}
-        if e["mode"] == "once":   # optional timing of a play-once clip: see video_plan()
-            play, wind = clamp_timing(v.get("play"), v.get("wind"))
-            if play is not None:   # no key = full length (also every entry written before play 0 became literal)
+        if e["mode"] == "once":   # timing of a play-once clip: see video_plan()
+            # no "play" key = nothing stored: the defaults (timing_default); "full" (or any non-number) = full length
+            play, wind = clamp_timing(v.get("play"), v.get("wind")) if "play" in v else timing_default()
+            if play is not None:
                 e["play"], e["wind"] = play, wind
+            else:
+                e["play"] = PLAY_FULL
             tr = clamp_ease(v.get("ease"))
             if tr is not None:   # no key = the theme.toml default
                 e["ease"] = tr
@@ -618,28 +1259,112 @@ def hyprpaper_active():
     return {k.strip(): v.strip() for k, _, v in (l.partition(": ") for l in out.splitlines()) if v}
 
 
-def live_set_wallpaper(key, conn, path):
-    """Change one output's wallpaper in the running hyprpaper, then CHECK it took (listactive); if not, restart it
-    (it reads the freshly rendered out/hyprpaper.conf). The selector must be the one the config block uses:
-    hyprpaper ignores `<connector>,...` for an output that a `desc:` rule matches (seen live: exit 0, nothing
-    changed), so a description key goes as `desc:<key>`, a connector-name key as the connector."""
-    if not conn or not path:
-        return
-    sel = conn if key == conn else "desc:" + key
-    sh(f"hyprctl hyprpaper wallpaper '{sel},{path},cover'")
-    want = os.path.realpath(path)
-    for _ in range(20):   # decoding a big image takes a moment
-        cur = hyprpaper_active().get(conn)
-        if cur and os.path.realpath(cur) == want:
-            return
-        time.sleep(0.15)
-    print(f"theme: hyprpaper did not switch {conn} to {Path(path).name}, restarting it", file=sys.stderr)
-    restart_hyprpaper()
+# ------------------------------------------------------------ wallpaper backend
+# Who draws the wallpaper IMAGE (and the still under a video wallpaper): [settings] wallpaper_backend =
+#  * "quickshell" (default): the shell's background layer (config/quickshell/Wallpaper.qml + WallpaperLayer.qml) watches
+#    out/wallpaper.json (written together with out/hyprpaper.conf: the same blocks as JSON, plus the backend) and
+#    cross-fades on a change. theme.py only writes the files: it never starts, restarts or waits for hyprpaper. A
+#    hyprpaper that still runs on this Hyprland instance (left from the old backend) is kept in step, never started.
+#  * "hyprpaper": the old path (live `hyprctl hyprpaper wallpaper`, the worker's listactive check + restart, the video
+#    players wait for hyprpaper at login). scripts/start-hyprpaper.sh starts hyprpaper only for this backend.
+# Video players (mpvpaper, bottom layer) are above the background layer either way.
+WALLPAPER_BACKENDS = ("quickshell", "hyprpaper")
+
+
+def wallpaper_backend(cfg=None):
+    v = (cfg if cfg is not None else load_cfg()).get("settings", {}).get("wallpaper_backend", WALLPAPER_BACKENDS[0])
+    return v if v in WALLPAPER_BACKENDS else WALLPAPER_BACKENDS[0]
+
+
+def hyprpaper_running():
+    """Does a hyprpaper answer on this Hyprland instance's socket (a connect, no IPC round trip; a stale socket fails)?"""
+    import socket
+    sig, run = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", ""), os.environ.get("XDG_RUNTIME_DIR", "")
+    if not sig or not run or "/" in sig:
+        return False
+    s = socket.socket(socket.AF_UNIX)
+    s.settimeout(0.2)
+    try:
+        s.connect(str(Path(run) / "hypr" / sig / ".hyprpaper.sock"))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
+def hyprpaper_in_use(cfg=None):
+    """Talk to hyprpaper at all: the hyprpaper backend, or the quickshell one while a hyprpaper still runs."""
+    return wallpaper_backend(cfg) == "hyprpaper" or hyprpaper_running()
+
+
+def wallpaper_rules(text):
+    """The wallpaper blocks of a rendered hyprpaper.conf, in order: [{monitor, path, fit}] (monitor "" = the catch-all,
+    a connector, or `desc:<description prefix>`; path expanded)."""
+    res = []
+    for body in re.findall(r"(?ms)^\s*wallpaper\s*\{(.*?)\}", text):
+        kv = {k.strip(): v.strip() for k, eq, v in (l.partition("=") for l in body.splitlines()) if eq}
+        if kv.get("path"):
+            res.append({"monitor": kv.get("monitor", ""), "path": os.path.expanduser(kv["path"]), "fit": kv.get("fit_mode") or "cover"})
+    return res
+
+
+def image_dims(path):
+    """(width, height) from a PNG / JPEG / WebP header (first 256 KB, no decode), else None."""
+    import struct
+    try:
+        with open(path, "rb") as f:
+            b = f.read(262144)
+    except OSError:
+        return None
+    try:
+        if b[:8] == b"\x89PNG\r\n\x1a\n" and b[12:16] == b"IHDR":
+            return struct.unpack(">II", b[16:24])
+        if b[:4] == b"RIFF" and b[8:12] == b"WEBP":
+            k = b[12:16]
+            if k == b"VP8 ":
+                w, h = struct.unpack("<HH", b[26:30])
+                return w & 0x3FFF, h & 0x3FFF
+            if k == b"VP8L":
+                v = int.from_bytes(b[21:25], "little")
+                return (v & 0x3FFF) + 1, ((v >> 14) & 0x3FFF) + 1
+            if k == b"VP8X":
+                return int.from_bytes(b[24:27], "little") + 1, int.from_bytes(b[27:30], "little") + 1
+        if b[:2] == b"\xff\xd8":
+            i = 2
+            while i + 9 < len(b):
+                if b[i] != 0xFF:
+                    i += 1
+                    continue
+                m = b[i + 1]
+                if m in (0xD8, 0x01) or 0xD0 <= m <= 0xD7 or m == 0xFF:
+                    i += 1 if m == 0xFF else 2
+                    continue
+                n = struct.unpack(">H", b[i + 2:i + 4])[0]
+                if m in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                    h, w = struct.unpack(">HH", b[i + 5:i + 9])
+                    return w, h
+                i += 2 + n
+    except (struct.error, IndexError):
+        pass
+    return None
+
+
+def write_wallpaper_json(text, cfg):
+    """out/wallpaper.json for the shell's wallpaper layer: the blocks of out/hyprpaper.conf (wallpaper_rules) + the backend.
+    `w` / `h` = the image's own size when its header says (the shell then never decodes a small image UP to the screen).
+    `pending` = the file does not exist yet (a video's still the worker extracts later): the shell keeps what it shows;
+    the worker's rewrite after the extraction drops the flag (a changed file: the watch fires)."""
+    rules = []
+    for r in wallpaper_rules(text):
+        dims = image_dims(r["path"]) if os.path.exists(r["path"]) else None
+        rules.append(dict(r, **({"w": dims[0], "h": dims[1]} if dims else {}), **({} if os.path.exists(r["path"]) else {"pending": True})))
+    write_atomic(OUT / "wallpaper.json", json.dumps({"version": 1, "backend": wallpaper_backend(cfg), "rules": rules}, indent=2) + "\n")
 
 
 # ------------------------------------------------------------ video wallpapers
-# mpvpaper (one process per output, on the wlr-layer-shell background layer) plays the video ABOVE hyprpaper, which
-# keeps showing a still of it: the extracted LAST frame for mode "once" (the clip plays, then holds that frame:
+# mpvpaper (one process per output, on the wlr-layer-shell bottom layer) plays the video ABOVE the wallpaper image
+# (the shell's background layer, or hyprpaper with that backend), which keeps showing a still of it: the extracted LAST frame for mode "once" (the clip plays, then holds that frame:
 # mpv `keep-open`, the surface keeps its last buffer; if the player ever vanishes the identical still is beneath),
 # a middle frame for "loop". The still is also what the palette and hyprpaper use, so login never shows black.
 # Players: one pid file per connector in $XDG_RUNTIME_DIR/theme-video/<connector>.json ({pid, video, mode}); they
@@ -676,9 +1401,25 @@ def video_cache():
 _PROBE = {}
 
 
+_PROBE_DISK = {}
+
+
+def _probe_disk():
+    """$XDG_CACHE_HOME/theme/video/probes.json: the _memo results across processes (an apply's foreground must not
+    spend ~40 ms per ffprobe of a clip it has probed before)."""
+    if "d" not in _PROBE_DISK:
+        try:
+            d = json.loads((video_cache() / "probes.json").read_text())
+            _PROBE_DISK["d"] = d if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            _PROBE_DISK["d"] = {}
+    return _PROBE_DISK["d"]
+
+
 def _memo(fn):
-    """Per-process cache of a probe keyed by file (mtime, size) + args: the encode runner re-evaluates what is wanted
-    often (a cancelled job must die within ~0.5 s) and must not re-run ffprobe each time."""
+    """Cache of a probe keyed by file (mtime, size) + args, per process and on disk (truthy JSON results only: a failed
+    probe is retried): the encode runner re-evaluates what is wanted often (a cancelled job must die within ~0.5 s) and
+    must not re-run ffprobe each time; neither must the foreground of an apply."""
     def wrapper(path, *a):
         try:
             st = os.stat(path)
@@ -686,7 +1427,27 @@ def _memo(fn):
             return fn(path, *a)
         k = (fn.__name__, path, st.st_mtime_ns, st.st_size) + a
         if k not in _PROBE:
-            _PROBE[k] = fn(path, *a)
+            dk = json.dumps(k)
+            disk = _probe_disk()
+            if dk in disk:
+                v = disk[dk]
+                _PROBE[k] = tuple(v) if isinstance(v, list) else v
+            else:
+                _PROBE[k] = v = fn(path, *a)
+                try:
+                    if v:
+                        f = video_cache() / "probes.json"
+                        try:
+                            cur = json.loads(f.read_text())
+                        except (OSError, ValueError):
+                            cur = {}
+                        if len(cur) > 4000:   # entries of files that are gone or changed pile up: start over
+                            cur = {}
+                        cur[dk] = v
+                        disk[dk] = v
+                        write_atomic(f, json.dumps(cur))
+                except (OSError, TypeError, ValueError):
+                    pass
         return _PROBE[k]
     return wrapper
 
@@ -756,6 +1517,11 @@ def video_hold(path):
         return json.loads(f.read_text())["hold"]
     except (OSError, ValueError, KeyError, TypeError):
         pass
+    if FAST[0]:   # foreground of an apply: assume no black tail now, the worker scans it (and restarts the player if it was wrong)
+        PROVISIONAL.add(path)
+        return None
+    if getattr(_ASSUME, "on", False):
+        return None
     dur, hold = video_duration(path), None
     if dur > 0.5:
         for span in HOLD_SCAN:
@@ -770,7 +1536,8 @@ def video_hold(path):
 
 
 # Timed play-once ("play for S s, then wind down over W s, then stay still"): an entry may carry play / wind
-# (seconds, 0-PLAY_MAX / 0-WIND_MAX; play 0 = unset = the whole clip up to the black-tail hold). Inside mpv,
+# (seconds, 0-PLAY_MAX / 0-WIND_MAX; "full" = the whole clip up to the black-tail hold; none stored = PLAY_DEFAULT /
+# WIND_DEFAULT). Inside mpv,
 # mpv/winddown.lua holds speed 1 for `play`, then eases it with s(u) = (1 + cos(pi*u)) / 2 over `wind`; the media
 # time covered by the wind is wind / 2, so the clip stops at t_stop = play + wind / 2. That time is known up front:
 # it is mpv's `end=` and the time the still (hyprpaper underlay, palette) is extracted at, so the frame held on
@@ -788,7 +1555,7 @@ WINDDOWN_SMOOTH_MAX_HZ = 145.0
 
 
 def clamp_timing(play, wind, usable=None):
-    """(play, wind) of a play-once entry. play None = FULL LENGTH (no timing: the clip up to the hold point, wind 0); a
+    """(play, wind) of a play-once entry. play None / "full" = FULL LENGTH (the clip up to the hold point, wind 0); a
     number is literal seconds of full-speed play, 0 = start winding down at once. `usable` = whole seconds of the
     clip (video_usable): play reaching it means full length, and the wind may only consume what is left:
     play + wind * WIND_AVG <= usable, i.e. wind <= (usable - play) / WIND_AVG."""
@@ -807,6 +1574,21 @@ def clamp_timing(play, wind, usable=None):
 
 
 EASE_MAX = 1.0   # seconds, the longest replay ease-in / fade
+# Timing of a play-once entry that stores none (a new pick without --play, an entry without a "play" key): play
+# PLAY_DEFAULT s at full speed, then wind down over WIND_DEFAULT s (theme.toml replay_play_default / replay_wind_default).
+# Full length is stored explicitly as "play": PLAY_FULL ("--play full"), so it is never mistaken for "nothing stored".
+PLAY_DEFAULT, WIND_DEFAULT = 0.0, 5.0
+PLAY_FULL = "full"
+
+
+def timing_default():
+    """(play, wind) of a play-once entry without stored timing (theme.toml replay_play_default / replay_wind_default)."""
+    try:
+        cfg = load_cfg()
+    except (OSError, tomllib.TOMLDecodeError):
+        cfg = {}
+    play, wind = clamp_timing(cfg.get("replay_play_default", PLAY_DEFAULT), cfg.get("replay_wind_default", WIND_DEFAULT))
+    return (PLAY_DEFAULT, WIND_DEFAULT) if play is None else (play, wind)
 
 
 def clamp_ease(ease, usable=None):
@@ -856,14 +1638,19 @@ def video_still(path, mode, play=None, wind=0):
         return None
     plan = video_plan(path, play, wind) if mode == "once" else None
     out = video_cache() / (_stamp(path, "once2" if mode == "once" else mode) + (f"-t{round(plan[2] * 1000)}" if plan else "") + ".png")
-    if out.exists():
+    if out.exists() or FAST[0]:   # (foreground of an apply: the path only, the worker extracts it)
         return out
     if mode == "once":
         hold = plan[2] if plan else video_hold(path)
         if hold is not None:   # same timestamp mpv stops at (`end=`)
-            # mpv's end= is exclusive: it holds the last frame BEFORE `hold`, so take that one
-            ss = max(0.0, hold - 1.0)
-            ok = _frame(path, out, ["-ss", f"{ss:.3f}"], ["-t", f"{max(hold - ss, 0.04):.3f}"])
+            # mpv's end= is exclusive: it holds the last frame BEFORE `hold`, so take that one (every frame of the window is
+            # written over the same file: a short window first, the 1 s one when it held no frame)
+            ok = False
+            for win in (0.25, 1.0):
+                ss = max(0.0, hold - win)
+                ok = _frame(path, out, ["-ss", f"{ss:.3f}"], ["-t", f"{max(hold - ss, 0.04):.3f}"])
+                if ok:
+                    break
         else:
             # decode only the tail; every frame overwrites the same file, the last one stays
             ok = _frame(path, out, ["-sseof", "-0.5"]) or _frame(path, out, [])
@@ -889,6 +1676,8 @@ def make_entry(path, mode, play=None, wind=0, ease=None):
     if not is_video(path):
         return tilde(path)
     mode = "loop" if mode == "loop" else "once"
+    if mode == "once" and play is None:   # no --play: the default timing (--play full = the whole clip)
+        play, wind = timing_default()
     play, wind = clamp_timing(play, wind, video_usable(path)) if mode == "once" else (None, 0.0)
     still = video_still(path, mode, play, wind)
     if not still:
@@ -896,6 +1685,8 @@ def make_entry(path, mode, play=None, wind=0, ease=None):
     ent = {"video": tilde(path), "mode": mode, "still": tilde(still)}
     if play is not None:
         ent["play"], ent["wind"] = play, wind
+    elif mode == "once":
+        ent["play"] = PLAY_FULL
     tr = clamp_ease(ease, video_usable(path)) if mode == "once" else None
     if tr is not None:
         ent["ease"] = tr
@@ -1569,7 +2360,7 @@ def bake_last_pts(path, t_stop):
         return None
 
 
-BAKE_EASE = 0.5        # seconds, theme.toml replay_ease_in: every replay burst starts from rest and reaches speed 1 in this time (0 = at once)
+BAKE_EASE = 0.0        # seconds, theme.toml replay_ease_in: every replay burst starts from rest and reaches speed 1 in this time (0 = at once)
 
 
 def bake_ease_default():
@@ -3170,22 +3961,27 @@ def vp_read(f):
         return None
 
 
-def vp_stop(f):
-    """Stop the player of one pid file: SIGTERM the recorded pid (only if it is still an mpvpaper), SIGKILL after 2 s."""
+def vp_stop(*files):
+    """Stop the players of these pid files, all at once: SIGTERM the recorded pids (only those still an mpvpaper),
+    SIGKILL after 2 s; returns when they are gone (polled every 5 ms: a switch waits for this)."""
     import signal
-    d = vp_read(f)
-    f.unlink(missing_ok=True)
-    if not d or not vp_alive(d["pid"]):
-        return
+    pids = []
+    for f in files:
+        d = vp_read(f)
+        f.unlink(missing_ok=True)
+        if d and vp_alive(d["pid"]):
+            pids.append(d["pid"])
     for sig, wait in ((signal.SIGTERM, 2.0), (signal.SIGKILL, 1.0)):
-        try:
-            os.kill(d["pid"], sig)
-        except OSError:
-            return
+        for pid in pids:
+            try:
+                os.kill(pid, sig)
+            except OSError:
+                pass
         end = time.time() + wait
-        while time.time() < end and vp_alive(d["pid"]):
-            time.sleep(0.05)
-        if not vp_alive(d["pid"]):
+        while time.time() < end and any(vp_alive(p) for p in pids):
+            time.sleep(0.005)
+        pids = [p for p in pids if vp_alive(p)]
+        if not pids:
             return
 
 
@@ -3308,9 +4104,10 @@ def video_wait_for_copy(video, mon, st_opt, src):
     return bool(plan) and not opt_path(video, plan).with_suffix(".fail").exists()
 
 
-def video_sync(start=True, force=False, only=None, wait=False):
+def video_sync(start=True, force=False, only=None, wait=False, kick=True):
     """Make the running players match the state: stop those no longer wanted (or all of them with force), start
-    the missing ones. start=False only stops (the caller restarts them). only = one connector."""
+    the missing ones. start=False only stops (the caller restarts them). only = one connector. kick=False: leave the
+    encode runner to the caller (the foreground of an apply: its worker pokes it)."""
     import fcntl
     mons = connected_monitors()
     want = video_wanted(mons=mons) if mons else {}
@@ -3319,15 +4116,17 @@ def video_sync(start=True, force=False, only=None, wait=False):
     with open(vp_dir() / "lock", "w") as lk:
         fcntl.flock(lk, fcntl.LOCK_EX)
         have = {f.stem: f for f in vp_dir().glob("*.json")}
+        stop = []
         for conn, f in have.items():
             d = vp_read(f) or {}
             if only and conn != only:
                 continue
             if force or conn not in want or not vp_alive(d.get("pid", -1)) or (d.get("video"), d.get("mode"), d.get("play"), d.get("wind", 0), d.get("ease")) != want[conn]:
-                vp_stop(f)
+                stop.append(f)
+        vp_stop(*stop)
         if not start or not want:
             return
-        if wait:   # at login: hyprpaper first, so the video layer maps above it
+        if wait and wallpaper_backend() == "hyprpaper":   # at login: hyprpaper first, so the video layer maps above it
             for _ in range(60):
                 if hyprpaper_active():
                     break
@@ -3350,7 +4149,7 @@ def video_sync(start=True, force=False, only=None, wait=False):
                 if not st_opt and not src and not hwdec_ok(video):
                     print(f"theme: warning: {conn}: {Path(video).name} cannot be decoded in hardware and Optimize is off: playing it in software (high CPU)", file=sys.stderr, flush=True)
                 vp_start(conn, video, mode, play, wind, str(src) if src else None, baked[1] if baked else None, ease)
-    if start and want and st_opt and (not only or waiting):
+    if kick and start and want and st_opt and (not only or waiting):
         video_optimize_kick()
 
 
@@ -3404,10 +4203,12 @@ def video_command(args):
         c = video_codec(v) if os.path.exists(v) else None
         print(("yes " if hwdec_ok(v) else "no ") + (c[0] if c else "?"), flush=True)
     elif sub in ("thumb", "thumbs"):
+        dp, dw = timing_default()
         for p in rest:
             t = video_thumb(os.path.expanduser(p))
-            # path, thumbnail, usable whole seconds (Play for + Wind down sliders), the wind curve's mean speed
-            print(f"{p}\t{t or ''}\t{video_usable(os.path.expanduser(p))}\t{WIND_AVG}\t{bake_ease_default()}", flush=True)
+            # path, thumbnail, usable whole seconds (Play for + Wind down sliders), the wind curve's mean speed, the
+            # defaults of an entry without stored timing: ease-in, play, wind
+            print(f"{p}\t{t or ''}\t{video_usable(os.path.expanduser(p))}\t{WIND_AVG}\t{bake_ease_default()}\t{dp:g}\t{dw:g}", flush=True)
     elif sub == "status":
         for f in sorted(vp_dir().glob("*.json")):
             if f.name == "optimize.json":
@@ -3577,7 +4378,8 @@ def render_all(pal, cfg, mode=None, dark=None):
         dest = (HOST_OUT if tpl.name in HOST_TEMPLATES else OUT) / tpl.name
         rendered[tpl.name] = render(tpl.read_text(), pal, extra)
         write_atomic(dest, rendered[tpl.name])
-    render_omarchy(pal, mode, extra, rendered, wp)
+    if not DEFAULT_MODE and "hyprpaper.conf" in rendered:   # the shell's wallpaper layer (same blocks; the default has no per-machine paths)
+        write_wallpaper_json(rendered["hyprpaper.conf"], cfg)
     expand = tilde if DEFAULT_MODE else os.path.expanduser
     dirs = [expand(d) for d in cfg.get("wallpaper_dirs", ["~/Pictures/wallpapers"])]
     s = cfg.get("settings", {})
@@ -3588,7 +4390,8 @@ def render_all(pal, cfg, mode=None, dark=None):
           "bar_floating": bool(s.get("bar_floating", False)),
           "smart_gaps": bool(s.get("smart_gaps", True)),
           "bar_border": s.get("bar_border", 0), "bar_opacity": s.get("bar_opacity", 0.55),
-          "card_fill": s.get("card_fill", 0.3), "plain_fill_min": s.get("plain_fill_min", 0)}
+          "card_fill": s.get("card_fill", 0.3), "plain_fill_min": s.get("plain_fill_min", 0),
+          "accent_pick": s.get("accent_pick", PICKS[0])}
     light = {}
     if mode == "light" and dark and not DEFAULT_MODE:
         light = {"dark": {k: dark[k] for k in INK_KEYS}, "wall_ink": wall_inks(wp, pal, dark)}
@@ -3597,6 +4400,7 @@ def render_all(pal, cfg, mode=None, dark=None):
     fills = "".join(f'  {k} = {float(ui[k])},\n' for k in ("bar_opacity", "card_fill", "plain_fill_min"))
     lua = "return {\n" + f'  wallpaper = "{wp}",\n  rounding = {ui["rounding"]},\n' + fills + "".join(f'  {k} = "{v}",\n' for k, v in pal.items()) + "}\n"
     write_atomic(OUT / "palette.lua", lua)
+    render_omarchy(pal, mode, extra, rendered, wp)   # last: it copies the wallpaper and makes a preview (the shell need not wait)
 
 
 # ------------------------------------------------------------ Omarchy theme dir
@@ -4425,12 +5229,6 @@ def sh(cmd, timeout=10):
         pass
 
 
-def reload_terminals():
-    sh("pkill -USR1 -x kitty")  # kitty: reload config (re-reads the included colors)
-    sh("pkill -USR2 -x ghostty")  # ghostty: reload config
-    # alacritty watches its imported files itself
-
-
 def reload_nvim():
     """Every running nvim exposes an RPC socket in $XDG_RUNTIME_DIR; ThemeReload()
     is defined in config/nvim/lua/plugins/theme.lua. Stale sockets just fail fast."""
@@ -4515,21 +5313,35 @@ def refresh_nautilus():
         sh("nautilus -q")
 
 
-def reload_apps(cfg, mode_only=False):
-    """mode_only (light / dark switch): the wallpaper did not change, so hyprpaper is left running."""
+def reload_apps(cfg, mode_only=False, changed=None):
+    """mode_only (light / dark switch, and every apply worker: it switched hyprpaper live): hyprpaper is left running
+    (never restarted with wallpaper_backend = quickshell).
+    changed = the files this run really wrote (write_atomic's CHANGED): apps whose files did not change are not reloaded;
+    None = reload everything. All reloads run in parallel."""
     from concurrent.futures import ThreadPoolExecutor
+
+    def ch(*names):
+        return changed is None or any(str(n) in changed for n in names)
 
     def hypr():
         sh("hyprctl reload")
-        if cfg.get("settings", {}).get("restart_hyprpaper", True) and not mode_only:
+        if cfg.get("settings", {}).get("restart_hyprpaper", True) and not mode_only and wallpaper_backend(cfg) == "hyprpaper":
             restart_hyprpaper()
 
     def quit_apps():
         for cmd in cfg.get("settings", {}).get("quit_on_apply", []):
             sh(cmd)
 
-    jobs = [quit_apps, refresh_nautilus, hypr, reload_terminals, reload_nvim, reload_zellij, reload_gtk, reload_kde, lambda: reload_icons(cfg),
-            lambda: sh("herdr server reload-config")]
+    pal_ch = ch(OUT / "palette.lua")
+    jobs = [(quit_apps, changed is None or bool(changed)), (refresh_nautilus, pal_ch), (hypr, pal_ch or not mode_only),
+            (lambda: sh("pkill -USR1 -x kitty"), ch(OUT / "kitty.conf")),   # kitty: reload config (re-reads the included colors)
+            (lambda: sh("pkill -USR2 -x ghostty"), ch(OUT / "ghostty")),    # ghostty: reload config (alacritty watches its imports)
+            (reload_nvim, pal_ch), (reload_zellij, ch(OUT / "zellij.kdl")),
+            (reload_gtk, ch(OUT / "gtk.css", HOST_OUT / "gtk3.css", HOST_OUT / "gtk4.css")), (reload_kde, ch(OUT / "kde.colors")),
+            (lambda: reload_icons(cfg), pal_ch), (lambda: sh("herdr server reload-config"), ch(OUT / "herdr.toml"))]
+    jobs = [j for j, want in jobs if want]
+    if not jobs:
+        return
     with ThreadPoolExecutor(len(jobs)) as ex:
         for f in [ex.submit(j) for j in jobs]:
             f.result()
@@ -4577,7 +5389,7 @@ def set_wallpaper(path):
 
 
 def write_hyprpaper(cfg):
-    """Re-render only out/hyprpaper.conf (a non-primary monitor changed: no palette, no app reloads)."""
+    """Re-render only out/hyprpaper.conf + out/wallpaper.json (a non-primary monitor changed: no palette, no app reloads)."""
     extra = {"wallpaper": str(Path(os.path.expanduser(cfg["wallpaper"]))), **cfg.get("vars", {})}
     if not os.path.exists(os.path.expanduser(extra.get("tv_wallpaper", ""))):
         extra["tv_wallpaper"] = extra["wallpaper"]
@@ -4585,7 +5397,9 @@ def write_hyprpaper(cfg):
     extra.update(wallpaper_t=tilde(extra["wallpaper"]), tv_wallpaper_t=tilde(extra["tv_wallpaper"]))
     extra["static_blocks"] = static_blocks(cfg, extra)
     drop_marker()
-    write_atomic(OUT / "hyprpaper.conf", render((ROOT / "templates/hyprpaper.conf").read_text(), {}, extra))
+    text = render((ROOT / "templates/hyprpaper.conf").read_text(), {}, extra)
+    write_atomic(OUT / "hyprpaper.conf", text)
+    write_wallpaper_json(text, cfg)
 
 
 def pop_all(args, name):
@@ -4623,22 +5437,13 @@ def monitor_command(cmd, args, o):
         video_optimize_poke()
         if prim in keys:
             return False   # the full apply below re-renders hyprpaper (with these entries) and syncs the players
-        write_hyprpaper(load_cfg())
-        for k in others:
-            live_set_wallpaper(k, next((m["name"] for m in mons if m["key"] == k), None), entry_image(ent))
-        video_sync()
         print(f"theme: {', '.join(others)} -> {Path(args[0]).name}" + (f" ({ent['mode']})" if isinstance(ent, dict) else " (hyprpaper only)"))
-        return True
+        return True   # (apply_fast shows it: hyprpaper.conf, live set, players)
     if cmd == "clear" and args:
         st, mons = load_wp_state(), connected_monitors()
         for k in args:
             st["monitors"].pop(k, None)
         save_wp_state(st)
-        cfg = load_cfg()
-        write_hyprpaper(cfg)
-        for k in args:
-            live_set_wallpaper(k, next((m["name"] for m in mons if m["key"] == k), None), os.path.expanduser(cfg["wallpaper"]))
-        video_sync()
         return True
     if cmd == "primary" and args:
         key = args[0]
@@ -4663,8 +5468,6 @@ def monitor_command(cmd, args, o):
             set_wallpaper(img)   # the new primary's image becomes the theme source: full apply
             args[:] = []
             return False
-        write_hyprpaper(cfg)
-        video_sync()
         return True
     if cmd == "unlink" and len(args) == 2:
         st = load_wp_state()
@@ -4826,11 +5629,12 @@ def default_command():
     if not wpfile.exists():
         sys.exit(f"theme: {wpfile} missing")
     cfg = load_cfg()
+    cfg.setdefault("settings", {})["accent_pick"] = get_pick(cfg)
     if cfg["wallpaper"] != "~/.config/theme/default/wallpaper.jpg":
         print(f"theme: theme.toml wallpaper is {cfg['wallpaper']!r}, expected the default one", file=sys.stderr)
     base = extract(wpfile)
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "extracted.json").write_text(json.dumps({"wallpaper": cfg["wallpaper"], **base}))
+    (OUT / "extracted.json").write_text(json.dumps({"wallpaper": cfg["wallpaper"], "v": EXTRACT_VERSION, **base}))
     pal = build_palette(base, cfg)
     PAL[0] = pal
     render_all(pal, cfg)
@@ -4841,11 +5645,427 @@ def default_command():
     print(f"theme: default  bg {pal['bg']}  fg {pal['fg']}  accent {pal['accent']}")
 
 
+# ------------------------------------------------------------ instant switch
+# An `apply` (Settings > Wallpaper click, `link`, `primary`, `clear`) is split in two:
+#  * the FOREGROUND (apply_fast, ~50-100 ms) only records the pick (theme.local.toml / wallpapers.json, under the short
+#    state.lock, never apply.lock) and changes what the monitors show: hyprpaper.conf + wallpaper.json re-rendered (the
+#    shell's wallpaper layer watches the latter: that IS the switch with wallpaper_backend "quickshell"; with "hyprpaper"
+#    every output that shows something else is switched live, `hyprctl hyprpaper wallpaper`, no restart) and the video players started / stopped
+#    (video_sync). Nothing is decoded or analysed: a video's still and black-tail hold are only named (FAST);
+#  * a detached, nice'd WORKER (`theme.py apply-bg`, apply_worker) then extracts the missing stills (hyprpaper underlay;
+#    a clip whose hold was assumed gets its player restarted when the guess was wrong; the rewritten wallpaper.json drops
+#    the still's `pending`), checks hyprpaper took the change (hyprpaper backend: else restarts it), analyses the primary's wallpaper (analysis cache first; an uncached video gets a quick palette
+#    from its still, refined once its frames are analysed, only when the accents really move), renders, deploys and
+#    reloads the apps (parallel, unchanged ones skipped). render + deploy + reload hold apply.lock and are never cut.
+# Latest wins: every apply bumps `gen` in $XDG_RUNTIME_DIR/theme-apply/status.json and SIGTERMs the previous worker,
+# which dies at once with its ffmpeg / ImageMagick children (own session) unless it is inside render + reload (it then
+# finishes that and exits). Workers are serialised (worker.lock); each one reconciles everything the state asks for, so
+# a superseded one leaves nothing undone. status.json {gen, state: working|done|failed, stage, path, pid} drives the
+# Settings indicator; a failed worker leaves the old palette (state failed, the wallpaper itself is already shown).
+APPLY_NICE = 10
+
+
+def apply_dir():
+    d = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/theme-{os.getuid()}") / "theme-apply"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def apply_status_read():
+    try:
+        d = json.loads((apply_dir() / "status.json").read_text())
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def apply_status(**kw):
+    write_atomic(apply_dir() / "status.json", json.dumps(kw))
+
+
+def hyprpaper_wanted(mons, text=None):
+    """{connector: (selector, image)} out/hyprpaper.conf asks for, per connected monitor: a block naming the connector
+    or `desc:<description>` wins over the catch-all `monitor =` block (which is set per connector)."""
+    try:
+        text = (OUT / "hyprpaper.conf").read_text() if text is None else text
+    except OSError:
+        return {}
+    blocks = [(r["monitor"], r["path"]) for r in wallpaper_rules(text)]
+    res = {}
+    for m in mons:
+        own = [b for b in blocks if b[0] == m["name"] or (b[0].startswith("desc:") and b[0][5:].strip() and m["key"].startswith(b[0][5:].strip()))]
+        hit = own[0] if own else next((b for b in reversed(blocks) if not b[0]), None)
+        if hit:
+            res[m["name"]] = (hit[0] or m["name"], hit[1])
+    return res
+
+
+def hyprpaper_show(mons=None, verify=False):
+    """Make the running hyprpaper show what out/hyprpaper.conf asks for: one `hyprctl hyprpaper wallpaper` per output
+    that shows something else, all at once, no restart (the selector is the config block's: a desc: rule ignores a bare
+    connector). verify (the worker): poll listactive and restart hyprpaper when an output did not switch."""
+    mons = connected_monitors() if mons is None else mons
+    want = {c: v for c, v in hyprpaper_wanted(mons).items() if os.path.exists(v[1])}
+    have = hyprpaper_active()
+    todo = {c: v for c, v in want.items() if os.path.realpath(have.get(c, "")) != os.path.realpath(v[1])}
+    procs = []
+    for sel, path in todo.values():
+        try:
+            procs.append(subprocess.Popen(["hyprctl", "hyprpaper", "wallpaper", f"{sel},{path},cover"], stdin=subprocess.DEVNULL,
+                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        except OSError:
+            pass
+    if not verify:
+        return todo   # (the foreground does not wait: hyprpaper decodes the image on its own time)
+    for p in procs:
+        try:
+            p.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            p.kill()
+    for _ in range(20):   # decoding a big image takes a moment
+        have = hyprpaper_active()
+        if all(os.path.realpath(have.get(c, "")) == os.path.realpath(v[1]) for c, v in want.items()):
+            return todo
+        time.sleep(0.15)
+    if want and load_cfg().get("settings", {}).get("restart_hyprpaper", True):
+        print("theme: hyprpaper did not switch every output, restarting it", file=sys.stderr)
+        restart_hyprpaper()
+    return todo
+
+
+def apply_fast(cmd, args, o, wait=False):
+    """Foreground of apply / clear / primary / link / unlink (see "instant switch"): state, hyprpaper, players, then the
+    worker (detached; wait=True runs it here, for tests and scripts)."""
+    import signal
+    FAST[0] = True
+    with prof("fast.total"):
+        with state_lock():
+            with prof("fast.state"):
+                theme = not monitor_command(cmd, args, o)   # False: a non-primary monitor only (no palette change)
+                if theme and cmd == "apply" and args:
+                    ent = make_entry(args[0], o["mode"], o["play"], o["wind"], o["ease"])   # the primary: an image, or a video whose still is the theme wallpaper
+                    st = load_wp_state()
+                    if isinstance(ent, dict) or st["primary_video"]:   # (no state file is created for plain image applies)
+                        st["primary_video"] = ent if isinstance(ent, dict) else None
+                        if isinstance(ent, dict):
+                            st["primary"] = st["primary"] or primary_key(st, connected_monitors())
+                        save_wp_state(st)
+                    set_wallpaper(tilde(entry_image(ent)))
+                write_hyprpaper(load_cfg())
+                prev = apply_status_read()
+                prov = sorted(PROVISIONAL | (set(prev.get("provisional", [])) if prev.get("state") == "working" else set()))
+                job = {"gen": int(prev.get("gen", 0)) + 1, "state": "working", "stage": "show", "path": args[0] if args else "",
+                       "theme": theme or (prev.get("state") == "working" and bool(prev.get("theme"))), "provisional": prov, "pid": 0}
+                apply_status(**job)
+        live = not os.environ.get("THEME_OUT_DIR")   # a redirected out/ is a test render: the live hyprpaper / players stay
+        if live:
+            mons = connected_monitors()
+            if hyprpaper_in_use():          # (quickshell backend: wallpaper.json above is all; the shell watches it)
+                with prof("fast.hyprpaper"):
+                    hyprpaper_show(mons)    # the image (or a cached still under a new video) appears now
+            with prof("fast.players"):
+                video_sync(kick=False)      # players: the unwanted stop, the new start on what is cached (copy, bake, original)
+        old = int(prev.get("pid") or 0)
+        if old and old != os.getpid():   # the previous worker: superseded (it finishes a running render + reload first)
+            try:
+                if b"apply-bg" in Path(f"/proc/{old}/cmdline").read_bytes():
+                    os.kill(old, signal.SIGTERM)
+            except OSError:
+                pass
+    if wait:
+        return apply_worker()
+    try:
+        log = open(apply_dir() / "worker.log", "a")
+        pre = ["nice", "-n", str(APPLY_NICE)] + (["ionice", "-c", "2", "-n", "7"] if shutil.which("ionice") else []) if shutil.which("nice") else []
+        pr = subprocess.Popen(pre + [sys.executable, "-I", str(Path(__file__).resolve()), "apply-bg"], stdin=subprocess.DEVNULL,
+                              stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        with state_lock():
+            cur = apply_status_read()
+            if cur.get("gen") == job["gen"]:
+                apply_status(**dict(cur, pid=pr.pid))
+    except OSError as e:
+        apply_status(**dict(job, state="failed", stage=f"spawn: {e}"))
+
+
+class Superseded(Exception):
+    pass
+
+
+_CRIT = {"on": False, "term": False}
+
+
+class critical:
+    """`with critical():` a worker's render + deploy + reload: a SIGTERM (newer apply) waits until it is done."""
+    def __enter__(self):
+        _CRIT["on"] = True
+
+    def __exit__(self, *exc):
+        _CRIT["on"] = False
+        if _CRIT["term"]:
+            os._exit(0)
+
+
+def _worker_term(*_):
+    if _CRIT["on"]:
+        _CRIT["term"] = True
+        return
+    try:
+        os.killpg(os.getpgid(0), 9)   # this worker and its ffmpeg / ImageMagick children (its own session)
+    finally:
+        os._exit(0)
+
+
+def ensure_stills(provisional=()):
+    """Worker: every video entry gets its real still (extracted now when the foreground only named it) and its real
+    timing (the black-tail hold scanned for clips the foreground assumed had none). Entries that change are rewritten
+    (and theme.local.toml when it is the primary's); returns the videos whose players must restart."""
+    from concurrent.futures import ThreadPoolExecutor
+    FAST[0] = False
+    st = load_wp_state()
+    ents = [e for e in [st["primary_video"], *st["monitors"].values()] if isinstance(e, dict) and os.path.exists(os.path.expanduser(e["video"]))]
+
+    def prefetch(e):   # the still the foreground named, extracted WHILE the black tail is scanned: a loop or timed still only
+        # depends on the hold when it clamps the timing, which renames it (make_entry below then extracts the right one)
+        if os.path.exists(os.path.expanduser(e["still"])) or (e["mode"] == "once" and e.get("play") == PLAY_FULL):
+            return
+        _ASSUME.on = True
+        try:
+            video_still(os.path.expanduser(e["video"]), e["mode"], e.get("play"), e.get("wind", 0))
+        finally:
+            _ASSUME.on = False
+    with ThreadPoolExecutor(4) as ex:
+        list(ex.map(lambda f: f(), [lambda e=e: prefetch(e) for e in ents] + [lambda e=e: video_hold(os.path.expanduser(e["video"])) for e in ents]))
+    fixed, restart = {}, set()
+    for e in ents:
+        if not isinstance(e, dict) or json.dumps(e, sort_keys=True) in fixed:
+            continue
+        v = os.path.expanduser(e["video"])
+        if not os.path.exists(v):
+            continue
+        try:
+            new = make_entry(v, e["mode"], e.get("play"), e.get("wind", 0), e.get("ease"))
+        except SystemExit:   # ffmpeg could not extract a frame: leave it, the player still plays
+            continue
+        fixed[json.dumps(e, sort_keys=True)] = new
+        if new != e or (v in provisional and video_hold(v) is not None):
+            restart.add(v)
+    changes = {k: n for k, n in fixed.items() if json.loads(k) != n}
+    if changes:
+        with state_lock():
+            st = load_wp_state()
+            pv = st["primary_video"]
+            if pv and json.dumps(pv, sort_keys=True) in changes:
+                st["primary_video"] = changes[json.dumps(pv, sort_keys=True)]
+                if load_cfg().get("wallpaper") == pv["still"]:
+                    set_wallpaper(st["primary_video"]["still"])
+            for k, e in list(st["monitors"].items()):
+                if isinstance(e, dict) and json.dumps(e, sort_keys=True) in changes:
+                    st["monitors"][k] = changes[json.dumps(e, sort_keys=True)]
+            save_wp_state(st)
+    return restart
+
+
+def theme_stale(wp):
+    try:
+        old = json.loads((OUT / "extracted.json").read_text())
+    except (OSError, ValueError):
+        return True
+    return old.get("wallpaper") not in (str(wp), tilde(wp)) or old.get("v") != EXTRACT_VERSION or bool(old.get("partial"))
+
+
+def render_theme(cfg, mode, wp, base, partial=False):
+    """Write extracted.json, render every output, deploy, reload the apps whose files changed: under apply.lock and
+    never interrupted (critical)."""
+    apply_lock()
+    try:
+        with critical():
+            OUT.mkdir(parents=True, exist_ok=True)
+            drop_marker()
+            write_atomic(OUT / "extracted.json", json.dumps({"wallpaper": str(wp), "v": EXTRACT_VERSION, **({"partial": True} if partial else {}), **base}))
+            pal = build_palette(base, cfg, mode)
+            dark = build_palette(base, cfg, "dark") if mode == "light" else None
+            PAL[0] = pal
+            CHANGED.clear()
+            with prof("worker.render"):
+                render_all(pal, cfg, mode, dark)
+            if os.environ.get("THEME_OUT_DIR"):   # a test render: no links, no app reloads
+                return pal
+            with prof("worker.deploy"):
+                deploy(cfg, pal, mode)
+                apply_brave(cfg, pal, mode)
+            with prof("worker.reload"):
+                reload_apps(cfg, mode_only=True, changed=set(CHANGED))
+            return pal
+    finally:
+        apply_unlock()
+
+
+def palette_moved(a, b, cfg, mode):
+    """Do two analyses give visibly different accents (OKLab distance >= 0.02 on accent / accent2)?"""
+    pa, pb = build_palette(a, cfg, mode), build_palette(b, cfg, mode)
+    import math
+    return any(math.dist(oklab(hex_to_rgb(pa[k])), oklab(hex_to_rgb(pb[k]))) >= 0.02 for k in ("accent", "accent2"))
+
+
+def apply_worker():
+    """Background half of an apply (see "instant switch"): stills, hyprpaper check, players, palette, render, reloads."""
+    import fcntl
+    import signal
+    import traceback
+    FAST[0] = False
+    lk = open(apply_dir() / "worker.lock", "w")
+    fcntl.flock(lk, fcntl.LOCK_EX)   # the previous worker was told to stop: wait until it has
+    if os.getsid(0) == os.getpid():   # detached (own session): a newer apply's SIGTERM takes our children along
+        signal.signal(signal.SIGTERM, _worker_term)
+    job = apply_status_read()
+    gen = job.get("gen", 0)
+
+    def stage(name, **kw):
+        with state_lock():
+            cur = apply_status_read()
+            if cur.get("gen") != gen:
+                raise Superseded
+            apply_status(**dict(cur, stage=name, pid=os.getpid(), **kw))
+    try:
+        with prof("worker.total"):
+            stage("still")
+            with prof("worker.stills"):
+                restart = ensure_stills(job.get("provisional", []))
+            write_hyprpaper(load_cfg())
+            if not os.environ.get("THEME_OUT_DIR"):   # (a test render: the live hyprpaper / players stay)
+                mons = connected_monitors()
+                if hyprpaper_in_use():   # verify + restart only for the hyprpaper backend (a leftover one is just kept in step)
+                    with prof("worker.hyprpaper"):
+                        hyprpaper_show(mons, verify=wallpaper_backend() == "hyprpaper")
+                for conn, spec in video_wanted(mons=mons).items():
+                    if spec[0] in restart:
+                        video_sync(force=True, only=conn)
+                video_optimize_poke()   # the encode queue: the changed monitors first (kicks the runner)
+            mode = get_mode()
+            cfg = mode_cfg(load_cfg(), mode)
+            cfg.setdefault("settings", {})["accent_pick"] = get_pick(cfg)
+            wp = Path(os.path.expanduser(cfg["wallpaper"]))
+            if job.get("theme") or theme_stale(wp):
+                stage("palette")
+                video = still_video(wp)
+                with prof("worker.analysis"):
+                    base = extract(wp, video, frames=False)   # cached: instant; a new video: its still alone first
+                partial = bool(video) and frames_analysis(video, compute=False) is None
+                pal = render_theme(cfg, mode, wp, base, partial)
+                if partial:
+                    stage("refine")
+                    with prof("worker.frames"):
+                        full = extract(wp, video)
+                    if palette_moved(base, full, cfg, mode):
+                        pal = render_theme(cfg, mode, wp, full)
+                    else:
+                        write_atomic(OUT / "extracted.json", json.dumps({"wallpaper": str(wp), "v": EXTRACT_VERSION, **full}))
+                print(f"theme: {wp.name} ({mode})  bg {pal['bg']}  fg {pal['fg']}  accent {pal['accent']}", flush=True)
+            else:
+                refresh_wall_ink()   # a monitor's own wallpaper changed: light mode's bar ink for it too
+        stage("done", state="done")
+    except Superseded:
+        return
+    except (Exception, SystemExit) as e:   # noqa: BLE001 - the old palette stays (an unreadable image exits); Settings stops its indicator
+        traceback.print_exc()
+        try:
+            stage(f"{type(e).__name__}: {e}"[:200], state="failed")
+        except Superseded:
+            pass
+        return 1
+    analyze_kick()
+
+
+# ---- precompute: `theme.py analyze` fills the analysis cache for the whole library (images; videos: black-tail hold +
+# frames, not the stills: 4K PNGs per video are big and a still decodes in well under a second), so most switches hit
+# the cache. Nice 19 + idle I/O, two frames at a time, pauses while an apply worker runs; one at a time (analyze.lock).
+# Kicked after every apply worker and when Settings > Wallpaper scans the library; old-version entries are pruned.
+ANALYZE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def library_files(cfg):
+    """(images, videos) of wallpaper_dirs / video_dirs, two levels deep, sorted (as Settings > Wallpaper lists them)."""
+    def scan(dirs, exts):
+        out = []
+        for d in dirs:
+            base = Path(os.path.expanduser(d))
+            for f in sorted(list(base.glob("*")) + list(base.glob("*/*"))) if base.is_dir() else []:
+                if f.suffix.lower() in exts and f.is_file():
+                    out.append(str(f))
+        return sorted(set(out))
+    return scan(cfg.get("wallpaper_dirs", ["~/Pictures/wallpapers"]), ANALYZE_EXTS), scan(video_dirs(cfg), VIDEO_EXTS)
+
+
+def analyze_kick():
+    """Start `theme.py analyze` detached at the lowest priority unless one runs ($THEME_ANALYZE=0: never, tests)."""
+    import fcntl
+    if os.environ.get("THEME_ANALYZE") == "0":
+        return
+    try:
+        with open(apply_dir() / "analyze.lock", "w") as f:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return
+    pre = (["nice", "-n", "19"] if shutil.which("nice") else []) + (["ionice", "-c", "3"] if shutil.which("ionice") else [])
+    try:
+        subprocess.Popen(pre + [sys.executable, "-I", str(Path(__file__).resolve()), "analyze"], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=open(apply_dir() / "analyze.log", "a"), start_new_session=True)
+    except OSError:
+        pass
+
+
+def analyze_library():
+    import fcntl
+    lk = open(apply_dir() / "analyze.lock", "w")
+    try:
+        fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return   # one runs
+    try:   # lowest CPU and I/O priority, however it was started (Settings runs it plainly)
+        os.nice(19 - os.nice(0))
+        if shutil.which("ionice"):
+            subprocess.run(["ionice", "-c", "3", "-p", str(os.getpid())], stdin=subprocess.DEVNULL, capture_output=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    d = analysis_dir()
+    for f in d.glob("*.json") if d.is_dir() else []:   # entries of an older EXTRACT_VERSION are never read again
+        try:
+            if json.loads(f.read_text()).get("v") != EXTRACT_VERSION:
+                f.unlink()
+        except (OSError, ValueError):
+            f.unlink(missing_ok=True)
+    imgs, vids = library_files(load_cfg())
+
+    def idle():   # an apply worker runs: it gets the machine
+        while apply_status_read().get("state") == "working":
+            time.sleep(0.5)
+    n = 0
+    for f in imgs:
+        if analysis_get("img", f) is None:
+            idle()
+            with prof("analyze.image"):
+                image_analysis(f)
+            n += 1
+    for v in vids:
+        if analysis_get("frames", v) is None:
+            idle()
+            with prof("analyze.video"):
+                video_hold(v)   # (+ the probes a switch's foreground asks: cached on disk)
+                video_codec(v)
+                video_probe(v)
+                frames_analysis(v, par=2)
+            n += 1
+    print(f"theme: analyzed {n} of {len(imgs) + len(vids)} wallpapers", file=sys.stderr)
+
+
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else "apply"
     args = list(argv[2:])
     if cmd == "video":
         return video_command(args)
+    if cmd == "wallpaper-backend":   # quickshell | hyprpaper ([settings] wallpaper_backend; scripts/start-hyprpaper.sh)
+        print(wallpaper_backend())
+        return
     if cmd == "default":
         return default_command()
     if cmd == "seed":
@@ -4863,57 +6083,63 @@ def main(argv):
         set_mode(want)
         cmd, args = "mode-apply", []
         argv = argv[:2]
+    if cmd == "accent":   # theme.py accent [get|standout|dominant]: persist the accent source, re-render + reload like `mode`
+        want = args[0] if args else "get"
+        if want == "get":
+            print(get_pick(load_cfg()))
+            return
+        if want not in PICKS:
+            sys.exit("theme: accent [get|standout|dominant]")
+        apply_lock()
+        PICK_FILE.parent.mkdir(parents=True, exist_ok=True)
+        write_atomic(PICK_FILE, want + "\n")
+        cmd, args = "mode-apply", []
+        argv = argv[:2]
     if cmd == "migrate-local":
         return migrate_local(args)
     if cmd == "adopt-legacy":
         adopt_legacy(args)
         cmd, args = "render", []
-    if cmd in ("apply", "clear", "primary", "link", "unlink", "render", "mode-apply"):
+    if cmd == "analyze":   # precompute the analysis cache of the whole library (low priority; see library_files)
+        return analyze_library()
+    if cmd == "build-helper":   # theme-blobs (blobs/, Rust): the native standout pass
+        return build_helper()
+    if cmd in ("render", "mode-apply"):   # (apply & co: apply_fast takes the short state.lock, its worker apply.lock)
         apply_lock()
+    if cmd in ("apply", "clear", "primary", "link", "unlink", "render", "mode-apply", "apply-bg"):
         migrate_glass_modes()   # before any reload: managed.lua reads the per-mode glass sets
     seed_out()
+    if cmd == "apply-bg":   # the detached second half of an apply (apply_fast)
+        return apply_worker()
+    wait = "--wait" in args or os.environ.get("THEME_APPLY_WAIT") == "1"   # run the worker in this process (tests, scripts)
+    args = [a for a in args if a != "--wait"]
     o = {"mode": pop_opt(args, "--mode"),
-         "play": pop_opt(args, "--play"), "wind": pop_opt(args, "--wind") or 0,   # no --play = full length
+         "play": pop_opt(args, "--play"), "wind": pop_opt(args, "--wind") or 0,   # no --play = the default timing, --play full = full length
          "ease": pop_opt(args, "--ease")}   # replay transition seconds; absent = the theme.toml default
     if cmd in ("apply", "clear", "primary", "link", "unlink"):
-        if monitor_command(cmd, args, o):
-            refresh_wall_ink()   # a monitor's own wallpaper changed: light mode's bar ink for it too
-            return
-        if cmd != "apply":
-            cmd = "apply"
-    mode, play, wind, ease = o["mode"], o["play"], o["wind"], o["ease"]
-    argv = argv[:2] + args
-    if cmd == "apply" and len(argv) > 2:
-        ent = make_entry(argv[2], mode, play, wind, ease)   # the primary: an image, or a video whose still is the theme wallpaper
-        st = load_wp_state()
-        if isinstance(ent, dict) or st["primary_video"]:   # (no state file is created for plain image applies)
-            st["primary_video"] = ent if isinstance(ent, dict) else None
-            if isinstance(ent, dict):
-                st["primary"] = st["primary"] or primary_key(st, connected_monitors())
-            save_wp_state(st)
-            video_optimize_poke()
-        set_wallpaper(tilde(entry_image(ent)))
+        return apply_fast(cmd, args, o, wait)
     mode = get_mode()
     cfg = mode_cfg(load_cfg(), mode)   # the glass knobs of this mode
+    cfg.setdefault("settings", {})["accent_pick"] = get_pick(cfg)
     wp = Path(os.path.expanduser(cfg["wallpaper"]))
-    if cmd == "brave":  # used by the launcher in ~/.local/bin: cached palette, no rendering
-        cache = OUT / "extracted.json"
-        base = json.loads(cache.read_text()) if cache.exists() else extract(wp)
-        apply_brave(cfg, build_palette({k: base[k] for k in ("bg", "fg", "accent")}, cfg, mode), mode)
-        return
     cache = OUT / "extracted.json"
+    if cmd == "brave":  # used by the launcher in ~/.local/bin: cached palette, no rendering
+        base = json.loads(cache.read_text()) if cache.exists() else extract(wp, still_video(wp))
+        apply_brave(cfg, build_palette({k: base.get(k) for k in BASE_KEYS}, cfg, mode), mode)
+        return
     stale = True
     if cache.exists():
-        stale = json.loads(cache.read_text()).get("wallpaper") not in (str(wp), tilde(wp))  # wallpaper edited in toml (the default's cache has the ~ form)
-    if cmd in ("apply", "show") or stale:
+        old = json.loads(cache.read_text())
+        # wallpaper edited in toml (the default's cache has the ~ form), or a cache from before the standout accent
+        stale = old.get("wallpaper") not in (str(wp), tilde(wp)) or old.get("v") != EXTRACT_VERSION or bool(old.get("partial"))
+    if cmd == "show" or stale:   # (analysis cache: a lookup unless the wallpaper is new)
         OUT.mkdir(parents=True, exist_ok=True)
-        base = extract(wp)
+        base = extract(wp, still_video(wp))
         if cmd != "show" or not (OUT / MARKER).exists():   # `show` is not a render: it must not turn a seeded out/ into a real one
             drop_marker()
-            cache.write_text(json.dumps({"wallpaper": str(wp), **base}))
+            cache.write_text(json.dumps({"wallpaper": str(wp), "v": EXTRACT_VERSION, **base}))
     else:
-        base = json.loads(cache.read_text())
-        base = {k: base[k] for k in ("bg", "fg", "accent")}
+        base = {k: old.get(k) for k in BASE_KEYS}
     pal = build_palette(base, cfg, mode)
     dark = build_palette(base, cfg, "dark") if mode == "light" else None   # light mode: the bar's text on the wallpaper
     if cmd == "show":
@@ -4927,11 +6153,8 @@ def main(argv):
         return
     deploy(cfg, pal, mode)
     apply_brave(cfg, pal, mode)
-    if cmd in ("apply", "mode-apply"):
-        reload_apps(cfg, mode_only=cmd == "mode-apply")
-    if cmd == "apply":
-        # a restarted hyprpaper brings the players back itself (restart_hyprpaper); otherwise just reconcile them
-        video_sync(start=not cfg.get("settings", {}).get("restart_hyprpaper", True))
+    if cmd == "mode-apply":
+        reload_apps(cfg, mode_only=True)
     print(f"theme: {wp.name} ({mode})  bg {pal['bg']}  fg {pal['fg']}  accent {pal['accent']}")
 
 

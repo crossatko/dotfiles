@@ -14,13 +14,20 @@ video_dirs = ["~/Videos/wallpapers"]
 # Replays of a play-once clip (switching to an empty workspace): short bursts that advance the clip along its loop, each an
 # ease-in from rest followed by the wind-down. replay_ease_in = seconds of the ease-in of every burst (0 = none, per monitor in
 # Settings; a burst is at least 1 s long).
-replay_ease_in = 0.5
+replay_ease_in = 0.0
+# Timing of a play-once video wallpaper with none stored (Settings > Wallpaper > Play for / Wind down): full speed for
+# replay_play_default s, then wind down over replay_wind_default s. Full length is an explicit choice (`--play full`).
+replay_play_default = 0.0
+replay_wind_default = 5.0
 
 [settings]
 ansi_saturation = 0.38   # 0 = greyscale terminal colors, 1 = vivid
 ansi_lightness = 0.64
 bg_max_lightness = 0.075 # keeps backgrounds near-black whatever the image is
-restart_hyprpaper = true
+# who draws the wallpaper image (and the still under a video): "quickshell" (the shell's background layer, instant
+# cross-fade; hyprpaper is not started) or "hyprpaper" (the old path). Apply a change with `theme.py render`.
+wallpaper_backend = "quickshell"
+restart_hyprpaper = true # hyprpaper backend only
 icons = true             # generate a hue-matched copy of Adwaita (Wall-Adwaita) and use it
 icon_base = "Adwaita"
 icon_recolor = "blue"    # "blue": only Adwaita's blue family follows the accent; "all": every color

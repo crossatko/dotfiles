@@ -1,0 +1,16 @@
+[package]
+name = "theme-blobs"
+version = "1.0.0"
+edition = "2021"
+description = "frame_blobs() of config/theme/theme.py, natively (standout-accent analysis); no dependencies"
+publish = false
+
+[[bin]]
+name = "theme-blobs"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

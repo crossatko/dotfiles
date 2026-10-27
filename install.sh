@@ -13,7 +13,7 @@
 # Default: repos + packages + links. `system` is opt-in (--system, or --only). Skip the third-party repo with `--only links,packages`.
 # --cachyos (opt-in, needs the repos stage) also adds the CachyOS repos.
 #
-# Environment: CLAUDE_TABS_DIR (claude-tabs checkout), INSTALL_SKIP (space separated: librepods omz claude-tabs
+# Environment: CLAUDE_TABS_DIR (claude-tabs checkout), INSTALL_SKIP (space separated: librepods theme-blobs omz claude-tabs
 # cachyos-repo chaotic-repo omacal), GPU_DRIVER (radeon|intel|virtio|swrast|none instead of GPU detection), PACMAN_CONF (pacman.conf to edit, default /etc/pacman.conf; for tests),
 # CACHYOS_LEVEL (force znver4|v4|v3|plain|none instead of CPU detection).
 set -euo pipefail
@@ -1054,6 +1054,15 @@ gtk-application-prefer-dark-theme=1'
     echo "    [dry-run] bash config/librepods/build.sh"
   else
     bash "$CONFIG_DIR/librepods/build.sh" || warn "librepods build failed (AirPods section stays off until it works)"
+  fi
+
+  log "Theme analysis helper (config/theme/blobs, README Instant switch)"
+  if skipped theme-blobs; then
+    echo "    skipped (INSTALL_SKIP)"
+  elif [ "$DRY" = 1 ]; then
+    echo "    [dry-run] python3 -I config/theme/theme.py build-helper"
+  else
+    python3 -I "$CONFIG_DIR/theme/theme.py" build-helper || warn "theme-blobs build failed (the Python analysis is used: same colours, slower)"
   fi
 
   if [ "$FONTS_DIRTY" = 1 ] && [ "$DRY" = 0 ] && command -v fc-cache >/dev/null 2>&1; then

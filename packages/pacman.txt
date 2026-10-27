@@ -111,11 +111,12 @@ libqalculate
 
 # --- Hyprland ecosystem
 hyprland
-hyprpaper
+hyprpaper            # optional: theme.toml wallpaper_backend = "hyprpaper" (default: the shell draws the wallpaper)
 hypridle
 hyprlock
 hyprpolkitagent
 quickshell
+qt6-imageformats     # WebP wallpapers in the shell (WallpaperLayer, thumbnails)
 xdg-desktop-portal-hyprland
 xdg-desktop-portal-gtk
 xdg-desktop-portal-gnome

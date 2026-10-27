@@ -28,6 +28,7 @@ config/wivrn/known_keys.json
 # per-machine theme: generated output (seeded from the committed config/theme/default/) and the wallpaper selection
 config/theme/out/
 config/theme/theme.local.toml
+config/theme/blobs/target/
 __pycache__/
 
 # claude-tabs zellij plugin: standalone package (~/code/crossatko/zellij-wc3cz-claude); its setup.sh
