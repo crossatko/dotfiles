@@ -408,6 +408,7 @@ Linked only by `./install-mac.sh` (symlinks, `--dry-run`, backups `*.bak.<timest
 - Ghostty: shared `config/ghostty/config` + Mac overrides `macos.conf`. kitty: `${KITTY_OS}.conf` include.
 - WM = own AeroSpace fork (`crossatko/AeroSpace`; build/sign/install in its README), config `config/aerospace/aerospace.toml`. Accessibility survives rebuilds
   only while the signing identity `aerospace-codesign-certificate` stays in the login keychain: do not delete it.
+  Magic Mouse 2-finger workspace swipe (`magic-mouse-swipe` in `[gestures]`) needs the fork build and macOS Mouse > "Swipe between full-screen apps" off.
 - `config/karabiner/karabiner.json` is GENERATED: edit the table in `generate.py`, run `python3 -I config/karabiner/generate.py` (`--aerospace` prints the
   matching bindings).
 - SwiftBar plugin `config/swiftbar/ai-usage.10m.py` reads the Claude token from the Keychain. Set `user.name`/`user.email` on the Mac (else the hostname lands
