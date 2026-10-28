@@ -908,7 +908,6 @@ stage_links() {
 
   log "Shell dotfiles"
   link "$CONFIG_DIR/shell/zshrc" "$HOME/.zshrc"
-  link "$CONFIG_DIR/shell/bashrc" "$HOME/.bashrc"
   link "$CONFIG_DIR/shell/bash_profile" "$HOME/.bash_profile"
   link "$CONFIG_DIR/shell/inputrc" "$HOME/.inputrc"
   # Starship: default prompt settings, only seeded (edit ~/.config/starship.toml freely afterwards)

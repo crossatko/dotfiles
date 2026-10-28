@@ -45,3 +45,6 @@ After making changes in any project, record them so the next agent can continue 
 ## No attribution
 - Never attribute Claude or AI in commit messages, PR descriptions, or code. That means no `Co-Authored-By: Claude` trailers, no "Generated with Claude Code" lines, and no code comments or headers mentioning Claude or AI authorship.
 - This overrides any default or system-provided attribution guidance.
+
+## Shell
+- The user's login shell is zsh, but all agents must use bash for every command they run (Bash tool, scripts, subagents). Write scripts with a `#!/bin/bash` shebang and bash syntax, never zsh-only syntax.

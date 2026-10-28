@@ -63,7 +63,7 @@ install.sh        Arch bootstrap (stages below); install-mac.sh  macOS symlinks 
 packages/         pacman.txt aur.txt flatpak.txt; optional/NAME.txt = opt-in bundles (--with)
 system/           root-owned files (udev, systemd units, getty autologin, mullvad-tailscale), needs sudo: system/README.md
 .githooks/        pre-commit (privacy), post-merge/rewrite/checkout -> theme-render
-config/shell/     zshrc bashrc bash_profile inputrc (linked into ~), README.md
+config/shell/     zshrc bash_profile inputrc (linked into ~), README.md
 config/theme/     wallpaper-driven theme engine: theme.py theme.toml templates/ default/ bin/ selftest.py, README.md
 config/hypr/      hyprland.lua + hyprland/*.lua (host monitors rules binds autostart managed animations ...), scripts/ (lua/sh helpers, TV/gamescope, screenshot/rec)
 config/quickshell/ the shell: shell.qml Theme.qml Bar*.qml Popups/PopupHost Settings*.qml Launcher.qml launcher/ (js/ bin/ data/) bin/ shaders/
@@ -432,7 +432,7 @@ wallpaper to hyprpaper on TV resyncs.
 
 ## Shell, url-router
 
-- `config/shell/zshrc`: `eval "$(zoxide init zsh)"` stays the LAST line. Bash is the Linux login shell (`install.sh --chsh` switches to zsh).
+- `config/shell/zshrc`: `eval "$(zoxide init zsh)"` stays the LAST line. zsh is the login shell (`install.sh --chsh` sets it); `~/.zprofile` (unmanaged) starts the TTY1 session supervisor. No bashrc is kept; agents still run bash.
 - `config/url-router/bin/url-router` is the default http(s) handler (docs in its header, template `config.example`); Brave's "make default" resets the handler.
   Links sent to the fallback browser focus its plain window (class `Brave-browser`, never `--app` windows; waits up to 10 s for a cold start) via `hl.dsp.focus`; `focus_browser = no` opts out, Hyprland only (elsewhere it execs the browser as before). Web app links are not focused. Real focus is only unit-tested (fake hyprctl), not tried live.
 

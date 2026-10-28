@@ -9,5 +9,3 @@ if [ "$(tty)" = "/dev/tty1" ] && [ -z "$WAYLAND_DISPLAY" ] && [ -z "$DISPLAY" ];
 	exec ~/.config/hypr/scripts/session-supervisor.sh
 fi
 
-# Login shells read ~/.bashrc too
-[[ -f ~/.bashrc ]] && . ~/.bashrc
