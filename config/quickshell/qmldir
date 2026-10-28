@@ -97,6 +97,10 @@ Glass 1.0 Glass.qml
 singleton GlassTuneCtl 1.0 GlassTuneCtl.qml
 singleton GlassSurfaces 1.0 GlassSurfaces.qml
 GlassOptRow 1.0 GlassOptRow.qml
+ArgbRow 1.0 ArgbRow.qml
+singleton BlurTuneCtl 1.0 BlurTuneCtl.qml
+BlurOptRow 1.0 BlurOptRow.qml
+BlurSection 1.0 BlurSection.qml
 GlassSurfaceProfile 1.0 GlassSurfaceProfile.qml
 GlassSurfacesSection 1.0 GlassSurfacesSection.qml
 Launcher 1.0 Launcher.qml

@@ -17,7 +17,7 @@ Item {
     implicitHeight: col.implicitHeight
 
     readonly property int titleW: 120
-    readonly property bool dragging: glassAdv.dragging || motionAdv.dragging || shapeAdv.dragging
+    readonly property bool dragging: glassAdv.dragging || blurSec.dragging || motionAdv.dragging || shapeAdv.dragging
     // the wallpaper behind this window (the monitor Settings is on): what the previews draw their glass / desktop on
     readonly property var screen: { const w = pg.Window.window as Window; return w && w.screen ? Quickshell.screens.find(s => s.name === w.screen.name) ?? null : null }
     readonly property string wallpaper: LockWallpapers.stillFor(screen)
@@ -112,6 +112,7 @@ Item {
             detail: GlassTuneCtl.changedKeys.length > 0 ? pg.count(GlassTuneCtl.changedKeys.length, "value") + " changed" : ""
             GlassAdvanced { id: glassAdv; Layout.fillWidth: true; titleW: pg.titleW }
         }
+        BlurSection { id: blurSec; Layout.fillWidth: true; titleW: pg.titleW }
 
         // ---------------------------------------------------------------- motion
         SectionHead { title: "Motion"; Layout.topMargin: 6; detail: Motion.reduced ? "off" : Theme.popupOpenMs + " ms" }

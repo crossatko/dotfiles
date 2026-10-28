@@ -22,14 +22,11 @@ ColumnLayout {
     spacing: 12
 
     function slide(key, v) { dragHold.restart(); tune.set(key, v) }
-    function tintChannel(shift) { return (Math.round(tune.values.tint) >>> shift) & 255 }
-    function setTint(shift, v) {
+    function setTint(shift, argb) {
         dragHold.restart()
-        const t = Math.round(tune.values.tint) >>> 0
         if (shift !== 24 && tune.tintFromBg) tune.setTintFromBg(false)   // a colour of its own
-        tune.set("tint", ((t & ~(255 << shift)) | (Math.round(v) << shift)) >>> 0)
+        tune.set("tint", argb)
     }
-    readonly property color tintColor: Qt.rgba(tintChannel(16) / 255, tintChannel(8) / 255, tintChannel(0) / 255, tintChannel(24) / 255)
     readonly property bool anyChanged: tune.changedKeys.length > 0
 
     RowLayout {
@@ -65,69 +62,32 @@ ColumnLayout {
                 }
 
                 // tint: swatch + A / R / G / B channels (alpha = absorption)
-                SettingRow {
+                ArgbRow {
                     visible: grp.modelData === "Material"
                     title: "Tint"
-                    titleWidth: ga.titleW
-                    Rectangle {
-                        implicitWidth: 44; implicitHeight: 20
-                        radius: Math.min(5, Theme.radiusDeep)
-                        color: "#808080"
-                        clip: true
-                        border.width: 1; border.color: Theme.alpha(Theme.fg, 0.3)
-                        Rectangle { anchors.fill: parent; color: ga.tintColor }
-                        Rectangle { width: parent.width / 2; height: parent.height; color: Qt.rgba(ga.tintColor.r, ga.tintColor.g, ga.tintColor.b, 1) }
-                    }
-                    Label {
-                        Layout.fillWidth: true
-                        text: ga.tune.fmt("tint", ga.tune.values.tint)
-                        color: Theme.fgDim; font.pixelSize: Theme.fontSmall
-                    }
-                    ResetBtn {
-                        objectName: "reset-tint"
-                        set: ga.tune.isChanged("tint")
-                        onClicked: ga.tune.reset("tint")
-                    }
-                }
-                // the colour follows the theme background (on) or is the user's own (off, the channels below)
-                SettingRow {
-                    visible: grp.modelData === "Material"
-                    title: "Tint colour"
-                    titleWidth: ga.titleW
-                    Toggle {
-                        objectName: "toggle-tint-from-bg"
-                        checked: ga.tune.tintFromBg
-                        onToggled: want => ga.tune.setTintFromBg(want)
-                    }
-                    Label {
-                        Layout.fillWidth: true
-                        text: ga.tune.tintFromBg ? "From the theme background" : "Own"
-                        color: Theme.fgDim; font.pixelSize: Theme.fontSmall
-                    }
-                }
-                Repeater {
-                    model: grp.modelData === "Material" ? [
-                        { n: "Absorption (A)", s: 24 },
-                        { n: "Red", s: 16 },
-                        { n: "Green", s: 8 },
-                        { n: "Blue", s: 0 }
-                    ] : []
+                    alphaName: "Absorption (A)"
+                    objectPrefix: "tint"
+                    titleW: ga.titleW
+                    valueW: ga.valueW
+                    value: ga.tune.values.tint
+                    defaultValue: GlassTuneCtl.tintDef
+                    changed: ga.tune.isChanged("tint")
+                    onReset: ga.tune.reset("tint")
+                    onEdited: (shift, argb) => ga.setTint(shift, argb)
+                    // the colour follows the theme background (on) or is the user's own (off, the channels below)
                     SettingRow {
-                        id: trow
-                        required property var modelData
-                        title: modelData.n
+                        title: "Tint colour"
                         titleWidth: ga.titleW
-                        readonly property int cur: ga.tintChannel(modelData.s)
-                        Slider {
-                            wheel: false
-                            objectName: "slider-tint-" + trow.modelData.s
-                            Layout.fillWidth: true
-                            value: trow.cur / 255
-                            notches: [((GlassTuneCtl.tintDef >>> trow.modelData.s) & 255) / 255]   // the default tint's channel
-                            onMoved: v => ga.setTint(trow.modelData.s, v * 255)
+                        Toggle {
+                            objectName: "toggle-tint-from-bg"
+                            checked: ga.tune.tintFromBg
+                            onToggled: want => ga.tune.setTintFromBg(want)
                         }
-                        Label { text: trow.cur; Layout.preferredWidth: ga.valueW; horizontalAlignment: Text.AlignRight; color: Theme.fg; font.pixelSize: Theme.fontSmall }
-                        Item { Layout.preferredWidth: 24 }      // where the reset button sits on the other rows
+                        Label {
+                            Layout.fillWidth: true
+                            text: ga.tune.tintFromBg ? "From the theme background" : "Own"
+                            color: Theme.fgDim; font.pixelSize: Theme.fontSmall
+                        }
                     }
                 }
             }

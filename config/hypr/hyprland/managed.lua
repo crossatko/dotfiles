@@ -433,6 +433,12 @@ function M.split_surfaces(text)
 	return split_object(text, "surfaces")
 end
 
+-- Pure: glass.json text -> text without the "blur" object (stock blur variant + options, see M.parse_blur), that
+-- object's text (nil when none). Same order rule as M.split_surfaces.
+function M.split_blur(text)
+	return split_object(text, "blur")
+end
+
 -- Pure: text of ONE mode's glass object -> {key = number} with ONLY the keys that are set and valid (clamped; tint
 -- is rounded to an integer), plus tint_from_bg (boolean) when set. Never raises; anything odd (garbage, > 4 KiB,
 -- null, strings, NaN) is "not set". Nested objects (the "light" one) must be split off first (M.split_glass).
@@ -544,7 +550,7 @@ function M.read_glass()
 		if not text then
 			return {}
 		end
-		local dark_text, light_text = M.split_glass((M.split_surfaces(text)))
+		local dark_text, light_text = M.split_glass((M.split_blur((M.split_surfaces(text)))))
 		return M.parse_glass((light and light_text or (not light and dark_text)) or "{}")
 	end)
 	return ok and type(g) == "table" and g or {}, light == true, r, gr, b
@@ -588,6 +594,154 @@ function M.apply_glass_layer_alpha()
 		return false, "no layer_alpha_ref option"
 	end
 	return pcall(hl.config, { decoration = { blur = { solid_glass = { layer_alpha_ref = M.GLASS_LAYER_ALPHA_REF } } } })
+end
+
+-- Does the running Hyprland have this option? (path with dots, e.g. decoration.blur.acrylic.tint)
+local function option_exists(path)
+	local ok, v = pcall(hl.get_config, path)
+	return ok and v ~= nil
+end
+
+-- ---------------------------------------------------------------- blur variant (glass.json "blur")
+-- Settings > Look & feel > Blur (BlurTuneCtl.qml): which decoration:blur:variant is active and the options of the stock
+-- variants (Hyprland v0.57: kawase, frost, ripple, drops, water, fluid_jar, prism, heat_shimmer, acrylic, aurora, haze;
+-- the fork adds solid_glass, whose own options are the flat glass.json keys above). Shared by both colour modes:
+--   "blur": {"variant":"acrylic","acrylic:refraction":30,"size":6,"xray":1,"aurora:color1":689107199}
+-- Keys are the option path below decoration:blur: with ":" (bools are 0 / 1, colours AARRGGBB integers). Nothing here
+-- touches a key the running Hyprland lacks (each is probed with hl.get_config), so stock / older builds never get
+-- a config error. Same variant names, keys and ranges as BlurTuneCtl.qml.
+M.BLUR_VARIANTS = {
+	kawase = { id = 0 },
+	frost = { id = 1, probe = "glass.refraction" },
+	ripple = { id = 2, probe = "ripple.strength" },
+	drops = { id = 3, probe = "drops.speed" },
+	water = { id = 4, probe = "water.strength" },
+	fluid_jar = { id = 5, probe = "fluid_jar.color" },
+	prism = { id = 6, probe = "glass.refraction" },
+	heat_shimmer = { id = 7, probe = "heat_shimmer.speed" },
+	acrylic = { id = 8, probe = "acrylic.refraction" },
+	aurora = { id = 9, probe = "aurora.speed" },
+	haze = { id = 10, probe = "haze.intensity" },
+	solid_glass = { id = 11, probe = "solid_glass.refraction" },
+}
+local BOOL, COLOR = { bool = true }, { 0, 0xFFFFFFFF }
+M.BLUR_OPTS = {
+	enabled = BOOL, size = { 0, 100, int = true }, passes = { 0, 10, int = true }, noise = { 0, 1 }, contrast = { 0, 2 },
+	brightness = { 0, 2 }, vibrancy = { 0, 1 }, vibrancy_darkness = { 0, 1 }, ignore_opacity = BOOL, new_optimizations = BOOL,
+	xray = BOOL, proportional = BOOL, special = BOOL, popups = BOOL, popups_ignorealpha = { 0, 1 }, input_methods = BOOL,
+	input_methods_ignorealpha = { 0, 1 },
+	["glass:refraction"] = { 0, 20 }, ["glass:size"] = { 4, 512 }, ["glass:roughness"] = { 0, 1 },
+	["acrylic:refraction"] = { 0, 48 }, ["acrylic:bulb"] = { 4, 256 }, ["acrylic:clarity"] = { 0, 1 },
+	["acrylic:aberration"] = { 0, 0.25 }, ["acrylic:tint"] = COLOR,
+	["drops:speed"] = { 0, 10 }, ["heat_shimmer:speed"] = { 0, 10 },
+	["aurora:speed"] = { 0, 10 }, ["aurora:intensity"] = { 0, 1 }, ["aurora:color1"] = COLOR, ["aurora:color2"] = COLOR,
+	["haze:intensity"] = { 0, 1 }, ["haze:iridescence"] = { 0, 1 },
+	["ripple:strength"] = { 0, 32 }, ["ripple:radius"] = { 1, 1000 }, ["ripple:width"] = { 1, 200 }, ["ripple:duration"] = { 0.05, 5 },
+	["water:strength"] = { 0, 32 }, ["water:radius"] = { 1, 1000 }, ["water:speed"] = { 0, 10 }, ["water:damping"] = { 0, 1 },
+	["water:duration"] = { 0.5, 60 },
+	["fluid_jar:color"] = COLOR, ["fluid_jar:speed"] = { 0, 10 }, ["fluid_jar:fill_amount"] = { 0, 1 },
+	["fluid_jar:mass"] = { 0.1, 10 }, ["fluid_jar:precision"] = { 0.5, 8 }, ["fluid_jar:turbulence"] = { 0, 5 },
+	["fluid_jar:distortion"] = { 0, 10 },
+}
+
+-- Pure: the "blur" object text (M.split_blur) -> { variant = name|nil, opts = {key = value} } with only known, valid
+-- entries (clamped; ints and colours rounded, bools as booleans). Never raises.
+function M.parse_blur(text)
+	local b = { opts = {} }
+	if type(text) ~= "string" or #text > M.GLASS_MAX_BYTES then
+		return b
+	end
+	local body = text:match("^%s*(%b{})%s*$")
+	if body == nil then
+		return b
+	end
+	local name = (last_token(body, "variant") or ""):match('^"([a-z_]+)"$')
+	if name and M.BLUR_VARIANTS[name] then
+		b.variant = name
+	end
+	for key, lim in pairs(M.BLUR_OPTS) do
+		local tok = last_token(body, key)
+		local v = tok and tok:match("^%-?%d[%d%.eE+%-]*$") and tonumber(tok)
+		if type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge then
+			if lim.bool then
+				b.opts[key] = v >= 0.5
+			else
+				v = math.max(lim[1], math.min(lim[2], v))
+				if lim.int or lim == COLOR then
+					v = math.tointeger(math.floor(v + 0.5)) or lim[1]
+				end
+				b.opts[key] = v
+			end
+		end
+	end
+	return b
+end
+
+-- -> the parsed "blur" object of glass.json ({opts = {}} when absent)
+function M.read_blur()
+	local ok, b = pcall(function()
+		local text = M.read_small_file(M.glass_path(), M.GLASS_MAX_BYTES)
+		local _, blur = M.split_blur((M.split_surfaces(text or "")))
+		return M.parse_blur(blur or "{}")
+	end)
+	return ok and type(b) == "table" and b or { opts = {} }
+end
+
+-- Group bar colours depend on the blur being solid_glass (settings.lua computes them at load): redo after a variant
+-- change made here.
+function M.apply_groupbar_colors()
+	local okt, theme = pcall(require, "hyprland.theme")
+	if not okt or type(theme) ~= "table" or type(theme.groupbar_colors) ~= "function" then
+		return false
+	end
+	local _, variant = pcall(hl.get_config, "decoration.blur.variant")
+	local _, enabled = pcall(hl.get_config, "decoration.blur.enabled")
+	local glass = (variant == 11 or variant == "solid_glass") and not (enabled == false or enabled == 0)
+	local c = theme.groupbar_colors(glass)
+	return pcall(hl.config, { group = { groupbar = { col = {
+		active = c.active, inactive = c.inactive, locked_active = c.locked_active, locked_inactive = c.locked_inactive,
+	} } } })
+end
+
+-- parsed "blur" object -> applies the options the running Hyprland has, then the variant when its options exist
+-- there. Nothing saved = nothing touched (settings.lua stays in charge).
+function M.apply_blur(b)
+	if type(b) ~= "table" then
+		return false, "no blur object"
+	end
+	local t = {}
+	for key, v in pairs(b.opts or {}) do
+		local path = "decoration.blur." .. key:gsub(":", ".")
+		if option_exists(path) then
+			local parts = {}
+			for part in key:gmatch("[^:]+") do
+				parts[#parts + 1] = part
+			end
+			local node = t
+			for i = 1, #parts - 1 do
+				node[parts[i]] = node[parts[i]] or {}
+				node = node[parts[i]]
+			end
+			node[parts[#parts]] = v
+		end
+	end
+	local changed_variant = false
+	local spec = b.variant and M.BLUR_VARIANTS[b.variant]
+	if spec and (spec.probe == nil or option_exists("decoration.blur." .. spec.probe)) then
+		local _, cur = pcall(hl.get_config, "decoration.blur.variant")
+		if cur ~= spec.id and cur ~= b.variant then
+			t.variant = b.variant
+			changed_variant = true
+		end
+	end
+	if next(t) == nil then
+		return true
+	end
+	local ok, err = pcall(hl.config, { decoration = { blur = t } })
+	if ok and changed_variant then
+		pcall(M.apply_groupbar_colors)
+	end
+	return ok, err
 end
 
 -- ---------------------------------------------------------------- per-surface glass (glass.json "surfaces")
@@ -669,11 +823,6 @@ function M.border_spec(p)
 	end
 	local spec = M.surface_spec(p)
 	return spec == "" and "on" or spec
-end
-
-local function option_exists(path)
-	local ok, v = pcall(hl.get_config, path)
-	return ok and v ~= nil
 end
 
 -- Does this Hyprland have per-surface glass (the `glass` rule effect)? Older fork / stock builds do not.
@@ -1344,6 +1493,9 @@ function M.apply(s)
 	pcall(function()
 		M.apply_glass(M.read_glass())
 	end)
+	pcall(function()
+		M.apply_blur(M.read_blur())
+	end)
 	local ok, err = pcall(M.apply_smart, s)
 	if not ok and ok_all then
 		ok_all, first_err = false, err
@@ -1364,6 +1516,9 @@ pcall(function()
 	M.apply_glass(M.read_glass())
 end)
 pcall(M.apply_glass_layer_alpha)
+pcall(function()
+	M.apply_blur(M.read_blur())
+end)
 pcall(function()
 	M.apply_surfaces(M.read_surfaces())
 end)
@@ -1449,6 +1604,12 @@ function layout_apply()
 		return false, ok2
 	end
 	return ok2, err
+end
+
+-- Global entry point for Settings > Look & feel > Blur (BlurTuneCtl.qml): after it changed decoration:blur:variant at
+-- runtime, the group bar colours follow (glass fills only on solid_glass).
+function blur_variant_changed()
+	return pcall(M.apply_groupbar_colors)
 end
 
 -- Global entry point for Settings > Glass > Surfaces: hyprctl eval "if glass_surfaces_apply then return

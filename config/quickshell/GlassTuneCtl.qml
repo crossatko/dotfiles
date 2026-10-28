@@ -255,6 +255,14 @@ Singleton {
     }
     readonly property bool savePending: saver.running
 
+    // ---- blur variant + options (BlurTuneCtl.qml) ----
+    // glass.json's top-level "blur" object, shared by both modes: {"variant": "acrylic", "acrylic:refraction": 30, ...}
+    property var blur: ({})
+    function setBlur(obj) {
+        blur = obj
+        saver.restart()
+    }
+
     // ---- persistence ----
     readonly property string stateFile: {
         const env = Quickshell.env("QS_GLASS_FILE")
@@ -278,7 +286,9 @@ Singleton {
             if (typeof file.light === "object" && file.light !== null) out.light = file.light
         }
         delete out.surfaces
+        delete out.blur
         if (Object.keys(surfaces).length > 0) out.surfaces = surfaces
+        if (Object.keys(blur).length > 0) out.blur = blur
         const dir = stateFile.substring(0, stateFile.lastIndexOf("/")) || "/"
         Quickshell.execDetached(["mkdir", "-p", dir])
         store.setText(JSON.stringify(out) + "\n")
@@ -298,6 +308,7 @@ Singleton {
             for (const k of allKeys) if (typeof p[k] === "number" && isFinite(p[k])) o[k] = clamp(k, p[k])
             if (typeof p.tint_from_bg === "boolean") fb = p.tint_from_bg
             surfaces = (typeof f.surfaces === "object" && f.surfaces !== null && !Array.isArray(f.surfaces)) ? f.surfaces : ({})
+            blur = (typeof f.blur === "object" && f.blur !== null && !Array.isArray(f.blur)) ? f.blur : ({})
         } catch (e) {}
         overrides = o
         tintFromBgSet = fb

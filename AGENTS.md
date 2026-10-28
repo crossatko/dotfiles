@@ -386,6 +386,17 @@ config/aerospace karabiner swiftbar  macOS only
   them); the tray menu (xdg popup of the bar) cannot get a profile (the fork resolves the `glass` rule for layer surfaces
   and windows, not popups; from the source); Settings (a window) has none yet (would be a window rule); the shell's own
   lenses (GlassLens, glass lettering) keep the global values.
+- **Blur variants** (Settings > Look & feel > Blur, `BlurSection.qml` > `BlurOptRow` (slider / switch / `ArgbRow` colour by kind); engine `BlurTuneCtl.qml`,
+  `qs ipc call blurtune variant|set|get|reset|dump`, exists once the page was opened): picks any `decoration:blur:variant` of Hyprland v0.57
+  (kawase, frost, ripple, drops, water, fluid_jar, prism, heat_shimmer, acrylic, aurora, haze) plus the fork's solid_glass (tuned in Glass > Customise),
+  and tunes that variant's options + the shared ones (size, passes, noise, contrast, ..., popups; fold). One table (`BlurTuneCtl.variants` / `.opts`,
+  from ConfigValues.cpp) drives the UI; a new variant/option = a table entry there + `managed.lua` `M.BLUR_VARIANTS` / `M.BLUR_OPTS` (same ranges). Probe:
+  one batch `getoption` fills `present`; variants / options the running Hyprland lacks are hidden and never sent. Stored in glass.json `"blur"` (flat,
+  keys = option path under `decoration:blur:` with ":", bools 0/1, colours AARRGGBB, shared by both colour modes; written by `GlassTuneCtl.setBlur`, split
+  off before the glass parse by `M.split_blur`); `managed.lua` `M.apply_blur` applies it at load and on `M.apply`, each key guarded by `hl.get_config`.
+  `Theme.glass` stays solid_glass only: any other variant gets the plain translucent fills (as stock), the group bar colours follow (`blur_variant_changed`).
+  Caveats: reset writes Hyprland's built-in default (may differ from settings.lua); GTK/theme.py fills (`hypr_solid_glass`) follow at the next theme
+  apply, not at the variant change; acrylic / aurora / fluid_jar colours are AARRGGBB like solid_glass tint.
 - **Motion language** (`Motion.qml`, shell section; `Theme.popup*` are the same tokens): `Motion.ms(base)` = base / popup speed, 16 ms
   floor, 0 when style "none" (`Motion.reduced`); `pressMs` 80 / `hoverMs` 120 / `moveMs` 200 / `exitMs` 150 / `emphasisMs` 300 at 1x;
   `easeEnter`/`easeMove`/`easeExit` follow the Curve setting, `easeHover` = OutCubic; `stagger(i, max)`. Never hard-code a duration
