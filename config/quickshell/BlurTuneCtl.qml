@@ -13,7 +13,7 @@ import Quickshell.Hyprland
 // entry in `variants` plus its option rows in `opts` (`v` = the variants an option belongs to, [] = every variant).
 // Everything the running Hyprland lacks is hidden: the batch `getoption` probe (load) fills `present`; an option or
 // variant that is missing there is never shown nor sent (older fork builds know fewer variants, stock lacks solid_glass).
-// Live: `hyprctl eval 'hl.config{...}'` (throttled, same instance guard as GlassTuneCtl, whose `ready` / `sig` this
+// Live: `hyprctl eval 'hl.config{...}'` (throttled, same instance guard as GlassTuneCtl, whose `reachable` / `sig` this
 // uses). Persistence: GlassTuneCtl.blur = glass.json's "blur" object, {"variant": "acrylic", "acrylic:refraction": 30,
 // "size": 6, ...} (keys = the option path under decoration:blur: with ":", bools 0 / 1, colours AARRGGBB), applied at config
 // load by hypr/hyprland/managed.lua (M.apply_blur, which mirrors the names and ranges here). Only what the user touched is
@@ -139,7 +139,7 @@ Singleton {
     property var dirty: ({})
     property bool variantDirty: false
     readonly property var saved: GlassTuneCtl.blur
-    readonly property bool ready: GlassTuneCtl.ready && known
+    readonly property bool ready: GlassTuneCtl.reachable && known
     property string status: ""
 
     function persist() {
@@ -176,7 +176,7 @@ Singleton {
         if (!ready || !vr || available.indexOf(vr) < 0) return false
         variant = id
         variantSaved = true
-        variantDirty = true
+        variantDirty = present["variant"] === true    // Hyprland 0.56 has no decoration:blur:variant: the choice is only saved
         throttle.start()
         persist()
         return true
@@ -185,7 +185,7 @@ Singleton {
     // ---- probe ----
     function probeKeys() { return opts.map(o => o.key).concat(variants.filter(v => v.probe !== "" && !opts.some(o => o.key === v.probe)).map(v => v.probe)) }
     function load() {
-        if (!GlassTuneCtl.ready) return
+        if (!GlassTuneCtl.reachable) return
         loadProc.command = ["hyprctl", "-j", "--batch", ["decoration:blur:variant"].concat(probeKeys().map(k => "decoration:blur:" + k)).map(k => "getoption " + k).join(" ; ")]
         loadProc.running = true
     }
@@ -276,20 +276,20 @@ Singleton {
 
     Connections {
         target: GlassTuneCtl
-        function onReadyChanged() { if (GlassTuneCtl.ready) ctl.load() }
+        function onReachableChanged() { if (GlassTuneCtl.reachable) ctl.load() }
     }
     // a config reload re-applies glass.json (managed.lua): read it back, or re-send what is still pending
     Connections {
         target: Hyprland
         function onRawEvent(event) {
-            if (event.name !== "configreloaded" || !GlassTuneCtl.ready) return
+            if (event.name !== "configreloaded" || !GlassTuneCtl.reachable) return
             if (throttle.running || applyProc.running) {
                 for (const k of Object.keys(ctl.overrides)) ctl.dirty[k] = true
                 throttle.restart()
             } else ctl.load()
         }
     }
-    Component.onCompleted: { loadSaved(); if (GlassTuneCtl.ready) load() }
+    Component.onCompleted: { loadSaved(); if (GlassTuneCtl.reachable) load() }
 
     IpcHandler {
         target: "blurtune"

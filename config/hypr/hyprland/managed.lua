@@ -611,7 +611,7 @@ end
 -- touches a key the running Hyprland lacks (each is probed with hl.get_config), so stock / older builds never get
 -- a config error. Same variant names, keys and ranges as BlurTuneCtl.qml.
 M.BLUR_VARIANTS = {
-	kawase = { id = 0 },
+	kawase = { id = 0, probe = "variant" }, -- 0.56 has no decoration:blur:variant at all (plain kawase only)
 	frost = { id = 1, probe = "glass.refraction" },
 	ripple = { id = 2, probe = "ripple.strength" },
 	drops = { id = 3, probe = "drops.speed" },

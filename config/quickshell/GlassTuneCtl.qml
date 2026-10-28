@@ -132,6 +132,8 @@ Singleton {
     property string guard: "checking"
     property string guardError: ""
     readonly property bool ready: guard === "ok"
+    // the instance guard passed and hyprctl answers (also on stock, where `ready` stays false for lack of solid_glass): what the stock blur page (BlurTuneCtl) needs
+    readonly property bool reachable: ready || unsupported
     // values can be edited (and are used by the shell's own glass): the compositor answered, or it has no solid_glass
     readonly property bool editable: ready || unsupported
     // what shell-drawn glass (lenses, glass lettering, flat card edge) uses: the live values when the compositor has

@@ -31,7 +31,7 @@ ColumnLayout {
         visible: !bs.ctl.ready
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        text: GlassTuneCtl.guard === "error" ? GlassTuneCtl.guardError : "Reading the blur options from Hyprland…"
+        text: GlassTuneCtl.guard === "error" && !GlassTuneCtl.reachable ? GlassTuneCtl.guardError : "Reading the blur options from Hyprland…"
         color: Theme.muted; font.pixelSize: Theme.fontCaption
     }
 

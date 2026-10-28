@@ -397,6 +397,8 @@ config/aerospace karabiner swiftbar  macOS only
   `Theme.glass` stays solid_glass only: any other variant gets the plain translucent fills (as stock), the group bar colours follow (`blur_variant_changed`).
   Caveats: reset writes Hyprland's built-in default (may differ from settings.lua); GTK/theme.py fills (`hypr_solid_glass`) follow at the next theme
   apply, not at the variant change; acrylic / aurora / fluid_jar colours are AARRGGBB like solid_glass tint.
+  Stock: the page runs on `GlassTuneCtl.reachable` (hyprctl answers), not `ready` (= has solid_glass); stock 0.57 lists the 11 variants, 0.56 only Kawase (no
+  `decoration:blur:variant`, the choice is saved but never sent). Nested stock check: a `hyprctl configerrors` taken at startup is empty, run `hyprctl reload` first.
 - **Motion language** (`Motion.qml`, shell section; `Theme.popup*` are the same tokens): `Motion.ms(base)` = base / popup speed, 16 ms
   floor, 0 when style "none" (`Motion.reduced`); `pressMs` 80 / `hoverMs` 120 / `moveMs` 200 / `exitMs` 150 / `emphasisMs` 300 at 1x;
   `easeEnter`/`easeMove`/`easeExit` follow the Curve setting, `easeHover` = OutCubic; `stagger(i, max)`. Never hard-code a duration
