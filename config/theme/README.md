@@ -216,7 +216,9 @@ A second, rarely restarted Quickshell instance owns everything under the windows
   **Hyprland instance:** Quickshell reads `HYPRLAND_INSTANCE_SIGNATURE` once; a stale one (an old shell's env after a
   session restart) means no workspace events. The supervisor passes the RUNNING instance's signature and Wayland socket on
   every (re)start (the caller's when alive, else the `$XDG_RUNTIME_DIR/hypr/*/hyprland.lock` whose pid is a live
-  Hyprland; none = it exits), and the engine exits (-> restart) when its instance's lock / pid disappears (checked every
+  Hyprland whose Wayland socket exists; none = it exits). At login autostart runs it before Hyprland has written that lock
+  (a real boot: lock ~0.25 s after the supervisor looked, it exited silently, no wallpaper), so it waits for the instance up
+  to 60 s at start and 15 s before each restart, and logs start / give-up in `engine.log`. The engine exits (-> restart) when its instance's lock / pid disappears (checked every
   30 s). `status` shows `hyprland: {signature, instanceAlive, events, lastEventAgoMs}` and per screen `workspace`,
   `wsChanges`, `wsBursts`, `unlockBursts`, `lastWsAgoMs`.
 * **Clock:** `DeskClockView` with `backdrop` = the `paper` item of the same window: the glass samples the live wallpaper

@@ -400,7 +400,8 @@ config/aerospace karabiner swiftbar  macOS only
   whole surface) keeps no open / close motion of its own: a fading card would leave an empty blurred box.
 - **Wallpaper engine** (backend `engine`; config/theme/README.md "Wallpaper engine" is authoritative): `engine.qml` is its own
   Quickshell instance (`quickshell -p ~/.config/quickshell/engine.qml`, kept alive by `hypr/scripts/start-wallpaper-engine.sh`,
-  pid in `$XDG_RUNTIME_DIR/wallpaper-engine/pid`) with `EngineWindow` / `EngineVideo` / `EngineVideoSlot`; `Wallpaper.engine`
+  pid in `$XDG_RUNTIME_DIR/wallpaper-engine/pid`, its log `engine.log` there; at login it waits up to 60 s for Hyprland's
+  `hyprland.lock` + Wayland socket, which appear after autostart runs) with `EngineWindow` / `EngineVideo` / `EngineVideoSlot`; `Wallpaper.engine`
   turns the main shell's `WallpaperLayer` and `DeskClock` off and `Lock.qml` talks to it over `bin/engine-ipc`. It does NOT
   hot-reload (`settings.watchFiles: false`): after editing a component it uses (WallpaperView, DeskClockView, Glass*, ...)
   run `theme.py wallpaper-engine restart` (never kill it by name). Tests: nested only, `QS_ENGINE_ALWAYS` / `QS_ENGINE_PLAYERS`

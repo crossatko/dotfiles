@@ -10,7 +10,9 @@
 # Hyprland instance: every (re)start passes the RUNNING instance's signature and Wayland socket (current_instance: the
 # caller's when it is alive, else the $XDG_RUNTIME_DIR/hypr/*/hyprland.lock whose pid is a live Hyprland), never a stale
 # one inherited from an old shell (Quickshell reads it once: a dead signature = no workspace events, no monitors).
-# No live Hyprland = the session is over: the supervisor exits.
+# Race at login: autostart runs this ~0.2 s BEFORE Hyprland writes its hyprland.lock (seen on a real boot: no instance
+# found, the supervisor exited silently, no wallpaper). So the instance is waited for: up to 60 s at start, 15 s before
+# each restart; only then "no live Hyprland" = the session is over and the supervisor exits (and says so in engine.log).
 d="${XDG_RUNTIME_DIR:-/tmp}/wallpaper-engine"
 mkdir -p "$d"
 exec 9> "$d/supervisor.lock"
@@ -24,7 +26,9 @@ current_instance() {   # prints "<signature> <wayland socket>" of the running Hy
   local d pid way sig best=""
   for d in "${XDG_RUNTIME_DIR:-/tmp}"/hypr/*/; do
     [ -f "$d/hyprland.lock" ] || continue
+    pid= way=
     { read -r pid; read -r way; } < "$d/hyprland.lock"
+    [ -n "$way" ] && [ -S "${XDG_RUNTIME_DIR:-/tmp}/$way" ] || continue   # lock half written / socket not up yet
     alive "$pid" || continue
     sig=$(basename "$d")
     [ "$sig" = "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && { echo "$sig $way"; return; }
@@ -32,11 +36,20 @@ current_instance() {   # prints "<signature> <wayland socket>" of the running Hy
   done
   [ -n "$best" ] && echo "$best"
 }
+wait_instance() {   # wait_instance <seconds>: current_instance, polled every 0.25 s until it answers or time is up
+  local i inst
+  for ((i = 0; i < $1 * 4; i++)); do
+    inst=$(current_instance)
+    [ -n "$inst" ] && { echo "$inst"; return 0; }
+    sleep 0.25
+  done
+  return 1
+}
 [ "$(backend)" = engine ] || exit 0
 echo $$ > "$d/supervisor.pid"
 : > "$log"
-inst=$(current_instance)
-[ -n "$inst" ] || { rm -f "$d/supervisor.pid"; exit 0; }
+echo "$(date '+%F %T') supervisor $$ started, waiting for Hyprland" >> "$log"
+inst=$(wait_instance 60) || { echo "$(date '+%F %T') no running Hyprland after 60 s: supervisor exits" >> "$log"; rm -f "$d/supervisor.pid"; exit 0; }
 export HYPRLAND_INSTANCE_SIGNATURE=${inst% *} WAYLAND_DISPLAY=${inst#* }
 # the player records live in the per-login runtime dir: write them now (a no-op when they exist; the still shows meanwhile)
 python3 -I "$theme" video start > /dev/null 2>&1 9>&- &
@@ -46,8 +59,7 @@ trap stop TERM INT HUP
 fails=0
 while :; do
   t0=$SECONDS
-  inst=$(current_instance)
-  [ -n "$inst" ] || { echo "$(date '+%F %T') no running Hyprland: supervisor exits" >> "$log"; break; }
+  inst=$(wait_instance 15) || { echo "$(date '+%F %T') no running Hyprland: supervisor exits" >> "$log"; break; }
   export HYPRLAND_INSTANCE_SIGNATURE=${inst% *} WAYLAND_DISPLAY=${inst#* }
   echo "$(date '+%F %T') starting the engine for Hyprland $HYPRLAND_INSTANCE_SIGNATURE ($WAYLAND_DISPLAY)" >> "$log"
   # Quickshell's own crash handler is off: it re-launched a crashed instance as a NEW detached process (seen in a nested
