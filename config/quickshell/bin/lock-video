@@ -15,7 +15,8 @@ frame is bursts[idx]).
   "still" = an image wallpaper / no player / anything unreadable (exit 1).
 Read-only: the state file written by theme.py ($XDG_RUNTIME_DIR/theme-video/<conn>.json), the player's /proc cmdline
 (script-opts winddown-bursts / -cyc / -station, input-ipc-server, loop-file), its station file and (loop) one
-`get_property path` on its socket."""
+`get_property path` on its socket. Wallpaper engine (backend "engine"): the state file is an engine RECORD ("engine": true,
+bursts / cyc / tag / station in it; the engine writes the station like winddown.lua): the same burst line, no socket."""
 import json
 import os
 import socket
@@ -113,10 +114,40 @@ def loop_info(st, mpv):
     return {"mode": "loop", "socket": sock, "pid": int(st["pid"]), "file": f}
 
 
+def engine_info(conn):
+    """The burst record of an engine player record (theme.py ep_start), or None."""
+    if not 0 < len(conn) <= 40 or not OK.issuperset(conn):
+        return None
+    d = (os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/theme-{os.getuid()}") + "/theme-video/"
+    try:
+        with open(d + conn + ".json") as f:
+            st = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(st, dict) or st.get("engine") is not True or st.get("mode") != "once" or not st.get("baked"):
+        return None
+    f, bursts = st.get("file"), st.get("bursts")
+    if not isinstance(f, str) or not os.path.isfile(f) or not isinstance(bursts, list) or len(bursts) < 2:
+        return None
+    k, idx, tag, station = len(bursts) - 1, 0, str(st.get("tag", "")), str(st.get("station", ""))
+    try:
+        with open(station) as sf:
+            t, _, n = sf.read().strip().rpartition(":")
+        if t == tag and n.isdigit():
+            idx = int(n) % k
+    except OSError:
+        pass
+    return {"file": f, "bursts": [float(x) for x in bursts], "idx": idx, "cyc": int(st.get("cyc", 0) or 0), "station": station, "tag": tag}
+
+
 def main(argv):
     desk = argv[:1] == ["--desk"]
     if desk:
         argv = argv[1:]
+    e = engine_info(argv[0]) if argv else None
+    if e:
+        print(json.dumps({"mode": "burst", **e} if desk else e))
+        return 0
     p = player(argv[0]) if argv else None
     if not desk:
         b = burst_info(*p) if p else None

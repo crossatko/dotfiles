@@ -21,6 +21,9 @@ hl.on("hyprland.start", function()
 	-- Not a bare `hyprpaper`: started 2 s after the compositor it raced the monitor setup and left every
 	-- output black. The script waits for the outputs and retries once (scripts/start-hyprpaper.sh).
 	hl.exec_cmd("$HOME/.config/hypr/scripts/start-hyprpaper.sh")
+	-- wallpaper_backend "engine" only (exits at once otherwise): the wallpaper engine (config/quickshell/engine.qml: wallpaper,
+	-- video wallpapers, desktop clock) under its restart loop
+	hl.exec_cmd("$HOME/.config/hypr/scripts/start-wallpaper-engine.sh")
 	-- Via systemd, not a bare `hypridle`, so that there is exactly one owner of
 	-- the process. steam-streaming.lua and steam-tv-dim.lua already manage it
 	-- with `systemctl --user stop/restart hypridle`; combined with a bare exec

@@ -117,6 +117,7 @@ hyprlock
 hyprpolkitagent
 quickshell
 qt6-imageformats     # WebP wallpapers in the shell (WallpaperLayer, thumbnails)
+qt6-websockets       # TV card auto-detect (HaWatch: Home Assistant websocket)
 xdg-desktop-portal-hyprland
 xdg-desktop-portal-gtk
 xdg-desktop-portal-gnome

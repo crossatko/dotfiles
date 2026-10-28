@@ -6,7 +6,7 @@ import Quickshell.Io
 
 // Settings -> Wallpaper & theme. Top to bottom:
 //  - title row (`headerItem`): the theme source's file name + the current palette swatches (stays put while scrolling);
-//  - with 2+ monitors: the MonitorChooser (primary first; the shared Settings pick, Monitors.selected) picks the monitor
+//  - with 2+ monitors: the MonitorSection (primary first; the shared Settings pick, Monitors.selected) picks the monitor
 //    being edited; the palette glyph marks the palette source (the monitor whose wallpaper sets the colour theme), the
 //    link buttons between chips link neighbours, and the row ends in the monitor-level actions: "Follow primary"
 //    (`theme.py clear`, a monitor with its own wallpaper) and "Use for palette" (`theme.py primary`);
@@ -21,7 +21,7 @@ import Quickshell.Io
 // monitor, videos, links)"); this page only reads it.
 // Tabs: Tab / Shift+Tab. The page opens on the tab matching what the edited monitor shows; a tab picked by hand is kept
 // for the session (Settings' `memory` page hook).
-// Monitor links: a MonitorLinkButton between neighbouring chips links them; a linked group always gets the
+// Monitor links: a MonitorLink between neighbouring chips links them; a linked group always gets the
 // same wallpaper: every apply / mode / timing / "Follow primary" goes out as ONE theme.py call naming every monitor of the
 // group (`--monitor k` repeated; the links live in wallpapers.json `links`, written by `theme.py link|unlink`).
 // Test hook: `qs ipc call wallpaperpage tab images|videos`, `... monitor <key>` (only while the page is open).
@@ -100,7 +100,7 @@ ColumnLayout {
         if (wpPrimary !== "" && ms.some(s => Appearance.monitorKey(s) === wpPrimary)) return wpPrimary
         return ms.some(s => Appearance.monitorKey(s) === Monitors.primaryKey) ? Monitors.primaryKey : Appearance.monitorKey(ms[0])
     }
-    // the monitor being edited: the shared Settings pick (MonitorChooser / Monitors.selected), else the palette source
+    // the monitor being edited: the shared Settings pick (MonitorSection / Monitors.selected), else the palette source
     readonly property string pickedKey: Monitors.selected ? Appearance.monitorKey(Monitors.selected) : ""
     readonly property string target: monitors.some(s => Appearance.monitorKey(s) === pickedKey) ? pickedKey : primaryKey
     readonly property bool multi: monitors.length > 1
@@ -580,7 +580,7 @@ ColumnLayout {
 
 
     // ---- monitors (only with 2+ screens): which one is edited, links, palette source; actions at the row's end ----
-    MonitorChooser {
+    MonitorSection {
         objectName: "wallpaper-monitors"
         screens: page.monitors
         current: page.screenOf(page.target) ? page.screenOf(page.target).name : ""
@@ -592,19 +592,25 @@ ColumnLayout {
         thumbFor: s => page.shownFor(Appearance.monitorKey(s))
         markFor: s => Appearance.monitorKey(s) === page.primaryKey ? Icons.palette : ""
         markTipFor: s => Appearance.monitorKey(s) === page.primaryKey ? "Palette source" : ""
-        Label { visible: page.busyState; text: "Updating…"; font.pixelSize: Theme.fontCaption; color: Theme.muted }
-        Btn {
+        Icon {
+            visible: page.busyState
+            text: Icons.spinner
+            font.pixelSize: Theme.iconMd
+            color: Theme.muted
+            RotationAnimator on rotation { running: page.busyState; from: 0; to: 360; duration: 1000; loops: Animation.Infinite }
+        }
+        MonitorAction {
             objectName: "btn-wp-follow"
             visible: !page.targetIsPrimary && page.group.some(k => page.ownFor(k))
-            text: "Follow primary"
-            outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26
+            glyph: Icons.undo
+            tip: "Follow primary"
             onClicked: page.monitorCmd("clear", page.target)
         }
-        Btn {
+        MonitorAction {
             objectName: "btn-wp-palette"
             visible: !page.targetIsPrimary
-            text: "Use for palette"
-            outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26
+            glyph: Icons.palette
+            tip: "Use for palette"
             onClicked: page.monitorCmd("primary", page.target)
         }
     }

@@ -1,0 +1,12 @@
+#!/bin/sh
+# engine-ipc <function> [args...]: call the wallpaper engine (config/quickshell/engine.qml, IpcHandler "engine") of this
+# login: status | reload | poke | pause | resume | replay <conn> | form | lockPrepare <gen> <dir> | lockCover "<conns>" |
+# lockHide | lockRelease. The engine's pid comes from $XDG_RUNTIME_DIR/wallpaper-engine/pid (written by
+# hypr/scripts/start-wallpaper-engine.sh) and must still be a quickshell running engine.qml. Exit 3 at once when there
+# is no engine (Lock.qml must never wait for one); every call is capped at ENGINE_IPC_TIMEOUT (default 0.15 s; a call
+# takes ~12 ms).
+d="${XDG_RUNTIME_DIR:-/tmp}/wallpaper-engine"
+read -r pid < "$d/pid" 2>/dev/null || exit 3
+case $pid in '' | *[!0-9]*) exit 3 ;; esac
+grep -qa 'engine\.qml' "/proc/$pid/cmdline" 2>/dev/null || exit 3
+exec timeout "${ENGINE_IPC_TIMEOUT:-0.15}" quickshell ipc --pid "$pid" call engine "$@"

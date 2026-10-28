@@ -7,7 +7,7 @@ import Quickshell.Io
 // (WallpaperLayer) and for anything that needs "what does this monitor show" (LockWallpapers.stillFor delegates here).
 // theme.py writes ~/.config/theme/out/wallpaper.json together with out/hyprpaper.conf (same blocks, theme.py
 // write_wallpaper_json) on every apply / link / primary / clear / render, in the click's foreground:
-//   { "version": 1, "backend": "quickshell" | "hyprpaper",
+//   { "version": 1, "backend": "quickshell" | "hyprpaper" | "engine",
 //     "rules": [ { "monitor": "" | "<connector>" | "desc:<description prefix>", "path": "<absolute image>",
 //                  "fit": "cover" | "contain" | "fill" | "tile", "w": px, "h": px (the file's own size, when known),
 //                  "pending": true (file not there yet) } ] }
@@ -26,6 +26,9 @@ Singleton {
     property string backend: "quickshell"
     // the shell draws only once theme.py has written the file (before that the hyprpaper era: hyprpaper's own config)
     readonly property bool drawn: found && backend === "quickshell"
+    // backend "engine": the wallpaper engine (engine.qml, its own Quickshell instance) draws the wallpaper, videos and the
+    // desktop clock; the main shell draws neither (WallpaperLayer: `drawn` false, DeskClock off)
+    readonly property bool engine: found && backend === "engine"
     property int gen: 0                        // bumped by `reload`: layers re-load what they show
 
     function home(p) { return typeof p === "string" ? p.replace(/^~(?=\/|$)/, Theme.home) : "" }
@@ -68,7 +71,7 @@ Singleton {
             h: Number.isInteger(r.h) && r.h > 0 ? r.h : 0,
             pending: r.pending === true
         }))
-        root.backend = j.backend === "hyprpaper" ? "hyprpaper" : "quickshell"
+        root.backend = j.backend === "hyprpaper" || j.backend === "engine" ? j.backend : "quickshell"
         root.found = true
     }
 

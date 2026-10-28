@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+# engine-bench: wallpaper engine (config/quickshell/engine.qml, QtMultimedia) vs mpvpaper on ONE real monitor, ~2 x 20 s,
+# plus a switch check of the engine. Run it in your Hyprland session before / after switching
+# theme.toml wallpaper_backend to "engine" (config/theme/README.md "Wallpaper engine").
+#
+# What it does, in order (nothing else):
+#   1. a temp dir (mktemp); a 20 s clip at the monitor's size and refresh (60 or 120 fps) with a frame-counter barcode
+#      (ffmpeg, VA-API HEVC, ~5-15 s), unless --clip FILE is given (then no pacing analysis)
+#   2. mpvpaper with theme.py's loop options on the OVERLAY layer of that monitor for SECS s: CPU, RSS / private memory,
+#      GPU gfx + video-decode time (amdgpu fdinfo); with wf-recorder, the barcode strip is recorded and decoded (pacing
+#      at the real refresh rate)
+#   3. the same with a throwaway engine instance (QS_ENGINE_BENCH=<monitor>: overlay layer, no clock, writes nothing; your
+#      running shell / engine are not touched) playing the same clip from a private player record
+#   4. switch check on that instance: launch -> first video frame (ms), position advancing, `pause` = no CPU / position
+#      frozen, `resume`, `status`
+#   5. a summary + ./engine-bench-<time>.json; kills exactly the PIDs it started, deletes the temp dir (trap, also on Ctrl+C)
+# Your desktop: the test clip covers the chosen monitor for ~2 x (SECS + 5) s. Input passes through (no input region).
+#
+# usage: engine-bench [--monitor <connector>] [--secs 20] [--clip FILE] [--no-record] [--keep]
+set -u
+MON=""; SECS=20; CLIP=""; REC=1; KEEP=0
+while [ $# -gt 0 ]; do
+  case $1 in
+    --monitor) MON=$2; shift 2 ;; --secs) SECS=$2; shift 2 ;; --clip) CLIP=$2; shift 2 ;;
+    --no-record) REC=0; shift ;; --keep) KEEP=1; shift ;;
+    -h | --help) sed -n 2,22p "$0"; exit 0 ;; *) echo "unknown option $1"; exit 2 ;;
+  esac
+done
+for b in mpvpaper quickshell ffmpeg ffprobe hyprctl python3; do command -v $b > /dev/null || { echo "missing $b"; exit 1; }; done
+[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] || { echo "run this inside your Hyprland session"; exit 1; }
+command -v wf-recorder > /dev/null || REC=0
+QML="${WALLPAPER_ENGINE_QML:-$HOME/.config/quickshell/engine.qml}"
+[ -f "$QML" ] || { echo "no engine at $QML"; exit 1; }
+[ -n "$MON" ] || MON=$(hyprctl -j monitors | python3 -c "import json,sys; print(next(m['name'] for m in json.load(sys.stdin) if m['focused']))")
+read -r MW MH MHZ LX LY LW LH < <(hyprctl -j monitors | python3 -c "
+import json,sys
+m=next((m for m in json.load(sys.stdin) if m['name']=='$MON'),None)
+if m:
+    s=m['scale']; w,h=m['width']/s,m['height']/s
+    if m['transform']%2: w,h=h,w
+    print(m['width'],m['height'],m['refreshRate'],m['x'],m['y'],round(w),round(h))")
+[ -n "${MW:-}" ] || { echo "no monitor $MON"; exit 1; }
+FPS=$(python3 -c "print(120 if $MHZ >= 119 else 60)")
+
+T=$(mktemp -d /tmp/engine-bench.XXXXXX)
+PIDS=()
+cleanup() {
+  for p in "${PIDS[@]}"; do kill "$p" 2> /dev/null; done
+  sleep 0.5
+  for p in "${PIDS[@]}"; do kill -0 "$p" 2> /dev/null && kill -9 "$p" 2> /dev/null; done
+  if [ $KEEP = 1 ]; then echo "kept $T"; else rm -rf "$T"; fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+echo "monitor $MON ${MW}x${MH}@${MHZ} (logical ${LW}x${LH} at ${LX},${LY}), $SECS s per player, record=$REC"
+
+BAR=0
+if [ -z "$CLIP" ]; then
+  EW=$((MW / 2 * 2)); EH=$((MH / 2 * 2))   # (even sizes for NV12)
+  echo "making a ${EW}x${EH}@${FPS} test clip ..."
+  ffmpeg -hide_banner -loglevel error -y -vaapi_device /dev/dri/renderD128 -f lavfi -t $((SECS + 10)) -i "mandelbrot=s=${EW}x${EH}:r=$FPS" \
+    -f lavfi -i "nullsrc=s=768x96:r=$FPS,format=gray" \
+    -filter_complex "[0:v]format=yuv420p[v];[1:v]geq=lum='255*mod(floor(N/pow(2,floor(X/64))),2)',format=yuv420p[b];[v][b]overlay=x=(W-w)/2:y=(H-h)/2:shortest=1,format=nv12,hwupload" \
+    -c:v hevc_vaapi -rc_mode VBR -b:v 25M -maxrate 30M -g $FPS -an "$T/clip.mp4" || { echo "clip encode failed (VA-API?); pass --clip FILE"; exit 1; }
+  CLIP=$T/clip.mp4; BAR=1
+fi
+CW=$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$CLIP")
+CH=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$CLIP")
+G=$(python3 -c "
+W,H,cw,ch=$LW,$LH,$CW,$CH; s=max(W/cw,H/ch); ox=(cw*s-W)/2; oy=(ch*s-H)/2
+bx,by=(cw-768)/2,(ch-96)/2
+print(f'{round($LX+bx*s-ox)},{round($LY+by*s-oy+96*s*0.25)} {round(768*s)}x{round(96*s*0.5)}')")
+
+cat > "$T/sample.py" << 'EOF'
+import glob, json, sys, time, os
+CLK = os.sysconf("SC_CLK_TCK")
+def cpu(p):
+    f = open(f"/proc/{p}/stat").read().rsplit(")", 1)[1].split(); return (int(f[11]) + int(f[12])) / CLK
+def mem(p):
+    d = {l.split(":")[0]: int(l.split()[1]) for l in open(f"/proc/{p}/smaps_rollup") if l.split(":")[0] in ("Rss", "Private_Clean", "Private_Dirty")}
+    return d["Rss"] / 1024, (d["Private_Clean"] + d["Private_Dirty"]) / 1024
+def drm(p):
+    seen, g, e = set(), 0, 0
+    for fd in glob.glob(f"/proc/{p}/fdinfo/*"):
+        try: d = dict(l.rstrip("\n").split(":", 1) for l in open(fd) if ":" in l)
+        except OSError: continue
+        c = d.get("drm-client-id")
+        if not c or c in seen or "drm-engine-gfx" not in d: continue
+        seen.add(c)
+        g += int(d["drm-engine-gfx"].split()[0])
+        e += sum(int(d.get(k, "0 ns").split()[0]) for k in ("drm-engine-enc", "drm-engine-dec", "drm-engine-vcn"))
+    return g, e
+p, dur = int(sys.argv[1]), float(sys.argv[2])
+c0, d0, t0 = cpu(p), drm(p), time.monotonic(); r = []
+while time.monotonic() - t0 < dur:
+    time.sleep(0.5); r.append(mem(p))
+el = time.monotonic() - t0; c1, d1 = cpu(p), drm(p)
+print(json.dumps({"cpu%": round(100 * (c1 - c0) / el, 2), "rss_mb": round(max(x[0] for x in r), 1), "private_mb": round(max(x[1] for x in r), 1),
+                  "gfx%": round(100 * (d1[0] - d0[0]) / 1e9 / el, 2), "decode%": round(100 * (d1[1] - d0[1]) / 1e9 / el, 2)}))
+EOF
+cat > "$T/pace.py" << 'EOF'
+import json, subprocess, sys, statistics as st
+rec, fps, hz = sys.argv[1], float(sys.argv[2]), float(sys.argv[3])
+pts = [float(x.strip(",")) for x in subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "frame=pts_time", "-of", "csv=p=0", rec], capture_output=True, text=True).stdout.split() if x.strip(",") and x.strip(",") != "N/A"]
+raw = subprocess.run(["ffmpeg", "-v", "error", "-i", rec, "-vf", "scale=12:1:flags=area,format=gray", "-fps_mode", "passthrough", "-f", "rawvideo", "-"], capture_output=True).stdout
+idx = [sum(1 << k for k in range(12) if raw[i + k] > 128) for i in range(0, len(raw) - 11, 12)]
+n = min(len(idx), len(pts)); idx, pts = idx[:n], pts[:n]
+s = next((i for i, t in enumerate(pts) if t - pts[0] >= 1.0), 0); idx, pts = idx[s:], pts[s:]
+ch = [i for i in range(len(idx)) if i == 0 or idx[i] != idx[i - 1]]
+steps, dts = [], []
+for a, b in zip(ch, ch[1:]):
+    d = idx[b] - idx[a]
+    if d < 0: continue
+    steps.append(d); dts.append(1000 * (pts[b] - pts[a]))
+exp = max(1, round(fps / hz)); dur = pts[-1] - pts[0] if len(pts) > 1 else 0
+q = lambda a, p: round(sorted(a)[min(len(a) - 1, int(p * len(a)))], 2)
+print(json.dumps({"media_fps": round(sum(steps) / dur, 2) if dur else None, "skipped_frames": sum(d - exp for d in steps if d > exp),
+    "dt_ms_p50": q(dts, .5), "dt_p99": q(dts, .99), "dt_max": round(max(dts), 2), "expected_dt_ms": round(1000 / min(fps, hz), 2)}) if dts else json.dumps({"error": "no frames in the recording"}))
+EOF
+record() {
+  [ $REC = 1 ] && [ $BAR = 1 ] || return
+  wf-recorder -o "$MON" -g "$G" -c libx264rgb -p qp=0 -p preset=ultrafast -f "$T/rec-$1.mkv" > "$T/wfr-$1.log" 2>&1 &
+  WR=$!; PIDS+=("$WR")
+}
+stoprec() { [ -n "${WR:-}" ] && { kill -INT "$WR" 2> /dev/null; wait "$WR" 2> /dev/null; WR=""; }; }
+pace() { [ -f "$T/rec-$1.mkv" ] && python3 "$T/pace.py" "$T/rec-$1.mkv" "$FPS" "$MHZ" || echo '{}'; }
+
+echo "== mpvpaper (theme.py loop options) on $MON"
+mpvpaper -l overlay -o "loop-file=inf no-audio load-scripts=no hwdec=auto-safe panscan=1.0" "$MON" "$CLIP" > "$T/mpv.log" 2>&1 < /dev/null &
+MP=$!; PIDS+=("$MP")
+sleep 4; record mpv
+MS=$(python3 "$T/sample.py" "$MP" "$SECS" 2> /dev/null); stoprec
+[ -n "$MS" ] || { MS=null; echo "   mpvpaper exited early: $(tail -3 "$T/mpv.log" | tr '\n' ' ')"; }
+kill "$MP" 2> /dev/null; sleep 1
+MPACE=$(pace mpv)
+echo "   cost $MS"; echo "   pacing $MPACE"
+
+echo "== wallpaper engine (QtMultimedia, throwaway instance) on $MON"
+python3 -c "import json; json.dump({'version': 1, 'players': {'$MON': {'video': '$CLIP', 'file': '$CLIP', 'mode': 'loop', 'bursts': [], 'station': ''}}}, open('$T/players.json', 'w'))"
+ipc() { timeout 2 quickshell ipc --pid "$QP" call engine "$@" 2> /dev/null; }
+pos() { ipc status | python3 -c "import json,sys; s=json.load(sys.stdin)['screens']; print(s[0]['pos'] if s else -1)" 2> /dev/null; }
+t0=$(date +%s%3N)
+QS_ENGINE_BENCH=$MON QS_ENGINE_PLAYERS=$T/players.json QSG_USE_SIMPLE_ANIMATION_DRIVER=1 \
+  QT_LOGGING_RULES="qt.multimedia.ffmpeg.hwaccel*=true" quickshell -p "$QML" > "$T/qs.log" 2>&1 < /dev/null &
+QP=$!; PIDS+=("$QP")
+up=-1
+for _ in $(seq 1 250); do
+  ipc status 2> /dev/null | grep -q '"showing":true' && { up=$(($(date +%s%3N) - t0)); break; }
+  sleep 0.02
+done
+sleep 3; record qt
+QS=$(python3 "$T/sample.py" "$QP" "$SECS" 2> /dev/null); stoprec
+[ -n "$QS" ] || { QS=null; echo "   the engine instance exited early: $(tail -3 "$T/qs.log" | tr '\n' ' ')"; }
+QPACE=$(pace qt)
+HW=$(grep -c "Creating VAAPI HW accelerator\|hw_device_ctx\|VAAPI" "$T/qs.log")
+# switch check: advancing, pause (frozen, ~0 CPU), resume, status
+p1=$(pos); sleep 1; p2=$(pos)
+ipc pause > /dev/null; sleep 0.5; PZ=$(python3 "$T/sample.py" "$QP" 3 2> /dev/null); p3=$(pos); sleep 1; p4=$(pos)
+ipc resume > /dev/null; sleep 1; p5=$(pos)
+PZ=${PZ:-null}; p1=${p1:--1}; p2=${p2:--1}; p3=${p3:--1}; p4=${p4:--2}; p5=${p5:--2}
+kill "$QP"; sleep 1
+ok() { [ "$1" = 1 ] && echo ok || echo FAIL; }
+ADV=$(python3 -c "print(int($p2 != $p1))"); FROZEN=$(python3 -c "print(int($p3 == $p4))"); RES=$(python3 -c "print(int($p5 != $p4))")
+echo "   cost $QS (VA-API log lines: $HW)"; echo "   pacing $QPACE"
+echo "   switch check: first frame $up ms after launch; plays $(ok "$ADV"); pause freezes $(ok "$FROZEN") (paused cost $PZ); resume $(ok "$RES")"
+
+OUT=$PWD/engine-bench-$(date +%Y%m%d-%H%M%S).json
+cat > "$OUT" << EOF
+{"monitor": "$MON", "mode": "${MW}x${MH}@${MHZ}", "secs": $SECS, "clip_fps": $FPS,
+ "mpvpaper": {"cost": $MS, "pacing": $MPACE},
+ "engine": {"cost": $QS, "pacing": $QPACE, "first_frame_ms": $up, "paused_cost": $PZ, "plays": $ADV, "pause_freezes": $FROZEN, "resumes": $RES}}
+EOF
+echo "written $OUT"

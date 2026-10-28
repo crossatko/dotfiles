@@ -16,8 +16,9 @@ Item {
     property var screen: null
     property string path: ""                      // explicit image ("" = the screen's Wallpaper entry)
     property bool reporting: true                 // the screen's own layer (Wallpaper.status); embedded copies: off
+    property bool active: true                    // false: loads nothing (an embedded copy that is not needed)
     readonly property var entry: Wallpaper.entryFor(screen)
-    readonly property var want: path === "" ? entry
+    readonly property var want: !active ? { path: "", fit: "cover", w: 0, h: 0, pending: false } : path === "" ? entry
         : entry.path === path ? entry : { path: path, fit: "cover", w: 0, h: 0, pending: false }
     property bool hasImage: false
     readonly property int fadeMs: Motion.emphasisMs      // large surface; 0 with motion off

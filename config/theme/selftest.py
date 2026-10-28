@@ -386,6 +386,18 @@ with tempfile.TemporaryDirectory() as d:
         theme.OUT = real_out
     c_check("backend default / unknown -> quickshell", theme.wallpaper_backend({}) == "quickshell"
             and theme.wallpaper_backend({"settings": {"wallpaper_backend": "x"}}) == "quickshell")
+    c_check("backend engine", theme.wallpaper_backend({"settings": {"wallpaper_backend": "engine"}}) == "engine")
+    # player records: an engine record is live only with the engine backend; an mpvpaper record only while its pid is one
+    real_wb = theme.wallpaper_backend
+    try:
+        theme.wallpaper_backend = lambda cfg=None: "engine"
+        live_e = theme.vp_live({"pid": 0, "engine": True})
+        theme.wallpaper_backend = lambda cfg=None: "quickshell"
+        dead_e = theme.vp_live({"pid": 0, "engine": True})
+    finally:
+        theme.wallpaper_backend = real_wb
+    c_check("engine record live only with the engine backend", live_e and not dead_e and not theme.vp_live(None)
+            and not theme.vp_live({"pid": os.getpid()}))
     # reloads: only apps whose files changed
     ran = []
     real = {k: getattr(theme, k) for k in ("sh", "reload_nvim", "reload_zellij", "reload_gtk", "reload_kde", "reload_icons", "refresh_nautilus")}
@@ -485,6 +497,30 @@ exit 0
     c_check("unreadable image: failed, palette kept", st.get("state") == "failed" and pal2 == pal, st.get("stage", "")[:60])
     c_check("nothing live touched", all(l.split()[0] in ("hyprctl", "pkill", "gsettings", "kwriteconfig6", "plasma-apply-colorscheme", "herdr",
                                                           "nautilus", "nvim", "mpvpaper", "hyprpaper") for l in log.read_text().splitlines()))
+    # engine backend: a video is a player RECORD (theme-video/<conn>.json "engine": true + engine/players.json), never an
+    # mpvpaper; an image afterwards empties the players file
+    (root / "theme.local.toml").write_text(local + '\n[settings]\nwallpaper_backend = "engine"\n')
+    clip = d / "clip.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=320x180:r=30:d=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip)], check=True)
+    eenv = dict(env, THEME_BAKE="0")
+    subprocess.run([sys.executable, "-I", str(root / "theme.py"), "video", "optimize", "off"], env=eenv, check=True, capture_output=True)
+    subprocess.run(py + [str(clip), "--mode", "loop"], env=eenv, check=True)
+    st = settle()
+    pf = run / "theme-video" / "engine" / "players.json"
+    pl = json.loads(pf.read_text()).get("players", {}) if pf.exists() else {}
+    rec = json.loads((run / "theme-video" / "DP-9.json").read_text()) if (run / "theme-video" / "DP-9.json").exists() else {}
+    c_check("engine backend: video = player record", st.get("state") == "done" and list(pl) == ["DP-9"] and pl["DP-9"].get("file") == str(clip)
+            and pl["DP-9"].get("mode") == "loop" and rec.get("engine") is True and rec.get("pid") == 0
+            and json.loads((out / "wallpaper.json").read_text())["backend"] == "engine", f"{st.get('state')} {pl} {rec.get('engine')}")
+    c_check("engine backend: no mpvpaper started", not any(l.startswith("mpvpaper") for l in log.read_text().splitlines()))
+    subprocess.run(py + [str(clip), "--mode", "once", "--play", "1", "--wind", "1"], env=eenv, check=True)
+    settle()
+    pl = json.loads(pf.read_text()).get("players", {})
+    c_check("engine backend: unbaked play-once stops at play + wind x WIND_AVG", pl.get("DP-9", {}).get("mode") == "once"
+            and abs((pl.get("DP-9", {}).get("stop") or 0) - (1 + 1 * theme.WIND_AVG)) < 0.01, str(pl.get("DP-9", {}).get("stop")))
+    subprocess.run(py + [str(a)], env=eenv, check=True)
+    settle()
+    c_check("engine backend: an image empties the players", json.loads(pf.read_text()).get("players") == {} and not (run / "theme-video" / "DP-9.json").exists())
     # (a worker that is still running when the temp dir goes: wait for it)
     settle()
 

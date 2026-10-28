@@ -1267,13 +1267,25 @@ def hyprpaper_active():
 #    hyprpaper that still runs on this Hyprland instance (left from the old backend) is kept in step, never started.
 #  * "hyprpaper": the old path (live `hyprctl hyprpaper wallpaper`, the worker's listactive check + restart, the video
 #    players wait for hyprpaper at login). scripts/start-hyprpaper.sh starts hyprpaper only for this backend.
-# Video players (mpvpaper, bottom layer) are above the background layer either way.
-WALLPAPER_BACKENDS = ("quickshell", "hyprpaper")
+#  * "engine": the wallpaper engine (config/quickshell/engine.qml, a second Quickshell instance kept alive by
+#    hypr/scripts/start-wallpaper-engine.sh) draws the image AND the videos (QtMultimedia) AND the desktop clock. theme.py
+#    writes the same files (wallpaper.json, the still) but never starts mpvpaper or hyprpaper: a video is a player RECORD
+#    (ep_start: theme-video/<conn>.json with "engine": true + theme-video/engine/players.json, which the engine watches).
+# Video players (mpvpaper, bottom layer) are above the background layer with the first two.
+WALLPAPER_BACKENDS = ("quickshell", "hyprpaper", "engine")
 
 
 def wallpaper_backend(cfg=None):
+    if cfg is None and _BACKEND[1] > time.monotonic():   # (a long-lived optimize runner re-reads it every few seconds)
+        return _BACKEND[0]
     v = (cfg if cfg is not None else load_cfg()).get("settings", {}).get("wallpaper_backend", WALLPAPER_BACKENDS[0])
-    return v if v in WALLPAPER_BACKENDS else WALLPAPER_BACKENDS[0]
+    v = v if v in WALLPAPER_BACKENDS else WALLPAPER_BACKENDS[0]
+    if cfg is None:
+        _BACKEND[:] = [v, time.monotonic() + 5]
+    return v
+
+
+_BACKEND = ["", 0.0]
 
 
 def hyprpaper_running():
@@ -3849,7 +3861,7 @@ def video_optimize_run():
             dest, video, plan, conns, kind = job["dest"], job["video"], job["plan"], job["conns"], job["kind"]
             what = ("wind-down + replay " if plan["wind"] > 0 else "replay ") if kind == "bake" else ""
             label = f"{Path(video).name} {what}for {', '.join(conns)}"
-            if any(not (vp_read(vp_dir() / f"{c}.json") and vp_alive((vp_read(vp_dir() / f"{c}.json") or {}).get("pid", -1))) for c in conns):
+            if any(not vp_live(vp_read(vp_dir() / f"{c}.json")) for c in conns):
                 label += " (playback starts when ready)"   # nothing plays on those monitors yet: the original cannot be decoded in hardware
             opt_status(state="encoding", label=label, pct=0, kind=kind)
             with _RUN["lock"]:
@@ -3874,11 +3886,16 @@ def video_optimize_run():
                 still = None
             for conn in (still["conns"] if still else []):
                 d = vp_read(vp_dir() / f"{conn}.json")
-                if not (d and vp_alive(d.get("pid", -1))):   # waiting for its copy (video_wait_for_copy): start the player now
+                if not vp_live(d):   # waiting for its copy (video_wait_for_copy): start the player now
                     video_sync(only=conn)
                     continue
-                if d and d.get("video") == video and vp_alive(d["pid"]) and d.get("file") != str(dest) \
+                if d and d.get("video") == video and vp_live(d) and d.get("file") != str(dest) \
                         and ((kind == "opt" and not d.get("baked")) or (kind == "bake" and (d.get("play"), d.get("wind", 0), d.get("ease")) == job["pw"])):
+                    if d.get("engine"):   # the engine swaps itself (cross-fade, on the held frame / at the next burst)
+                        ep_start(conn, video, d["mode"], d.get("play"), d.get("wind", 0), str(dest),
+                                 {"side": bake_side(dest), "t2": bake_side(dest).get("t2", 0.0)} if kind == "bake" else None, d.get("ease"))
+                        engine_publish()
+                        continue
                     vp_ipc(conn, "script-message", "swap", str(dest), *(["baked", bursts_arg(bake_side(dest)), str(bake_side(dest).get("cycle_from", 0)), str(bake_side(dest).get("tag", "")),
                                                                          str(vp_dir() / (conn + ".station"))] if kind == "bake" else []))
                     d["file"] = str(dest)
@@ -3959,6 +3976,59 @@ def vp_read(f):
         return d if isinstance(d, dict) and isinstance(d.get("pid"), int) else None
     except (OSError, ValueError):
         return None
+
+
+def vp_live(d):
+    """Is this player record live: an mpvpaper that runs, or (wallpaper_backend "engine") an engine record (the engine
+    plays it whenever it runs; it is not a process of its own)."""
+    if not d:
+        return False
+    if d.get("engine") is True:
+        return wallpaper_backend() == "engine"
+    return vp_alive(d.get("pid", -1))
+
+
+# ---- wallpaper engine (wallpaper_backend "engine", config/quickshell/engine.qml): the players are records, not processes ----
+# ep_start writes theme-video/<conn>.json like vp_start (same keys, "pid": 0, "engine": true) plus what the engine needs
+# to play it: file (the monitor's optimized / baked copy when it exists, else the original), mode, bursts (s: where each
+# baked replay burst starts, then the file's end), cyc, tag, station (the burst index file, winddown.lua's format), stop
+# (s: an unbaked play-once clip pauses there: play + wind x WIND_AVG or the black-tail hold; no runtime speed ramp).
+# engine_publish() collects every engine record into theme-video/engine/players.json {"version": 1, "players": {conn:
+# record}} (the one file the engine watches: inotify, ~1 ms; an IPC poke would be slower) after every change.
+def engine_dir():
+    d = vp_dir() / "engine"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def ep_start(conn, video, mode, play=None, wind=0, src=None, baked=None, ease=None):
+    plan = video_plan(video, play, wind) if mode == "once" else None
+    side = baked.get("side", {}) if baked else {}
+    bursts = [float(x) for x in bursts_arg(side).split("/") if x] if side.get("bursts") else []
+    stop = None
+    if mode == "once" and not baked:
+        stop = plan[2] if plan else video_hold(video)
+    station = vp_dir() / f"{conn}.station"
+    if bursts:
+        try:   # a new bake starts with the first play (as vp_start: the station of another file is dropped)
+            if station.read_text().strip().rpartition(":")[0] != side.get("tag", ""):
+                station.unlink()
+        except OSError:
+            pass
+    rec = {"pid": 0, "engine": True, "video": video, "mode": mode, "play": play, "wind": wind, "file": src or video,
+           "baked": bool(baked), "t2": baked.get("t2", 0.0) if baked else 0.0, "ease": ease, "bursts": bursts,
+           "cyc": int(side.get("cycle_from", 0) or 0), "tag": side.get("tag", ""), "station": str(station), "stop": stop}
+    write_atomic(vp_dir() / f"{conn}.json", json.dumps(rec))
+
+
+def engine_publish():
+    """theme-video/engine/players.json from the engine records (written only when its content changes)."""
+    players = {}
+    for f in sorted(vp_dir().glob("*.json")):
+        d = vp_read(f)
+        if d and d.get("engine") is True and re.fullmatch(CONN_RE, f.stem):
+            players[f.stem] = {k: v for k, v in d.items() if k not in ("pid", "engine")}
+    write_atomic(engine_dir() / "players.json", json.dumps({"version": 1, "players": players}, indent=1) + "\n")
 
 
 def vp_stop(*files):
@@ -4121,10 +4191,13 @@ def video_sync(start=True, force=False, only=None, wait=False, kick=True):
             d = vp_read(f) or {}
             if only and conn != only:
                 continue
-            if force or conn not in want or not vp_alive(d.get("pid", -1)) or (d.get("video"), d.get("mode"), d.get("play"), d.get("wind", 0), d.get("ease")) != want[conn]:
+            if force or conn not in want or not vp_live(d) or (d.get("video"), d.get("mode"), d.get("play"), d.get("wind", 0), d.get("ease")) != want[conn]:
                 stop.append(f)
         vp_stop(*stop)
+        engine = wallpaper_backend() == "engine"
         if not start or not want:
+            if engine or stop:
+                engine_publish()
             return
         if wait and wallpaper_backend() == "hyprpaper":   # at login: hyprpaper first, so the video layer maps above it
             for _ in range(60):
@@ -4132,11 +4205,11 @@ def video_sync(start=True, force=False, only=None, wait=False, kick=True):
                     break
                 time.sleep(0.25)
         for conn, (video, mode, play, wind, ease) in want.items():
-            if (only and conn != only) or not shutil.which("mpvpaper"):
+            if (only and conn != only) or not (engine or shutil.which("mpvpaper")):
                 continue
             f = vp_dir() / f"{conn}.json"
             d = vp_read(f)
-            if not (d and vp_alive(d["pid"])):
+            if not vp_live(d):
                 mon = next((m for m in mons if m["name"] == conn), None)
                 src = baked = None
                 if st_opt:
@@ -4148,7 +4221,9 @@ def video_sync(start=True, force=False, only=None, wait=False, kick=True):
                     continue
                 if not st_opt and not src and not hwdec_ok(video):
                     print(f"theme: warning: {conn}: {Path(video).name} cannot be decoded in hardware and Optimize is off: playing it in software (high CPU)", file=sys.stderr, flush=True)
-                vp_start(conn, video, mode, play, wind, str(src) if src else None, baked[1] if baked else None, ease)
+                (ep_start if engine else vp_start)(conn, video, mode, play, wind, str(src) if src else None, baked[1] if baked else None, ease)
+        if engine or stop:
+            engine_publish()
     if kick and start and want and st_opt and (not only or waiting):
         video_optimize_kick()
 
@@ -4189,8 +4264,9 @@ def video_command(args):
         print(load_wp_state()["optimize_speed"])
     elif sub == "stop":
         for f in vp_dir().glob("*.json"):
-            if not only or f.stem == only:
+            if (not only or f.stem == only) and f.name != "optimize.json":
                 vp_stop(f)
+        engine_publish()
     elif sub == "loopinfo":   # <video> <play|full> <wind> [ease] [monitor key|connector]: how its replay works there (cached searches; the Settings read-only line)
         v = os.path.expanduser(rest[0]) if rest else ""
         pl = None if len(rest) < 2 or rest[1] == "full" else rest[1]
@@ -4214,6 +4290,9 @@ def video_command(args):
             if f.name == "optimize.json":
                 continue
             d = vp_read(f) or {}
+            if d.get("engine"):
+                print(f"{f.stem}: engine record ({'live' if vp_live(d) else 'backend is not engine'}) {d.get('mode')} {d.get('video')} -> {d.get('file')}")
+                continue
             print(f"{f.stem}: pid {d.get('pid')} {'alive' if vp_alive(d.get('pid', -1)) else 'dead'} {d.get('mode')} {d.get('video')}")
         opt_reap_stale()
         rp = opt_runner_pid()
@@ -4224,6 +4303,73 @@ def video_command(args):
         print(f"optimize runner: {'pid ' + str(rp) + ' alive' if rp else 'not running'}, state {ost.get('state', '?')}" + (f" {ost.get('pct')} %" if rp else ""))
     else:
         sys.exit("theme: video start|stop|restart|sync [key] | replay <connector> | optimize [on|off] | thumb <file> | thumbs <file>... | status")
+
+
+def engine_command(args):
+    """wallpaper-engine status | start | restart | stop | <IPC function> [args]: the wallpaper engine (config/quickshell/engine.qml,
+    supervised by hypr/scripts/start-wallpaper-engine.sh). restart = kill the engine by pid (the supervisor starts it again
+    in ~1 s), or start the supervisor when none runs; stop = stop the supervisor (and so the engine). Anything else is an
+    IPC call through quickshell/bin/engine-ipc (pause, resume, reload, replay <connector>, form, poke, ...)."""
+    import signal
+    sub, rest = (args[0] if args else "status"), args[1:]
+    d = Path(os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/theme-{os.getuid()}") / "wallpaper-engine"
+    ipc = ROOT.parent / "quickshell" / "bin" / "engine-ipc"
+    sup = ROOT.parent / "hypr" / "scripts" / "start-wallpaper-engine.sh"
+
+    def pid_of(name, needle):
+        try:
+            pid = int((d / name).read_text().strip())
+            return pid if needle in Path(f"/proc/{pid}/cmdline").read_bytes() else 0
+        except (OSError, ValueError):
+            return 0
+
+    def call(*a):
+        r = subprocess.run([str(ipc), *a], capture_output=True, text=True, timeout=5)
+        return r.stdout.strip() if r.returncode == 0 else None
+
+    eng, svp = pid_of("pid", b"engine.qml"), pid_of("supervisor.pid", b"start-wallpaper-engine")
+    if sub == "status":
+        print(f"backend {wallpaper_backend()}; supervisor {'pid ' + str(svp) if svp else 'not running'}; engine {'pid ' + str(eng) if eng else 'not running'}")
+        for f in sorted(vp_dir().glob("*.json")):
+            rec = vp_read(f) or {}
+            if rec.get("engine"):
+                print(f"  record {f.stem}: {rec.get('mode')} {rec.get('file')}" + (f" ({len(rec.get('bursts') or []) - 1} bursts)" if rec.get("bursts") else ""))
+        out = call("status") if eng else None
+        if out:
+            try:
+                print(json.dumps(json.loads(out), indent=1))
+            except ValueError:
+                print(out)
+        return
+    if sub in ("start", "restart"):
+        if wallpaper_backend() != "engine":
+            sys.exit("theme: wallpaper_backend is not \"engine\" (theme.local.toml [settings]); the engine would show nothing")
+        if svp and eng and sub == "restart":
+            os.kill(eng, signal.SIGTERM)
+            for _ in range(60):   # the supervisor starts a new one ~0.3 s after the old one is gone
+                time.sleep(0.05)
+                new = pid_of("pid", b"engine.qml")
+                if new and new != eng:
+                    print(f"engine restarted: pid {new}")
+                    return
+            print("engine did not come back (see $XDG_RUNTIME_DIR/wallpaper-engine/engine.log)", file=sys.stderr)
+            return 1
+        if not svp:
+            if eng:   # an engine without its supervisor (started by hand): replace it
+                os.kill(eng, signal.SIGTERM)
+            subprocess.Popen([str(sup)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            print("supervisor started")
+        return
+    if sub == "stop":
+        for pid in (svp, eng):
+            if pid:
+                os.kill(pid, signal.SIGTERM)
+        return
+    out = call(sub, *rest)
+    if out is None:
+        sys.exit("theme: the wallpaper engine is not running (or did not answer)")
+    if out:
+        print(out)
 
 
 # ---- light mode: bar text straight on the wallpaper ----
@@ -6063,9 +6209,11 @@ def main(argv):
     args = list(argv[2:])
     if cmd == "video":
         return video_command(args)
-    if cmd == "wallpaper-backend":   # quickshell | hyprpaper ([settings] wallpaper_backend; scripts/start-hyprpaper.sh)
+    if cmd == "wallpaper-backend":   # quickshell | hyprpaper | engine ([settings] wallpaper_backend; scripts/start-hyprpaper.sh)
         print(wallpaper_backend())
         return
+    if cmd == "wallpaper-engine":   # status | start | restart | stop | <engine IPC function> [args] (backend "engine")
+        return engine_command(args)
     if cmd == "default":
         return default_command()
     if cmd == "seed":

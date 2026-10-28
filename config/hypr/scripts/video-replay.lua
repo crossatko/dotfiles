@@ -20,9 +20,24 @@ do
 	rawset(_G, "__video_replay_sub", nil)
 end
 
+-- wallpaper_backend "engine" (theme.toml): the wallpaper engine replays its clips itself (config/quickshell/engine.qml);
+-- out/wallpaper.json says which backend is active (a few hundred bytes, read per event: a backend switch needs no reload)
+local function engine_backend()
+	local ok, yes = pcall(function()
+		local f = io.open((os.getenv("HOME") or "") .. "/.config/theme/out/wallpaper.json", "r")
+		if not f then
+			return false
+		end
+		local head = f:read(256) or ""
+		f:close()
+		return head:find('"backend": "engine"', 1, true) ~= nil
+	end)
+	return ok and yes
+end
+
 local function on_active(ws)
 	local ok, err = pcall(function()
-		if ws == nil or ws.id == nil or ws.monitor == nil then
+		if ws == nil or ws.id == nil or ws.monitor == nil or engine_backend() then
 			return
 		end
 		local name = ws.name
