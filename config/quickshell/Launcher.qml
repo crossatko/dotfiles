@@ -707,6 +707,7 @@ ModalMenu {
         // the selection is one marker gliding between rows (GlideHighlight), not a fill switching row by row: the
         // selected row's accent fill and outline
         GlideHighlight {
+            glide: false   // arrow keys move the tint instantly
             visible: !lc.actionsOpen && lc.results.length > 0 && lc.sel >= lc.first && lc.sel < lc.first + lc.numResults
             want: Qt.rect(0, (lc.sel - lc.first) * (lc.rowH + list.gap), list.width - list.scrollInset, lc.rowH)
             radius: Theme.radiusModal
@@ -715,6 +716,7 @@ ModalMenu {
             border.color: Theme.accentEdge
         }
         GlideHighlight {
+            glide: false   // arrow keys move the tint instantly
             visible: lc.actionsOpen && lc.actions.length > 0
             want: Qt.rect(0, lc.asel * (lc.rowH + list.gap), list.width, lc.rowH)
             radius: Theme.radiusModal
