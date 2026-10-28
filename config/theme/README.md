@@ -155,6 +155,8 @@ players. Library precompute: 73 files in 2.6 min wall, ~18 CPU-min at nice 19. `
   Until the shell is up (login, shell restart) Hyprland's background colour shows (nested: ~350 ms on a restart).
 * **`hyprpaper`**: the old path (live set, worker listactive check + restart, players wait for it at login). Switching back:
   set it, `theme.py render`, start hyprpaper (`scripts/start-hyprpaper.sh` or a re-login); the shell then draws nothing.
+* **`engine`**: the wallpaper engine (`config/quickshell/engine.qml`, its own Quickshell instance) draws images, videos and the
+  desktop clock; theme.py writes the same files but no mpvpaper / hyprpaper. See "Wallpaper engine" below.
 * hyprpaper stays in `packages/pacman.txt` as the optional fallback. WebP wallpapers in the shell need `qt6-imageformats`.
 
 Measured in a nested Hyprland (fork and stock; 1600x900 @1.25 + 720x1280 portrait; 4K JPEG; click = detached `theme.py apply`):
@@ -165,6 +167,117 @@ Measured in a nested Hyprland (fork and stock; 1600x900 @1.25 + 720x1280 portrai
 | cover crop vs hyprpaper (PSNR) | - | 34-53 dB, aligned (resampling differs: Qt downsamples at decode, hyprpaper on the GPU); 1:1 images pixel-exact at 1.25 and rotated |
 | memory, 4K image on 2 x 1440p | hyprpaper 132 MB RSS | shell +57-63 MB RSS |
 | idle after the fade | - | 0 % CPU (one static texture) |
+
+## Wallpaper engine (`wallpaper_backend = "engine"`)
+A second, rarely restarted Quickshell instance owns everything under the windows: the wallpaper image, video wallpapers
+(QtMultimedia instead of mpvpaper) and the desktop clock. The main shell then draws neither (`Wallpaper.engine`:
+`WallpaperLayer` off, `DeskClock` off; `Lock` talks to the engine instead).
+* **Files:** `config/quickshell/engine.qml` (root: player records, pause logic, workspace bursts, lock protocol, IPC),
+  `EngineWindow.qml` (one background-layer window per monitor, namespace `qs-wallpaper`: `paper` = `WallpaperView` + `EngineVideo`,
+  the clock = `DeskClockView` with `backdrop: paper`), `EngineVideo.qml` (two players, cross-fade, bursts, station),
+  `EngineVideoSlot.qml` (one MediaPlayer + VideoOutput, stretch / park / hold), `bin/engine-ipc` (IPC client),
+  `bin/engine-bench` (real-session benchmark + switch check), `hypr/scripts/start-wallpaper-engine.sh` (supervisor, autostart).
+* **Isolation:** `quickshell -p ~/.config/quickshell/engine.qml` shares this directory's components but sets `settings.watchFiles:
+  false`: editing the shell's QML hot-reloads the main shell only (nested: the engine's video kept playing through an edit of
+  `DeskClockView.qml` + `Bar.qml`). The engine picks up QML changes only on `theme.py wallpaper-engine restart` (or IPC `reload`).
+* **Players:** with this backend theme.py never starts mpvpaper / hyprpaper. `video_sync` writes the same per-connector state
+  file as for mpvpaper but as a RECORD (`ep_start`: `"engine": true`, `pid` 0, `file` = the optimized / baked copy when it
+  exists else the original, `bursts` (s, where each baked burst starts, then the file's end), `cyc`, `tag`, `station`, `stop`
+  (unbaked play-once: play + wind x WIND_AVG or the black-tail hold)) and `engine_publish()` gathers them into
+  `$XDG_RUNTIME_DIR/theme-video/engine/players.json`, which the engine watches (inotify; click -> first visible change
+  84-121 ms nested, apply foreground included; an IPC poke would only be slower). Baking / optimizing run as before;
+  a finished copy is a new record and the engine swaps itself (cross-fade, on the held frame or after the running burst).
+* **Video:** loop = MediaPlayer loops (gapless in the decoder). Play-once = the same file looping too, with stretches:
+  baked first play 0..bursts[0], burst i = bursts[i]..bursts[i+1] (winddown.lua's semantics; `cyc` after the last),
+  unbaked 0..stop (a plain pause, no speed ramp). The backend reports the position every ~50 ms only, so frames are counted
+  between reports and the stretch pauses on its exact last frame (the backend shows ONE more frame after `pause()`: it
+  pauses on the second-to-last). A single-pass player at the file's end went EMPTY (EndOfMedia: the still showed
+  through); looping avoids it. Nested, barcode clips: 60 fps held frames exact (179, 419, 539, 659, 839 = the frame before
+  each burst start / the file's last frame), 30 fps exact 4 of 5 (one held a frame early); no black / background frame at
+  bursts, the end or clip swaps.
+  Workspace bursts: Quickshell.Hyprland `monitor.activeWorkspace` per monitor, compared by workspace NAME (Quickshell
+  leaves the id at -1 for a workspace it first saw through a window: an id test missed every switch on the live
+  session), special workspaces ignored, ignored while a burst plays (as replay.py); `video-replay.lua` returns early for
+  this backend (it reads `out/wallpaper.json`). The unlock wakes it the same way: `lockRelease` (sent when the ring has
+  revealed the desktop) starts one burst per play-once monitor (nested: with the unlock, < 30 ms); a burst the lock
+  paused continues from the snapshot's frame instead (no second burst).
+  A new clip loads in the hidden player (drawn at opacity 0.004: an undrawn VideoOutput gets no frames) and fades in over
+  the old one / the still once it has a frame (`Motion.emphasisMs`); only during a fade do two clips decode.
+* **Pause** (no decode, position kept): the lock (below), a fullscreen window on that monitor
+  (`activeWorkspace.hasFullscreen`), DPMS off (`hyprctl monitors` every 3 s while a clip plays: no event), IPC `pause`.
+* **Persistence:** the burst index in `theme-video/<conn>.station` (winddown.lua's format; bin/lock-video reads it), each
+  clip's position in `$XDG_STATE_HOME/quickshell/wallpaper-engine.json` (burst start / end, pause, every 10 s while a loop
+  plays) and `$XDG_RUNTIME_DIR/wallpaper-engine/positions.json` (every second; preferred at start): a restart parks /
+  resumes there. **Crash:** the supervisor starts it again 0.1 s after it exits (Quickshell's own crash handler is off,
+  `QS_DISABLE_CRASH_HANDLER=1`: it relaunched a crashed engine as a second, detached process next to the restarted one).
+  Nested, SIGKILL: Hyprland's background showed for ~0.36 s, then the still, the clip ~0.8 s after the kill at the
+  position it had (+0.3 s); SIGSEGV: the same after ~0.9 s of core dump. Quick repeated exits back off (2-30 s); the
+  supervisor stops when the backend is no longer `engine`.
+  **Hyprland instance:** Quickshell reads `HYPRLAND_INSTANCE_SIGNATURE` once; a stale one (an old shell's env after a
+  session restart) means no workspace events. The supervisor passes the RUNNING instance's signature and Wayland socket on
+  every (re)start (the caller's when alive, else the `$XDG_RUNTIME_DIR/hypr/*/hyprland.lock` whose pid is a live
+  Hyprland; none = it exits), and the engine exits (-> restart) when its instance's lock / pid disappears (checked every
+  30 s). `status` shows `hyprland: {signature, instanceAlive, events, lastEventAgoMs}` and per screen `workspace`,
+  `wsChanges`, `wsBursts`, `unlockBursts`, `lastWsAgoMs`.
+* **Clock:** `DeskClockView` with `backdrop` = the `paper` item of the same window: the glass samples the live wallpaper
+  (a `ShaderEffectSource` of `paper` limited to the clock's area), so the old hidden copies (stage, `DeskClockVideo` /
+  `DeskClockLoop` mpv-socket sync, hand-over snapshot) stay idle; every fade / burst under the clock is the same item the
+  desktop shows. Check (IPC `debugGrab <prefix>`: the glass's texture and the same rect of `paper` in one grab pass): 45 dB
+  during a burst, vs 15-16 dB between consecutive grabs = the same frame. Prefs, monitors, reveal, morph, seconds, adapt:
+  unchanged (the engine has its own `DeskClockPrefs` reading the same JSON; FileView watches work across processes).
+* **Lock** (`Lock.qml`, `engineMode`; every call through `bin/engine-ipc`, ~12 ms, 150 ms cap, exit 3 at once without an
+  engine): `lockPrepare <gen> <dir>` before the snapshot (clips paused: the snapshot is the frame the desktop stays on;
+  each clock's clean rect written to `<dir>/clean-<conn>-<gen>.png`, renamed when complete, "clean <conn>" once there) ->
+  `lockCover "<conns>"` for a clock covered by a window (bin/lock-clock-cover, rects from the engine's
+  `$XDG_RUNTIME_DIR/wallpaper-engine/clock.json`) -> `lockHide` once secure (the clock is never drawn under the lock, so the
+  buffer Hyprland keeps has none) -> `lockRelease` after the unlock (clips continue, clocks form). A lock whose release never
+  came (shell died) is released when `<dir>/held` disappears (checked every 2 s). Nested: lock-now -> secure 97-216 ms
+  (was ~135), ring opens onto the clean rect, no old clock after the unlock (6 ms sampling), a burst paused mid-way continues
+  from the snapshot's frame.
+* **IPC** (`quickshell ipc --pid <pid> call engine ...`, or `bin/engine-ipc ...`, or `theme.py wallpaper-engine ...`):
+  `status` (JSON per screen: still, video, mode, pos, playing, idx, held, fullscreen, dpmsOff, clock, ink), `reload`, `poke`,
+  `pause`, `resume`, `replay <conn>`, `form`, `lockPrepare`, `lockCover`, `lockHide`, `lockRelease`, `debugGrab <prefix>`.
+  `theme.py wallpaper-engine status | start | restart | stop | <ipc function>`. Test hooks: `QS_ENGINE_ALWAYS=1`,
+  `QS_ENGINE_PLAYERS=<file>`, `QS_ENGINE_BENCH=<connector>` (overlay, no clock, writes nothing), `QS_ENGINE_DEBUG=1`
+  (positions / frames of every stretch).
+* **Adding something to the engine:** a per-monitor visual goes into `EngineWindow` (above `paper` if it should sample the
+  wallpaper: `backdrop`-style, sample `paper` with a `ShaderEffectSource`; never a copy of the wallpaper), engine-wide
+  state / IPC into `engine.qml`; reuse shell components by type (same directory). New types need a qmldir entry; the
+  engine needs `theme.py wallpaper-engine restart` (no hot reload), the main shell a restart only if it uses them.
+
+**Switch** (per machine): `wallpaper_backend = "engine"` in `theme.local.toml [settings]`, then `theme.py wallpaper-engine start`
+(supervisor + engine; it shows nothing until the next step), `theme.py render` (wallpaper.json says "engine": the shell's layer
+and desktop clock hand over to the engine), `theme.py video restart` (mpvpaper players stop, records are written). Check with
+`theme.py wallpaper-engine status`; `config/quickshell/bin/engine-bench` compares both players on a monitor first.
+At login `hyprland/autostart.lua` runs `start-wallpaper-engine.sh` (exits at once for the other backends).
+**Rollback:** `wallpaper_backend = "quickshell"` (or remove the line), `theme.py render`, `theme.py video restart`
+(mpvpaper starts again), `theme.py wallpaper-engine stop`.
+
+Measured (nested Hyprland, 1259x677 + 900x1600 portrait @1.25, 2560x1440 HEVC 25 Mbit/s 60 fps loop, VA-API; per process):
+
+| | mpvpaper | engine |
+|---|---|---|
+| CPU, 1 / 2 monitors playing | 2.9 % / 5.2 % (2 processes) | 3.8 % / 5.4 % |
+| video decode (VCN) per stream / gfx | 13.9 % / 2.3 % | 14.0 % / 0.7 % |
+| memory, 1 stream: RSS / private | 229 / 85 MB | 457-583 / 285-390 MB |
+| memory, 2 streams: RSS / private | 2 x 215-229 / 2 x 85 MB | 787-807 / 620-640 MB, flat over 16 min |
+| image only / paused (lock, fullscreen, DPMS) | - | 0 % CPU, 0 decode (RSS 336 MB image only) |
+| clock with seconds (2 monitors) | (old clock: ~1.1 % per monitor) | +5.3 % CPU, nested Hyprland +2.7 % (full-window redraw per morph frame) |
+| start -> first video frame | 45-230 ms | 520-555 ms (the still maps first) |
+
+| main shell + players, clock on, loop video on both | shell 877 / 694 MB (its clock copies decode both clips AGAIN: 4 decodes) + 2 x 212 / 87 MB | shell 329 / 171 MB + engine ~800 / 620 MB (2 decodes) |
+
+Caveats: the engine process itself costs more memory than mpvpaper (Qt's FFmpeg frame pools: ~+200 MB private per 1440p
+stream, plus ~200 MB for a Qt Quick process), but the main shell drops its wallpaper layer and clock copies: with the clock on
+the total is lower (private ~790 vs ~870 MB) and half the video decodes. A clock animation redraws the whole wallpaper
+window (Qt Quick has no partial updates; the compositor recomposites the output): seconds + morph cost more than with the old
+separate clock window. 10-bit originals without an optimized copy play without dithering (mpv dithers; the optimized copies
+are 8-bit, made by ffmpeg, the same file for both players). DPMS pause, real 360 Hz pacing, HDR, real login / autostart: not
+verified (nested outputs ignore DPMS; run `engine-bench` on the real monitor).
+After the user's soak these become removable (keep them while `quickshell` / `hyprpaper` stay selectable): `mpvpaper`,
+`theme/mpv/winddown.lua` + `replay.py`, `hypr/scripts/video-replay.lua`, `quickshell/bin/lock-desktop-video`,
+`DeskClockVideo.qml` / `DeskClockLoop.qml` + `bin/lock-video --desk`, `WallpaperLayer.qml`, DeskClock's stage / hand-over
+snapshot, `vp_start` / `vp_ipc` / `vp_stop` and the mpv options in theme.py.
 
 ## What follows the wallpaper, and how it reloads
 

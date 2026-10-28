@@ -124,9 +124,14 @@ Fade colours with `Theme.alpha(sameColour, 0)`, never "transparent" (lerps throu
 | `Toggle` / `Slider` / `Meter` | the real state is what they show; a change is a signal, never a local flip | `busy` pulses; the knob and the slider handle grow a `GlassLens`; every slider has notches (below) |
 | `DropSelect` | the one dropdown (`DevicePicker`, `BtProfilePicker`, `CalPicker` wrap it) | open head = itemActive + accentEdge |
 | `Segmented` / `ResetBtn` | a joined row of equal options (`GlideHighlight` marks the choice); the per-key undo at the end of a Settings row, dim at the default | `KeysReset` in MotionAdvanced wraps ResetBtn for several keys |
-| `StatusDot` / `Pill` / `InfoTip` | 8 px state dot (semantic tint, `pulse`), a caption badge, a hover tooltip glyph | the InfoTip is where a technical note goes |
+| `StatusDot` / `Pill` / `InfoTip` / `TipBubble` | 8 px state dot (semantic tint, `pulse`), a caption badge, a hover tooltip glyph, the hover bubble itself | the InfoTip is where a technical note goes; `TipBubble` (as wide as its wrapped text) also shows a cut `FitLabel` in full |
 | `PopupHost` | the L2 card, `pad` padding, width from `Popups.panels` | content keeps its target size while the card morphs |
-| `MonitorChooser` + `MonitorChip` | a strip of L1 chips (wallpaper still, model / connector, `PrimaryTag`), gliding accent marker, optional link buttons between neighbours, trailing actions | the only monitor picker of a Settings page; reads / writes `Monitors.selected` |
+| `MediaPanel` / `LockMedia` + `MediaArt` / `MediaSeek` / `MediaTransport` / `MediaStats` / `MediaBadge` / `LivePill` / `FitLabel` | art (cover, channel picture or the source's brand mark), title (fontLead), subtitle (fgDim), category (gamepad badge), stats row (LIVE pill, viewers `user` + 12.3K, stream time `clock` + H:MM:SS; badges = iconSm glyph + caption, fgDim, no box; caption muted last), seek bar (MPRIS only), transport, volume `LevelRow` (a source with its own volume) | any `MediaSources` source; a control the source lacks is not drawn (no dead buttons); several sources = a `Segmented` switcher above the card, active first; the lock card shows only play / pause / previous / next. Long text never overflows: `FitLabel` wraps to 2 lines then elides (popup: full text in a `TipBubble` on hover), badges elide, the stats wrap on a narrow card |
+| `TvSource` + `MediaVolumeSteps` | the TV card as a media source (a Send to TV session, or what the TV plays by itself): cover from HA else tv glyph art (iconFont), a `tv` badge with the TV's name, a read-only seek bar when the TV reports a length, transport prev / seek back / play / seek forward / next / stop / disconnect (`linkOff`, sent sessions only), volume = a level slider (Cast) or icon steps mute / down / up | a sent session is first in the popup, chip and lock card while it lasts; an auto-detected one follows the pick rule (a playing local player wins); lock: play / pause only; local sources stay in the switcher; nothing at all while the TV is off / idle / on its home screen |
+| `TvButton` | Send to TV (TvCast): one icon `Btn` at the media card's transport row end, outside the row's layout (it fades in / out, nothing moves); the glyph IS the progress: `tv` -> `power` (waking) -> `circlePlay` (opening; both pulse with `busyPulseMs`, still when motion is off) -> `check` -> `warning` (red) -> `tv`; hover = `TipBubble` ("Send to <TV>", the error) | shown only when it would work (no disabled state); never on the lock card; Settings > TV picks the target: one entry per physical TV (icon, device name, state dot; never a backend word) |
+| `MonitorSection` + `MonitorChip` (+ `MonitorThumb`, `MonitorStateCell`, `MonitorLink`, `MonitorAction`, `LabelSwitch`) | the monitor section: equal split chips (wallpaper still, name over connector, `PrimaryTag` dot, badge; the state cell at the end) on a constant 28 px seam, gliding accent marker, link bridges on the seams, "All" tile + icon actions at the row's end | the only monitor selector and per-monitor switch of Settings; see "Monitor section" below |
+| `MonitorLink` | the bridge on a seam: a plain chain glyph (no pill, no border), accent with a short accent connector line on both sides while linked, a faint fg glyph alone while not; the whole seam is the hit area | links two neighbouring monitors (Wallpaper, Bar); never a slashed glyph or a disabled look for "not linked" |
+| `MonitorStateCell` | a square cell: eye (accent) = on here, eye-slash (muted) = off, lock = cannot change; hairline on its left, hover wash + tooltip | the per-monitor switch everywhere (chips, "All", the Monitors card's `LabelSwitch` tiles); never a `Toggle` knob for a per-monitor on / off |
 
 States: hover = the item's hover fill + `HoverGlow`; press = `PressFeedback`; disabled = `disabledOpacity`; a dimmed chip =
 `dimOpacity`; busy = the pulse tokens; focused / asking = `accentEdge`; selected / on = `accentFill`.
@@ -144,6 +149,8 @@ States: hover = the item's hover fill + `HoverGlow`; press = `PressFeedback`; di
   `brightnessNotches` 80 / 100 %, `centreNotches` 50 %. `PrefSlider` takes the store default plus `extras` (key units,
   e.g. `Presets.lockSize.map(p => p.v)`), `GlassOptRow` the option default (a surface profile: the global value via `mark`).
   A row whose reset means "unset the key" sets `resetToNotch: false` and handles `resetRequested()`.
+- Home Assistant controls are optimistic: a click shows its expected result in the same frame (predicted overlay in `HomeAssistant.byId`);
+  the only sign of a slow server is the Toggle knob pulse after 1.2 s, a failure rolls back and shows the existing error strip.
 
 ## 6. Settings
 
@@ -152,11 +159,50 @@ Pages: Look & feel (Colour mode; Glass / Motion / Shape presets with previews an
 first (`PresetCards` = visual cards with a live preview and a tick, `ChoiceRow` = `Segmented` + `CustomTag` + a hint of five
 words at most + `InfoTip`), then one `AdvancedFold` ("Customise…", `detail` = a short badge) with every detailed row
 (`PrefSlider` / `PrefToggle` / `PrefSwitch` / `GlassOptRow`), then `PageReset`.
-Monitors are always in `Monitors.ordered` order (primary first) with a `PrimaryTag`. A page that edits one monitor's settings picks it with the
-one `MonitorChooser` (chips, the shared `Monitors.selected`, hidden with one monitor; links / an "All" chip / a status line / an accent mark as
-options); the Monitors page selects on its `MonitorPicker` map, same selection. Everything per monitor that is on / off (primary, bar, lock clock,
-desktop clock) lives only on the Monitors page (one `MonitorCard` with `LabelSwitch` tiles for the selected monitor); feature pages keep only
-their own settings.
+Monitors are always in `Monitors.ordered` order (primary first) with a `PrimaryTag`. Every page with per-monitor settings starts with
+the monitor strip (below); the Monitors page selects on its `MonitorPicker` map (same selection, same `PrimaryTag`, `MonitorThumb` in the card
+head) and lists all of one monitor's switches in a `MonitorCard` (`LabelSwitch` tiles). Lock clock = lock glyph, desktop clock = desktop glyph
+(`Icons.desktop`) wherever both appear. A row a per-monitor state dims shows why (`OffMark`: an eye-slash "Off" on its section head). A button
+with a glyph = `Btn.glyph`, never the glyph inside `text` (the text font has none); an icon-only button names itself with `Btn.tip`.
+
+**Monitor section** (`MonitorSection`): one unit, one layout on every page; the pages only turn options on. Two channels, never
+mixed: the FILL says which monitor the page edits (the gliding `accentFill` marker, as `Segmented`), the GLYPH says on / off (accent eye /
+muted eye-slash, as a bar chip's icon). A third device, the BRIDGE, says "these two are one" (`MonitorLink`). No knobs, no words beyond
+the names and "All"; nothing above it, nothing under it: the page title, the unit, then the first section head (`topMargin` 6).
+- Place: the page's first row (Wallpaper, Bar, Lock screen, Desktop clock; the smart gaps row of Shape), full width, chips `rowH` (44 px)
+  tall, all the same width (the widest name, capped at 240) on a constant 28 px seam, so a monitor's chip sits at the same place on
+  every page whether or not the page links; "All" and the page actions at the row's right end. A page never repeats the unit's state in
+  words (no "linked" in a section head).
+- Chip anatomy (`MonitorChip`, a split chip): BODY = wallpaper still in the monitor's aspect (`MonitorThumb`, 26 px), name (model, else
+  connector) over the connector, `PrimaryTag` dot, optional accent badge (`markFor`: the palette source); STATE CELL (`MonitorStateCell`) at
+  the end behind a hairline on switchable pages. Padding: `padSm` from the chip edge to the still and from the last body item to the
+  hairline; the cell is a `rowH` square with its glyph centred (the "All" tile the same: `padSm` around glyph + label, then the cell). A cut name shows in full on hover. Narrow window: "All" and the actions move under the
+  chips; chips that no longer fit compact (still + a few letters + cell) wrap onto a second row (a row break has no seam).
+- Click the body = the monitor this page edits: the marker glides there; shared across pages (`Monitors.selected`) while Settings is open.
+- `switchable` (a per-monitor on / off: bar, lock clock, desktop clock): the cell is the switch (click = `switched(screen, want)` through the
+  feature's single setter, never flipped locally); the tooltip says what it does ("Hide bar on X"); an off monitor's body dims
+  (`disabledOpacity`) but it stays selectable; a cell that cannot change shows a lock (the last bar) with the reason in its tooltip. "All"
+  = a `LabelSwitch` tile (feature glyph, "All", the same cell) at the strip's end; `allTip` is its hover note. `glyphOn` / `glyphOff` change
+  the pair for a page whose state is not "shown" (Shape smart gaps: the window glyph). No separate "Show" rows.
+- `linkable` (relations: Wallpaper, Bar): a `MonitorLink` bridge fills the seam between neighbours: a plain chain glyph in the middle
+  (no pill, border or fill); linked = accent glyph with an accent connector line from each chip edge to it (the two read as one), not
+  linked = the glyph alone in faint fg (40 %) that brightens on hover (80 %); the whole seam clicks, the tooltip names the pair ("Link A and B" / "Unlink …"). Chips linked to the
+  picked one get the accent outline without the fill. A pair split by a row break has no seam: both chips show a chain badge after
+  the name instead (state only; widen the window to change it).
+- Actions (`MonitorAction` children: Follow primary, Use for palette, Copy layout from): chip-tall square glyph buttons, name in `tip`, no
+  text (text only where glyphs alone cannot tell two apart: copy from one of several monitors).
+- `selectable: false`: a switch list without selection (Shape smart gaps): the whole chip is the switch, same look (the glyph carries
+  the state, the body dims while off, no fill: fill means selection).
+- Hover on a chip's body: a cut name in full and the word "Primary" for the primary (its dot alone says nothing).
+- One monitor: hidden, except `showSingle` + switchable pages (lock / desktop clock) show that chip with its cell, no tag, no "All".
+- Keyboard: Tab focuses the strip (ring), Left / Right pick, Space / Enter / T toggle the picked chip's cell; Tab reaches "All", the link
+  buttons and the actions (Space / Enter).
+- The same cell is the per-monitor switch on the Monitors page card (`MonitorCard` > `LabelSwitch` tiles), so "eye = shown on this
+  monitor" reads the same everywhere; `OffMark` (eye-slash "Off") on the dimmed sections below is its echo.
+- Adding a per-monitor page: `MonitorSection {}` first (+ `switchable` / `onFor` / `onSwitched` / `allOn` / `onAllSwitched` / `allIcon` if it
+  has an on / off, through the feature's single setters; `switchEnabledFor` / `switchTipFor` for a locked state), read `Monitors.selected`
+  (key via `Appearance.monitorKey`), dim the rows below with `OffMark` on their heads while the picked monitor is off. Never a second
+  monitor list, switch row or `Toggle` for a per-monitor state.
 Presets drive tokens: a preset is a named value set in `Presets.qml`; `<area>Current` reports which set the saved values equal
 (else Custom; nothing is migrated), `apply<Area>()` writes through the stores' own setters. Glass presets feed
 `GlassTuneCtl.effective` (compositor glass, `GlassLens`, glass lettering), Motion presets feed `Motion.*`, Shape presets feed the
@@ -186,5 +232,9 @@ radii and gaps, the Bar look cards feed `bars.json` (Floating / Docked / Transpa
   feature's prefs singleton (`spec` + `defaults` + a readonly accessor, the `LockPrefs` pattern); a primary choice only when it is a
   clear few-way decision with a preview, then also a `Presets.qml` table entry.
 - **Shared UI** that appears twice becomes its own file + qmldir entry (a new type needs a full shell restart).
+- **Something under the windows** (wallpaper backend `engine`): a per-monitor visual goes into `EngineWindow.qml`, above
+  `paper` when it should refract / sample the wallpaper (sample `paper` itself with a `ShaderEffectSource` limited to its
+  rect, as the desktop clock's `backdrop`; never a copy of the wallpaper or a second player); engine-wide state and IPC in
+  `engine.qml`. The engine does not hot-reload: `theme.py wallpaper-engine restart` (config/theme/README.md "Wallpaper engine").
 - **Checking a change:** nested Hyprland (AGENTS.md), screenshots of the user's saved look first, then dark / light, the three
   bar looks, a bright / dark / busy wallpaper, the glass presets and the stock shim; `qmllint` clean against the baseline.

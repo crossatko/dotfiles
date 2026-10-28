@@ -42,7 +42,8 @@ zellij claude-tabs, AeroSpace fork, librepods) live in their own repos, only the
 
 - Plain Arch Linux (CachyOS repos are only an opt-in), **Hyprland with the native Lua config** (`hl.*`), Quickshell (QML) for
   bar/popups/launcher/notifications/Settings/lock screen and the wallpaper image (theme.toml `wallpaper_backend`, default
-  `quickshell`; hyprpaper = optional fallback backend; hyprlock = fallback only, below).
+  `quickshell`; `engine` = the wallpaper engine, a second Quickshell instance for wallpaper + videos + desktop clock;
+  hyprpaper = optional fallback backend; hyprlock = fallback only, below).
 - **Battlestation** (primary desktop): two 2560x1440 monitors (360 Hz OLED + 60 Hz), RX 9070 XT, a living-room 4K TV output for Steam Big Picture/gamescope
   sessions. Runs the user's **Hyprland fork** at `/usr/local/bin/Hyprland` (glass compositing: `solid_glass`, `layer_alpha_ref`, workspace-created-empty fix).
   Corne keyboard with VIA.
@@ -143,6 +144,8 @@ config/aerospace karabiner swiftbar  macOS only
   `hyprctl hyprpaper wallpaper` selector must match the config block's (`desc:<key>` vs connector), else it silently does nothing.
   `steam-tv-dim.lua` / `steam-streaming.lua` still set the TV wallpaper through hyprpaper directly (no effect with the quickshell backend). Video wallpapers (mpvpaper, optimize/bake): see README "Video wallpapers". Play-once without stored
   timing = play 0 / wind 5 / ease 0 (theme.toml); full length is `"play": "full"`.
+  `engine` = `config/quickshell/engine.qml` (README "Wallpaper engine": switch / rollback, IPC, measurements): theme.py writes
+  player RECORDS (`ep_start`, `theme-video/engine/players.json`) instead of starting mpvpaper / hyprpaper; selftest covers it.
 - After theme changes run `selftest.py` and diff a dark render before/after.
 - Wallpaper switch (README "Instant switch"): the foreground only saves the pick and switches hyprpaper / the players (< 100 ms); a detached
   worker (`apply-bg`, latest click wins via `$XDG_RUNTIME_DIR/theme-apply/status.json`) does stills, analysis (per-file cache, `theme.py analyze`
@@ -207,12 +210,14 @@ config/aerospace karabiner swiftbar  macOS only
   (`LockReveal`, `shaders/lockreveal.frag`) closes over it, and after a correct password the ring opens back onto it before
   `locked = false` (`Theme.lockRevealMs`). No snapshot = instant. Caveat: the desktop may have changed while locked (e.g. the video
   wallpaper advanced), so the last transition frame can differ from the real desktop.
-  Settings > Lock screen (`SettingsLock.qml`: Layout / Clock size / Backdrop / Morph presets, every row under Customise…, rows `PrefSlider`/`PrefToggle`/`PrefSwitch`) edits `LockPrefs` (lock.json next to animations.json,
+  Settings > Lock screen (`SettingsLock.qml`, built like the Desktop clock page: monitor section (`MonitorSection` switchable: lock clock per monitor + All, objectNames `monitor-chip-<conn>-switch`, `lock-monitors-all`) > Preview head (eye-slash Off, Replay, Lock now) > `LockPreview` > Layout cards (`LockSketch`: the picked monitor's still with the saved backdrop) > Clock (Size / Seconds / Time / Morph) > Look (Backdrop) > Customise… > PageReset; Layout and Clock dim while the picked monitor has no lock clock) edits `LockPrefs` (lock.json next to animations.json,
   same storage pattern as Motion; `qs ipc call lockprefs ...`): dim (`Theme.lockDim`, blurred backdrop and what the glass refracts; MULTIPLIES by 1 - dim: a black veil
   over the blur and `glasstext.frag` `seen()`. MultiEffect `brightness` subtracts and turned a dark blurred video frame fully black on one
   monitor), blur,
-  clock/dot size, date, 24h, seconds, morph time, clock screens (`hidden` map by `Appearance.monitorKey`, same scheme as the desktop
-  clock, switched on Settings > Monitors; `ipc call lockprefs hideClockOn|showClockOn <key>`; off = no clock/date/playback card there, the dots keep their place), playback
+  clock/dot size, date, 24h, seconds, morph time, clock screens (`clock` bool, default true, + `hidden` map by `Appearance.monitorKey`: the desktop clock's
+  rule `launcher/js/MonitorShown.js` with `clock` as its `enabled`, read via `LockPrefs.clockOn(screen)` / `clockOnKey`, written only via `setClockOn` /
+  `setAllClock` (lock page "Show", Monitors card); files without `clock` read as before; `ipc call lockprefs hideClockOn|showClockOn <key> | clockAll true|false`;
+  off = no clock/date/playback card there, the dots keep their place), playback
   card, clock reveal, snapshot, unlock ring, video bursts; defaults = the stock look. Its preview (`LockPreview`) is
   a real `LockView` with `preview: true` (no input/video/lock, sample playback card) at a virtual 1920x1080, 16:9. Per-monitor stills: `LockWallpapers`. Backdrop chain is
   `bleed` px larger than the screen (no dark blur edges); the video goes in as its own layer (a ShaderEffectSource of the
@@ -228,10 +233,122 @@ config/aerospace karabiner swiftbar  macOS only
   the desktop is really on. Image/loop wallpapers show the still. Test hooks: `QS_LOCK_PAM_DIR`,
   `QS_LOCK_PAM_SERVICE`, `QS_LOCK_WALLPAPER`, `QS_LOCK_VIDEO`, `QS_LOCK_ARGS`, `QS_LOCK_CLOCK` (fixed clock text; several separated by spaces cycle every 3 s), `QS_WALLPAPERS_FILE`. Revert to hyprlock: point
   the two `lock_cmd`s and the bind back at `hyprlock` (`hyprlock.conf` is untouched).
-  Playback card (`LockMedia`, under the dots, only while an MPRIS player exists): the media panel's parts `MediaPick` / `MediaArt` /
-  `MediaSeek` / `MediaTransport` (shared with `MediaPanel`); glass slab = `GlassShape` over a rounded-rect mask, flat card without
+  Playback card (`LockMedia`, under the dots, only while a media source exists: `MediaSources.current`, below): the media panel's parts `MediaArt` /
+  `MediaSeek` / `MediaTransport` / `MediaStats` / `FitLabel` (shared with `MediaPanel`); title 2 lines then elided, artist 1 line, stats wrap
+  onto more lines on a narrow card; only play / pause / previous / next there (never stop / show window / volume); glass slab = `GlassShape` over a rounded-rect mask, flat card without
   `Theme.shellGlass`. Pointer clicks work on the ext-session-lock surface and do not take the password field's focus (nested test: virtual
   pointer + mpv/mpris.so on the nested shell's bus; play/pause/next/previous reached the player, typing went on).
+- **Media sources** (`MediaSources.qml` singleton; bar media chip, `MediaPanel` popup, `LockMedia`): one list of normalized
+  `MediaSource` objects (title / subtitle / caption / category / name / chipText / artUrl / glyph, playing, live, viewers, liveSince,
+  muted, volume, `can*` flags, `command` signal for toggle / previous / next / stop / raise / mute / unmute / volume:<n>). Providers:
+  `MprisSource` (one per MPRIS player, pass-through; `mpris` = the raw player for the seek bar and the chip's brand guess) and
+  `TwitchSource` (twitch-qs-mpv: embedded libmpv has no MPRIS). Pick rule (`active`, the chip): a playing MPRIS player, else Twitch if
+  it plays, else a paused MPRIS player with a title, else Twitch (paused); `current` (cards) adds "any MPRIS player"; `list` =
+  `current` first + the others with a title (popup switcher = `Segmented`, shown with 2+ sources). The TV card (`TvSource`): a
+  sent session wins outright; an auto-detected one ranks after playing MPRIS / Twitch when playing, last when paused.
+  Twitch status file (written by the app; the contract lives in its README "Now-playing status file"): `$XDG_RUNTIME_DIR/twitch-qs-mpv-now.json`,
+  stale after 45 s. v1 = `{channel, playing, title, game, live, updated}`; v2 adds `paused, volume, muted, viewers, startedAt (ms),
+  caps`. A control shows only when its cap is listed (`pause` = play/pause also on the lock card, `mute` / `volume` = the popup's
+  volume row, `stop`, `raise`); no `caps` = a v1 app = stop + show window, popup only. Actions run the app's CLI
+  (`twitch-qs-mpv pause on|off` (explicit, from the file's `paused`), `mute on|off`, `volume <0-100>` (sent at most every 120 ms;
+  the requested value shows for 1.5 s until the file has it), `quit`); show window = hyprctl focus by title `Twitch - `. Picture = the
+  app's cached avatar (`~/.cache/twitch-qs-mpv/avatars/<login>.*`), else the Twitch mark. Chip: channel · category, elided at 460 px;
+  left = popup, other buttons = show window. Popup: title / subtitle `FitLabel` (2 lines then elided, full text in a `TipBubble`
+  on hover), category line (gamepad), `MediaStats` (LIVE pill, viewers user glyph 999 / 1.2K / 45.6K / 1.1M cut not rounded,
+  stream time clock glyph H:MM:SS ticking each second only while visible; caption = Offline / Paused / the player name), volume
+  `LevelRow` for a source with `canVolume`. Add a source: a `MediaSource` subtype filling what it knows + `onCommand`, instantiated
+  in `MediaSources` and added to `active` / `list`. Test hooks: `QS_TWITCH_NOW_FILE`, `QS_TWITCH_CACHE_DIR`, `LAUNCHER_TWITCH_DIR`
+  (stub CLI). Nested-verified: a mock v2 writer + stub CLI (fresh / stale / paused / offline / viewers null / v1 / pause-only, long
+  latin / no-space / CJK / emoji / RTL titles and categories, narrow 284 px lock card, light / dark, glass / stock, per-screen lock
+  clock, pause from popup and lock card) and the real app (scratch copy, libmpv, mock Helix / streamlink) driven from the popup and
+  lock card. Caveats: not run against real Twitch; the password field keeping focus after a lock-card click was not re-checked by
+  typing (same MouseArea `Btn` as before).
+- **Send to TV** (media popup only, never the lock card): `TvButton` (icon only, at the transport row's end outside its layout,
+  fades in place) -> `TvCast.qml` (singleton: flow, TV state, IPC `tvcast`) -> Home Assistant via `HomeAssistant.request` (same
+  URL / token). Pure logic in `launcher/js/TvCast.js` (node tests `tvcast.test.js`): `identify` (what plays) and `plan` (HA calls per
+  integration = the `ADAPTERS` table). Target / options = `TvPrefs` (tv.json: `tv` = {name, entities: [{id, adapter}]},
+  `entity` = its first id (a file with only `entity` still works and is migrated to `tv` on the first HA read), `pauseAfter`
+  default on, `dryRun` = on while no entity, else off unless set; `QS_TVCAST_FILE`), Settings > TV (`SettingsTv`: ONE entry
+  per physical TV, icon + device name + state dot, never a backend word: `Js.tvGroups` over every `remote.*` / `media_player.*`
+  with an adapter plus its HA device from one read-only template (device_id / device_attr name, name_by_user, maker, model,
+  MAC); devices merge on a shared MAC, or the same name with backend words ("- Remote", "- Google Cast") stripped, or the
+  same original name + model, only while no adapter appears twice (two identical TVs stay apart; a model note shows only
+  for same-named entries); Pause here, Dry run, Test = open the YouTube app home). Per send `Js.pickMember` takes the first
+  entity not unavailable / unknown in `ORDER` (remote.* Android TV Remote, its media_player.*, ADB, Cast).
+  Identification: Twitch app = status-file `channel`; mpv = its MPRIS `xesam:url` (Jellyfin stream `/Videos/<id>/stream` from
+  jellyfin-qs, or a YouTube / Twitch URL); Firefox-like = cover URL (`i.ytimg.com/vi/<id>/`, `live_user_<login>-`); Chromium
+  family (Brave, Chromium, Chrome, Vivaldi, Edge: no URL over MPRIS, cover = a local temp file) = `bin/browser-tab-url`
+  reads the profile's newest `Sessions/Session_*` (SNSS, read-only) and prints the URL of the tab whose title contains the
+  track title (Twitch: starts with the artist), else the newest matching row of the profile's `History` (SQLite, immutable
+  read-only: Brave's session file can lag minutes behind an in-page YouTube navigation), youtube / twitch URLs only; asked
+  when the card shows a title (paused too), a miss asked again every 5 s while the popup is open (24 tries per title, reset
+  on reopen), a hit kept; the helper is killed after 5 s. Start position = MPRIS position (YouTube, Jellyfin); Twitch joins live.
+  Button rule (`Js.shown`): shown only when it would work: HA configured and answering, TV entity set and not
+  unavailable / unknown / missing (off / standby SHOWS: waking is the point), recognised kind with an id the adapter
+  supports; otherwise hidden (no disabled state). TV state = one `GET /api/states/<id>` on popup open and every 10 s while it
+  is open; nothing at rest. Flow: read state -> off/standby: wake (adapters with `launchWakes` send the launch itself, else
+  `turn_on`) -> poll until on (25 s) -> 3 s grace -> launch (again) unless the foreground app already matches -> verify via
+  `current_activity` / `app_id` (8 s), one retry -> state-gated calls (Cast seek once `playing`) -> pause here. Glyph = progress:
+  tv, power (waking, pulses), circle-play (opening, pulses), check, warning (red; tooltip = the error); click while busy
+  cancels. Adapters: `remote` + androidtv_remote = `remote.turn_on {activity: link}` (powers on + opens); `media_player` +
+  androidtv_remote = `turn_on`, then `play_media {media_content_type: url}`; androidtv (ADB) = `turn_on`, then
+  `androidtv.adb_command "am start -a <action> -d '<link>' <package>"` (VIEW; Wholphin: its PLAYBACK action); cast = YouTube only:
+  `play_media {media_content_type: cast, media_content_id: {"app_name":"youtube","media_id":ID}}` + `media_seek`. Links
+  (`APPS`): YouTube `https://www.youtube.com/watch?v=ID&t=Ns` (com.google.android.youtube.tv), Twitch
+  `twitch://stream/<login>` (tv.twitch.android.app), Jellyfin = Wholphin `wholphin://play?itemId=<id>&position=<ms>`
+  (com.github.damontecres.wholphin, its Intents.md; needs Wholphin's auto sign-in). Wholphin plays only on action
+  `com.github.damontecres.wholphin.PLAYBACK` (IntentService.kt: the action wins, the URI host counts only without one); a
+  VIEW (all Android TV Remote sends) opens the item's details page, so `APPS.jellyfin.afterOpen` presses `DPAD_CENTER` once
+  (2.5 s after the app is in front; via the TV's remote.*, `remote.send_command`): the page focuses its first play button
+  (Resume / Play; read from EpisodeDetails / ExpandablePlayButtons, movies assumed alike). Never pressed twice (playback is
+  not observable; a second OK would pause). Real-TV checked by the user: wakes + opens the right episode; the OK press is not.
+  Add an app: an `APPS` entry + `identify`
+  rule + test; an integration: an `ADAPTERS` entry keyed `<domain>_<integration>` + test. Test hooks: `QS_TVCAST_TIMES`
+  (wake,grace,verify,poll ms), `QS_BROWSER_TAB_URL`, `qs ipc call tvcast status|last|log|send|test|cancel|refresh|candidates`,
+  `tvprefs get|set|unset|reset`; a stateful HA mock (states, template, device registry with one TV as two devices, service log, wake delay,
+  boot-ignored launches) + a mock MPRIS player (Brave's shape: no DesktopEntry, no URL, temp cover, paused).
+  Real TV procedure (the user): Settings > TV, pick the TV, turn Dry run on,
+  `qs ipc call tvcast test` + `tvcast last` (the planned call), Dry run off, `tvcast test` again (wakes the TV, opens YouTube's
+  home), then the button on a playing YouTube video. Caveats: verified against the mock only (never a real TV / HA); YouTube
+  `t=` seeking, Twitch's TV app handling `twitch://stream/`, Wholphin's deep link and Android TV Remote's launch-while-booting
+  are unverified on a device; Firefox tabs are not read (only its cover URL); a browser playing two tabs with the same title
+  picks the most recent.
+- **TV session** ("playing on TV", after a successful Send to TV): `TvSession.qml` (singleton: session, polling, controls,
+  IPC `tvsession status|control <what>|disconnect|stop|poll|log`, tv-session.json next to tv.json, `QS_TVSESSION_FILE`,
+  `QS_TVSESSION_TIMES` poll,off,away,hold ms) + `TvSource.qml` (a MediaSource, kind `tv`, key `tv`: first in `MediaSources`
+  active / current / list while it lasts; local players stay in the switcher). Logic in `launcher/js/TvSession.js` (node
+  tests `tvsession.test.js`): roles of the TV's entities (power + foreground app = remote.* `current_activity`, else a
+  media_player `app_id`; metadata = Cast while its session is our app (`castActive`: playing / paused + the app's cast id;
+  never Cast's `AndroidNativeApp`, a native app Cast only mirrors: HA accepts media commands to it and the TV ignores them),
+  else the Android TV Remote / ADB media_player), `route` per control (Cast services while castActive and Cast's
+  `supported_features` has that control (e.g. no PREVIOUS / NEXT on Cast: keys), else Android key codes on the remote.* via
+  `remote.send_command` (MEDIA_PLAY_PAUSE, MEDIA_PREVIOUS / NEXT, MEDIA_REWIND / FAST_FORWARD, VOLUME_UP / DOWN / MUTE,
+  Stop = BACK (MEDIA_STOP is accepted and ignored by native apps like Twitch; BACK leaves the player, a live stream may keep playing on its page), else ADB `input keyevent`, else the media_player's services where its features allow; `caps` = controls with
+  a route). Every sent call is logged with its outcome: `tvsession: <what> -> <domain.service> [KEY] (<route>): ok` or
+  `: HTTP <n> <HA's message>` (failure also rolls the optimistic state back), `tvsession: <what>: no route on this TV`. `view` (Cast title / position /
+  volume where castActive, else what we sent + our optimistic play / pause; a control's expectation shows for 3 s, then the
+  TV's state wins where it has one), `judge` (ends after 25 s off / unavailable / idle (a Cast send), or 20 s with another
+  app in front; unread entities keep the timers). Polls every 5 s only while a session exists. Card: tv glyph art /
+  chip (iconFont: `glyphBrand: false`), tv badge with the TV's name (`device`), transport prev / seek -10 s / play /
+  seek +10 s / next / stop (stops the TV, ends) / disconnect (`linkOff`, detach; the TV keeps playing); volume = Cast's
+  level slider, else `MediaVolumeSteps` (mute, down, up); lock card: play / pause only (`lockTransport: false`). Starts in
+  `TvCast.finish` (not for the test / dry run), replaces an older one; the local player was paused there. Dry run logs
+  controls. Caveats: verified against the mock only; Android TV Remote reports no play state (card = optimistic), the
+  REWIND / FAST_FORWARD step is the TV app's own; the lock card in session mode was not checked visually.
+- **TV auto-detect** (the same TV card for what the TV plays by itself: a remote, a phone's cast, its own app): `TvPrefs.autoDetect`
+  (tv.json, default on; Settings > TV "Show TV playback"). The picked TV's entities (`tv.entities`, never hard-coded) are watched
+  over HA's websocket (`HaWatch.qml`: `/api/websocket`, auth, `subscribe_entities` for those ids; HA pushes changes; backoff 2 s
+  to 60 s; needs `qt6-websockets`, loaded by a Loader: missing module = REST reads every 10 s). `TvSession.card` = the sent
+  session, else `Js.detect` (TvSession.js, tests): power entity on, a media_player (Cast / ADB) playing / paused / buffering,
+  app in front not a home screen / screensaver (`HOME_APPS`, incl. Cast Backdrop), title or a known app name (`APP_NAMES`,
+  HA's `app_name`) else nothing; a Cast session paused behind another app is skipped. Art = `entity_picture` (HA path + base),
+  position extrapolated from `media_position_updated_at` (`TvSource.progress` -> MediaSeek, read-only). A gap while the TV
+  stays on is held 3 s; off / standby / unavailable hides at once. Controls = `Js.control` on `Js.autoSession` (same routes:
+  a native app such as Twitch / Wholphin = remote keys / ADB; volume steps, no Cast level slider), no disconnect; dry run applies. IPC `tvsession auto`; `QS_TVSESSION_TIMES` 5th / 6th =
+  gap / REST poll ms. Nested-verified against a websocket HA mock (art / no art / paused / standby / home / unknown app /
+  named app / switch off / with mpv, lock card, controls, reconnect) and a feature-checking mock (400 for unsupported services,
+  AndroidNativeApp ignoring media commands). Caveats: key routes on a real TV unverified (the mock only logs them); an Android TV Remote-only TV never shows
+  (no play state; needs Cast or ADB reporting); real HA's `subscribe_entities` diffs and the REST fallback are unverified.
 - **Glass clocks: time, seconds, morph** (`ClockFace.qml`, used by LockClock and DeskClockView): text HH:mm[:ss] (12 h: h:mm[:ss]),
   `morphMs` = popup motion of `Motion.baseMs * 3` x the page's morph time (0 = plain swap), capped at 450 ms with seconds; `fitSize`
   shrinks the digits only if the row would not fit (lock: screen - 2 edgeGap; desktop: screen - 2 margins, posX/posY unchanged). Every
@@ -281,6 +398,13 @@ config/aerospace karabiner swiftbar  macOS only
   once, the blur is the whole window), `FoldBox` + `Chevron` (DropSelect, DevicePicker, BtProfilePicker). Fade colours from
   `Theme.alpha(sameColour, 0)`, not "transparent" (lerps through black). Caveat: the tray menu (xdg popup, compositor blurs the
   whole surface) keeps no open / close motion of its own: a fading card would leave an empty blurred box.
+- **Wallpaper engine** (backend `engine`; config/theme/README.md "Wallpaper engine" is authoritative): `engine.qml` is its own
+  Quickshell instance (`quickshell -p ~/.config/quickshell/engine.qml`, kept alive by `hypr/scripts/start-wallpaper-engine.sh`,
+  pid in `$XDG_RUNTIME_DIR/wallpaper-engine/pid`) with `EngineWindow` / `EngineVideo` / `EngineVideoSlot`; `Wallpaper.engine`
+  turns the main shell's `WallpaperLayer` and `DeskClock` off and `Lock.qml` talks to it over `bin/engine-ipc`. It does NOT
+  hot-reload (`settings.watchFiles: false`): after editing a component it uses (WallpaperView, DeskClockView, Glass*, ...)
+  run `theme.py wallpaper-engine restart` (never kill it by name). Tests: nested only, `QS_ENGINE_ALWAYS` / `QS_ENGINE_PLAYERS`
+  / `QS_ENGINE_BENCH` / `QS_ENGINE_DEBUG`; `bin/engine-bench` = the user's real-monitor comparison with mpvpaper.
 - **Wallpaper layer** (`Wallpaper.qml` singleton = per-monitor `entryFor/pathFor(screen)` from theme.py's `out/wallpaper.json`, FileView,
   `qs ipc call wallpaper reload|status`, `QS_WALLPAPER_FILE`; `WallpaperLayer.qml` = one Background-layer window per screen, namespace
   `qs-wallpaper`, no input / exclusive zone, empty blur region, `no_anim` layer rule in `rules.lua`, maps with its first decoded image;
@@ -307,24 +431,26 @@ config/aerospace karabiner swiftbar  macOS only
   makes primary, arrows move), then `ChoiceRow` Primary Auto | Manual (Auto = `clearPrimary`, Manual pins the selected one), then ONE `MonitorCard`
   for the selected monitor (name, connector, mode / scale `Pill`s from `Monitors.modeText` / `scaleText`, `PrimaryTag` or "Set as primary") with
   three `LabelSwitch` tiles writing the features' own stores: Bar = `BarConfig.set(s, "enabled")` (linked group together, last bar locked), Lock
-  clock = `LockPrefs.setClockOn`, Desktop clock = `DeskClockPrefs.setShownOn` (locked while the clock is off). The selection is the shared
-  `Monitors.selected`. Badges re-read Hyprland (`refreshMonitors`) on open and on any geometry change. It is the only place for these per-monitor
-  switches (other pages show at most a status such as "no bar" on a chip). objectNames `monitor-pick-<conn>`, `monitor-card-<conn>`,
+  clock = `LockPrefs.setClockOn` (lock glyph), Desktop clock = `DeskClockPrefs.shownOn` / `setShownOn` (desktop glyph, never locked). The
+  selection is the shared `Monitors.selected`. Badges re-read Hyprland (`refreshMonitors`) on open and on any geometry change. It is the place for these per-monitor
+  switches together (the Bar / Lock screen / Desktop clock pages carry the same switch on their monitor strip). objectNames `monitor-pick-<conn>`, `monitor-card-<conn>`,
   `mon-bar|mon-lockclock|mon-deskclock-<conn>`, `mon-primary-<conn>`, `primary-auto|primary-manual`.
-  **Monitor chooser** (`MonitorChooser.qml` + `MonitorChip.qml`): the ONE way a Settings page picks the monitor it edits (Wallpaper, Bar, Lock
-  screen and Desktop clock previews, Look & feel > Shape > Customise… smart gaps). A strip of chips in `Monitors.ordered` order (wallpaper
-  still in the monitor's aspect, model over connector + optional status, `PrimaryTag`, optional accent `mark`), bound to the shared Settings
-  pick `Monitors.selected` / `Monitors.select()` (`""` / a monitor that went away = the primary; Settings resets it on open; the Monitors map
-  uses it too), so switching on one page carries to the others. Hidden with one monitor. Options: `allEntry` + `allCurrent` (an "All" chip,
-  `picked("")`), `linkable` + `linkedAt(i)` / `linkToggled(i)` / `groupedFor` (a `MonitorLinkButton` between neighbours: Bar, Wallpaper),
-  `subtitleFor` / `markFor` / `thumbFor`, trailing page actions as children (stacked under the chips when narrow). Tab focuses it, arrows pick;
-  link buttons take Tab + Space. Adding a per-monitor setting: put `MonitorChooser {}` above the rows and read `Monitors.selected` (key via
-  `Appearance.monitorKey`); never a per-monitor switch list. objectNames `monitor-chip-<conn>|all`, `monitor-link-<i>`; test hook `qs ipc call
-  monitors select <connector>|selected`. Wallpaper page: palette glyph = palette source (wallpapers.json `primary`, else the shell primary
-  as theme.py), row actions "Follow primary" (`theme.py clear`) and "Use for palette" (`theme.py primary`). Nested test arrangements: `hyprctl eval 'hl.monitor({output="TEST2", mode="1600x900@60",
+  **Monitor section** (`MonitorSection.qml` + `MonitorChip.qml` + `MonitorStateCell` (the eye / eye-slash cell, also in `LabelSwitch`) / `MonitorLink` (the seam bridge) / `MonitorThumb` / `MonitorAction`): the ONE monitor selector + per-monitor
+  switch of Settings, first row of Wallpaper / Bar / Lock screen / Desktop clock (and the Shape smart gaps row); anatomy, options, keyboard and
+  how to add a per-monitor page: DESIGN.md "Monitor section". Selection = the shared `Monitors.selected` (reset to the primary on open); switches call
+  the features' single setters (`BarConfig.set(s,"enabled")`, `LockPrefs.setClockOn` / `setAllClock`, `DeskClockPrefs.setShownOn` / `setAllShown`,
+  `Appearance.setSmartFor` / `setSmartAll`). objectNames `monitor-chip-<conn>` (+ `-switch`), `<strip objectName>-all`, `monitor-link-<i>`,
+  `btn-bar-copy-<conn>`, `btn-wp-follow|palette`; test hook `qs ipc call monitors select <connector>|selected`. Wallpaper page: palette glyph = palette source (wallpapers.json `primary`, else the shell primary
+  as theme.py), strip actions Follow primary (`theme.py clear`) and Use for palette (`theme.py primary`). Nested test arrangements: `hyprctl eval 'hl.monitor({output="TEST2", mode="1600x900@60",
   position="0x900", transform=1, scale=1.25})'` on the nested instance (a wayland output takes the mode until its host window is resized again).
 - **Desktop clock** (opt-in, Settings > Desktop clock: Size presets, 3x3 position grid, sliders under Customise…; `DeskClockPrefs` -> deskclock.json, `QS_DESKCLOCK_FILE`, `qs ipc call deskclock
-  get|set|unset|reset|hideOn|showOn`): `DeskClock.qml` = one bottom-layer window per shown monitor (`qs-deskclock`, empty blur region,
+  get|set|unset|reset|hideOn|showOn|all true|false`). Which monitors show it = ONE rule, `launcher/js/MonitorShown.js` (node tests; shared with the lock clock):
+  `enabled && !hidden[key]` on disk (old readers unchanged), read through `DeskClockPrefs.shownOn` by the shell, the engine and Settings, written
+  only through `setShownOn` / `setAllShown` (one commit of both keys): on while off everywhere = that monitor only (other connected ones hidden),
+  off on the last connected one = `enabled` false (`hidden` keeps where it was). Caveat: a monitor first plugged in while it is on shows it
+  (`hidden` is an opt-out map). Settings > Desktop clock on / off = its monitor strip (switch per chip + All, primary first; objectNames
+  `monitor-chip-<conn>-switch`, `deskclock-monitors-all`); the preview / rows below follow the strip's monitor and dim with an eye-slash "Off" while it shows no clock.
+  `DeskClock.qml` = one bottom-layer window per shown monitor (`qs-deskclock`, empty blur region,
   clock area only; `rules.lua` layer rule `order = -1` keeps it above mpvpaper, which is on the bottom layer too), `DeskClockView.qml` =
   GlassText per character refracting what the desktop shows: the still / image (`LockWallpapers.stillFor`, cover crop like hyprpaper) or,
   for a play-once video wallpaper, `DeskClockVideo.qml` = the same baked clip in QtMultimedia following the desktop player: parked on the
@@ -374,7 +500,7 @@ config/aerospace karabiner swiftbar  macOS only
   (as `QS_LOCK_CLOCK`). GlassText morph caveat: its two mask texts are set, not bound to `text` (a binding changed both masks at once:
   no morph, the digit just switched), and a text change bumps `GlassShape.refresh` / `refresh2` so that mask's shape field re-renders.
   Desktop clock page: seconds, morph time ("Show morph" / a changed slider steps the preview a minute ahead and back); which
-  monitors show it: Settings > Monitors. Glyphs created after the reveal (character count changed) start formed.
+  monitors show it: its "Show" row or Settings > Monitors (same setter). Glyphs created after the reveal (character count changed) start formed.
 - **Bar text contrast** (Settings > Bar > Text, shown for the Transparent look (= docked + transparent when flush; Floating / Docked / Transparent are the Look cards); bars.json per bar `contrast` auto|dark|light|off, `contrastSens` 0..100, `hoverFill` 0..100): while
   the bar has no backdrop (flush + "transparent when flush", `Bar.inkFlat`) its text sits on the wallpaper, so each section (left / centre / right)
   gets a `BarInk.qml` colour set, whatever the theme mode: dark text on a bright wallpaper, light on a dark one (`Theme.barInkDark/barInkLight` = the
@@ -403,7 +529,13 @@ config/aerospace karabiner swiftbar  macOS only
   never user data in `sh -c`; no endless shell loops in a `Process` (poll with `Timer` + `FileView.reload()`); poll only while visible; no `console.log` of
   notification content or HA host; never bind `visible` to `visibleChildren`; `clip: true` ignores rounded shape; avoid binding loops from child `x`/`width`.
 - VPN switching goes through `bin/vpn-switch` (exclusive vs coexist mode); Tailscale needs `tailscale set --operator=$USER` once.
-- Home Assistant (`HA_URL`/`HA_TOKEN` in `config/hypr/.secrets`): test with `QS_HA_*` mocks, never service calls against the real HA. `bin/ai-usage` uses an
+- Home Assistant (`HA_URL`/`HA_TOKEN` in `config/hypr/.secrets`): test with `QS_HA_*` mocks, never service calls against the real HA
+  (Send to TV included: `QS_HA_SECRETS` at a mock, or Dry run).
+  Optimistic layer (`HomeAssistant.qml`): `call()` creates a `pend[id]` record (expected state/attrs, `predict()`) merged over `serverById` into
+  `byId`, which every consumer reads; `reconcile()` ignores states from requests started before the call finished, keeps the prediction for
+  `hold` ms (2 s, vacuum 5 s), then the server wins; error/6 s timeout = `rollback()` + `actionError`; after a reply a single `GET /api/states/<id>`
+  replaces the full refresh; the poll timer skips while `touch()`ed or records pend. Consumers must read `byId`, never `serverById`.
+  Not predicted: stop_cover, number/select helpers, climate turn_on. Mock with latency/failures: any stateful HA mock (reply latency, delayed apply). `bin/ai-usage` uses an
   undocumented endpoint and must never refresh OAuth tokens (rotates the refresh token); mocks `QS_AI_*`.
 
 ## Hyprland (`config/hypr`)
