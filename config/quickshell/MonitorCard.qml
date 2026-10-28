@@ -2,11 +2,14 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 
-// Settings > Monitors: the detail card of the monitor selected on the map (MonitorPicker). Head = name (model, elided),
+// Settings > Monitors: the detail card of the monitor selected on the map (MonitorPicker). Head = the MonitorChip's
+// anatomy: wallpaper still (MonitorThumb), name (model, elided),
 // connector, mode / scale badges, then PrimaryTag or "Set as primary". Body = the per-monitor switches, each written to
 // its feature's OWN store (no copy here): Bar = BarConfig "enabled" (a linked group goes on / off together; the last bar
-// stays on: it is the way back into Settings), Lock clock = LockPrefs.setClockOn, Desktop clock =
-// DeskClockPrefs.setShownOn (locked while the clock is off on its page). objectNames: monitor-card-<connector>,
+// stays on: it is the way back into Settings), Lock clock (lock glyph) = LockPrefs.clockOnKey / setClockOn, Desktop clock (desktop
+// glyph) = DeskClockPrefs.shownOn / setShownOn (the same setters as the switches on the Bar / Lock screen / Desktop clock
+// pages' monitor strip: on while off everywhere =
+// this monitor only). objectNames: monitor-card-<connector>,
 // mon-bar|mon-lockclock|mon-deskclock-<connector> (+ "-toggle"), mon-primary-<connector>.
 Rectangle {
     id: card
@@ -33,7 +36,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: Theme.controlH          // same height with the tag or the button
             spacing: Theme.gapRow
-            Icon { text: Icons.monitor; font.pixelSize: Theme.iconMd; color: card.primary ? Theme.accent : Theme.fgDim; Layout.preferredWidth: Theme.iconLg; horizontalAlignment: Text.AlignHCenter }
+            MonitorThumb { screen: card.monitor }                // as on the MonitorChip
             Label {
                 objectName: "mon-name-" + card.monitor.name
                 text: Monitors.title(card.monitor)
@@ -76,7 +79,6 @@ Rectangle {
                 checked: card.barOn
                 enabledLook: !card.barLast
                 tip: card.barLast ? "Last bar" : card.barLinked ? "Linked bars" : ""
-                tipIcon: card.barLast ? Icons.lock : Icons.info
                 onToggled: want => BarConfig.set(card.monitor, "enabled", want)
             }
             LabelSwitch {
@@ -85,7 +87,7 @@ Rectangle {
                 Layout.fillWidth: true; Layout.preferredWidth: 1
                 icon: Icons.lock
                 label: "Lock clock"
-                checked: LockPrefs.hidden[card.key] !== true
+                checked: LockPrefs.clockOnKey(card.key)
                 enabledLook: card.key !== ""
                 onToggled: want => LockPrefs.setClockOn(card.key, want)
             }
@@ -93,12 +95,10 @@ Rectangle {
                 id: deskSw
                 objectName: "mon-deskclock-" + card.monitor.name
                 Layout.fillWidth: true; Layout.preferredWidth: 1
-                icon: Icons.clock
+                icon: Icons.desktop
                 label: "Desktop clock"
-                checked: DeskClockPrefs.hidden[card.key] !== true      // the saved choice, dimmed while the clock is off
-                enabledLook: DeskClockPrefs.enabled && card.key !== ""
-                tip: DeskClockPrefs.enabled ? "" : "Clock is off"
-                tipIcon: Icons.lock
+                checked: DeskClockPrefs.shownOn(card.monitor)
+                enabledLook: card.key !== ""
                 onToggled: want => DeskClockPrefs.setShownOn(card.key, want)
             }
         }

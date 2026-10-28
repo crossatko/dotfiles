@@ -11,6 +11,8 @@ import Quickshell.Io
 // Which entities are hidden in the popup: ~/.local/state/quickshell/homeassistant.json {"hidden": [...], "hiddenSections": ["light", ...]} (section keys: light, climate, vacuum, fan, cover, switch).
 // Switches from container-manager integrations (Portainer, Docker, ...: one switch per container / stack) are
 // left out by integration (config entry domain); extend with {"excludePlatforms": [...]} in that file.
+// Optimistic UI: a service call applies its expected result at once (`pend` records merged over the polled states
+// into `byId`; `serverById` stays the last polled truth), see "optimistic layer" below.
 // Polls every 4 s while the popup is open (15 s while failing), once a minute for the bar chip, not at all otherwise.
 // The token goes only into the Authorization header of in-process XHRs (never argv, never the log). When a
 // request fails without an HTTP status, a token-less `curl` probe of <base>/api/ classifies why (DNS, refused,
@@ -43,7 +45,8 @@ Singleton {
     property string actionError: ""
     property double lastUpdate: 0
 
-    property var byId: ({})                  // entity_id -> state object (entity_id, state, attributes, area)
+    property var byId: ({})                  // entity_id -> state object shown by the UI: serverById + pending predictions
+    property var serverById: ({})            // entity_id -> last polled state object (the truth)
     property var sections: ({})              // domain -> [entity_id] (sorted by area, name); only reassigned when the set changes
     property var areas: ({})                 // entity_id -> area name
     property var devices: ({})               // entity_id -> device id
@@ -51,7 +54,8 @@ Singleton {
     property var platforms: ({})             // entity_id -> integration domain (config entry), when HA can tell
     property bool metaDone: false            // first area / device / platform lookup finished (or failed)
     property var rawGroups: ({})             // domain -> [entity_id], before `dropped`
-    property var busy: ({})                  // entity_id -> true while a service call is in flight
+    property var busy: ({})                  // entity_id -> true when the server has not confirmed a change after 1.2 s (subtle "syncing")
+    property var acked: ({})                 // scene / script / button id -> true for a moment after it was run
     property var hidden: []
     property var hiddenSections: []          // whole popup sections switched off in edit mode (key = first domain of the section)
     property var services: ({})              // "domain.service" -> true (GET /api/services, once per connection)
@@ -116,7 +120,7 @@ Singleton {
         url = strip(kv.HA_URL)
         fallbackUrl = strip(kv.HA_URL_FALLBACK)
         token = kv.HA_TOKEN || ""
-        if (!same) { base = url; status = "idle"; errorText = ""; errorHint = ""; metaDone = false; rawGroups = ({}); servicesAsked = false; services = ({}); vacAsked = ({}); vacRooms = ({}) }
+        if (!same) { pend = ({}); pendCount = 0; serverById = ({}); busy = ({}); base = url; status = "idle"; errorText = ""; errorHint = ""; metaDone = false; rawGroups = ({}); servicesAsked = false; services = ({}); vacAsked = ({}); vacRooms = ({}) }
         secretsRead = true
         if (configured) refresh(true)
         else { status = "idle"; byId = ({}); sections = ({}) }
@@ -160,13 +164,14 @@ Singleton {
     // ---- transport ----------------------------------------------------------------------
     property var inflight: []                // [{x, t, done, cb}]
 
-    function request(method, path, body, cb) {
-        const r = { x: new XMLHttpRequest(), t: Date.now(), done: false, cb: cb }
+    // cb(status, text, timedOut, startedAt); limit: abort after this many ms (default 8 s)
+    function request(method, path, body, cb, limit) {
+        const r = { x: new XMLHttpRequest(), t: Date.now(), done: false, cb: cb, limit: limit || 8000 }
         const finish = (st, txt) => {
             if (r.done) return
             r.done = true
             inflight = inflight.filter(q => q !== r)
-            cb(st, txt, r.timedOut === true)
+            cb(st, txt, r.timedOut === true, r.t)
         }
         r.finish = finish
         r.x.onreadystatechange = function() {
@@ -179,14 +184,14 @@ Singleton {
         if (body !== null && body !== undefined) r.x.send(typeof body === "string" ? body : JSON.stringify(body))
         else r.x.send()
     }
-    // XHR has no timeout here: a watchdog aborts anything older than 8 s (unreachable host)
+    // XHR has no timeout here: a watchdog aborts anything older than its limit (8 s; service calls 6 s)
     Timer {
         interval: 1000; repeat: true
         running: ha.inflight.length > 0
         onTriggered: {
             const now = Date.now()
             for (const r of ha.inflight.slice())
-                if (now - r.t > 8000) { r.timedOut = true; try { r.x.abort() } catch (e) {} r.finish(0, "") }
+                if (now - r.t > r.limit) { r.timedOut = true; try { r.x.abort() } catch (e) {} r.finish(0, "") }
         }
     }
 
@@ -199,14 +204,14 @@ Singleton {
         refreshing = true
         if (status === "idle") status = "loading"     // a failure stays on screen while retrying
         if (force && failed) retrying = true
-        request("GET", "/api/states", null, (st, txt, timedOut) => {
+        request("GET", "/api/states", null, (st, txt, timedOut, startedAt) => {
             refreshing = false
             if (again) { again = false; Qt.callLater(refresh, true) }
             if (st === 200) {
                 let arr = null
                 try { arr = JSON.parse(txt) } catch (e) { arr = null }
                 if (!Array.isArray(arr)) { fail("error", "Not a Home Assistant API reply", "Check that HA_URL points at Home Assistant itself (scheme, host, port)."); return }
-                apply(arr)
+                apply(arr, startedAt)
                 if (status !== "ok") console.log("homeassistant: connected")
                 status = "ok"; errorText = ""; errorHint = ""; retrying = false
             } else if (st === 401 || st === 403) {
@@ -274,7 +279,7 @@ Singleton {
         prober.running = true
     }
 
-    function apply(arr) {
+    function apply(arr, startedAt) {
         const map = {}
         const groups = {}
         const help = {}
@@ -290,9 +295,11 @@ Singleton {
             map[s.entity_id] = s
             groups[d].push(s.entity_id)
         }
-        byId = map
+        serverById = map
         helpers = help
-        busy = ({})
+        for (const id in map) noteBri(map[id])
+        if (pendCount > 0) for (const id of Object.keys(pend)) reconcile(id, map[id] || help[id] || null, startedAt || 0, true)
+        rebuild()
         lastUpdate = Date.now()
         const changed = JSON.stringify(groups) !== JSON.stringify(rawGroups)
         rawGroups = groups
@@ -386,6 +393,7 @@ Singleton {
     function statusOf(id) {
         const e = byId[id]
         if (!e) return ""
+        if (pend[id] && pend[id].state) return pend[id].state            // expected, until the server confirms
         if (e.attributes && typeof e.attributes.status === "string") return e.attributes.status
         const s = siblings(id, h => /^sensor\..*_status$/.test(h))[0]
         const v = s ? helpers[s].state : ""
@@ -466,32 +474,214 @@ Singleton {
     function cleanAll(id, passes) {
         const rep = repeatEntityOf(id)
         const all = roomsOf(id)
+        if (rep !== "" && passes >= 1) expect("vacuum", "start", id)          // the passes are set first: show "cleaning" now
         if (rep === "" && passes > 1 && all.length > 0) { cleanRooms(id, all.map(r => r.id), passes); return }
         if (rep === "" || passes < 1) { call("vacuum", "start", id); return }
         const h = helpers[rep]
-        if (rep.indexOf("number.") === 0) call("number", "set_value", rep, { value: passes }, () => call("vacuum", "start", id))
+        if (rep.indexOf("number.") === 0) call("number", "set_value", rep, { value: passes }, () => call("vacuum", "start", id), () => rollback(id))
         else {
             const opt = (h.attributes.options || []).find(o => parseInt(o) === passes)
             if (opt === undefined) call("vacuum", "start", id)
-            else call("select", "select_option", rep, { option: opt }, () => call("vacuum", "start", id))
+            else call("select", "select_option", rep, { option: opt }, () => call("vacuum", "start", id), () => rollback(id))
         }
     }
 
-    // POST /api/services/<domain>/<service> {entity_id, ...data}; refreshes shortly after
-    function call(domain, service, entityId, data, done) {
+    // ---- optimistic layer ---------------------------------------------------------------
+    // A service call applies its expected result at once: `pend[id]` = {state, attrs, accept, ...} is merged over
+    // `serverById[id]` into `byId` (every consumer reads byId, so cards, bar chip and summaries change in the same
+    // frame). Reconciliation (reconcile): the prediction stays while the call is in flight and for `hold` ms after it
+    // succeeded; a polled state whose request started BEFORE the call finished is stale and ignored; the first
+    // fresh state ends it (it matches: confirmed; or the hold is over: the server wins). A newer call on the same
+    // entity supersedes the record (last intent wins). Error / timeout: rollback to the polled state + actionError.
+    // After the reply a single-entity GET (/api/states/<id>) checks instead of the full list; the full list still
+    // comes from the normal timer. Unavailable / unknown entities get no prediction.
+    property var pend: ({})                  // entity_id -> record
+    property int pendCount: 0
+    property var lastBri: ({})               // light id -> last brightness seen while on (turn_on without one)
+    property int seqCounter: 0
+    property double interactUntil: 0
+    function touch() { interactUntil = Date.now() + 1500 }      // the user is acting: the poll timer skips its refresh
+
+    function noteBri(s) { if (s && s.state === "on" && s.attributes && typeof s.attributes.brightness === "number") lastBri[s.entity_id] = s.attributes.brightness }
+    function hsToRgb(h, s) {                 // h 0..360, s 0..100
+        const c = s / 100, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = 1 - c
+        const k = Math.floor(((h % 360) + 360) % 360 / 60)
+        const v = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][k]
+        return v.map(q => Math.round((q + m) * 255))
+    }
+    function merged(id) {
+        const s = serverById[id], p = pend[id]
+        if (!s || !p || (p.state === null && Object.keys(p.attrs).length === 0)) return s
+        return { entity_id: id, state: p.state !== null ? p.state : s.state, attributes: Object.assign({}, s.attributes, p.attrs) }
+    }
+    function rebuild() { const m = {}; for (const id in serverById) m[id] = merged(id); byId = m }
+    function setMerged(id) { if (!serverById[id]) return; const m = Object.assign({}, byId); m[id] = merged(id); byId = m }
+    function setBusy(id, on) {
+        if ((busy[id] === true) === on) return
+        const b = Object.assign({}, busy); if (on) b[id] = true; else delete b[id]; busy = b
+    }
+
+    // expected result of domain.service on entity `cur`: {state, attrs, accept (server states that confirm), hold ms} or null
+    function predict(domain, service, id, data, cur) {
+        const on = cur.state === "on"
+        const r = (state, attrs, accept, hold) => ({ state: state, attrs: attrs || {}, accept: accept || [state], hold: hold || 2000 })
+        switch (domain) {
+        case "light": {
+            if (service === "turn_off") return r("off")
+            if (service !== "turn_on" && service !== "toggle") return null
+            if (service === "toggle" && on) return r("off")
+            const at = {}
+            let bri = data.brightness
+            if (typeof data.brightness_pct === "number") bri = Math.round(data.brightness_pct * 2.55)
+            if (typeof bri === "number") at.brightness = Math.max(1, Math.min(255, bri))
+            else if (!on && lastBri[id] !== undefined) at.brightness = lastBri[id]
+            if (Array.isArray(data.hs_color)) { at.hs_color = data.hs_color; at.rgb_color = hsToRgb(data.hs_color[0], data.hs_color[1]); at.color_mode = "hs" }
+            else if (Array.isArray(data.rgb_color)) { at.rgb_color = data.rgb_color; at.color_mode = "rgb" }
+            else if (typeof data.color_temp_kelvin === "number") { at.color_temp_kelvin = data.color_temp_kelvin; at.color_mode = "color_temp" }
+            return r("on", at)
+        }
+        case "switch": case "input_boolean":
+            if (service === "turn_on") return r("on")
+            if (service === "turn_off") return r("off")
+            if (service === "toggle") return r(on ? "off" : "on")
+            return null
+        case "fan": {
+            if (service === "turn_off") return r("off")
+            if (service === "toggle" && on) return r("off")
+            if (service === "set_percentage") return typeof data.percentage === "number" ? r(data.percentage > 0 ? "on" : "off", { percentage: data.percentage }) : null
+            if (service === "turn_on" || service === "toggle") return r("on", typeof data.percentage === "number" ? { percentage: data.percentage } : {})
+            return null
+        }
+        case "cover":
+            if (service === "open_cover") return cur.state === "open" || cur.state === "opening" ? null : r("opening", {}, ["opening", "open"], 4000)
+            if (service === "close_cover") return cur.state === "closed" || cur.state === "closing" ? null : r("closing", {}, ["closing", "closed"], 4000)
+            return null
+        case "climate":
+            if (service === "turn_off") return r("off")
+            if (service === "set_hvac_mode" && typeof data.hvac_mode === "string") return r(data.hvac_mode)
+            if (service === "set_temperature" && typeof data.temperature === "number") return { state: null, attrs: { temperature: data.temperature }, accept: [], hold: 2000 }
+            return null
+        case "vacuum":                       // robots report slowly (cloud): longer hold
+            if (service === "start") return r("cleaning", {}, ["cleaning"], 5000)
+            if (service === "pause") return r("paused", {}, ["paused"], 5000)
+            if (service === "return_to_base") return r("returning", {}, ["returning", "docked"], 5000)
+            if (service === "stop") return r("idle", {}, ["idle", "paused", "docked"], 5000)
+            if (service === "send_command" && data.command === "app_segment_clean") return r("cleaning", {}, ["cleaning"], 5000)
+            return null
+        case "dreame_vacuum": return service === "vacuum_clean_segment" ? r("cleaning", {}, ["cleaning"], 5000) : null
+        }
+        return null
+    }
+    function expectable(cur) { return cur && cur.state !== "unavailable" && cur.state !== "unknown" }
+
+    // starts (or supersedes) the record for one entity and applies the prediction; returns it
+    function begin(domain, service, id, data, seq) {
+        const cur = byId[id]
+        const pr = expectable(cur) ? predict(domain, service, id, data || {}, cur) : null
+        const old = pend[id]
+        const rec = { seq: seq, state: null, attrs: {}, accept: [], sentAt: Date.now(), doneAt: 0, holdUntil: 0, nextCheck: 0, hold: 2000, checking: false }
+        if (old) { rec.state = old.state; rec.attrs = old.attrs; rec.accept = old.accept; rec.hold = old.hold }
+        if (pr) {
+            rec.attrs = old && pr.state !== "off" ? Object.assign({}, old.attrs, pr.attrs) : pr.attrs
+            rec.state = pr.state; rec.accept = pr.accept; rec.hold = pr.hold
+        }
+        if (!old) pendCount++
+        pend[id] = rec
+        setBusy(id, false)
+        setMerged(id)
+        sweep.restart()
+        return rec
+    }
+    // shows the expected result of a later call now (cleanAll sets the passes first)
+    function expect(domain, service, id) { begin(domain, service, id, {}, ++seqCounter) }
+    function drop(id, noRebuild) {
+        if (!pend[id]) return
+        delete pend[id]
+        pendCount--
+        setBusy(id, false)
+        if (!noRebuild) setMerged(id)
+    }
+    function rollback(id, seq) { if (pend[id] && (seq === undefined || pend[id].seq === seq)) { drop(id); refreshOne(id) } }
+
+    function matches(p, s) {
+        if (p.state !== null && p.accept.indexOf(s.state) < 0) return false
+        const a = s.attributes || {}, near = (k, tol) => typeof p.attrs[k] !== "number" || typeof a[k] !== "number" || Math.abs(p.attrs[k] - a[k]) <= tol
+        return near("brightness", 8) && near("percentage", 5) && near("color_temp_kelvin", 200) && near("temperature", 0.2)
+    }
+    // a state of entity `id` arrived from a request that started at `startedAt`
+    function reconcile(id, s, startedAt, batch) {
+        const p = pend[id]
+        if (!p || p.doneAt === 0 || startedAt < p.doneAt) return          // call still running, or a stale answer: keep predicting
+        if (!s || matches(p, s) || Date.now() >= p.holdUntil) drop(id, batch)
+        else p.nextCheck = Math.min(p.nextCheck, Date.now() + 500)
+    }
+    function refreshOne(id) {
+        const p = pend[id]
+        if (p) { if (p.checking) return; p.checking = true }
+        request("GET", "/api/states/" + id, null, (st, txt, timedOut, startedAt) => {
+            const q = pend[id]
+            if (q) { q.checking = false; q.nextCheck = Date.now() + 600 }
+            if (st !== 200) return
+            let s = null
+            try { s = JSON.parse(txt) } catch (e) { s = null }
+            if (!s || s.entity_id !== id) return
+            s.attributes = s.attributes || {}
+            if (serverById[id]) {
+                const was = serverById[id].state
+                serverById[id] = s
+                noteBri(s)
+                reconcile(id, s, startedAt)
+                setMerged(id)
+                if ((was === "unavailable") !== (s.state === "unavailable")) regroup()
+            } else if (helpers[id]) {
+                helpers[id] = s
+                reconcile(id, s, startedAt)
+            }
+            updated()
+        })
+    }
+    // 100 ms while records exist: "syncing" mark after 1.2 s, single-entity checks after a reply, hard cap
+    Timer {
+        id: sweep
+        interval: 100; repeat: true
+        running: ha.pendCount > 0
+        onTriggered: {
+            const now = Date.now()
+            for (const id of Object.keys(ha.pend)) {
+                const p = ha.pend[id]
+                ha.setBusy(id, now - p.sentAt > 1200)
+                if (p.doneAt > 0 && now >= p.nextCheck && !p.checking) ha.refreshOne(id)
+                if (p.doneAt > 0 && now > p.holdUntil + 4000) ha.drop(id)          // nothing answered: the server state wins
+            }
+        }
+    }
+
+    // POST /api/services/<domain>/<service> {entity_id, ...data}. The expected result shows at once (see the optimistic
+    // layer); done() runs on success, fail() on error (chained calls).
+    function call(domain, service, entityId, data, done, fail) {
         if (!configured) return
         const body = Object.assign({ entity_id: entityId }, data || {})
-        const b = Object.assign({}, busy); b[entityId] = true; busy = b
+        const seq = ++seqCounter
+        touch()
+        begin(domain, service, entityId, data, seq)
+        if (service === "turn_on" && ["scene", "script", "button"].indexOf(domain) >= 0) {
+            const k = Object.assign({}, acked); k[entityId] = true; acked = k
+            ackClear.restart()
+        }
         request("POST", "/api/services/" + domain + "/" + service, body, (st, txt) => {
             if (st < 200 || st >= 300) {
                 actionError = (st === 0 ? "No reply" : "HTTP " + st) + " for " + domain + "." + service
                 errClear.restart()
-                const b2 = Object.assign({}, busy); delete b2[entityId]; busy = b2
-            } else if (done) done()
-            soon.restart()
-        })
+                rollback(entityId, seq)
+                if (fail) fail()
+                return
+            }
+            const p = pend[entityId]
+            if (p && p.seq === seq) { p.doneAt = Date.now(); p.holdUntil = p.doneAt + p.hold; p.nextCheck = p.doneAt + 250 }
+            if (done) done()
+        }, 6000)
     }
-    Timer { id: soon; interval: 300; onTriggered: ha.refresh(true) }
+    Timer { id: ackClear; interval: 1000; onTriggered: ha.acked = ({}) }
     Timer { id: errClear; interval: 6000; onTriggered: ha.actionError = "" }
 
     // the popup re-reads the secrets file on open (a token added since then is picked up)
@@ -501,6 +691,6 @@ Singleton {
         interval: ha.failed ? (ha.panelOpen ? 15000 : 120000) : ha.panelOpen ? 4000 : 60000
         repeat: true
         running: ha.configured && (ha.panelOpen || BarWidgets.shown("homeassistant"))
-        onTriggered: ha.refresh()
+        onTriggered: if (Date.now() >= ha.interactUntil && ha.pendCount === 0) ha.refresh()      // not mid-interaction
     }
 }

@@ -4,8 +4,9 @@ import QtQuick.Layouts
 
 // One Home Assistant entity card in HaPanel (vacuums use HaVacuum). Reads its live state from HomeAssistant.byId, so the
 // card survives polling (the panel's model is the list of ids, which only changes when entities do).
-// Controls never flip themselves: they send a service call and show the truth after the next refresh;
-// sliders / strips keep a local value until then so they don't jump back.
+// Controls are optimistic: a service call shows its expected result at once (HomeAssistant.qml, "optimistic layer":
+// byId = polled state + prediction, rolled back on error); `busy` is only the subtle "not confirmed after 1.2 s" mark.
+// Sliders / strips keep a local value while dragging and until the send settles so a poll never snaps them back.
 Rectangle {
     id: ent
 
@@ -66,12 +67,13 @@ Rectangle {
         }
     }
     property var pending: null               // [domain, service, data] sent when the debounce runs out
-    function later(d, s, data) { pending = [d, s, data]; sentAt = Date.now(); sendTimer.restart() }
+    function later(d, s, data) { pending = [d, s, data]; sentAt = Date.now(); HomeAssistant.touch(); sendTimer.restart() }
     Timer {
         id: sendTimer; interval: 220
         onTriggered: if (ent.pending) { HomeAssistant.call(ent.pending[0], ent.pending[1], ent.entityId, ent.pending[2]); ent.sentAt = Date.now(); ent.pending = null }
     }
     function now(d, s, data) { sentAt = Date.now(); HomeAssistant.call(d, s, entityId, data) }
+    readonly property bool acked: HomeAssistant.acked[entityId] === true
 
     function toggle(want) {
         if (domain === "climate") now("climate", want ? "turn_on" : "turn_off")
@@ -116,7 +118,7 @@ Rectangle {
     implicitHeight: body.implicitHeight + (compact ? 16 : 18)
     radius: Theme.radiusItem
     color: compact && tileGlow.hovered && !editing ? Theme.alpha(Theme.fg, 0.12)
-         : on ? Theme.alpha(Theme.accent, 0.14) : Theme.alpha(Theme.fg, 0.05)
+         : on || acked ? Theme.alpha(Theme.accent, 0.14) : Theme.alpha(Theme.fg, 0.05)
     border.width: on ? 1 : 0
     border.color: Theme.alpha(Theme.accent, 0.45)
     opacity: hiddenNow || unavailable ? Theme.disabledOpacity : 1

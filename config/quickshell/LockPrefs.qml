@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "launcher/js/MonitorShown.js" as Shown
 
 // Settings -> Lock screen: the look and motion of the shell's lock (Lock.qml / LockView.qml and their parts read the
 // values here, live). Saved in ${XDG_STATE_HOME:-~/.local/state}/quickshell/lock.json next to appearance.json
@@ -16,9 +17,13 @@ import Quickshell.Io
 //   burstOnType / burstOnSubmit (video wallpaper bursts), seconds (HH:mm:ss), mediaCard (playback card under the
 //   password dots while an MPRIS player exists)   all bool
 //   morph (0-3)          the digits' morph time, x the default (Animations speed); 0 = a plain swap (ClockFace)
-//   hidden               { "<monitor key>": true } monitors without the clock and date (Appearance.monitorKey; a new
-//                        monitor shows it). The password dots stay where they would be.
-//   qs ipc call lockprefs get | set <key> <value> | unset <key> | reset | hideClockOn <monitor key> | showClockOn <monitor key>
+//   clock                the clock at all (default on); with `hidden` = which monitors show the clock, date and playback
+//   hidden               card: { "<monitor key>": true } (Appearance.monitorKey). ONE rule, launcher/js/MonitorShown.js (as the
+//                        desktop clock; `clock` plays its `enabled`), read through clockOn(screen) by LockView and Settings,
+//                        written only through setClockOn / setAllClock (one commit of both keys: on while off everywhere =
+//                        that monitor only; off on the last connected one = `clock` false). Files without `clock` read as
+//                        before (on, minus `hidden`). Off = the password dots stay where they would be.
+//   qs ipc call lockprefs get | set <key> <value> | unset <key> | reset | hideClockOn <monitor key> | showClockOn <monitor key> | clockAll <true|false>
 Singleton {
     id: root
 
@@ -33,14 +38,14 @@ Singleton {
         dim: [0, 0.7, 2], blur: [0, 64, 0], clockSize: [0.14, 0.34, 3], dotSize: [0.06, 0.14, 3],
         showDate: "bool", clock24h: "bool", clockReveal: "bool", snapshot: "bool", unlockRing: "bool",
         burstOnLock: "bool", burstOnType: "bool", burstOnSubmit: "bool",
-        seconds: "bool", morph: [0, 3, 2], hidden: "map", mediaCard: "bool"
+        seconds: "bool", morph: [0, 3, 2], hidden: "map", mediaCard: "bool", clock: "bool"
     })
     readonly property var keys: Object.keys(spec)
     readonly property var defaults: ({
         dim: 0.5, blur: 0, clockSize: 0.24, dotSize: 0.08,
         showDate: true, clock24h: true, clockReveal: true, snapshot: true, unlockRing: true,
         burstOnLock: true, burstOnType: true, burstOnSubmit: true,
-        seconds: false, morph: 1, hidden: ({}), mediaCard: true
+        seconds: false, morph: 1, hidden: ({}), mediaCard: true, clock: true
     })
     readonly property int blurMax: 64           // the largest blur: the lock's backdrop chain is this much larger than the screen
 
@@ -64,13 +69,26 @@ Singleton {
     readonly property real morph: value("morph")
     readonly property var hidden: value("hidden")
     readonly property bool mediaCard: value("mediaCard")
-    function clockOn(screen) { return !screen || hidden[Appearance.monitorKey(screen)] !== true }
-    function setClockOn(monitorKey, on) {
-        if (!monitorKey) return
-        const h = Object.assign({}, hidden)
-        if (on) delete h[monitorKey]
-        else h[monitorKey] = true
-        set("hidden", h)
+    readonly property bool clock: value("clock")
+    // per monitor: the clock (and date, playback card) on this screen / monitor key; no screen = the global switch
+    function clockOn(screen) { return screen ? clockOnKey(Appearance.monitorKey(screen)) : clock }
+    function clockOnKey(monitorKey) { return Shown.shown(clock, hidden, monitorKey) }
+    // the connected monitors' keys, and how many of them show the clock
+    readonly property var screenKeys: Quickshell.screens.map(s => Appearance.monitorKey(s)).filter(k => k !== "")
+    readonly property int clockCount: Shown.shownKeys({ enabled: clock, hidden: hidden }, screenKeys).length
+    readonly property bool clockAll: screenKeys.length > 0 && clockCount === screenKeys.length
+    // the only writers of `clock` + `hidden` besides set / reset (one commit)
+    function setClockOn(monitorKey, on) { applyShown(Shown.toggle({ enabled: clock, hidden: hidden }, screenKeys, monitorKey, on)) }
+    function setAllClock(on) { applyShown(Shown.setAll({ enabled: clock, hidden: hidden }, screenKeys, on)) }
+    function applyShown(n) {
+        const d = Object.assign({}, root.data)
+        const vals = { clock: n.enabled, hidden: n.hidden }
+        for (const k of ["clock", "hidden"]) {
+            const c = clean(k, vals[k])
+            if (c === undefined || same(c, root.defaults[k])) delete d[k]
+            else d[k] = c
+        }
+        if (root.serialize(d) !== root.serialize(root.data)) commit(d)
     }
 
     function clean(key, v) {
@@ -169,5 +187,10 @@ Singleton {
         function reset(): string { root.reset(); return "ok" }
         function hideClockOn(monitor: string): string { root.setClockOn(monitor, false); return "ok" }
         function showClockOn(monitor: string): string { root.setClockOn(monitor, true); return "ok" }
+        function clockAll(on: string): string {
+            if (on !== "true" && on !== "false") return "bad value"
+            root.setAllClock(on === "true")
+            return "ok"
+        }
     }
 }

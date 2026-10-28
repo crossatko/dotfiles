@@ -3,8 +3,9 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 
-// Settings -> Bar: per-monitor look and layout editor (BarWidgets). The MonitorChooser only picks whose bar is edited
-// (the shared Settings pick) and links neighbours; bar on / off per monitor lives on Settings > Monitors ("On / off"). Drag widget chips between
+// Settings -> Bar: per-monitor look and layout editor (BarWidgets). The monitor strip (MonitorSection) picks whose bar is
+// edited (the shared Settings pick), switches the bar per monitor (BarConfig "enabled", the same setter as Settings >
+// Monitors; "All"), links neighbours and ends in "copy layout from" actions. Drag widget chips between
 // Left / Center / Right / Hidden to move, reorder or hide them; the eye button hides / shows a chip in place.
 // The control center chip can be moved but not hidden.
 Item {
@@ -35,6 +36,12 @@ Item {
         BarWidgets.syncGroup(from)
     }
     function screenTitle(s) { return Monitors.title(s) }
+    // the strip's "All": on = every bar on; off = only the primary's (linked) group keeps its bar (the last bar never goes)
+    function setAll(want) {
+        const keep = want ? [] : BarConfig.groupOf(Monitors.primary)
+        for (const s of Monitors.ordered)
+            if (want ? !BarConfig.enabled(s) : keep.indexOf(BarConfig.keyOf(s)) < 0 && BarConfig.enabled(s)) BarConfig.set(s, "enabled", want)
+    }
 
     // ---- drag state (the proxy below follows the pointer; DropAreas are the section boxes) ----
     property string dragId: ""
@@ -217,21 +224,36 @@ Item {
         spacing: 12
 
 
-        // ---- monitors: the chooser picks the bar edited below (on / off: Settings > Monitors) ----
-        MonitorChooser {
+        // ---- the monitor strip: the bar edited below, the bar on / off per monitor, links; "copy layout from" at its end ----
+        MonitorSection {
+            id: strip
             objectName: "bar-monitors"
             screens: Monitors.ordered                   // toggleLink indexes the same list
+            switchable: true
+            onFor: s => BarConfig.enabled(s)
+            switchEnabledFor: s => BarConfig.canDisable(s)
+            switchTipFor: s => !BarConfig.canDisable(s) ? "Last bar" : (BarConfig.enabled(s) ? "Hide bar on " : "Show bar on ") + Monitors.title(s)
+            allOn: Monitors.ordered.every(s => BarConfig.enabled(s))
+            allIcon: Icons.tableColumns
+            allTip: "Off keeps the primary's bar"
+            onSwitched: (s, want) => BarConfig.set(s, "enabled", want)
+            onAllSwitched: want => ed.setAll(want)
             linkable: true
             linkedAt: i => Monitors.ordered[i + 1] ? BarConfig.linked(BarConfig.keyOf(Monitors.ordered[i]), BarConfig.keyOf(Monitors.ordered[i + 1])) : false
             linkTip: i => (linkedAt(i) ? "Unlink " : "Link ") + ed.screenTitle(Monitors.ordered[i]) + " and " + ed.screenTitle(Monitors.ordered[i + 1])
             onLinkToggled: i => ed.toggleLink(i)
             groupedFor: s => ed.group.indexOf(BarConfig.keyOf(s)) >= 0
-            subtitleFor: s => BarConfig.enabled(s) ? "" : "no bar"
-            Btn {
-                objectName: "btn-bar-monitors"
-                text: "On / off"
-                outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26
-                onClicked: Popups.settingsRequest("open", "monitors")
+            Repeater {
+                id: copyRep
+                model: Monitors.ordered.filter(s => ed.group.indexOf(BarConfig.keyOf(s)) < 0)   // copying from a linked monitor would change nothing
+                MonitorAction {
+                    required property var modelData
+                    objectName: "btn-bar-copy-" + modelData.name
+                    glyph: Icons.copy
+                    text: copyRep.count > 1 ? modelData.name : ""      // several sources: the glyph alone cannot tell them apart
+                    tip: "Copy layout from " + ed.screenTitle(modelData)
+                    onClicked: BarWidgets.copyFrom(ed.key, BarWidgets.keyOf(modelData))
+                }
             }
         }
 
@@ -239,8 +261,7 @@ Item {
         SectionHead {
             Layout.topMargin: 6
             title: "Look"
-            detail: ed.barOn ? (ed.linkedGroup ? "linked" : "") : "bar off"
-            Icon { visible: !ed.barOn; text: Icons.lock; font.pixelSize: 11; color: Theme.yellow }
+            OffMark { visible: !ed.barOn }
         }
         PresetCards {
             id: lookCards
@@ -387,35 +408,11 @@ Item {
         SectionHead {
             Layout.topMargin: 6
             title: "Layout"
-            detail: (ed.linkedGroup ? "linked · " : "") + (ed.own ? "own" : "default")
+            detail: ed.own ? "own" : "default"
+            OffMark { visible: !ed.barOn }
             InfoTip { objectName: "tip-layout"; text: "Drag chips between columns to move or reorder, onto Hidden to hide (or use the eye). The control center chip can't be hidden, and the last bar can't be turned off: it is the way back into Settings." }
             Btn { inset: 18; implicitHeight: 24; text: "Reset"; enabledLook: ed.own; onClicked: if (ed.own) BarWidgets.reset(ed.key) }
         }
-        // "Copy from <other monitor>": a wrapping row of its own (with 3 monitors the names do not fit next to the head at 920 px)
-        Flow {
-            visible: copyRep.count > 0
-            Layout.fillWidth: true
-            spacing: 6
-            Repeater {
-                id: copyRep
-                model: Monitors.ordered.filter(s => ed.group.indexOf(BarConfig.keyOf(s)) < 0)   // copying from a linked monitor would change nothing
-                Btn {
-                    required property var modelData
-                    inset: 18                 // page level, like the monitor chips (radiusPage)
-                    implicitHeight: 24
-                    text: "Copy from " + ed.screenTitle(modelData)
-                    onClicked: BarWidgets.copyFrom(ed.key, BarWidgets.keyOf(modelData))
-                }
-            }
-        }
-        RowLayout {
-            visible: ed.sel ? !BarConfig.enabled(ed.sel) : false
-            spacing: 6
-            Icon { text: Icons.lock; font.pixelSize: 11; color: Theme.yellow }
-            Label { text: "bar off"; color: Theme.fgDim; font.pixelSize: Theme.fontCaption }
-            InfoTip { text: "The layout is kept for when the bar is back on." }
-        }
-
         // ---- preview ----
         Rectangle {
             id: preview

@@ -28,6 +28,8 @@ Scope {
     // from nothing then. `hidden` unmaps the windows (under the lock), `hiddenOn` = content opacity 0 (see below).
     property bool hidden: false
     property var hiddenOn: []           // connectors
+    // the wallpaper engine owns the clock (theme.toml wallpaper_backend "engine": engine.qml draws it with the wallpaper)
+    property bool disabled: false
     // connector -> { result (ItemGrabResult; its url is the image), x, y, w, h (screen px) }; null = the grab failed
     property var patches: ({})
     property int grabGen: 0
@@ -41,13 +43,13 @@ Scope {
         return m
     }
     // connectors that show a clock
-    readonly property var shownOn: Quickshell.screens.filter(s => DeskClockPrefs.shownOn(s)).map(s => s.name)
+    readonly property var shownOn: root.disabled ? [] : Quickshell.screens.filter(s => DeskClockPrefs.shownOn(s)).map(s => s.name)
     // delay (ms): until the first digit starts
     function formAll(delay) { formed(delay) }
     signal formed(int delay)
     Variants {
         id: clocks
-        model: Quickshell.screens.filter(s => DeskClockPrefs.shownOn(s))
+        model: root.disabled ? [] : Quickshell.screens.filter(s => DeskClockPrefs.shownOn(s))
         PanelWindow {
             id: win
             required property var modelData

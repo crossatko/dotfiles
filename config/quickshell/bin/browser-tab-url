@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""browser-tab-url BROWSER TITLE [ARTIST]: the YouTube / Twitch URL of the open tab that plays TITLE.
+
+Used by TvCast.qml (Send to TV): Chromium-family browsers export no URL over MPRIS (xesam:url is missing and the cover is
+a local temp file), but they write every tab's current URL and title to the profile's session file
+(<config>/<browser dir>/<profile>/Sessions/Session_*, Chromium's SNSS command log, rewritten a few seconds after a
+change). This reads the newest Session_* of each profile (read-only), takes each open tab's current navigation and
+prints the URL of the tab whose title contains TITLE (or, for Twitch, starts with ARTIST: Twitch tabs are titled
+"<channel> - Twitch"). The session file can lag minutes behind the tab (seen with Brave after an in-page YouTube
+navigation), so when no open tab matches, the profile's History database (SQLite, opened read-only + immutable: no lock,
+never written) is searched the same way, newest visit first. Only youtube.com / youtu.be / twitch.tv URLs are ever
+printed; anything else prints nothing.
+BROWSER: brave | chromium | chrome | vivaldi | edge. Exit 0 always (no output = not found). Config dir: $XDG_CONFIG_HOME
+or ~/.config (tests point HOME / XDG_CONFIG_HOME at a fixture).
+"""
+import glob
+import os
+import re
+import sqlite3
+import struct
+import sys
+import urllib.parse
+
+DIRS = {
+    "brave": "BraveSoftware/Brave-Browser",
+    "chromium": "chromium",
+    "chrome": "google-chrome",
+    "vivaldi": "vivaldi",
+    "edge": "microsoft-edge",
+}
+UPDATE_NAV, SELECTED_NAV, TAB_CLOSED = 6, 7, 16
+ALLOWED = re.compile(r"^https?://((www\.|m\.|music\.)?youtube\.com/(watch\?|shorts/|live/)|youtu\.be/|(www\.|m\.)?twitch\.tv/[A-Za-z0-9_]{1,25}/?([?#]|$))")
+MAX_BYTES = 64 << 20
+HISTORY_ROWS = 5000                                  # newest visited YouTube / Twitch URLs scanned in History
+
+
+def read_pickle_string(b, o, wide):
+    n, = struct.unpack_from("<i", b, o)
+    o += 4
+    size = n * 2 if wide else n
+    if n < 0 or o + size > len(b):
+        raise ValueError("bad string")
+    s = b[o:o + size].decode("utf-16-le" if wide else "utf-8", "replace")
+    return s, o + ((size + 3) & ~3)
+
+
+def tabs_of(path):
+    """{tab_id: (url, title, order)} of the open tabs' current navigation."""
+    with open(path, "rb") as f:
+        b = f.read(MAX_BYTES)
+    if b[:4] != b"SNSS":
+        return {}
+    navs, selected, closed = {}, {}, set()
+    p, order = 8, 0
+    while p + 3 <= len(b):
+        size, = struct.unpack_from("<H", b, p)
+        if size < 1 or p + 2 + size > len(b):
+            break
+        cid, data = b[p + 2], b[p + 3:p + 2 + size]
+        p += 2 + size
+        order += 1
+        try:
+            if cid == UPDATE_NAV and len(data) >= 16:
+                _, tab, idx = struct.unpack_from("<iii", data, 0)
+                url, o = read_pickle_string(data, 12, False)
+                title, _ = read_pickle_string(data, o, True)
+                navs[(tab, idx)] = (url, title, order)
+                closed.discard(tab)
+            elif cid == SELECTED_NAV and len(data) >= 8:
+                tab, idx = struct.unpack_from("<ii", data, 0)
+                selected[tab] = idx
+            elif cid == TAB_CLOSED and len(data) >= 4:
+                closed.add(struct.unpack_from("<i", data, 0)[0])
+        except (ValueError, struct.error):
+            continue
+    cur = {}
+    for (tab, idx), v in navs.items():
+        if tab in closed:
+            continue
+        want = selected.get(tab)
+        if want is not None and idx != want:
+            continue
+        if tab not in cur or v[2] > cur[tab][2]:
+            cur[tab] = v
+    return cur
+
+
+def norm(s):
+    s = re.sub(r"^\(\d+\)\s*", "", s or "")        # "(3) Title - YouTube": unread-notification count
+    return re.sub(r"\s+", " ", s).strip().casefold()
+
+
+def matches(url, tt, t, a):
+    if not ALLOWED.match(url or ""):
+        return False
+    n = norm(tt)
+    return t in n or ("twitch.tv/" in url and bool(a) and n.startswith(a))
+
+
+def history_rows(path):
+    """(url, title, last_visit_time) of the newest YouTube / Twitch visits in a Chromium History database."""
+    uri = "file:" + urllib.parse.quote(path) + "?mode=ro&immutable=1"
+    con = sqlite3.connect(uri, uri=True, timeout=1)
+    try:
+        return con.execute(
+            "SELECT url, title, last_visit_time FROM urls WHERE url LIKE 'http%youtu%' OR url LIKE 'http%twitch.tv/%' "
+            "ORDER BY last_visit_time DESC LIMIT ?", (HISTORY_ROWS,)).fetchall()
+    finally:
+        con.close()
+
+
+def find(browser, title, artist=""):
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    root = os.path.join(base, DIRS.get(browser, ""))
+    if browser not in DIRS or not os.path.isdir(root):
+        return ""
+    t, a = norm(title), norm(artist)
+    if not t:
+        return ""
+    best = None
+    for prof in glob.glob(os.path.join(root, "*", "Sessions")):
+        files = glob.glob(os.path.join(prof, "Session_*"))
+        if not files:
+            continue
+        newest = max(files, key=os.path.getmtime)
+        try:
+            tabs = tabs_of(newest)
+        except OSError:
+            continue
+        mtime = os.path.getmtime(newest)
+        for url, tt, order in tabs.values():
+            if matches(url, tt, t, a):
+                key = (mtime, order)
+                if best is None or key > best[0]:
+                    best = (key, url)
+    if best:
+        return best[1]
+    # the open tab is not in the session file yet: the newest matching visit in History
+    for hist in glob.glob(os.path.join(root, "*", "History")):
+        try:
+            rows = history_rows(hist)
+        except (sqlite3.Error, OSError):
+            continue
+        for url, tt, when in rows:
+            if matches(url, tt or "", t, a):
+                if best is None or (when or 0) > best[0]:
+                    best = (when or 0, url)
+                break
+    return best[1] if best else ""
+
+
+def main(argv):
+    if len(argv) < 3:
+        print(__doc__.strip().splitlines()[0], file=sys.stderr)
+        return 0
+    url = find(argv[1], argv[2], argv[3] if len(argv) > 3 else "")
+    if url:
+        print(url)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -116,17 +116,23 @@ Item {
         // every clock when a video was held (mid-burst: the clock's copy moves on, and a busy compositor answers slowly):
         // "hide <connectors> | *" on stdout, then snapHideS for the compositor to show that.
         clockHideOn = []
+        enginePatches = ({})
         // the clean rects for LockClockPatch, alongside the snapshot: the clock window must still be drawing (the
         // compositor stops its frames once the lock is up, then a grab never finishes)
-        if (snapHideS > 0 && LockPrefs.snapshot) clockGrab()
-        snapProc.command = ["sh", "-c", 'umask 077; d="$1"; g="$2"; h="$3"; snap="$4"; w="$5"; c="$6"; r="$7"; shift 7; rm -rf "$d"; mkdir -p "$d" || exit 1; '
+        if (snapHideS > 0 && LockPrefs.snapshot && !engineMode) clockGrab()
+        // Wallpaper engine (e = 1): `engine-ipc lockPrepare` instead of the hold: the engine pauses its clips and writes each
+        // clock's clean rect (clean-<conn>-<gen>.png, a frame later; "clean <conn>" once it is there, waited for after
+        // grim, ~60 ms at most), a covered clock is hidden by `lockCover`; no engine = nothing happens (exit 3 at once)
+        snapProc.command = ["sh", "-c", 'umask 077; d="$1"; g="$2"; h="$3"; snap="$4"; w="$5"; c="$6"; r="$7"; e="$8"; x="$9"; shift 9; rm -rf "$d"; mkdir -p "$d" || exit 1; '
             + 'cp=; [ "$w" = 0 ] || [ "$snap" != 1 ] || { python3 -I -S "$c" "$r" > "$d/cover" & cp=$!; }; '
-            + 'python3 -I -S "$h" hold "$@" > "$d/held"; [ "$snap" = 1 ] || exit 1; '
+            + 'ec=; if [ "$e" = 1 ]; then : > "$d/held"; ec=$("$x" lockPrepare "$g" "$d" 2>/dev/null); else python3 -I -S "$h" hold "$@" > "$d/held"; fi; [ "$snap" = 1 ] || exit 1; '
             + 'if [ -n "$cp" ]; then if [ -s "$d/held" ]; then kill "$cp"; hide="*"; else wait "$cp"; hide=$(xargs < "$d/cover"); fi; '
-            + '[ -z "$hide" ] || { echo "hide $hide"; sleep "$w"; }; fi; '
-            + 'for o in "$@"; do grim -t ppm -o "$o" "$d/$o-$g.ppm" & done; wait; for o in "$@"; do [ -s "$d/$o-$g.ppm" ] || exit 1; done',
+            + '[ -z "$hide" ] || { echo "hide $hide"; [ "$e" != 1 ] || "$x" lockCover "$hide" > /dev/null 2>&1; sleep "$w"; }; fi; '
+            + 'for o in "$@"; do grim -t ppm -o "$o" "$d/$o-$g.ppm" & done; wait; for o in "$@"; do [ -s "$d/$o-$g.ppm" ] || exit 1; done; '
+            + 'case "$ec" in "ok "*) for o in ${ec#ok }; do i=0; while [ ! -s "$d/clean-$o-$g.png" ] && [ $i -lt 12 ]; do sleep 0.005; i=$((i + 1)); done; '
+            + '[ -s "$d/clean-$o-$g.png" ] && echo "clean $o"; done;; esac; exit 0',
             "_", snapDir, String(snapGen), Quickshell.shellDir + "/bin/lock-desktop-video", LockPrefs.snapshot ? "1" : "0", String(snapHideS),
-            Quickshell.shellDir + "/bin/lock-clock-cover", JSON.stringify(clockRects)].concat(names)
+            Quickshell.shellDir + "/bin/lock-clock-cover", JSON.stringify(clockRects), engineMode ? "1" : "0", engineIpc].concat(names)
         snapProc.running = true
         snapCap.restart()
     }
@@ -138,6 +144,7 @@ Item {
         id: snapProc
         stdout: SplitParser {
             onRead: line => {
+                if (line.startsWith("clean ")) { root.enginePatch(line.substring(6).trim()); return }
                 if (!line.startsWith("hide ")) return
                 const l = line.substring(5).split(" ").filter(c => c !== "")
                 root.clockHideOn = l.indexOf("*") >= 0 ? root.clockScreens.slice() : l
@@ -158,8 +165,40 @@ Item {
     // the snapshots
     function dropSnaps() {
         snapsReady = false
-        Quickshell.execDetached(["sh", "-c", 'd="$1"; [ -s "$d/held" ] && python3 -I -S "$2" release $(cat "$d/held"); rm -rf "$d"',
-                                 "_", snapDir, Quickshell.shellDir + "/bin/lock-desktop-video"])
+        if (engineMode) Quickshell.execDetached(["sh", "-c", '"$2" lockRelease; rm -rf "$1"', "_", snapDir, engineIpc])
+        else Quickshell.execDetached(["sh", "-c", 'd="$1"; [ -s "$d/held" ] && python3 -I -S "$2" release $(cat "$d/held"); rm -rf "$d"',
+                                      "_", snapDir, Quickshell.shellDir + "/bin/lock-desktop-video"])
+    }
+
+    // ---- wallpaper engine (theme.toml wallpaper_backend "engine": engine.qml draws the wallpaper and the desktop clock in
+    // its own process; Wallpaper.engine). Same lock behaviour over bin/engine-ipc (~12 ms a call, 150 ms cap, exit 3 at
+    // once without an engine): lockPrepare before the snapshot (clips paused: the snapshot is the frame the desktop
+    // stays on; the clean rects as PNGs), lockCover for a covered clock, lockHide once secure (the clock is never drawn
+    // under the lock: no old clock in the engine's buffer at the unlock), lockRelease after the unlock (clips go on, the
+    // clocks form). The clock rects come from the engine's $XDG_RUNTIME_DIR/wallpaper-engine/clock.json ({conn: [x, y,
+    // w, h]} global px). shell.qml switches clockScreens / clockRects / clockPatches to these.
+    readonly property bool engineMode: Wallpaper.engine
+    readonly property string engineIpc: Quickshell.shellDir + "/bin/engine-ipc"
+    property var engineRects: ({})
+    property var enginePatches: ({})
+    FileView {
+        path: root.engineMode ? (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/wallpaper-engine/clock.json" : ""
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            let j = null
+            try { j = JSON.parse(text()) } catch (e) { j = null }
+            root.engineRects = j && typeof j === "object" && !Array.isArray(j) ? j : {}
+        }
+        onLoadFailed: root.engineRects = {}
+    }
+    function enginePatch(conn) {
+        const r = engineRects[conn], s = Quickshell.screens.find(x => x && x.name === conn)
+        if (!Array.isArray(r) || r.length !== 4 || !s) return
+        const m = Object.assign({}, enginePatches)
+        m[conn] = { result: { url: "file://" + snapDir + "/clean-" + conn + "-" + snapGen + ".png" }, x: r[0] - s.x, y: r[1] - s.y, w: r[2], h: r[3] }
+        enginePatches = m
     }
 
     // correct password: play the reveal (each LockView) and unlock when it ends; instantly without snapshots
@@ -200,6 +239,7 @@ Item {
         dropSnaps()
         clockHidden = false
         clockHideOn = []
+        enginePatches = ({})
         log("unlocked")
         unlocked()
     }
@@ -303,7 +343,10 @@ Item {
         locked: false
         onSecureStateChanged: {
             root.log("secure=" + secure)
-            if (secure) { root.pendingSessionLock = false; root.clockHidden = true; stabilize.stop(); poll.stop() }
+            if (secure) {
+                root.pendingSessionLock = false; root.clockHidden = true; stabilize.stop(); poll.stop()
+                if (root.engineMode) Quickshell.execDetached([root.engineIpc, "lockHide"])
+            }
         }
         // the compositor ended the lock under us (it can, e.g. a restore by another client)
         onLockStateChanged: {

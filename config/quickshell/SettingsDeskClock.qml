@@ -2,17 +2,20 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 
-// Settings -> Desktop clock: a live preview (DeskClockPreview: the real DeskClockView over that monitor's wallpaper,
-// 16:9, shown even while the clock is off), a few named choices (Presets.qml: size, morph; a 3 x 3 position grid) and,
-// under Customise…, every DeskClockPrefs key (deskclock.json). Everything applies live. The glass itself (refraction,
-// light, tint) is Settings > Look & feel.
+// Settings -> Desktop clock: the monitor strip first (MonitorSection, switchable: the picked monitor + the clock on / off per
+// monitor and "All"; DeskClockPrefs.setShownOn / setAllShown, the same setter as Settings > Monitors), a live preview of
+// the picked monitor (DeskClockPreview: the real DeskClockView over that monitor's wallpaper, 16:9), a few named
+// choices (Presets.qml: size, morph; a 3 x 3 position grid) and, under Customise…, every DeskClockPrefs key
+// (deskclock.json). Everything applies live. While the picked monitor shows no clock the preview and the rows are dimmed
+// (still usable, so it can be set up first) and the section heads say "Off". The glass itself is Settings > Look & feel.
 Item {
     id: pg
     implicitHeight: col.implicitHeight
 
     readonly property int titleW: 120
     readonly property bool dragging: size.dragging || posX.dragging || posY.dragging || adaptStrength.dragging || morph.dragging
-    readonly property var monitors: Monitors.ordered.filter(s => s.width > 0)
+    readonly property bool on: DeskClockPrefs.shownOn(Monitors.selected)
+    readonly property real dim: pg.on ? 1 : Theme.disabledOpacity
     function pct(v) { return Math.round(v * 100) + " %" }
     function times(v) { return v <= 0 ? "instant" : Number(v.toFixed(2)) + "x" }
     // a changed morph time shows itself in the preview once the slider rests
@@ -24,29 +27,32 @@ Item {
         width: parent.width
         spacing: 12
 
-
-        PrefSwitch {
-            title: "Show clock"; titleWidth: pg.titleW; store: DeskClockPrefs; key: "enabled"
-            info: DeskClockPrefs.enabled ? "Under all windows" : "Clock is off"
-            infoIcon: DeskClockPrefs.enabled ? "" : Icons.lock
+        // ---- the monitor strip: which monitor the preview / rows edit, and the clock on / off per monitor ----
+        MonitorSection {
+            objectName: "deskclock-monitors"
+            showSingle: true
+            switchable: true
+            onFor: s => DeskClockPrefs.shownOn(s)
+            switchTipFor: s => (DeskClockPrefs.shownOn(s) ? "Hide on " : "Show on ") + Monitors.title(s)
+            allOn: DeskClockPrefs.allShown
+            allIcon: Icons.desktop
+            onSwitched: (s, want) => DeskClockPrefs.setShownOn(Appearance.monitorKey(s), want)
+            onAllSwitched: want => DeskClockPrefs.setAllShown(want)
         }
 
-        // everything below hints that the clock is off, but stays usable
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 12
 
             SectionHead {
                 title: "Preview"
-                detail: pg.monitors.length > 1 ? "" : "as on " + (pg.monitors[0] ? pg.monitors[0].name : "this monitor")
                 Layout.topMargin: 6
-            }
-            MonitorChooser {
-                objectName: "deskclock-monitors"
-                subtitleFor: s => !DeskClockPrefs.enabled || DeskClockPrefs.shownOn(s) ? "" : "no clock"
+                OffMark { visible: !pg.on }
             }
             DeskClockPreview {
                 id: preview
+                opacity: pg.dim
+                Behavior on opacity { NumberAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
                 Layout.fillWidth: true
                 Layout.preferredHeight: implicitHeight      // 16:9
                 screen: Monitors.selected
@@ -54,14 +60,14 @@ Item {
 
         }
 
-        // below the preview: dimmed while the clock is off (a hint only, everything stays usable)
+        // below the preview: dimmed while the picked monitor shows no clock (a hint only, everything stays usable)
+        SectionHead { title: "Look"; Layout.topMargin: 6; OffMark { visible: !pg.on } }
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 12
-            opacity: DeskClockPrefs.enabled ? 1 : Theme.disabledOpacity
+            opacity: pg.dim
             Behavior on opacity { NumberAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
 
-            SectionHead { title: "Look"; Layout.topMargin: 6 }
             ChoiceRow {
                 title: "Size"
                 titleWidth: pg.titleW
@@ -112,7 +118,7 @@ Item {
                 SectionHead {
                     title: "Clock"
                     InfoTip { text: "Follows the Animations speed." }
-                    Btn { objectName: "btn-deskclock-morph"; text: Icons.play + "  Morph"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26; onClicked: preview.demo() }
+                    Btn { objectName: "btn-deskclock-morph"; glyph: Icons.play; text: "Morph"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26; onClicked: preview.demo() }
                 }
                 PrefToggle { titleWidth: pg.titleW; store: DeskClockPrefs; key: "clock24h"; label: "24-hour clock" }
                 PrefSlider { id: morph; title: "Morph time"; titleWidth: pg.titleW; store: DeskClockPrefs; key: "morph"; format: v => pg.times(v); extras: Presets.morph.map(p => p.v) }

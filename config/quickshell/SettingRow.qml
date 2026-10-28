@@ -8,9 +8,14 @@ RowLayout {
     id: sr
     property string title: ""
     property real titleWidth: 120
+    property real titleTopAt: -1          // >= 0: the title's centre this far below the top (content that wraps to more rows)
 
     Layout.fillWidth: true
     spacing: 10
 
-    Label { text: sr.title; Layout.preferredWidth: sr.titleWidth; color: Theme.fgDim; font.pixelSize: Theme.fontSmall; elide: Text.ElideRight }
+    Label {
+        text: sr.title; Layout.preferredWidth: sr.titleWidth; color: Theme.fgDim; font.pixelSize: Theme.fontSmall; elide: Text.ElideRight
+        Layout.alignment: sr.titleTopAt >= 0 ? Qt.AlignTop : Qt.AlignVCenter
+        Layout.topMargin: sr.titleTopAt >= 0 ? Math.max(0, Math.round(sr.titleTopAt - implicitHeight / 2)) : 0
+    }
 }

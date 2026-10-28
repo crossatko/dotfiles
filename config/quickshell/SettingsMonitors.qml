@@ -8,7 +8,7 @@ import Quickshell.Hyprland
 // detail card (MonitorCard) for the selected monitor with its per-monitor switches (bar, lock clock, desktop clock). The
 // switches write the features' own stores (bars.json, lock.json, deskclock.json): this page is the one place for them;
 // the Bar / Lock screen / Desktop clock pages keep only their own settings. The selection is the shared Settings pick
-// (Monitors.selected): the MonitorChooser of the other pages shows the same monitor.
+// (Monitors.selected): the MonitorSection of the other pages shows the same monitor.
 Item {
     id: pg
     implicitHeight: col.implicitHeight

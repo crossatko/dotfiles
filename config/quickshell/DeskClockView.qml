@@ -28,8 +28,25 @@ Item {
     // what the glass refracts: always `stage` (the still / image, the video copy drawn over it, and during a hand-over
     // the frozen old picture fading out on top)
     readonly property Item liveSource: videoOn ? video.output : wall     // which picture is live (swap detection)
-    readonly property Item source: stageTex
-    readonly property bool sourceReady: videoOn || wallReady
+    readonly property Item source: backdrop ? backdropTex : stageTex
+    readonly property bool sourceReady: backdrop ? backdropReady : videoOn || wallReady
+    // Wallpaper engine (engine.qml / EngineWindow): `backdrop` = the live wallpaper item (image + video) drawn under this
+    // clock in the same window. The glass samples it directly, only the clock's `area` (texRect: a small texture, not the
+    // screen); the stage below (still copy, video copy, hand-over snapshot) stays idle. `backdropReady` = it shows something.
+    property Item backdrop: null
+    property bool backdropReady: false
+    readonly property rect texRect: backdrop ? area : Qt.rect(0, 0, width, height)
+    ShaderEffectSource {
+        id: backdropTex
+        sourceItem: v.backdrop
+        sourceRect: v.texRect
+        width: v.texRect.width
+        height: v.texRect.height
+        hideSource: false
+        live: v.backdrop !== null
+        smooth: true
+        visible: false
+    }
 
     readonly property real unit: Math.min(width, height)
     // the digit size (DeskClockPrefs.size); with seconds the clock is wider: it shrinks only if it would not fit the screen
@@ -175,7 +192,7 @@ Item {
         function onFrameSwapped() { v.armFrames += 1 }
     }
     function arm() {
-        if (v.preview || v.holding || !v.sourceReady) return
+        if (v.preview || v.backdrop || v.holding || !v.sourceReady) return
         snap.sourceItem = scene
         snap.live = true
         v.armFrames = 0
@@ -228,7 +245,7 @@ Item {
         anchors.fill: parent
         sourceItem: stage
         hideSource: true
-        live: true
+        live: !v.backdrop
         smooth: true            // sampled bent by the glass
         visible: false
     }
@@ -245,6 +262,7 @@ Item {
                 anchors.fill: parent
                 screen: v.screen
                 path: v.wallpaper
+                active: !v.backdrop
                 reporting: false
                 pixelScale: v.preview ? 1 : (monitor && monitor.scale > 0 ? monitor.scale : 1)
             }
@@ -260,7 +278,7 @@ Item {
     DeskClockVideo {
         id: video
         anchors.fill: parent
-        connector: v.preview ? "" : v.connector
+        connector: v.preview || v.backdrop ? "" : v.connector
         opacity: 0.004
     }
 
@@ -337,8 +355,8 @@ Item {
                         morphMs: face.morphMs
                         backdrop: v.source
                         sharpBackdrop: v.source
-                        backdropSize: Qt.size(v.width, v.height)
-                        origin: Qt.point(col.x + glyphs.x + slot.x, col.y + glyphs.y + slot.y)
+                        backdropSize: Qt.size(v.texRect.width, v.texRect.height)
+                        origin: Qt.point(col.x + glyphs.x + slot.x - v.texRect.x, col.y + glyphs.y + slot.y - v.texRect.y)
                         presence: 1 - v.flatT
                         visible: v.flatT < 1
                     }

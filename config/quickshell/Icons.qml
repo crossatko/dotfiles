@@ -24,6 +24,7 @@ Singleton {
     readonly property string memory: "\uf538"   // memory
     readonly property string vm: "\uf108"   // desktop
     readonly property string monitor: "\uf390"   // desktop
+    readonly property string desktop: "\uf108"   // desktop (the desktop clock; the lock clock is Icons.lock)
     readonly property string caffeineOn: "\ue1f5"   // mug-tea-saucer
     readonly property string caffeineOff: "\uf0f4"   // mug-saucer
     readonly property string recording: "\uf03d"   // video
@@ -64,6 +65,8 @@ Singleton {
     readonly property string stop: "\uf04d"   // stop
     readonly property string prev: "\uf048"   // backward-step
     readonly property string next: "\uf051"   // forward-step
+    readonly property string seekBack: "\uf04a"   // backward
+    readonly property string seekForward: "\uf04e"   // forward
     readonly property string circlePlay: "\uf144"   // circle-play
     readonly property string shuffle: "\uf074"   // shuffle
     readonly property string repeat: "\uf363"   // repeat

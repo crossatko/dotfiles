@@ -2,12 +2,14 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "launcher/js/MonitorShown.js" as Shown
 
 // Settings -> Desktop clock: the opt-in glass clock on the desktop (DeskClock.qml / DeskClockView.qml read the values
 // here, live). Saved in ${XDG_STATE_HOME:-~/.local/state}/quickshell/deskclock.json next to appearance.json
 // (QS_DESKCLOCK_FILE overrides the path), the same way as LockPrefs / lock.json: a MISSING key = the built-in default,
 // `{}` or no file = off; this singleton is the only writer (debounced save).
-//   enabled                 show it at all (default off)
+//   enabled                 show it at all (default off); with `hidden` = which monitors show it, ONE rule:
+//                           launcher/js/MonitorShown.js (shownOn below; the shell, the engine and Settings use it)
 //   size (0.08-0.30)        digit size, share of the screen's short side
 //   posX, posY (0-1)        where the clock box sits: 0 = left / top edge, 1 = right / bottom edge (a 3 % margin kept)
 //   clock24h, showDate      bool
@@ -16,7 +18,9 @@ import Quickshell.Io
 //   adapt                   wallpaper-aware glass (default on): over a bright wallpaper the glass turns light and clear
 //   adaptStrength (0-1)     how far it goes there (1 = fully light glass on a white wallpaper)
 //   hidden                  { "<monitor key>": true } monitors without the clock (Appearance.monitorKey)
-//   qs ipc call deskclock get | set <key> <value> | unset <key> | reset | hideOn <monitor key> | showOn <monitor key>
+// Per monitor on / off goes through setShownOn / setAllShown only (they write `enabled` + `hidden` together: on while off
+// everywhere = that monitor only; off on the last one = off everywhere).
+//   qs ipc call deskclock get | set <key> <value> | unset <key> | reset | hideOn <monitor key> | showOn <monitor key> | all <true|false>
 Singleton {
     id: root
 
@@ -52,7 +56,12 @@ Singleton {
     readonly property bool adapt: value("adapt")
     readonly property real adaptStrength: value("adaptStrength")
     readonly property var hidden: value("hidden")
-    function shownOn(screen) { return enabled && !!screen && hidden[Appearance.monitorKey(screen)] !== true }
+    function shownOn(screen) { return !!screen && Shown.shown(enabled, hidden, Appearance.monitorKey(screen)) }
+    // the connected monitors' keys, and how many of them show the clock
+    readonly property var screenKeys: Quickshell.screens.map(s => Appearance.monitorKey(s)).filter(k => k !== "")
+    readonly property int shownCount: Shown.shownKeys({ enabled: enabled, hidden: hidden }, screenKeys).length
+    readonly property bool anyShown: shownCount > 0
+    readonly property bool allShown: screenKeys.length > 0 && shownCount === screenKeys.length
 
     function clean(key, v) {
         const s = spec[key]
@@ -104,12 +113,17 @@ Singleton {
         commit(d)
     }
     function reset() { commit({}) }
-    // per monitor (Appearance.monitorKey)
-    function setShownOn(monitorKey, on) {
-        const h = Object.assign({}, hidden)
-        if (on) delete h[monitorKey]
-        else h[monitorKey] = true
-        set("hidden", h)
+    // per monitor (Appearance.monitorKey): the only writers of `enabled` + `hidden` besides set / reset (one commit)
+    function setShownOn(monitorKey, on) { applyShown(Shown.toggle({ enabled: enabled, hidden: hidden }, screenKeys, monitorKey, on)) }
+    function setAllShown(on) { applyShown(Shown.setAll({ enabled: enabled, hidden: hidden }, screenKeys, on)) }
+    function applyShown(n) {
+        const d = Object.assign({}, root.data)
+        for (const k of ["enabled", "hidden"]) {
+            const c = clean(k, n[k])
+            if (c === undefined || same(c, root.defaults[k])) delete d[k]
+            else d[k] = c
+        }
+        if (!same(root.serialize(d), root.serialize(root.data))) commit(d)
     }
 
     function commit(d) {
@@ -157,5 +171,10 @@ Singleton {
         function reset(): string { root.reset(); return "ok" }
         function hideOn(monitor: string): string { root.setShownOn(monitor, false); return "ok" }
         function showOn(monitor: string): string { root.setShownOn(monitor, true); return "ok" }
+        function all(on: string): string {
+            if (on !== "true" && on !== "false") return "bad value"
+            root.setAllShown(on === "true")
+            return "ok"
+        }
     }
 }

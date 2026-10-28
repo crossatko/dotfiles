@@ -4,9 +4,8 @@ import QtQuick.Layouts
 import Quickshell
 
 // Settings > Look & feel > Shape > Customise…: corner radius, window border, window gap, a separate edge gap, and
-// smart gaps (one switch; with several monitors a MonitorChooser with an "All" chip picks what it edits: All = every
-// monitor, also ones connected later, and drops the per-monitor entries; a monitor = its own entry, undone by the
-// reset glyph; a chip with its own entry says "on" / "off"), with a sample of the
+// smart gaps (one switch; with several monitors the monitor strip without selection: a switch per monitor = its own
+// entry, "All" = every monitor, also ones connected later, and drops the per-monitor entries), with a sample of the
 // concentric radii. Writes only through the Appearance singleton (appearance.json overrides, debounced save, then
 // Hyprland is poked); shows the EFFECTIVE values from Theme (override, else the theme default). Everything in the
 // shell and Hyprland follows at once. Slider rows end in the value and a reset glyph (lit while the key is set), like
@@ -42,9 +41,6 @@ ColumnLayout {
         Appearance.set(key, Math.round(v * max / step) * step)
     }
     readonly property bool multiMonitor: Quickshell.screens.length > 1
-    property bool smartAll: true                     // the chooser's "All" chip is picked (page-local; a monitor = Monitors.selected)
-    readonly property var smartScreen: multiMonitor && !smartAll ? Monitors.selected : null
-    readonly property string smartKey: smartScreen ? Appearance.monitorKey(smartScreen) : ""
     // with one monitor the "all monitors" switch is the only one: it shows that monitor's effective value
     // (a leftover entry of its own, e.g. from a docked laptop, wins in Hyprland) and clears it when used
     readonly property string soleKey: !multiMonitor && Quickshell.screens.length === 1 ? Appearance.monitorKey(Quickshell.screens[0]) : ""
@@ -72,35 +68,35 @@ ColumnLayout {
         delegate: sliderRow
     }
     SettingRow {
-        visible: smartMons.shown
         titleWidth: sa.titleW
-        MonitorChooser {
-            id: smartMons
-            objectName: "smart-monitors"
-            allEntry: true
-            allCurrent: sa.smartAll
-            subtitleFor: s => { const k = Appearance.monitorKey(s); return Appearance.smartOverridden(k) ? (Appearance.smartFor(k, Theme.smartGaps) ? "on" : "off") : "" }
-            onPicked: name => sa.smartAll = name === ""
-        }
-    }
-    SettingRow {
-        titleWidth: sa.titleW
-        // All: sets the default (also for monitors connected later) and clears the per-monitor entries; a monitor: its own entry
+        // one monitor: the plain switch (it shows that monitor's effective value: a leftover entry of its own, e.g. from a
+        // docked laptop, wins in Hyprland, and is cleared when used); several: the monitor strip below
         Toggle {
             objectName: "toggle-smartGaps"
-            checked: sa.smartKey !== "" ? Appearance.smartFor(sa.smartKey, Theme.smartGaps)
-                   : sa.soleKey !== "" ? Appearance.smartFor(sa.soleKey, Theme.smartGaps) : Theme.smartGaps
-            onToggled: want => sa.smartKey !== "" ? Appearance.setSmartFor(sa.smartKey, want) : Appearance.setSmartAll(want)
+            visible: !sa.multiMonitor
+            checked: sa.soleKey !== "" ? Appearance.smartFor(sa.soleKey, Theme.smartGaps) : Theme.smartGaps
+            onToggled: want => Appearance.setSmartAll(want)
         }
         Label { text: "Smart gaps"; color: Theme.fgDim; font.pixelSize: Theme.fontSmall }
         InfoTip { text: "A lone tiled window fills the screen without gaps." }
         Item { Layout.fillWidth: true }
-        ResetBtn {
-            objectName: "reset-smart-monitor"
-            visible: sa.smartKey !== ""
-            set: Appearance.smartOverridden(sa.smartKey)
-            onClicked: Appearance.unsetSmartFor(sa.smartKey)
-        }
+    }
+    // the monitor strip without selection, full width (three chips do not fit beside the title column): each chip is that
+    // monitor's switch (its own entry); "All" sets the default (also for monitors connected later) and drops the
+    // per-monitor entries
+    MonitorSection {
+        id: smartMons
+        objectName: "smart-monitors"
+        selectable: false
+        switchable: true
+        onFor: s => Appearance.smartFor(Appearance.monitorKey(s), Theme.smartGaps)
+        switchTipFor: s => "Smart gaps on " + Monitors.title(s)
+        allOn: Monitors.ordered.every(s => Appearance.smartFor(Appearance.monitorKey(s), Theme.smartGaps))
+        allIcon: Icons.windowMaximize
+        glyphOn: Icons.windowMaximize
+        glyphOff: Icons.windowMaximize
+        onSwitched: (s, want) => Appearance.setSmartFor(Appearance.monitorKey(s), want)
+        onAllSwitched: want => Appearance.setSmartAll(want)
     }
 
     // the concentric radii at real size: card (R) > item (inner(R, 12)) > chip (inner(item, 8))

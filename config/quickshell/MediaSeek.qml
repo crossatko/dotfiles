@@ -3,7 +3,7 @@ import QtQuick.Layouts
 
 // A player's progress: seek bar (click = seek, where the player can) and position / length under it. Shown only for a
 // track with a known, finite length (`usable`). MPRIS does not push the position: it is re-read once a second while
-// playing and shown. MediaPanel, LockMedia.
+// playing and shown (a MediaSource.progress object: its refresh()). MediaPanel, LockMedia.
 ColumnLayout {
     id: seek
     property var player: null
@@ -16,8 +16,9 @@ ColumnLayout {
     Timer {
         interval: 1000
         repeat: true
-        running: seek.visible && seek.player !== null && !!seek.player.isPlaying && typeof seek.player.positionChanged === "function"
-        onTriggered: seek.player.positionChanged()
+        running: seek.visible && seek.player !== null && !!seek.player.isPlaying
+                 && (typeof seek.player.refresh === "function" || typeof seek.player.positionChanged === "function")
+        onTriggered: typeof seek.player.refresh === "function" ? seek.player.refresh() : seek.player.positionChanged()
     }
     Meter {
         Layout.fillWidth: true

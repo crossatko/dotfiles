@@ -9,6 +9,7 @@ ShellRoot {
     // Which screens get a bar and on which edge: BarConfig (on / off: Settings -> Monitors; edge and look: Settings -> Bar).
     readonly property var bars: BarConfig.bars
     Binding { target: Popups; property: "bars"; value: root.bars }
+    readonly property var tvCast: TvCast     // Send to TV: its `tvcast` IPC target exists from the start (idle until used)
 
     // the desktop wallpaper (theme.py wallpaper_backend "quickshell"; Wallpaper.qml): background layer, first so it maps early
     WallpaperLayer {}
@@ -36,16 +37,17 @@ ShellRoot {
     // opt-in glass clock on the desktop (Settings > Desktop clock): stays in the lock's desktop snapshot and fades out on
     // the lock surface (its clean rect, DeskClock.patches); hidden while locked, forms again after the unlock
     // (its first digit starts when the unlock is done: the ring was the pause)
-    DeskClock { id: deskClock; hidden: lockService.clockHidden; hiddenOn: lockService.clockHideOn }
+    // (backend "engine": the wallpaper engine draws the clock; Lock talks to it over bin/engine-ipc instead)
+    DeskClock { id: deskClock; disabled: Wallpaper.engine; hidden: lockService.clockHidden; hiddenOn: lockService.clockHideOn }
     Connections {
         target: lockService
         function onUnlocked() { deskClock.dropPatches(); deskClock.formAll(0) }
         function onClockGrab() { deskClock.grabClean() }
     }
-    Binding { target: lockService; property: "snapHideS"; value: DeskClockPrefs.enabled ? 0.035 : 0 }
-    Binding { target: lockService; property: "clockPatches"; value: deskClock.patches }
-    Binding { target: lockService; property: "clockScreens"; value: deskClock.shownOn }
-    Binding { target: lockService; property: "clockRects"; value: deskClock.inkRects }
+    Binding { target: lockService; property: "snapHideS"; value: DeskClockPrefs.anyShown ? 0.035 : 0 }
+    Binding { target: lockService; property: "clockPatches"; value: lockService.engineMode ? lockService.enginePatches : deskClock.patches }
+    Binding { target: lockService; property: "clockScreens"; value: lockService.engineMode ? Object.keys(lockService.engineRects) : deskClock.shownOn }
+    Binding { target: lockService; property: "clockRects"; value: lockService.engineMode ? lockService.engineRects : deskClock.inkRects }
 
     // one popup host per screen; Popups.* says which is open
     Variants {

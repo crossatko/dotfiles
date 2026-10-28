@@ -138,8 +138,8 @@ ColumnLayout {
             Layout.fillWidth: true
             Layout.topMargin: 6
             spacing: 8
-            Btn { objectName: "btn-copy-changed"; visible: ga.tune.ready; text: Icons.copy + "  Copy Lua"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26; onClicked: ga.tune.copy(true) }
-            Btn { objectName: "btn-copy-all"; visible: ga.tune.ready; text: Icons.copy + "  Copy all"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26; onClicked: ga.tune.copy(false) }
+            Btn { objectName: "btn-copy-changed"; visible: ga.tune.ready; glyph: Icons.copy; text: "Copy Lua"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26; onClicked: ga.tune.copy(true) }
+            Btn { objectName: "btn-copy-all"; visible: ga.tune.ready; glyph: Icons.copy; text: "Copy all"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26; onClicked: ga.tune.copy(false) }
             Btn { objectName: "btn-reset-all"; text: "Reset glass"; outerRadius: Theme.radiusPage; inset: 9; implicitHeight: 26; enabledLook: ga.anyChanged; onClicked: ga.tune.reset("all") }
             InfoTip { text: ga.tune.ready ? "Changed values are applied to Hyprland while you drag and saved in glass.json, which wins over settings.lua at every config load. Copy Lua = the changed values as a settings.lua snippet." + (ga.tune.nestedOnly ? " (nested dev instance only)" : "")
                                           : "Saved in glass.json; applied to the shell's own glass at once." }

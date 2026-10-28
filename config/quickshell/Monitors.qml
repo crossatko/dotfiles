@@ -10,7 +10,7 @@ import Quickshell.Hyprland
 //   primary            the primary ShellScreen (null while there is none); primaryName its connector, primaryKey its key
 //   isPrimary(screen)  label(screen) connector name; title(screen) model, else connector
 //   setPrimary(screen) / clearPrimary()   save the choice / go back to the automatic one
-//   selected / select(screen | name)   the monitor the Settings pages edit (MonitorChooser, the Monitors map): one shared
+//   selected / select(screen | name)   the monitor the Settings pages edit (MonitorSection, the Monitors map): one shared
 //                      pick, so switching on one page carries to the others; "" / a monitor that went away = the primary.
 //                      Not saved; Settings resets it when it opens.
 // Choice: ${XDG_STATE_HOME:-~/.local/state}/quickshell/monitors.json (QS_MONITORS_FILE overrides) =

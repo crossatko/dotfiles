@@ -5,7 +5,8 @@ import QtQuick.Layouts
 
 // Settings > Monitors: the monitor MAP and selector. Every connected monitor at its real relative size and position
 // (uniformly scaled to the width and at most `maxH` tall, centred), each tile showing its wallpaper still (cover crop)
-// under a soft bottom scrim with the connector name, a refresh badge and the Primary marker. Real gaps are kept, with at
+// under a soft bottom scrim with the name (model, else connector, as MonitorChip), connector + refresh badge and the
+// PrimaryTag (on its dark pill). Real gaps are kept, with at
 // least `gap` px between neighbours. The `selected` monitor (the one the detail card below acts on) has the accent
 // outline (heavier while the map has keyboard focus). Click = select, double click = make it primary (Monitors.setPrimary). Keyboard: Tab focuses the map,
 // Left / Right (by position) select, Enter / Space make the selected one primary. Tiles: objectName monitor-pick-<conn>.
@@ -108,28 +109,19 @@ Rectangle {
             }
             PressFeedback { area: thArea }
 
-            // Primary marker: top left, a dark chip with the accent dot
-            Rectangle {
+            // Primary marker: top left, on a dark pill
+            PrimaryTag {
                 visible: th.primary
                 anchors { left: parent.left; top: parent.top; margins: Theme.controlGap }
-                width: tagRow.implicitWidth + 2 * Theme.controlGap
-                height: tagRow.implicitHeight + 4
-                radius: Math.min(Theme.radiusDeep, height / 3)
-                color: Theme.alpha(pk.ink.bg, 0.72)
-                RowLayout {
-                    id: tagRow
-                    anchors.centerIn: parent
-                    spacing: Theme.gapTight
-                    Rectangle { Layout.preferredWidth: 6; Layout.preferredHeight: 6; radius: 3; color: pk.ink.accent }
-                    Label { visible: th.width >= 70; text: "Primary"; font.pixelSize: Theme.fontTiny; font.bold: true; color: pk.ink.fg }
-                }
+                ink: pk.ink
+                compact: th.width < 70
             }
             // name bottom left, refresh badge bottom right
             RowLayout {
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: Theme.gapRow }
                 spacing: Theme.controlGap
                 Label {
-                    text: Monitors.label(th.modelData)
+                    text: Monitors.title(th.modelData)
                     font.pixelSize: Theme.fontSmall
                     font.bold: true
                     color: pk.ink.fg
@@ -137,8 +129,10 @@ Rectangle {
                     Layout.fillWidth: true
                 }
                 Label {
-                    visible: !th.small && Monitors.mode(th.modelData).hz > 0
-                    text: Math.round(Monitors.mode(th.modelData).hz) + " Hz"
+                    visible: !th.small && text !== ""
+                    // the connector when the name is the model (as on MonitorChip), then the refresh rate
+                    text: [Monitors.title(th.modelData) !== th.modelData.name ? th.modelData.name : "",
+                           Monitors.mode(th.modelData).hz > 0 ? Math.round(Monitors.mode(th.modelData).hz) + " Hz" : ""].filter(t => t !== "").join(" · ")
                     font.pixelSize: Theme.fontTiny
                     color: pk.ink.fgDim
                 }

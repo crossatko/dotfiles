@@ -7,7 +7,6 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Services.SystemTray
 import Quickshell.Services.Pipewire
-import Quickshell.Services.Mpris
 import Quickshell.Networking
 import Quickshell.Bluetooth
 
@@ -118,33 +117,11 @@ PanelWindow {
     }
     Component.onCompleted: { BarContrast.bars[bar.screen.name] = bar; BarContrast.request(lumaKey); Popups.barObjs[bar.screen.name] = bar; Popups.setBarGap(bar.screen.name, gapNow) }
 
-    // the playing MPRIS player wins; a paused one only shows while the Twitch app isn't playing
-    // (media chip only: nothing below runs while the widget is in no layout)
+    // what the media chip shows: MediaSources.active (a playing MPRIS player wins; a paused one only shows while the
+    // Twitch app isn't playing; Twitch only while its status file is fresh). Nothing below runs while the widget is in no layout.
     readonly property bool mediaOn: BarWidgets.shown("media")
-    readonly property var player: {
-        if (!mediaOn) return null
-        const ps = Mpris.players.values
-        const twitchPlaying = twitchActive && twitchNow.playing
-        return ps.find(p => p.isPlaying) || (twitchPlaying ? null : ps.find(p => p.trackTitle)) || null
-    }
-    // Twitch player (~/code/crossatko/twitch-qs-mpv): embedded libmpv has no MPRIS, so it publishes a status
-    // file instead. Shown when no MPRIS player is active; ignored once it is older than 45 s (player gone).
-    property var twitchNow: null
-    property double twitchClock: Date.now()
-    Timer {
-        interval: 10000; running: bar.mediaOn; repeat: true
-        onRunningChanged: if (running) bar.twitchClock = Date.now()
-        onTriggered: bar.twitchClock = Date.now()
-    }
-    FileView {
-        path: bar.mediaOn ? Quickshell.env("XDG_RUNTIME_DIR") + "/twitch-qs-mpv-now.json" : ""
-        watchChanges: true
-        printErrors: false
-        onFileChanged: reload()
-        onLoaded: { try { bar.twitchNow = JSON.parse(text()) } catch (e) { bar.twitchNow = null } }
-        onLoadFailed: bar.twitchNow = null
-    }
-    readonly property bool twitchActive: twitchNow !== null && twitchClock - twitchNow.updated < 45000
+    readonly property var media: mediaOn ? MediaSources.active : null
+    readonly property var player: media && media.kind === "mpris" ? media.mpris : null
     // Brand glyph (Font Awesome Brands) for whatever is playing; "" = fall back to plain play/pause.
     // The service (YouTube, Twitch, ...) wins over the browser playing it. Browsers' MPRIS has no URL, so
     // the service comes from the browser window title minus the track title ("<track> - YouTube - Brave").
@@ -156,7 +133,7 @@ PanelWindow {
     function brandIn(list, s) { for (const m of list) if (s.indexOf(m[0]) >= 0) return m[1]; return "" }
     readonly property string mediaBrand: {
         if (!mediaOn) return ""
-        if (!player) return twitchNow && twitchNow.playing ? Icons.twitch : ""
+        if (!player) return media && (media.playing || media.kind === "tv") ? media.glyph : ""   // the TV session: tv glyph, paused too
         const md = player.metadata || {}
         const app = ((player.identity || "") + " " + (player.desktopEntry || "")).toLowerCase()
         const title = player.trackTitle || ""
@@ -168,7 +145,7 @@ PanelWindow {
         const where = (app + " " + (md["xesam:url"] || "") + " " + win).toLowerCase()
         return brandIn(services, where) || brandIn(services, title.toLowerCase()) || brandIn(browsers, app)
     }
-    readonly property bool showTwitch: mediaOn && twitchActive && player === null
+    readonly property bool showTwitch: media !== null && media.kind === "twitch"
     readonly property int mediaLabelMax: 460    // the media ticker's title never grows past this (elided)
     // network: wired link wins, else Wi-Fi; dimmed when nothing is connected
     readonly property var netDevs: Networking.devices.values
@@ -346,22 +323,20 @@ PanelWindow {
         Chip {
             id: mediaChip
             Component.onCompleted: bar.reg("media", mediaChip)
-            show: bar.player !== null || bar.showTwitch
+            show: bar.media !== null
             active: bar.isOpen("media")
             onClicked: mouse => {
-                if (bar.player === null) {   // Twitch player: raise its window
-                    bar.run(["sh", "-c", "hyprctl clients -j | jq -r '.[]|select(.class==\"org.quickshell\" and (.title|startswith(\"Twitch - \")))|.address' | head -n1 | xargs -I{} hyprctl dispatch 'hl.dsp.focus({window=\"address:{}\"})'"])
-                } else if (mouse.button === Qt.MiddleButton) bar.player.togglePlaying()
+                if (bar.showTwitch && mouse.button !== Qt.LeftButton) bar.media.raise()   // Twitch player: raise its window
+                else if (mouse.button === Qt.MiddleButton) { if (bar.player) bar.player.togglePlaying(); else if (bar.media) bar.media.togglePlaying() }
                 else bar.pop("media", mediaChip)
             }
             BarIcon {
                 text: bar.mediaBrand ? bar.mediaBrand : bar.player ? (bar.player.isPlaying ? Icons.play : Icons.pause) : Icons.pause
-                color: bar.player && !bar.player.isPlaying ? ink.muted : ink.accent   // the brand mark follows the chip's role too
-                family: bar.mediaBrand ? Theme.brandFont : Theme.iconFont
+                color: (bar.player && !bar.player.isPlaying) || (bar.media && bar.media.kind === "tv" && !bar.media.playing) ? ink.muted : ink.accent   // the brand mark follows the chip's role too
+                family: bar.mediaBrand && (!bar.media || bar.media.glyphBrand !== false) ? Theme.brandFont : Theme.iconFont
             }
             BarLabel {
-                text: bar.player ? bar.player.trackTitle + (bar.player.trackArtist ? "  ·  " + bar.player.trackArtist : "")
-                    : bar.showTwitch ? bar.twitchNow.channel + (bar.twitchNow.game ? "  ·  " + bar.twitchNow.game : "") : ""
+                text: bar.media ? bar.media.chipText : ""
                 elide: Text.ElideRight
                 Layout.maximumWidth: bar.mediaLabelMax
             }

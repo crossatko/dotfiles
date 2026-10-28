@@ -103,7 +103,7 @@ Launcher 1.0 Launcher.qml
 HoverGlow 1.0 HoverGlow.qml
 SwipeDismiss 1.0 SwipeDismiss.qml
 WallpaperTile 1.0 WallpaperTile.qml
-MonitorLinkButton 1.0 MonitorLinkButton.qml
+MonitorLink 1.0 MonitorLink.qml
 MullvadSection 1.0 MullvadSection.qml
 FoldSection 1.0 FoldSection.qml
 singleton VpnSwitch 1.0 VpnSwitch.qml
@@ -148,11 +148,18 @@ BarInk 1.0 BarInk.qml
 singleton BarContrast 1.0 BarContrast.qml
 LockClockPatch 1.0 LockClockPatch.qml
 ClockFace 1.0 ClockFace.qml
-MediaPick 1.0 MediaPick.qml
+MediaSource 1.0 MediaSource.qml
+MprisSource 1.0 MprisSource.qml
+TwitchSource 1.0 TwitchSource.qml
+singleton MediaSources 1.0 MediaSources.qml
+LivePill 1.0 LivePill.qml
 MediaArt 1.0 MediaArt.qml
 MediaSeek 1.0 MediaSeek.qml
 MediaTransport 1.0 MediaTransport.qml
 LockMedia 1.0 LockMedia.qml
+MediaBadge 1.0 MediaBadge.qml
+MediaStats 1.0 MediaStats.qml
+FitLabel 1.0 FitLabel.qml
 PressFeedback 1.0 PressFeedback.qml
 GlideHighlight 1.0 GlideHighlight.qml
 Reveal 1.0 Reveal.qml
@@ -164,6 +171,7 @@ LockSketch 1.0 LockSketch.qml
 PrefSwitch 1.0 PrefSwitch.qml
 BarLookSample 1.0 BarLookSample.qml
 InfoTip 1.0 InfoTip.qml
+TipBubble 1.0 TipBubble.qml
 singleton SystemStats 1.0 SystemStats.qml
 singleton Recording 1.0 Recording.qml
 singleton Monitors 1.0 Monitors.qml
@@ -171,6 +179,21 @@ PrimaryTag 1.0 PrimaryTag.qml
 MonitorPicker 1.0 MonitorPicker.qml
 SettingsMonitors 1.0 SettingsMonitors.qml
 MonitorCard 1.0 MonitorCard.qml
-MonitorChooser 1.0 MonitorChooser.qml
+MonitorSection 1.0 MonitorSection.qml
 MonitorChip 1.0 MonitorChip.qml
+MonitorStateCell 1.0 MonitorStateCell.qml
+MonitorThumb 1.0 MonitorThumb.qml
+MonitorAction 1.0 MonitorAction.qml
 LabelSwitch 1.0 LabelSwitch.qml
+OffMark 1.0 OffMark.qml
+EngineWindow 1.0 EngineWindow.qml
+EngineVideo 1.0 EngineVideo.qml
+EngineVideoSlot 1.0 EngineVideoSlot.qml
+singleton TvPrefs 1.0 TvPrefs.qml
+singleton TvCast 1.0 TvCast.qml
+TvButton 1.0 TvButton.qml
+SettingsTv 1.0 SettingsTv.qml
+singleton TvSession 1.0 TvSession.qml
+TvSource 1.0 TvSource.qml
+HaWatch 1.0 HaWatch.qml
+MediaVolumeSteps 1.0 MediaVolumeSteps.qml
