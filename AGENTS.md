@@ -15,8 +15,8 @@ zellij claude-tabs, AeroSpace fork, librepods) live in their own repos, only the
   app's repo/README.
 - **Never commit per-machine files:** `config/theme/theme.local.toml`, `config/theme/out/`, `config/hypr/.secrets` (keys listed in tracked `.secrets.example`),
   `config/ghostty/host.local`, `config/wivrn/` pairing data, `config/zellij/plugins/`, `~/.zshrc.local`. Never print/log secret values.
-- **Licensed fonts stay out of the repo:** Font Awesome Pro (Sharp Regular) lives in `~/.local/share/fonts/FontAwesomePro/`; Brands comes from the system
-  package.
+- **Icon fonts stay out of the repo:** Vadivam (MIT) is fetched from npm into `~/.local/share/fonts/Vadivam/` by install.sh (pinned version: its code points
+  are positional); Brands comes from the system package.
 - **Commits:** no AI attribution; commit/merge/push only when the user asks.
 - **Screenshots:** only the relevant window/part (`grim -g "x,y WxH"`, geometry from `hyprctl clients -j` / `layers -j`), never the whole screen or user
   content. Glass/translucency only in a nested Hyprland with a generated solid/checkerboard backdrop behind it. Hyprland dims unfocused windows; popups open on
@@ -55,7 +55,7 @@ zellij claude-tabs, AeroSpace fork, librepods) live in their own repos, only the
   is stock-compatible and needs no fork.
 - Hyprland Lua: `hyprctl dispatch "hl.dsp.focus({workspace=N})"`; `hyprctl keyword` is refused; Lua objects are userdata (nil-check, never `type(x)=="table"`);
   `hl.dsp.window.pin` TOGGLES.
-- Fonts: Paper Mono (UI), Font Awesome Pro Sharp + Brands (icons). A new machine needs `inode/directory` -> Nautilus in untracked `~/.config/mimeapps.list`.
+- Fonts: Paper Mono (UI), Vadivam + Font Awesome Brands (icons). A new machine needs `inode/directory` -> Nautilus in untracked `~/.config/mimeapps.list`.
 
 ## Repository map
 

@@ -56,7 +56,7 @@ QtObject {
         const run = j.state === "running"
         const sub = j.state === "failed" ? (j.error || "Failed") : run && j.pct >= 0 ? j.phase + "  ·  " + j.detail : j.detail
         return { id: id, name: (run ? "Downloading " : j.state === "failed" ? "Failed: " : "") + (title || j.label), subtitle: sub, kind: "vm-job", jobId: j.id, source: "",
-                 glyph: "\uf019", iconColor: j.state === "failed" ? "red" : "", transient: true, private: true, vmNav: false,   // download
+                 glyph: "\ue0b7", iconColor: j.state === "failed" ? "red" : "", transient: true, private: true, vmNav: false,   // download
                  progress: run ? Math.max(0, j.pct) / 100 : undefined, runLabel: "",
                  actions: [run ? act("vm-job-cancel", "Cancel download", "", "Stops quickget; the partial file is kept and resumes next time")
                                : act("vm-job-cancel", "Dismiss", "", "")] }
@@ -222,34 +222,34 @@ QtObject {
             if (v.ssh) parts.push("ssh :" + v.ssh)
         }
         const a = v.running
-            ? [act("vm-stop", "Shut down", "\uf011", "ACPI power button: the guest shuts down cleanly"),   // power-off
-               act("vm-kill", "Force stop", "\uf00d", "Kill qemu, like pulling the plug", true, "Force stop " + v.name + "? Unsaved work in it is lost")]   // xmark
-            : [act("vm-start-spice", "Start with SPICE viewer", "\uf26c", "Clipboard / folder sharing and USB redirection (needs spice-vdagent in the guest)"),   // tv
-               act("vm-start-headless", "Start headless", "\uf120", "No window; SSH and SPICE on localhost"),   // terminal
-               act("vm-snaps", "Snapshots", "\uf030", "Create, restore or delete disk snapshots"),   // camera
-               act("vm-attach", "Attach ISO...", "\uf51f", v.fresh ? "Installer ISO (replaces " + (v.iso || "none") + ")" : "Extra CD-ROM, e.g. drivers (virtio-win)")]   // compact-disc
-        if (!v.running) a.push(act("vm-res", "Resources...", "\uf2db", "RAM " + (v.ram || "auto") + "  ·  CPU cores " + (v.cores || "auto")))   // microchip
-        if (!v.running && (v.fixedIso || v.iso)) a.push(act("vm-detach", "Detach ISO", "\uf00d", v.fixedIso || v.iso))   // xmark
-        a.push(act("vm-folder", "Open VM folder", "\uf07c", v.vmdir))   // folder-open
-        a.push(act("vm-edit", "Edit config", "\uf044", v.name + ".conf"))   // pen-to-square
-        if (!v.running) a.push(act("vm-delete", "Delete VM", "\uf1f8", "Move the config and the VM folder to the trash", true, "Delete " + v.name + "? Moves it to the trash"))   // trash
+            ? [act("vm-stop", "Shut down", "\ue126", "ACPI power button: the guest shuts down cleanly"),   // power-off
+               act("vm-kill", "Force stop", "\ue0ee", "Kill qemu, like pulling the plug", true, "Force stop " + v.name + "? Unsaved work in it is lost")]   // xmark
+            : [act("vm-start-spice", "Start with SPICE viewer", "\ue1cb", "Clipboard / folder sharing and USB redirection (needs spice-vdagent in the guest)"),   // tv
+               act("vm-start-headless", "Start headless", "\ue0e8", "No window; SSH and SPICE on localhost"),   // terminal
+               act("vm-snaps", "Snapshots", "\ue105", "Create, restore or delete disk snapshots"),   // camera
+               act("vm-attach", "Attach ISO...", "\ue3ce", v.fresh ? "Installer ISO (replaces " + (v.iso || "none") + ")" : "Extra CD-ROM, e.g. drivers (virtio-win)")]   // compact-disc
+        if (!v.running) a.push(act("vm-res", "Resources...", "\ue0b5", "RAM " + (v.ram || "auto") + "  ·  CPU cores " + (v.cores || "auto")))   // microchip
+        if (!v.running && (v.fixedIso || v.iso)) a.push(act("vm-detach", "Detach ISO", "\ue0ee", v.fixedIso || v.iso))   // xmark
+        a.push(act("vm-folder", "Open VM folder", "\ue0be", v.vmdir))   // folder-open
+        a.push(act("vm-edit", "Edit config", "\ue142", v.name + ".conf"))   // pen-to-square
+        if (!v.running) a.push(act("vm-delete", "Delete VM", "\ue100", "Move the config and the VM folder to the trash", true, "Delete " + v.name + "? Moves it to the trash"))   // trash
         return { id: "vm:" + v.name, name: v.name, subtitle: parts.join("  ·  "), kind: "vm", source: v.running ? "Running" : "",
-                 glyph: "\uf111", iconColor: v.running ? "green" : "muted", transient: true, private: true, vm: v.name, running: v.running,   // circle
+                 glyph: "\ue0b1", iconColor: v.running ? "green" : "muted", transient: true, private: true, vm: v.name, running: v.running,   // circle
                  vmdir: v.vmdir, conf: v.conf, runLabel: v.running ? "Show window" : "Start", keywords: [guestLabel(v.guest), v.guest], actions: a }
     }
     readonly property var newRow: ({ id: "vm:new", name: "New VM...", subtitle: "Download an OS with quickget into " + dirLabel, kind: "vm-new", vmNav: true,
-                                     source: "", glyph: "\uf067", iconColor: "", transient: true, private: true, runLabel: "Choose OS",   // plus
+                                     source: "", glyph: "\ue0d8", iconColor: "", transient: true, private: true, runLabel: "Choose OS",   // plus
                                      keywords: ["create", "add", "quickget", "download", "install"] })
     function osRow(o) {
         const n = o.releases.length
         return { id: "vm:os:" + o.os, name: o.name, subtitle: (n === 1 ? o.releases[0].release : n + " releases") + (o.accel ? "" : "  ·  " + noAccel),
-                 kind: "vm-os", vmNav: true, os: o.os, source: "", glyph: "\uf108", iconColor: "muted", transient: true, private: true,   // desktop
+                 kind: "vm-os", vmNav: true, os: o.os, source: "", glyph: "\ue0d3", iconColor: "muted", transient: true, private: true,   // desktop
                  runLabel: "Choose release", keywords: [o.os].concat(o.releases.map(r => r.release)) }
     }
     function createRow(o, rel, ed) {
         const label = [o.name, rel, ed].filter(s => s).join(" ")
         return { id: "vm:mk:" + o.os + ":" + rel + ":" + ed, name: label, subtitle: "quickget " + [o.os, rel, ed].filter(s => s).join(" ") + (o.accel ? "" : "  ·  " + noAccel),
-                 kind: "vm-create", vmNav: true, os: o.os, rel: rel, ed: ed, label: label, source: "", glyph: "\uf019", iconColor: "muted", transient: true, private: true,   // download
+                 kind: "vm-create", vmNav: true, os: o.os, rel: rel, ed: ed, label: label, source: "", glyph: "\ue0b7", iconColor: "muted", transient: true, private: true,   // download
                  runLabel: "Download and create", keywords: [o.os] }
     }
     function osOf(id) { return oses.find(o => o.os === id) || null }
@@ -259,7 +259,7 @@ QtObject {
         if (!t) {
             const out = [pkgHint || newRow]
             for (const j of jobs) out.push(jobRow(j, "vm:job:" + j.label))
-            if (error !== "") out.push(info("error", "Could not list VMs", error, "\uf071", "red"))   // triangle-exclamation
+            if (error !== "") out.push(info("error", "Could not list VMs", error, "\ue101", "red"))   // triangle-exclamation
             else if (!loaded) out.push(info("load", "Loading...", ""))
             for (const v of vms) out.push(vmRow(v))
             return out
@@ -268,7 +268,7 @@ QtObject {
         if (t.level === "form") return formRows()
         if (t.level === "new") {
             if (osLoading) return [localRow, info("os-load", "Loading the OS list from quickget...", "Takes about 10 s, then it is cached for a day")]
-            if (osError !== "") return [localRow, info("os-error", "Could not get the OS list", osError, "\uf071", "red")]   // triangle-exclamation
+            if (osError !== "") return [localRow, info("os-error", "Could not get the OS list", osError, "\ue101", "red")]   // triangle-exclamation
             return [localRow].concat(oses.map(osRow))
         }
         const o = osOf(t.os)
@@ -276,7 +276,7 @@ QtObject {
             if (!o) return []
             return o.releases.map(r => r.editions.length === 0 ? createRow(o, r.release, "")
                 : { id: "vm:rel:" + o.os + ":" + r.release, name: o.name + " " + r.release, subtitle: r.editions.length + " editions" + (o.accel ? "" : "  ·  " + noAccel),
-                    kind: "vm-rel", vmNav: true, os: o.os, rel: r.release, source: "", glyph: "\uf02b", iconColor: "muted", transient: true, private: true,   // tag
+                    kind: "vm-rel", vmNav: true, os: o.os, rel: r.release, source: "", glyph: "\ue0ff", iconColor: "muted", transient: true, private: true,   // tag
                     runLabel: "Choose edition", keywords: r.editions })
         }
         if (t.level === "ed") {
@@ -303,7 +303,7 @@ QtObject {
         const o = osOf(t.os)
         return (o ? o.name : t.os) + (t.level === "ed" ? " " + t.rel : "")
     }
-    function glyph() { const t = top; return !t ? "\uf108" : t.level === "form" && form && form.mode !== "iso" ? "\uf2db" : t.level === "iso" || t.level === "form" ? "\uf51f" : t.level === "new" ? "\uf067" : t.level === "snap" ? "\uf030" : t.level === "ed" ? "\uf02b" : "\uf108" }   // desktop, microchip, compact-disc, plus, camera, tag, desktop
+    function glyph() { const t = top; return !t ? "\ue0d3" : t.level === "form" && form && form.mode !== "iso" ? "\ue0b5" : t.level === "iso" || t.level === "form" ? "\ue3ce" : t.level === "new" ? "\ue0d8" : t.level === "snap" ? "\ue105" : t.level === "ed" ? "\ue0ff" : "\ue0d3" }   // desktop, microchip, compact-disc, plus, camera, tag, desktop
     function headerSub() {
         void rev
         const t = top
@@ -347,22 +347,22 @@ QtObject {
     function snapRows(name) {
         const v = vmOf(name)
         const out = []
-        if (snapBusy !== "") out.push(info("snap-busy", snapBusy, "", "\uf254"))   // hourglass
+        if (snapBusy !== "") out.push(info("snap-busy", snapBusy, "", "\ue20e"))   // hourglass
         if (!v) return out.concat([info("snap-gone", name + " no longer exists", "")])
-        if (v.running) out.push(info("snap-running", name + " is running", "Shut it down to create or restore snapshots", "\uf071"))   // triangle-exclamation
+        if (v.running) out.push(info("snap-running", name + " is running", "Shut it down to create or restore snapshots", "\ue101"))   // triangle-exclamation
         if (snapLoading && snaps.length === 0) return out.concat([info("snap-load", "Loading...", "")])
-        if (snapError !== "") return out.concat([info("snap-error", "Could not read the snapshots", snapError, "\uf071", "red")])   // triangle-exclamation
+        if (snapError !== "") return out.concat([info("snap-error", "Could not read the snapshots", snapError, "\ue101", "red")])   // triangle-exclamation
         if (!snapInstalled) return out.concat([info("snap-none", "No disk yet", "Snapshots need an installed VM", "")])
         const d = new Date()
         if (!v.running) out.push({ id: "vm:snap-new:" + name, name: "New snapshot...", subtitle: "Saves the disk as it is now (VM must be off)", kind: "vm-snap-new", vm: name,
-                   source: "", glyph: "\uf067", iconColor: "", transient: true, private: true, argument: "Snapshot name", argVerb: "create",   // plus
+                   source: "", glyph: "\ue0d8", iconColor: "", transient: true, private: true, argument: "Snapshot name", argVerb: "create",   // plus
                    argInit: "snap-" + Qt.formatDateTime(d, "yyyyMMdd-HHmm") })
         for (const s of snaps)
             out.push({ id: "vm:snap:" + name + ":" + s.tag, name: s.tag, subtitle: (s.date ? Qt.formatDateTime(new Date(s.date * 1000), "d MMM yyyy, HH:mm") : "")
-                           + (s.size > 0 ? "  ·  with RAM state" : ""), kind: v.running ? "info" : "vm-snap", vm: name, tag: s.tag, source: "", glyph: "\uf030", iconColor: "muted",   // camera
+                           + (s.size > 0 ? "  ·  with RAM state" : ""), kind: v.running ? "info" : "vm-snap", vm: name, tag: s.tag, source: "", glyph: "\ue105", iconColor: "muted",   // camera
                        transient: true, private: true, runLabel: "Restore", confirm: true, confirmText: "Restore " + s.tag + "? Disk changes since then are lost",
                        confirmSub: "Press Enter again to restore " + name,
-                       actions: [act("vm-snap-delete", "Delete snapshot", "\uf1f8", "", true, "Delete snapshot " + s.tag + "?")] })   // trash
+                       actions: [act("vm-snap-delete", "Delete snapshot", "\ue100", "", true, "Delete snapshot " + s.tag + "?")] })   // trash
         if (snaps.length === 0 && !snapLoading) out.push(info("snap-empty", "No snapshots yet", ""))
         return out
     }
@@ -417,7 +417,7 @@ QtObject {
 
     // ---- local ISOs -------------------------------------------------------------------------------------------
     readonly property var localRow: ({ id: "vm:iso", name: "From local ISO...", subtitle: "An .iso from " + isoDirs.map(tilde).join(", ") + " or a typed path",
-                                       kind: "vm-iso-pick", vmNav: true, source: "", glyph: "\uf51f", iconColor: "", transient: true, private: true,   // compact-disc
+                                       kind: "vm-iso-pick", vmNav: true, source: "", glyph: "\ue3ce", iconColor: "", transient: true, private: true,   // compact-disc
                                        runLabel: "Choose ISO", keywords: ["iso", "local", "file", "image", "installer", "own"] })
     property var isoProc: Process {
         stdout: StdioCollector { id: isoOut }
@@ -437,7 +437,7 @@ QtObject {
     }
     function isoRow(x) {
         return { id: "vm:isof:" + x.path, name: x.name, subtitle: gb(x.size) + "  ·  " + Qt.formatDateTime(new Date(x.mtime * 1000), "d MMM yyyy") + "  ·  " + tilde(x.dir),
-                 kind: "vm-iso", vmNav: true, path: x.path, isoName: x.name, source: "", glyph: "\uf51f", iconColor: "muted", transient: true, private: true,   // compact-disc
+                 kind: "vm-iso", vmNav: true, path: x.path, isoName: x.name, source: "", glyph: "\ue3ce", iconColor: "muted", transient: true, private: true,   // compact-disc
                  runLabel: top && top.mode === "attach" ? "Attach" : "Use this ISO", keywords: [tilde(x.dir)] }
     }
     function isoRows() {
@@ -467,7 +467,7 @@ QtObject {
         if (!pathRes || pathRes.q !== t) return [info("path-load", "Looking...", tilde(t))]
         const keepTilde = t.startsWith("~")
         const out = pathRes.dirs.map(d => ({ id: "vm:dir:" + d, name: d.split("/").pop() + "/", subtitle: tilde(d), kind: "vm-dir", descend: (keepTilde ? tilde(d) : d) + "/",
-                                              source: "", glyph: "\uf07b", iconColor: "muted", transient: true, private: true }))   // folder
+                                              source: "", glyph: "\ue0bd", iconColor: "muted", transient: true, private: true }))   // folder
         for (const f of pathRes.files) out.push(isoRow(f))
         return out.length ? out : [info("path-none", "No folders or .iso files match", tilde(t))]
     }
@@ -534,45 +534,45 @@ QtObject {
         const f = form
         if (!f) return []
         const out = []
-        if (formBusy !== "") out.push(info("form-busy", formBusy, "", "\uf254"))   // hourglass
+        if (formBusy !== "") out.push(info("form-busy", formBusy, "", "\ue20e"))   // hourglass
         const job = f.mode === "quickget" ? jobOf(formKey(f)) : null
         if (job && job.state === "failed") out.push(info("form-job-error", "Download failed", job.error || "Failed", "", "red"))
-        if (formError !== "") out.push(info("form-error", f.mode === "res" ? "Could not save" : "Could not create the VM", formError, "\uf071", "red"))   // triangle-exclamation
+        if (formError !== "") out.push(info("form-error", f.mode === "res" ? "Could not save" : "Could not create the VM", formError, "\ue101", "red"))   // triangle-exclamation
         const row = (id, name, sub, kind, glyph, extra) => Object.assign({ id: "vm:form:" + id, name: name, subtitle: sub, kind: kind, source: "", glyph: glyph,
                                                                            iconColor: "", transient: true, private: true }, extra || {})
-        const typeAct = [{ id: "vm-form-type", label: "Type a value...", glyph: "\uf11c" }]   // keyboard
+        const typeAct = [{ id: "vm-form-type", label: "Type a value...", glyph: "\ue120" }]   // keyboard
         const ramRow = row("ram", "RAM:  " + (f.ram === "auto" ? "auto (" + hostInfo.autoRam + ")" : f.ram), "Enter cycles " + ramPicks().join(" / ") + "  ·  → type a value",
-                           "vm-form-ram", "\uf538", { runLabel: "Next value", actions: typeAct })   // memory
+                           "vm-form-ram", "\ue50f", { runLabel: "Next value", actions: typeAct })   // memory
         const coreRow = row("cores", "CPU cores:  " + (f.cores === "auto" ? "auto (" + hostInfo.autoCores + ")" : f.cores), "Enter cycles " + corePicks().join(" / ") + "  ·  → type a value"
-                            + (hostInfo.threads ? "  ·  host " + hostInfo.threads + " threads" : ""), "vm-form-cores", "\uf2db", { runLabel: "Next value", actions: typeAct })   // microchip
+                            + (hostInfo.threads ? "  ·  host " + hostInfo.threads + " threads" : ""), "vm-form-cores", "\ue0b5", { runLabel: "Next value", actions: typeAct })   // microchip
         if (f.mode === "res") {
             out.push(ramRow, coreRow)
-            out.push(row("save", "Save", "Writes ram= / cpu_cores= in " + f.vm + ".conf (auto removes the line)", "vm-form-save", "\uf00c", { runLabel: "Save" }))   // check
+            out.push(row("save", "Save", "Writes ram= / cpu_cores= in " + f.vm + ".conf (auto removes the line)", "vm-form-save", "\ue0ab", { runLabel: "Save" }))   // check
             return out
         }
         if (f.mode === "quickget") {
             out.push(ramRow, coreRow)
             out.push(row("size", "Disk size:  " + (f.size === "auto" ? "auto (quickget's default)" : f.size), "Grows as it fills (qcow2)  ·  Enter to change",
-                         "vm-form-size", "\uf0a0", { argument: "Disk size (e.g. 64G, or auto)", argInit: f.size === "auto" ? "" : f.size, argVerb: "set the size", runLabel: "Change size" }))   // hard-drive
+                         "vm-form-size", "\ue0c5", { argument: "Disk size (e.g. 64G, or auto)", argInit: f.size === "auto" ? "" : f.size, argVerb: "set the size", runLabel: "Change size" }))   // hard-drive
             if (job && job.state === "running") out.push(Object.assign(jobRow(job, "vm:form:download", f.label), { vmNav: false }))
             else out.push(row("download", "Download and create", "quickget " + [f.os, f.rel, f.ed].filter(x => x).join(" ") + " in the background (progress in the bar), then sets these values",
-                         "vm-form-download", "\uf019", { runLabel: "Download",   // download
+                         "vm-form-download", "\ue0b7", { runLabel: "Download",   // download
                            actions: [act("vm-form-download-term", "Download in a terminal", "", "quickget in a terminal window instead of the background")] }))
             out.push(info("form-qg", "Name: " + [f.os, f.rel, f.ed].filter(x => x).join("-").replace(/ /g, "-").replace(/[()]/g, "") + " (set by quickget)",
-                          f.guest === "linux" ? "GPU accelerated (VirGL)" : noAccel, "\uf05a"))   // circle-info
+                          f.guest === "linux" ? "GPU accelerated (VirGL)" : noAccel, "\ue0c9"))   // circle-info
             return out
         }
         const taken = vms.some(v => v.name === f.name)
         out.push(row("name", "Name:  " + f.name, taken ? "A VM with this name exists: Enter to change it" : "Config + folder in " + dirLabel + "  ·  Enter to change",
-                     "vm-form-name", "\uf02b", { argument: "VM name", argInit: f.name, argVerb: "set the name", runLabel: "Change name" }))   // tag
+                     "vm-form-name", "\ue0ff", { argument: "VM name", argInit: f.name, argVerb: "set the name", runLabel: "Change name" }))   // tag
         out.push(row("guest", "Guest:  " + guestNames[f.guest], "Enter switches Linux / Windows / Other  ·  " + (f.guest === "linux" ? "GPU accelerated (VirGL)"
-                     : f.guest === "windows" ? "TPM on, secure boot off; " + noAccel : noAccel), "vm-form-guest", "\uf108", { runLabel: "Switch" }))   // desktop
-        out.push(row("size", "Disk size:  " + f.size, "Grows as it fills (qcow2)  ·  Enter to change", "vm-form-size", "\uf0a0",   // hard-drive
+                     : f.guest === "windows" ? "TPM on, secure boot off; " + noAccel : noAccel), "vm-form-guest", "\ue0d3", { runLabel: "Switch" }))   // desktop
+        out.push(row("size", "Disk size:  " + f.size, "Grows as it fills (qcow2)  ·  Enter to change", "vm-form-size", "\ue0c5",   // hard-drive
                      { argument: "Disk size (e.g. 64G)", argInit: f.size, argVerb: "set the size", runLabel: "Change size" }))
         out.push(ramRow, coreRow)
-        out.push(row("start", "Create and boot the installer", f.isoName, "vm-form-start", "\uf04b", { runLabel: "Create and start" }))   // play
-        out.push(row("create", "Create only", "Start it later from the list", "vm-form-create", "\uf067", { runLabel: "Create" }))   // plus
-        out.push(info("form-iso", "Uses the ISO in place", "Moving or deleting it breaks the installer boot  ·  " + tilde(f.iso), "\uf05a"))   // circle-info
+        out.push(row("start", "Create and boot the installer", f.isoName, "vm-form-start", "\ue0d7", { runLabel: "Create and start" }))   // play
+        out.push(row("create", "Create only", "Start it later from the list", "vm-form-create", "\ue0d8", { runLabel: "Create" }))   // plus
+        out.push(info("form-iso", "Uses the ISO in place", "Moving or deleting it breaks the installer boot  ·  " + tilde(f.iso), "\ue0c9"))   // circle-info
         return out
     }
     function formActivate(item, arg) {

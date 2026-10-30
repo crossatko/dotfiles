@@ -172,10 +172,10 @@ Singleton {
     readonly property int fontSmall: 12     // buttons, secondary lines, values next to sliders
     readonly property int fontCaption: 11   // sub lines under a row title, captions, hints, section heads
     readonly property int fontTiny: 10      // badges and footnotes
-    readonly property string iconFont: "Font Awesome 7 Sharp"   // Pro desktop font, installed in ~/.local/share/fonts (not in this repo)
-    readonly property string iconFontPro: "Font Awesome 7 Pro"   // Pro desktop font (Solid for filled glyphs), installed in ~/.local/share/fonts
+    readonly property string iconFont: "Vadivam Icons"   // MIT outline icon font, installed in ~/.local/share/fonts/Vadivam by install.sh (not in this repo)
+    readonly property string iconFontSolid: "Vadivam Icons Solid"   // filled twin of iconFont, same code points
     readonly property string brandFont: "Font Awesome 7 Brands" // brand logos (system package)
-    readonly property int iconSize: 15      // FA glyphs are far larger than the old Nerd Font ones
+    readonly property int iconSize: 15      // Vadivam glyphs fill the whole 24 px grid
     readonly property int barHeight: 40
 
     // Shape and spacing: effective value = user override (Appearance.qml, appearance.json) else the

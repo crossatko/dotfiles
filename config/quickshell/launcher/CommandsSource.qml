@@ -8,15 +8,15 @@ QtObject {
     id: src
 
     readonly property var items: [
-        cmd("sleep",       "Sleep",            "Suspend the computer", "\uf186", ["suspend"],   // moon
+        cmd("sleep",       "Sleep",            "Suspend the computer", "\ue0d4", ["suspend"],   // moon
             "~/.config/hypr/scripts/suspend.sh"),
-        cmd("shutdown",    "Shut down",        "Power off", "\uf011", ["poweroff"],   // power-off
+        cmd("shutdown",    "Shut down",        "Power off", "\ue126", ["poweroff"],   // power-off
             "hyprshutdown -t 'Shutting down...' --post-cmd 'shutdown now'"),
-        cmd("reboot",      "Restart",          "Reboot the computer", "\uf2f9", ["reboot"],   // rotate-right
+        cmd("reboot",      "Restart",          "Reboot the computer", "\ue0dc", ["reboot"],   // rotate-right
             "hyprshutdown -t 'Restarting...' --post-cmd 'reboot'"),
-        cmd("exit",        "Exit Hyprland",    "End the session", "\uf08b", ["logout", "quit"],   // arrow-right-from-bracket
+        cmd("exit",        "Exit Hyprland",    "End the session", "\ue0ce", ["logout", "quit"],   // arrow-right-from-bracket
             "hyprshutdown"),
-        cmd("wallpaper",   "Wallpaper and theme", "Pick a wallpaper, the theme follows", "\uf03e", ["theme", "colors", "background", "picker"],   // image
+        cmd("wallpaper",   "Wallpaper and theme", "Pick a wallpaper, the theme follows", "\ue0c8", ["theme", "colors", "background", "picker"],   // image
             "sleep 0.15; qs ipc call picker toggle")
     ]
 

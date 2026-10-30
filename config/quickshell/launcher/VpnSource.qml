@@ -113,19 +113,19 @@ QtObject {
         else if (p.exitNode) sub.push("exit node")
         const target = p.fqdn || p.ipv4
         return { id: "vpn:ts:peer:" + p.id, name: p.name, subtitle: sub.filter(s => s).join("  ·  "), kind: "vpn-peer",
-                 source: p.online ? "Online" : "", glyph: "\uf111", iconColor: p.online ? "green" : "muted", transient: true, private: true,   // circle
+                 source: p.online ? "Online" : "", glyph: "\ue0b1", iconColor: p.online ? "green" : "muted", transient: true, private: true,   // circle
                  runLabel: "Copy name", keywords: [p.host, p.ipv4, p.owner].concat(p.tags).filter(s => s), fqdn: p.fqdn, ipv4: p.ipv4, target: target,
-                 actions: [{ id: "vpn-copy-ip", label: "Copy IP", glyph: "\uf0c5" },   // copy
-                           { id: "vpn-copy-name", label: "Copy name", glyph: "\uf0c5" },   // copy
-                           { id: "vpn-ssh", label: "SSH in terminal", glyph: "\uf120" },   // terminal
-                           { id: "vpn-web", label: "Open in browser", glyph: "\uf0ac" }] }   // globe
+                 actions: [{ id: "vpn-copy-ip", label: "Copy IP", glyph: "\ue0b4" },   // copy
+                           { id: "vpn-copy-name", label: "Copy name", glyph: "\ue0b4" },   // copy
+                           { id: "vpn-ssh", label: "SSH in terminal", glyph: "\ue0e8" },   // terminal
+                           { id: "vpn-web", label: "Open in browser", glyph: "\ue0c2" }] }   // globe
     }
     function info(id, name, sub, glyph, color) {
         return { id: "vpn:info:" + id, name: name, subtitle: sub || "", kind: "info", source: "", glyph: glyph || "", iconColor: color || "muted",
                  transient: true, private: true }
     }
     function copyRow(id, name, text) {
-        return { id: "vpn:copy:" + id, name: name, subtitle: "Enter copies  " + text, kind: "vpn-copy", source: "", glyph: "\uf071", iconColor: "muted",   // triangle-exclamation
+        return { id: "vpn:copy:" + id, name: name, subtitle: "Enter copies  " + text, kind: "vpn-copy", source: "", glyph: "\ue101", iconColor: "muted",   // triangle-exclamation
                  transient: true, private: true, text: text, runLabel: "Copy command" }
     }
     function tsRows() {
@@ -134,13 +134,13 @@ QtObject {
         const rowsOut = []
         const switching = sw.switching("tailscale") || tsAct === "up" || tsAct === "down"
         const online = tsPeerList.filter(p => p.online).length
-        if (tsBackend === "NeedsLogin") return [info("ts-login", "Logged out", "Run tailscale login in a terminal", "\uf071")]   // triangle-exclamation
-        if (tsBackend === "NeedsMachineAuth") return [info("ts-auth", "Needs approval", "Waiting for this machine to be approved in the admin console", "\uf071")]   // triangle-exclamation
+        if (tsBackend === "NeedsLogin") return [info("ts-login", "Logged out", "Run tailscale login in a terminal", "\ue101")]   // triangle-exclamation
+        if (tsBackend === "NeedsMachineAuth") return [info("ts-auth", "Needs approval", "Waiting for this machine to be approved in the admin console", "\ue101")]   // triangle-exclamation
         if (tsBackend !== "Running" && tsBackend !== "Starting" && tsBackend !== "Stopped") return [info("ts-state", "State: " + (tsBackend || "unknown"), "")]
         const on = tsOn
         const name = switching ? (tsAct === "down" ? "Disconnecting..." : "Connecting...") : tsBackend === "Starting" ? "Connecting..." : on ? "Connected" : "Disconnected"
         rowsOut.push({ id: "vpn:ts:toggle", name: name, subtitle: tsError !== "" ? tsError : (on ? "Enter turns Tailscale off" : "Enter turns Tailscale on") + (on && tsBackend === "Running" ? "  ·  " + online + " of " + tsPeerList.length + " online" : ""),
-                       kind: switching || tsBackend === "Starting" ? "info" : "vpn-ts-toggle", source: on ? "On" : "Off", glyph: "\uf011",   // power-off
+                       kind: switching || tsBackend === "Starting" ? "info" : "vpn-ts-toggle", source: on ? "On" : "Off", glyph: "\ue126",   // power-off
                        iconColor: tsError !== "" ? "red" : on ? "green" : "muted", transient: true, private: true, want: !on, runLabel: on ? "Turn off" : "Turn on",
                        keywords: ["tailscale", "vpn", "switch", "toggle", "on", "off"] })
         if (tsNeedOp) rowsOut.push(copyRow("ts-operator", "Tailscale refused: this user is not its operator", "sudo tailscale set --operator=$USER"))
@@ -203,14 +203,14 @@ QtObject {
         const on = mvOn
         const bad = mvError !== "" || mvTunnel === "error"
         out.push({ id: "vpn:mv:toggle", name: mvToggleName(), subtitle: mvError !== "" ? mvError : mvTunnel === "error" ? mvCause : on ? "Enter disconnects" : "Enter connects",
-                   kind: busy ? "info" : "vpn-mv-toggle", source: on ? "On" : "Off", glyph: "\uf3ed", iconColor: bad ? "red" : on ? "green" : "muted",   // shield-halved
+                   kind: busy ? "info" : "vpn-mv-toggle", source: on ? "On" : "Off", glyph: "\ue623", iconColor: bad ? "red" : on ? "green" : "muted",   // shield-halved
                    transient: true, private: true, want: !on, runLabel: on ? "Disconnect" : "Connect", keywords: ["mullvad", "vpn", "switch", "toggle", "on", "off"] })
         if (country === "") {
             if (on) out.push({ id: "vpn:mv:reconnect", name: "Reconnect", subtitle: "Get a new connection to the same location", kind: "vpn-mv-reconnect", source: "",
-                               glyph: "\uf021", iconColor: "", transient: true, private: true, keywords: ["mullvad", "reconnect", "reset", "restart"] })   // arrows-rotate
+                               glyph: "\ue0da", iconColor: "", transient: true, private: true, keywords: ["mullvad", "reconnect", "reset", "restart"] })   // arrows-rotate
             for (const c of mvCountries)
                 out.push({ id: "vpn:mv:cc:" + c.code, name: c.name, subtitle: c.cities.length + (c.cities.length === 1 ? " city" : " cities"), kind: "vpn-country", cc: c.code,
-                           source: mvChosen.cc === c.code ? "Selected" : "", glyph: "\uf0ac", iconColor: mvChosen.cc === c.code ? "" : "muted", transient: true, private: true,   // globe
+                           source: mvChosen.cc === c.code ? "Selected" : "", glyph: "\ue0c2", iconColor: mvChosen.cc === c.code ? "" : "muted", transient: true, private: true,   // globe
                            runLabel: "Choose city", keywords: [c.code].concat(c.cities.map(x => x.name)) })
             if (mvCountries.length === 0) out.push(info("mv-relays", "Loading locations...", ""))
             return out
@@ -221,10 +221,10 @@ QtObject {
         const list = []
         const here = mvChosen.cc === c.code
         list.push({ id: "vpn:mv:any:" + c.code, name: "Any city", subtitle: c.name, kind: "vpn-city", cc: c.code, city: "", label: c.name,
-                   source: here && mvChosen.city === "" ? "Selected" : "", glyph: "\uf3c5", iconColor: here && mvChosen.city === "" ? "" : "muted", transient: true, private: true })   // location-dot
+                   source: here && mvChosen.city === "" ? "Selected" : "", glyph: "\ue10e", iconColor: here && mvChosen.city === "" ? "" : "muted", transient: true, private: true })   // location-dot
         for (const x of c.cities)
             list.push({ id: "vpn:mv:city:" + c.code + ":" + x.code, name: x.name, subtitle: c.name, kind: "vpn-city", cc: c.code, city: x.code, label: x.name + ", " + c.name,
-                       source: here && mvChosen.city === x.code ? "Selected" : "", glyph: "\uf3c5", iconColor: here && mvChosen.city === x.code ? "" : "muted", transient: true, private: true })   // location-dot
+                       source: here && mvChosen.city === x.code ? "Selected" : "", glyph: "\ue10e", iconColor: here && mvChosen.city === x.code ? "" : "muted", transient: true, private: true })   // location-dot
         return list
     }
 

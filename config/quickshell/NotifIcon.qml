@@ -24,7 +24,7 @@ Item {
     readonly property bool asset: image === "" && (assetPath.startsWith(Quickshell.shellDir + "/assets/") || assetPath.indexOf("/quickshell/assets/") >= 0)
     readonly property bool direct: !asset && (image !== "" || name.startsWith("/") || name.startsWith("file://") || name.startsWith("image://"))
     readonly property string base: name.replace(/-symbolic$/, "")
-    // a standard freedesktop name draws as a Font Awesome glyph (NotifGlyph.js); "" = app-specific / unknown
+    // a standard freedesktop name draws as a Vadivam glyph (NotifGlyph.js); "" = app-specific / unknown
     readonly property string glyph: direct || asset ? "" : Glyphs.glyph(name)
     readonly property string symPath: Icons.symbolic[base] || ""
 
@@ -40,7 +40,7 @@ Item {
         asynchronous: true
     }
 
-    // 2a. Font Awesome glyph, same tint and box as the symbolic icon
+    // 2a. Vadivam glyph, same tint and box as the symbolic icon
     Icon {
         anchors.fill: parent
         visible: ico.glyph !== ""

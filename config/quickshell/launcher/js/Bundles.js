@@ -56,7 +56,7 @@ function parseMissing(out) {
 // a launcher row (kind "pkg-hint": Enter copies the command). `over` overrides row fields (e.g. the name of a power row).
 function hintRow(bundle, cmd, over) {
     var b = BUNDLES[bundle];
-    var row = { id: "pkg:" + bundle, name: b.title, subtitle: "Enter copies: " + cmd, kind: "pkg-hint", source: "", glyph: "",
+    var row = { id: "pkg:" + bundle, name: b.title, subtitle: "Enter copies: " + cmd, kind: "pkg-hint", source: "", glyph: "",
                 iconColor: "muted", transient: true, private: true, installCommand: cmd, runLabel: "Copy command" };
     for (var k in (over || {})) row[k] = over[k];
     return row;

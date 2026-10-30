@@ -34,7 +34,7 @@ Item {
 
         EmptyState {
             visible: !HomeAssistant.configured
-            icon: Icons.home
+            icon: Icons.homeAssistant
             text: "No Home Assistant"
             hint: "HA_URL / HA_TOKEN in ~/.config/hypr/.secrets"
         }

@@ -25,7 +25,7 @@ QtObject {
 
     readonly property var items: []                 // nothing in the normal list (the root row lives in SectionsSource)
     readonly property string modeTitle: "Jellyfin"  // launcher header in the "jf " prefix mode
-    readonly property string modeGlyph: "\uf008"   // film
+    readonly property string modeGlyph: "\ue1e7"   // film
 
     // ---- state -----------------------------------------------------------------------------------------------------
     property var stack: []                          // nested levels: {title, sub, glyph, args, query, selId, state, rows, code, err,
@@ -80,15 +80,15 @@ QtObject {
 
     function errRows(code, err) {
         const l = errLine(err)
-        if (code === 2) return [info("auth", "Not logged in to Jellyfin", l, "\uf071"),   // triangle-exclamation
-                                info("auth-how", "Run `jellyfin-qs login` in a terminal", "", "\uf120"),   // terminal
-                                actionRow("login", "jf-login", "Open login in terminal", "ghostty -e jellyfin-qs login", "\uf120")]   // terminal
-        if (code === 3) return [info("net", "Jellyfin server unreachable (is Tailscale connected?)", l, "\uf071"),   // triangle-exclamation
-                                actionRow("retry", "jf-retry", "Try again", "", "\uf021")]   // arrows-rotate
-        if (code === 127) return [info("missing", "jellyfin-qs not found: run install.sh", "", "\uf071")]   // triangle-exclamation
-        if (code === 4) return [info("nf", "Not found on the Jellyfin server", l, "\uf071")]   // triangle-exclamation
-        return [info("err", "Could not load Jellyfin", l !== "" ? l : "exit code " + code, "\uf071"),   // triangle-exclamation
-                actionRow("retry", "jf-retry", "Try again", "", "\uf021")]   // arrows-rotate
+        if (code === 2) return [info("auth", "Not logged in to Jellyfin", l, "\ue101"),   // triangle-exclamation
+                                info("auth-how", "Run `jellyfin-qs login` in a terminal", "", "\ue0e8"),   // terminal
+                                actionRow("login", "jf-login", "Open login in terminal", "ghostty -e jellyfin-qs login", "\ue0e8")]   // terminal
+        if (code === 3) return [info("net", "Jellyfin server unreachable (is Tailscale connected?)", l, "\ue101"),   // triangle-exclamation
+                                actionRow("retry", "jf-retry", "Try again", "", "\ue0da")]   // arrows-rotate
+        if (code === 127) return [info("missing", "jellyfin-qs not found: run install.sh", "", "\ue101")]   // triangle-exclamation
+        if (code === 4) return [info("nf", "Not found on the Jellyfin server", l, "\ue101")]   // triangle-exclamation
+        return [info("err", "Could not load Jellyfin", l !== "" ? l : "exit code " + code, "\ue101"),   // triangle-exclamation
+                actionRow("retry", "jf-retry", "Try again", "", "\ue0da")]   // arrows-rotate
     }
 
     // ---- rows -------------------------------------------------------------------------------------------------------
@@ -101,17 +101,17 @@ QtObject {
 
     function glyphFor(it) {
         const ct = it.collection_type
-        if (ct) return ct === "movies" ? "\uf008" : ct === "tvshows" ? "\uf26c" : ct === "music" ? "\uf001" : "\uf07b"   // film, tv, music, folder
+        if (ct) return ct === "movies" ? "\ue1e7" : ct === "tvshows" ? "\ue1cb" : ct === "music" ? "\ue229" : "\ue0bd"   // film, tv, music, folder
         switch (it.type) {
-        case "Movie": return "\uf008"   // film
-        case "Series": case "Season": return "\uf26c"   // tv
-        case "Episode": case "MusicVideo": return "\uf03d"   // video
-        case "MusicArtist": return "\uf007"   // user
-        case "MusicAlbum": return "\uf025"   // headphones
-        case "Audio": return "\uf001"   // music
-        case "Playlist": return "\uf0ca"   // list-ul
+        case "Movie": return "\ue1e7"   // film
+        case "Series": case "Season": return "\ue1cb"   // tv
+        case "Episode": case "MusicVideo": return "\ue128"   // video
+        case "MusicArtist": return "\ue0ec"   // user
+        case "MusicAlbum": return "\ue48a"   // headphones
+        case "Audio": return "\ue229"   // music
+        case "Playlist": return "\ue0cc"   // list-ul
         }
-        return it.kind === "audio" ? "\uf001" : it.kind === "video" ? "\uf008" : "\uf07b"   // music, film, folder
+        return it.kind === "audio" ? "\ue229" : it.kind === "video" ? "\ue1e7" : "\ue0bd"   // music, film, folder
     }
     function clock(s) {
         s = Math.max(0, Math.floor(s))
@@ -144,10 +144,10 @@ QtObject {
         const pct = Number(it.progress_pct) || 0
         if (pct > 0 && pct < 100 && !it.played) parts.push(Math.round(pct) + "%")
         const acts = []
-        if (playable && resume) acts.push({ id: "jf-play-start", label: "Play from start", glyph: "\uf04b" })   // play
-        if (playable && browsable && isMusicContainer(it.type)) acts.push({ id: "jf-shuffle", label: "Shuffle", glyph: "\uf074" })   // shuffle
-        if (browsable && playable) acts.push({ id: "jf-browse", label: "Browse", glyph: "\uf07b" })   // folder
-        if (browsable && it.collection_type) acts.push({ id: "jf-latest", label: "Recently added", glyph: "\uf017" })   // clock
+        if (playable && resume) acts.push({ id: "jf-play-start", label: "Play from start", glyph: "\ue0d7" })   // play
+        if (playable && browsable && isMusicContainer(it.type)) acts.push({ id: "jf-shuffle", label: "Shuffle", glyph: "\ue1d7" })   // shuffle
+        if (browsable && playable) acts.push({ id: "jf-browse", label: "Browse", glyph: "\ue0bd" })   // folder
+        if (browsable && it.collection_type) acts.push({ id: "jf-latest", label: "Recently added", glyph: "\ue16a" })   // clock
         return {
             id: "sec:jf:" + id, name: String(it.name || "Untitled"), subtitle: parts.join("  ·  "),
             kind: playable ? "jf" : browsable ? "jf-nav" : "info", source: hintOf(it), glyph: glyphFor(it),
@@ -178,7 +178,7 @@ QtObject {
 
     // continue watching / next up / recently added live inside each library (libHead); only the playlists stay global
     readonly property var fixedRows: [
-        menuRow("playlists", "Playlists", "Your playlists", "\uf0ca", ["playlists"])   // list-ul
+        menuRow("playlists", "Playlists", "Your playlists", "\ue0cc", ["playlists"])   // list-ul
     ]
     readonly property var collectionLabels: ({ tvshows: "TV shows", movies: "Movies", music: "Music", playlists: "Playlists" })
     // ---- library level ---------------------------------------------------------------------------------------------
@@ -194,10 +194,10 @@ QtObject {
             row.jfLevel = { title: name, sub: label, glyph: glyph, lib: { id: id, ct: ct } }
             r.push(row)
         }
-        if (ct !== "music") add("resume", "Continue watching", "Resume where you left off", "\uf04b", ["resume", "--library", id])   // play
-        if (ct !== "music" && ct !== "movies") add("nextup", "Next up", "The next unwatched episodes", "\uf051", ["nextup", "--library", id])   // forward-step
-        add("latest", "Recently added", "Newest first", "\uf017", ["latest", "--library", id])   // clock
-        if (ct === "music") add("albums", "Albums", "All albums by title", "\uf025", pagedArgs(id, ["--types", "MusicAlbum"]))   // headphones
+        if (ct !== "music") add("resume", "Continue watching", "Resume where you left off", "\ue0d7", ["resume", "--library", id])   // play
+        if (ct !== "music" && ct !== "movies") add("nextup", "Next up", "The next unwatched episodes", "\ue1ad", ["nextup", "--library", id])   // forward-step
+        add("latest", "Recently added", "Newest first", "\ue16a", ["latest", "--library", id])   // clock
+        if (ct === "music") add("albums", "Albums", "All albums by title", "\ue48a", pagedArgs(id, ["--types", "MusicAlbum"]))   // headphones
         return r
     }
     function isLibrary(item) { return item.jfType === "CollectionFolder" || item.jfType === "UserView" }
@@ -244,7 +244,7 @@ QtObject {
         }
         return statusCode === 0 ? user : ""
     }
-    function glyph() { return depth > 0 ? stack[depth - 1].glyph : "\uf008" }   // film
+    function glyph() { return depth > 0 ? stack[depth - 1].glyph : "\ue1e7" }   // film
     function rightHintFor(it) { return it && (it.kind === "jf-nav" || (it.actions && it.actions.some(a => a.id === "jf-browse"))) }
 
     function rank(rows, q, n) { return Ranker.rank(rows, q, {}, Date.now(), { limit: n }).map(r => r.item) }
@@ -288,7 +288,7 @@ QtObject {
     function dynamic(q, raw) {
         const t = prefixText(raw)
         if (t === null) return []
-        if (t === "") return [info("hint", "Search Jellyfin", "Type a title, artist or album", "\uf002")].concat(menuRows())   // magnifying-glass
+        if (t === "") return [info("hint", "Search Jellyfin", "Type a title, artist or album", "\ue0de")].concat(menuRows())   // magnifying-glass
         return searchList()
     }
 

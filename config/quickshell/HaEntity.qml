@@ -92,7 +92,7 @@ Rectangle {
         case "scene": return Icons.wand
         case "script": return Icons.scroll
         }
-        return Icons.home
+        return Icons.homeAssistant
     }
     function pretty(s) { return s ? String(s.charAt(0).toUpperCase() + s.slice(1)).replace(/_/g, " ") : "" }
     function sub() {

@@ -15,7 +15,7 @@ QtObject {
     property bool active: false
     signal updated()
     readonly property string modeTitle: "Clipboard history"   // launcher header in prefix mode
-    readonly property string modeGlyph: "\uf328"   // clipboard
+    readonly property string modeGlyph: "\ue131"   // clipboard
     property var items: []          // always empty (entries only show in prefix mode); the launcher redraws on updated()
     property var clips: []          // [{ id, preview, image }], newest first
     readonly property int limit: 50
@@ -68,7 +68,7 @@ QtObject {
                 kind: "clip", source: "Clipboard",
                 transient: true, private: true,       // never in usage.json / history.json, no Pin / Hide
                 actions: [{ id: "clip-delete", label: "Delete entry", glyph: "" }],
-                glyph: c.image ? "\uf03e" : "\uf328",     // image / clipboard
+                glyph: c.image ? "\ue0c8" : "\ue131",     // image / clipboard
                 clipId: c.id
             })
             if (out.length >= limit) break

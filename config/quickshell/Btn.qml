@@ -6,7 +6,7 @@ Rectangle {
     property string text: ""
     property bool active: false
     property bool enabledLook: true
-    property bool icon: false     // text is a Font Awesome glyph
+    property bool icon: false     // text is a Vadivam glyph
     property string glyph: ""     // an Icons glyph before the text (icon font, iconSm): never mixed into `text` (the text font has no glyphs)
     property bool activeFill: true   // false: an active button draws no fill / outline of its own (Segmented's gliding marker does)
     property string tip: ""       // hover / keyboard-focus bubble (TipBubble): the name of an icon-only button; it also makes the button a Tab stop (Space / Enter click)

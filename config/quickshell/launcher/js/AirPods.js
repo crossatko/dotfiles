@@ -73,10 +73,10 @@ function parse(text) {
 function modes(s) {
     if (!s.canControl) return [];
     var out = [];
-    if (s.canOff) out.push({ value: MODE_OFF, label: "Off", name: "Off", glyph: "\uf05e", verb: "noise:off" });
-    out.push({ value: MODE_TRANSPARENCY, label: "Transparency", name: "Transparency", glyph: "\uf2a2", verb: "noise:transparency" });
-    if (s.canAdaptive) out.push({ value: MODE_ADAPTIVE, label: "Adaptive", name: "Adaptive", glyph: "\uf890", verb: "noise:adaptive" });
-    out.push({ value: MODE_ANC, label: "ANC", name: "Noise cancelling", glyph: "\uf2a4", verb: "noise:anc" });
+    if (s.canOff) out.push({ value: MODE_OFF, label: "Off", name: "Off", glyph: "\ue07f", verb: "noise:off" });
+    out.push({ value: MODE_TRANSPARENCY, label: "Transparency", name: "Transparency", glyph: "\ue3e3", verb: "noise:transparency" });
+    if (s.canAdaptive) out.push({ value: MODE_ADAPTIVE, label: "Adaptive", name: "Adaptive", glyph: "\ue0e4", verb: "noise:adaptive" });
+    out.push({ value: MODE_ANC, label: "ANC", name: "Noise cancelling", glyph: "\ue3e4", verb: "noise:anc" });
     return out;
 }
 

@@ -107,11 +107,11 @@ var EXTS = {
 };
 var TEXT_NAMES = ["makefile", "readme", "license", "dockerfile", "pkgbuild", "changelog"];
 var CATS = {
-    image: { glyph: "", label: "Image" }, video: { glyph: "", label: "Video" },
-    audio: { glyph: "", label: "Audio" }, code: { glyph: "", label: "Code" },
-    text: { glyph: "", label: "Text" }, archive: { glyph: "", label: "Archive" },
-    pdf: { glyph: "", label: "PDF" }, file: { glyph: "", label: "File" },
-    dir: { glyph: "", label: "Folder" }
+    image: { glyph: "", label: "Image" }, video: { glyph: "", label: "Video" },
+    audio: { glyph: "", label: "Audio" }, code: { glyph: "", label: "Code" },
+    text: { glyph: "", label: "Text" }, archive: { glyph: "", label: "Archive" },
+    pdf: { glyph: "", label: "PDF" }, file: { glyph: "", label: "File" },
+    dir: { glyph: "", label: "Folder" }
 };
 function category(name) {
     var dot = name.lastIndexOf("."), e = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
@@ -127,13 +127,13 @@ function editable(cat) { return cat === "text" || cat === "code" || cat === "fil
 // opens it in zellij (projects), so the panel does not repeat it.
 function actionsFor(cat, zellij) {
     var a = [];
-    if (cat === "dir") a.push({ id: "openfolder", label: "Open folder", glyph: "" }, { id: "term", label: "Open terminal here", glyph: "" });
-    else if (cat === "image") a.push({ id: "copyfile", label: "Copy image to clipboard", glyph: "" }, { id: "wallpaper", label: "Set as wallpaper (full theme apply)", glyph: "" });
-    else if (cat === "video") a.push({ id: "mpv", label: "Play in mpv", glyph: "" }, { id: "wallpaper", label: "Set as video wallpaper (full theme apply)", glyph: "" });
-    else if (cat === "text" || cat === "code") a.push({ id: "edit", label: "Open in editor", glyph: "" }, { id: "copyfile", label: "Copy contents to clipboard", glyph: "" });
-    if (!zellij) a.push({ id: "zellij", label: zellijLabel(cat), glyph: "" });
-    if (cat !== "dir") a.push({ id: "showfolder", label: "Show in folder", glyph: "" });
-    a.push({ id: "copypath", label: "Copy path", glyph: "" });
+    if (cat === "dir") a.push({ id: "openfolder", label: "Open folder", glyph: "" }, { id: "term", label: "Open terminal here", glyph: "" });
+    else if (cat === "image") a.push({ id: "copyfile", label: "Copy image to clipboard", glyph: "" }, { id: "wallpaper", label: "Set as wallpaper (full theme apply)", glyph: "" });
+    else if (cat === "video") a.push({ id: "mpv", label: "Play in mpv", glyph: "" }, { id: "wallpaper", label: "Set as video wallpaper (full theme apply)", glyph: "" });
+    else if (cat === "text" || cat === "code") a.push({ id: "edit", label: "Open in editor", glyph: "" }, { id: "copyfile", label: "Copy contents to clipboard", glyph: "" });
+    if (!zellij) a.push({ id: "zellij", label: zellijLabel(cat), glyph: "" });
+    if (cat !== "dir") a.push({ id: "showfolder", label: "Show in folder", glyph: "" });
+    a.push({ id: "copypath", label: "Copy path", glyph: "" });
     return a;
 }
 function zellijLabel(cat) { return cat === "dir" ? "Open in zellij" : editable(cat) ? "Edit in zellij" : "Open its folder in zellij"; }
@@ -160,7 +160,7 @@ function row(path, isDir, o) {
 // folder browsing: "Open folder" first (the folder itself, or the folder the filter names exactly), then folders, then files;
 // hidden entries only when the filter starts with "."; entries whose name starts with the filter first; max 500.
 function folderRows(listing, p, home) {
-    if (!listing.ok) return [{ id: "file:err:" + p.base, kind: "info", source: "", name: "Cannot read folder", subtitle: tilde(p.base, home), glyph: "", transient: true }];
+    if (!listing.ok) return [{ id: "file:err:" + p.base, kind: "info", source: "", name: "Cannot read folder", subtitle: tilde(p.base, home), glyph: "", transient: true }];
     var f = p.text.toLowerCase(), hidden = f.charAt(0) === ".";
     var es = listing.entries.map(function (e, i) { return { e: e, i: i, pre: f !== "" && e.lname.indexOf(f) === 0 ? 0 : 1 }; })
         .filter(function (x) { return hidden ? x.e.lname.indexOf(f) === 0 : x.e.name.charAt(0) !== "." && (f === "" || x.e.lname.indexOf(f) >= 0); });
@@ -168,7 +168,7 @@ function folderRows(listing, p, home) {
     var rows = [];
     var exact = f === "" ? null : es.find(function (x) { return x.e.dir && x.e.lname === f; });
     var open = f === "" ? p.base : exact ? p.base + exact.e.name : "";
-    if (open !== "") rows.push(row(open, true, { id: "file:open:" + open, name: "Open folder", subtitle: tilde(open, home), source: "Folder", glyph: "" }));
+    if (open !== "") rows.push(row(open, true, { id: "file:open:" + open, name: "Open folder", subtitle: tilde(open, home), source: "Folder", glyph: "" }));
     es.slice(0, 500).forEach(function (x) {
         var e = x.e;
         rows.push(row(e.path, e.dir, {
@@ -190,7 +190,7 @@ function findRows(listing, p, home) {
 function projectRows(listing, p) {
     var list = p.text === "" ? listing.entries.slice(0, 50) : Ranker.rank(listing.entries, p.text, {}, 0, { limit: 50 }).map(function (r) { return r.item; });
     return list.map(function (e) {
-        return row(e.path, true, { id: e.id, name: e.name, subtitle: e.rel, source: "Project", glyph: "\uf07c", runLabel: "Open in zellij", zellij: true });
+        return row(e.path, true, { id: e.id, name: e.name, subtitle: e.rel, source: "Project", glyph: "\ue0be", runLabel: "Open in zellij", zellij: true });
     });
 }
 
@@ -226,7 +226,7 @@ function completePath(text, entries, selected) {
 // of a streamed lister), how long a listing stays fresh (ttl ms; Infinity = until the launcher opens again), the shortest
 // text worth listing (minText) and how the listing becomes rows. Enter / Ctrl+Enter are decided per row (row()).
 var MODES = {
-    browse:   { title: "Files",    glyph: "\uf07b", match: browseQuery,  argv: folderArgv,  read: parseFolder,     ttl: 2000,     rows: folderRows },
-    find:     { title: "Files",    glyph: "\uf07b", match: findQuery,    argv: findArgv,    readLine: parseFindLine, minText: 2, rows: findRows },
-    projects: { title: "Projects", glyph: "\uf07c", match: projectQuery, argv: projectArgv, read: parseProjects,   ttl: Infinity, rows: projectRows }
+    browse:   { title: "Files",    glyph: "\ue0bd", match: browseQuery,  argv: folderArgv,  read: parseFolder,     ttl: 2000,     rows: folderRows },
+    find:     { title: "Files",    glyph: "\ue0bd", match: findQuery,    argv: findArgv,    readLine: parseFindLine, minText: 2, rows: findRows },
+    projects: { title: "Projects", glyph: "\ue0be", match: projectQuery, argv: projectArgv, read: parseProjects,   ttl: Infinity, rows: projectRows }
 };

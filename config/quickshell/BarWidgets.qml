@@ -28,7 +28,7 @@ Singleton {
         { id: "caffeine",   title: "Keep awake",   icon: Icons.caffeineOff, section: "right" },
         { id: "cpu",        title: "CPU",          icon: Icons.cpu, section: "right" },
         { id: "memory",     title: "Memory",       icon: Icons.memory, section: "right" },
-        { id: "homeassistant", title: "Home Assistant", icon: Icons.home, section: "right" },
+        { id: "homeassistant", title: "Home Assistant", icon: Icons.homeAssistant, section: "right" },
         { id: "ai",         title: "AI usage",     icon: Icons.ai, section: "right" },
         { id: "volume",     title: "Volume",       icon: Icons.volumeHigh, section: "right" },
         { id: "network",    title: "Network",      icon: Icons.wifi, section: "right" },

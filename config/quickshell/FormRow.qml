@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 
-// One row of a compact popup form: a fixed leading column with a Font Awesome `icon` and the row's controls, put in
+// One row of a compact popup form: a fixed leading column with a Vadivam `icon` and the row's controls, put in
 // as children. Leading columns line up from row to row; the icon stays level with the first 30 px control line.
 RowLayout {
     id: fr

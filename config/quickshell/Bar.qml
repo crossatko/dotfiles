@@ -377,7 +377,7 @@ PanelWindow {
             dim: !HomeAssistant.configured || (HomeAssistant.status !== "ok" && HomeAssistant.status !== "loading")
             onClicked: bar.pop("ha", haChip)
             // lights on = accent + count; connected = plain ink; not configured / unreachable = muted (and the chip dims)
-            BarIcon { text: HomeAssistant.lightsOn > 0 ? Icons.lightOn : Icons.home; color: HomeAssistant.lightsOn > 0 ? ink.accent : HomeAssistant.configured && HomeAssistant.status === "ok" ? ink.fg : ink.muted }
+            BarIcon { text: HomeAssistant.lightsOn > 0 ? Icons.lightOn : Icons.homeAssistant; color: HomeAssistant.lightsOn > 0 ? ink.accent : HomeAssistant.configured && HomeAssistant.status === "ok" ? ink.fg : ink.muted }
             BarLabel { visible: HomeAssistant.lightsOn > 0; text: HomeAssistant.lightsOn }
         }
     }
@@ -446,7 +446,7 @@ PanelWindow {
             active: bar.isOpen("bt")
             dim: !bar.btOn
             onClicked: bar.pop("bt", btChip)
-            // while AirPods are connected: a Font Awesome Pro Solid battery by level (bolt while charging) + their lowest bud level instead of the device count
+            // while AirPods are connected: a Vadivam solid battery by level (bolt while charging) + their lowest bud level instead of the device count
             // (the count stays when something else is connected too); green while charging, red at 15 % and below
             readonly property bool pods: AirPods.lowest >= 0
             readonly property color podsColor: AirPods.lowestCharging ? ink.green : AirPods.lowest <= 15 ? ink.red : ink.fgDim
@@ -455,8 +455,7 @@ PanelWindow {
             BarIcon {
                 visible: btChip.pods
                 Layout.leftMargin: 2
-                family: Theme.iconFontPro
-                styleName: "Solid"
+                family: Theme.iconFontSolid
                 measure: Icons.batteryFull
                 text: AirPods.lowestCharging ? Icons.batteryBolt : AirPods.lowest >= 88 ? Icons.batteryFull : AirPods.lowest >= 63 ? Icons.batteryThreeQuarters : AirPods.lowest >= 38 ? Icons.batteryHalf : AirPods.lowest >= 13 ? Icons.batteryQuarter : Icons.batteryEmpty
                 color: btChip.podsColor

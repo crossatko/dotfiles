@@ -937,6 +937,32 @@ stage_links() {
     info "claude-tabs checkout not found at $ct: clone it and run its setup.sh, or set default_layout 'compact' in config/zellij/config.kdl"
   fi
 
+  # Icon font for the Quickshell shell (MIT, from npm). Code points are positional, so the version is pinned: Icons.qml and the
+  # launcher sources hold literal code points of this release; bump both together.
+  log "Vadivam icon font"
+  local vdir="$HOME/.local/share/fonts/Vadivam" vver=0.0.77 vtmp
+  if [ -f "$vdir/vadivam-$vver.woff2" ] && [ -f "$vdir/vadivam-solid-$vver.woff2" ]; then
+    echo "    ok      $vdir ($vver)"
+  elif [ "$DRY" = 1 ]; then
+    changed
+    echo "    [dry-run] npm pack vadivam@$vver -> $vdir"
+  elif ! command -v npm >/dev/null 2>&1; then
+    warn "npm not found: install nodejs, then re-run --only links (the shell's icons need the Vadivam font)"
+  else
+    changed
+    vtmp="$(mktemp -d)"
+    if (cd "$vtmp" && npm pack "vadivam@$vver" --silent >/dev/null && tar xzf vadivam-"$vver".tgz package/dist/font); then
+      mkdir -p "$vdir"
+      rm -f "$vdir"/*.woff2
+      cp "$vtmp/package/dist/font/vadivam.woff2" "$vdir/vadivam-$vver.woff2"
+      cp "$vtmp/package/dist/font/vadivam-solid.woff2" "$vdir/vadivam-solid-$vver.woff2"
+      FONTS_DIRTY=1
+    else
+      warn "could not fetch vadivam@$vver from npm"
+    fi
+    rm -rf "$vtmp"
+  fi
+
   log "Scripts, launcher, portals, units"
   local s
   for s in "$CONFIG_DIR"/nautilus/scripts/*; do
@@ -1216,7 +1242,7 @@ if stage_on links || stage_on packages || stage_on repos; then
 
 Manual steps (not automated):
   - Hyprland fork (glass compositing; battlestation only): build/install from the fork repo. Stock `hyprland` works elsewhere.
-  - Font Awesome 7 Pro (licensed) into ~/.local/share/fonts/FontAwesomePro/, and the Paper Mono font into ~/.local/share/fonts/.
+  - The Paper Mono font into ~/.local/share/fonts/ (the Vadivam icon font is fetched from npm by the links stage; needs nodejs).
   - omacal is built by the packages stage from the author's pinned PKGBUILD (skip: INSTALL_SKIP=omacal). It stores its Google sign-in in the Secret
     Service: gnome-keyring is installed, but a keyring must be unlocked/created in your session (Seahorse or first sign-in prompt).
   - zellij claude-tabs: clone its repo to ~/code/crossatko/zellij-wc3cz-claude (or set CLAUDE_TABS_DIR), then re-run `--only links`.

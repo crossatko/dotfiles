@@ -67,7 +67,7 @@ QtObject {
             kind: "script",
             source: "Script",
             icon: m.icon || "",
-            glyph: mode === "terminal" ? "\uf120" : "\uf121",     // terminal / code
+            glyph: mode === "terminal" ? "\ue0e8" : "\ue0b3",     // terminal / code
             file: c.file,
             mode: mode,
             argument: ("argument" in m) ? (m.argument || "Argument") : ""

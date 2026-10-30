@@ -35,7 +35,7 @@ QtObject {
                         kind: "window",
                         source: "Window",
                         icon: cls.toLowerCase(),
-                        glyph: "\uf2d0",                // window-maximize
+                        glyph: "\ue02e",                // window-maximize
                         transient: true,
                         address: c.address
                     })

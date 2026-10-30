@@ -659,17 +659,23 @@ ColumnLayout {
             id: playRow
             Layout.fillWidth: true
             spacing: 10
-            Icon {
-                Layout.alignment: Qt.AlignTop
-                Layout.topMargin: 1
-                text: page.playMode === "loop" ? Icons.repeat : Icons.play
-                font.pixelSize: Theme.iconMd
-                color: page.shownVideo !== "" ? Theme.accent : Theme.fgDim    // accent = a video is playing on this monitor
+            Item {      // centred like the title column beside it, whatever the icon font's metrics
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: playIcon.implicitWidth
+                implicitHeight: playIcon.implicitHeight
+                Icon {
+                    id: playIcon
+                    anchors.centerIn: parent
+                    text: page.playMode === "loop" ? Icons.repeat : Icons.play
+                    font.pixelSize: Theme.iconMd
+                    color: page.shownVideo !== "" ? Theme.accent : Theme.fgDim    // accent = a video is playing on this monitor
+                }
             }
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 3
                 RowLayout {
+                    id: playHead
                     Layout.fillWidth: true
                     spacing: 6
                     Label {

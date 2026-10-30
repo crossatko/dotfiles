@@ -37,33 +37,33 @@ QtObject {
     property var vm: null                           // VmSource (set by Launcher): the "vms" section delegates enter / header / glyph / headerSub (rows: Launcher -> vm.listFor)
 
     readonly property var sections: ({
-        "sound-output": { title: "Sound output", header: "Audio output", glyph: "\uf028", sub: "Choose the default audio output",   // volume-high
+        "sound-output": { title: "Sound output", header: "Audio output", glyph: "\ue12b", sub: "Choose the default audio output",   // volume-high
                           aliases: ["speaker", "speakers", "headphones"], words: ["audio", "sink", "output", "volume"] },
-        "sound-input":  { title: "Sound input", header: "Audio input", glyph: "\uf130", sub: "Choose the default microphone",   // microphone
+        "sound-input":  { title: "Sound input", header: "Audio input", glyph: "\ue10f", sub: "Choose the default microphone",   // microphone
                           aliases: ["mic", "microphone"], words: ["audio", "source", "input"] },
-        "power":        { title: "Power", glyph: "\uf011", sub: "Sleep, shut down, restart, log out, switch session",   // power-off
+        "power":        { title: "Power", glyph: "\ue126", sub: "Sleep, shut down, restart, log out, switch session",   // power-off
                           aliases: ["shutdown", "reboot", "logout", "suspend"], words: ["poweroff", "restart", "log out", "sleep", "exit", "session"] },
         "twitch":       { title: "Twitch", header: "Streams", glyph: "\uf1e8", sub: "Followed channels",   // twitch (brand font, see brand())
                           aliases: ["stream", "streams"], words: ["live", "channels", "watch"] },
-        "jellyfin":     { title: "Jellyfin", glyph: "\uf008", sub: "Movies, shows and music",   // film
+        "jellyfin":     { title: "Jellyfin", glyph: "\ue1e7", sub: "Movies, shows and music",   // film
                           aliases: ["jf", "movies", "shows", "tv", "music", "media", "video", "films"], words: ["jellyfin", "series", "episodes", "albums", "watch", "listen"] },
-        "network":      { title: "Network", glyph: "\uf1eb", sub: "Wi-Fi networks and wired connections",   // wifi
+        "network":      { title: "Network", glyph: "\ue117", sub: "Wi-Fi networks and wired connections",   // wifi
                           aliases: ["wifi", "wi-fi", "wlan", "ethernet", "wired", "internet"], words: ["network", "wireless", "ssid", "lan", "connect"] },
-        "bluetooth":    { title: "Bluetooth", glyph: "\uf293", sub: "Connect, pair and scan for devices",   // bluetooth
+        "bluetooth":    { title: "Bluetooth", glyph: "\ue148", sub: "Connect, pair and scan for devices",   // bluetooth
                           aliases: ["bt", "bluez", "pair"], words: ["bluetooth", "devices", "headset", "earbuds", "mouse", "keyboard", "controller"] },
-        "tailscale":    { title: "Tailscale", glyph: "\uf0e8", sub: "Switch Tailscale, copy or ssh to machines on the tailnet",   // sitemap
+        "tailscale":    { title: "Tailscale", glyph: "\ue111", sub: "Switch Tailscale, copy or ssh to machines on the tailnet",   // sitemap
                           aliases: ["ts", "tailnet"], words: ["vpn", "machines", "peers", "ssh", "magicdns", "ip", "node"] },
-        "mullvad":      { title: "Mullvad", glyph: "\uf3ed", sub: "Switch Mullvad VPN and choose its location",   // shield-halved
+        "mullvad":      { title: "Mullvad", glyph: "\ue623", sub: "Switch Mullvad VPN and choose its location",   // shield-halved
                           aliases: ["mv"], words: ["vpn", "location", "country", "city", "relay", "connect", "reconnect"] },
-        "vms":          { title: "Virtual machines", glyph: "\uf108", sub: "Start, stop and create quickemu VMs",   // desktop
+        "vms":          { title: "Virtual machines", glyph: "\ue0d3", sub: "Start, stop and create quickemu VMs",   // desktop
                           aliases: ["vm", "vms", "qemu", "quickemu", "quickget"], words: ["virtual", "machine", "kvm", "linux", "windows", "snapshot", "iso"] },
-        "binds":        { title: "Keybinds", glyph: "\uf11c", sub: "Keyboard shortcuts from the Hyprland config",   // keyboard
+        "binds":        { title: "Keybinds", glyph: "\ue120", sub: "Keyboard shortcuts from the Hyprland config",   // keyboard
                           aliases: ["keys", "keybinds", "shortcuts", "bindings", "hotkeys", "cheatsheet"], words: ["keyboard", "bind", "shortcut", "key", "cheat", "sheet", "super", "help"] },
-        "webapp":       { title: "Install webapp", header: "Install web app", glyph: "\uf0ac", sub: "Brave app window for a site, with its own icon",   // globe
+        "webapp":       { title: "Install webapp", header: "Install web app", glyph: "\ue0c2", sub: "Brave app window for a site, with its own icon",   // globe
                           aliases: ["webapp", "web app", "pwa"], words: ["install", "brave", "app", "website", "shortcut"] },
-        "screenshot":   { title: "Screenshot", glyph: "\uf030", sub: "Region, window or screen",   // camera
+        "screenshot":   { title: "Screenshot", glyph: "\ue105", sub: "Region, window or screen",   // camera
                           aliases: ["print", "grab", "snip", "capture"], words: ["screen", "region", "window", "monitor", "image"] },
-        "record":       { title: "Record", glyph: "\uf03d", sub: "Screen recording: region, window or screen",   // video
+        "record":       { title: "Record", glyph: "\ue128", sub: "Screen recording: region, window or screen",   // video
                           aliases: ["screenrec", "video", "screencast", "recording", "capture"], words: ["screen", "region", "window", "monitor", "fps", "audio", "stop"] }
     })
 
@@ -77,7 +77,7 @@ QtObject {
     function brand(name) { return name === "twitch" && !vodActive }
     // launcher header while inside the section (defaults to the title) and its icon (the root row glyph)
     function header(name) { const s = sections[name]; if (name === "jellyfin" && jf) return jf.header(); if (name === "vms" && vm) return vm.header(); if (name === "mullvad" && vpn && vpn.country !== "") return vpn.countryName(); return name === "twitch" && vodActive ? "Past broadcasts" : s ? (s.header || s.title) : "" }
-    function glyph(name) { if (name === "jellyfin" && jf) return jf.glyph(); if (name === "vms" && vm) return vm.glyph(); if (name === "mullvad" && vpn && vpn.country !== "") return "\uf3c5"; return name === "twitch" && vodActive ? "\uf144" : sections[name] ? sections[name].glyph : "" }   // location-dot, circle-play
+    function glyph(name) { if (name === "jellyfin" && jf) return jf.glyph(); if (name === "vms" && vm) return vm.glyph(); if (name === "mullvad" && vpn && vpn.country !== "") return "\ue10e"; return name === "twitch" && vodActive ? "\ue22f" : sections[name] ? sections[name].glyph : "" }   // location-dot, circle-play
 
     // ---- state ---------------------------------------------------------------------------------------------
     property var outRows: []
@@ -138,8 +138,8 @@ QtObject {
         if (name === "vms" && vm) return vm.rows()
         if (name === "twitch") {
             if (vodActive) return vodList()
-            if (twitchLoading) return [info("loading", "Loading followed channels...", "", "\uf110")]   // spinner
-            if (twitchError !== "") return [info("error", "Could not load Twitch", twitchError, "\uf071")]   // triangle-exclamation
+            if (twitchLoading) return [info("loading", "Loading followed channels...", "", "\ue0f6")]   // spinner
+            if (twitchError !== "") return [info("error", "Could not load Twitch", twitchError, "\ue101")]   // triangle-exclamation
             if (twFollowsPath === "") return [twitchWeb]
             return twitchRows
         }
@@ -165,9 +165,9 @@ QtObject {
     }
 
     function audioRows(loading, error, list, empty) {
-        if (loading) return [info("loading", "Loading devices...", "", "\uf110")]   // spinner
-        if (error !== "") return [info("error", "Could not list devices", error, "\uf071")]   // triangle-exclamation
-        if (list.length === 0) return [info("empty", empty, "", "\uf071")]   // triangle-exclamation
+        if (loading) return [info("loading", "Loading devices...", "", "\ue0f6")]   // spinner
+        if (error !== "") return [info("error", "Could not list devices", error, "\ue101")]   // triangle-exclamation
+        if (list.length === 0) return [info("empty", empty, "", "\ue101")]   // triangle-exclamation
         return list
     }
 
@@ -190,7 +190,7 @@ QtObject {
             const row = {
                 id: "sec:" + kind + ":" + name, name: shortName(desc === "" ? name : desc),
                 subtitle: isCur ? "Current default" : "", kind: kind, source: isCur ? "Default" : "",
-                glyph: isCur ? "\uf00c" : (kind === "sound-in" ? "\uf130" : "\uf028"),   // check, microphone, volume-high
+                glyph: isCur ? "\ue0ab" : (kind === "sound-in" ? "\ue10f" : "\ue12b"),   // check, microphone, volume-high
                 transient: true, private: true, device: name
             };
             (isCur ? cur : rest).push(row)
@@ -247,13 +247,13 @@ QtObject {
     }
     property var gamingHint: null            // replaces the Gamescope row while gamescope is missing (hint row, Enter copies the install command); set by Launcher
     readonly property var powerRows: [
-        power("sleep", "Sleep", "Suspend the computer", "\uf186", "~/.config/hypr/scripts/suspend.sh", false),   // moon
-        power("shutdown", "Shut down", "Power off", "\uf011", "hyprshutdown -t 'Shutting down...' --post-cmd 'shutdown now'", true),   // power-off
-        power("reboot", "Restart", "Reboot the computer", "\uf2f9", "hyprshutdown -t 'Restarting...' --post-cmd 'reboot'", true),   // rotate-right
-        power("exit", "Exit Hyprland", "End the session", "\uf2f5", "hyprshutdown", true),   // right-from-bracket
-        gamingHint || power("gamescope", "Switch to Gamescope", "Log out into the Gamescope session", "\uf11b",   // gamepad
+        power("sleep", "Sleep", "Suspend the computer", "\ue0d4", "~/.config/hypr/scripts/suspend.sh", false),   // moon
+        power("shutdown", "Shut down", "Power off", "\ue126", "hyprshutdown -t 'Shutting down...' --post-cmd 'shutdown now'", true),   // power-off
+        power("reboot", "Restart", "Reboot the computer", "\ue0dc", "hyprshutdown -t 'Restarting...' --post-cmd 'reboot'", true),   // rotate-right
+        power("exit", "Exit Hyprland", "End the session", "\ue0ce", "hyprshutdown", true),   // right-from-bracket
+        gamingHint || power("gamescope", "Switch to Gamescope", "Log out into the Gamescope session", "\ue265",   // gamepad
               "echo gamescope > ~/.local/state/next-session && hyprshutdown -t 'Switching to Gamescope...'", true),
-        power("kde", "Switch to KDE", "Log out into the KDE session", "\uf108",   // desktop
+        power("kde", "Switch to KDE", "Log out into the KDE session", "\ue0d3",   // desktop
               "echo kde > ~/.local/state/next-session && hyprshutdown -t 'Switching to KDE...'", true)
     ]
 
@@ -262,7 +262,7 @@ QtObject {
 
     function twitchPlayerLabel() { return twAppPath !== "" ? "twitch-qs-mpv" : twMpv ? "mpv" : "browser" }
     readonly property var twitchWeb: ({ id: "sec:twitch:web", name: "Open Twitch in browser", subtitle: "Following list, in your default browser",
-                                        kind: "twitch-web", source: "", glyph: "\uf0ac", keywords: ["twitch", "browser", "following", "streams"],   // globe
+                                        kind: "twitch-web", source: "", glyph: "\ue0c2", keywords: ["twitch", "browser", "following", "streams"],   // globe
                                         transient: true, private: true, url: "https://www.twitch.tv/directory/following" })
 
     // twitch-qs-follows --json: [{kind: live|offline|favorite|login|none, login, name, game, viewers, stale, avatar}]
@@ -272,7 +272,7 @@ QtObject {
     }
     function twitchSpecial(kind, label) {
         if (kind === "none") return info("none", label, "Check the network and try again", "")
-        if (twAppPath === "") return info("login", "Log in to Twitch", "Needs twitch-qs-mpv, which is not installed", "\uf071")   // triangle-exclamation
+        if (twAppPath === "") return info("login", "Log in to Twitch", "Needs twitch-qs-mpv, which is not installed", "\ue101")   // triangle-exclamation
         return loginRow(label)
     }
     function loginRow(label) {
@@ -283,7 +283,7 @@ QtObject {
         return { id: "sec:twitch:" + login, name: name, subtitle: sub, kind: "twitch", source: live ? "Live" : "",
                  avatar: avatar || "", avatarLive: live,    // local profile picture path ("" = generic glyph); full colour only while live
                  glyph: "", iconColor: live ? "red" : "muted", transient: true, private: true, login: login,
-                 actions: [{ id: "twitch-vods", label: twAppPath !== "" ? "Past broadcasts" : "Past broadcasts (browser)", glyph: "\uf144" }] }   // circle-play
+                 actions: [{ id: "twitch-vods", label: twAppPath !== "" ? "Past broadcasts" : "Past broadcasts (browser)", glyph: "\ue22f" }] }   // circle-play
     }
     // returns the rows, or null when the text is not a JSON array (an older twitch-qs-follows)
     function parseTwitchJson(text) {
@@ -410,19 +410,19 @@ QtObject {
             const date = e.created_at ? dateText(String(e.created_at)) : ""; if (date) parts.push(date)
             if (typeof e.views === "number") parts.push(countText(e.views) + (e.views === 1 ? " view" : " views"))
             out.push({ id: "sec:twitch:vod:" + id, name: String(e.title || "Untitled broadcast"), subtitle: parts.join("  \u00b7  "), kind: "twitch-vod", source: "",
-                       glyph: "\uf144", keywords: game ? [game] : [], transient: true, private: true, vodId: id })   // circle-play
+                       glyph: "\ue22f", keywords: game ? [game] : [], transient: true, private: true, vodId: id })   // circle-play
         }
         return out
     }
     function videosUrl(login) { return "https://www.twitch.tv/" + login.toLowerCase() + "/videos" }
     function vodList() {
         if (vodLoading) return [info("vod-loading", "Loading...", "", "")]
-        if (vodOld) return [info("vod-old", "Update twitch-qs-mpv for past broadcasts", vodOldNote !== "" ? vodOldNote : "This version has no `vods` command", "\uf071"),   // triangle-exclamation
-                            { id: "sec:twitch:vod-web", name: "Open past broadcasts in browser", subtitle: vodName, kind: "twitch-web", source: "", glyph: "\uf0ac",   // globe
+        if (vodOld) return [info("vod-old", "Update twitch-qs-mpv for past broadcasts", vodOldNote !== "" ? vodOldNote : "This version has no `vods` command", "\ue101"),   // triangle-exclamation
+                            { id: "sec:twitch:vod-web", name: "Open past broadcasts in browser", subtitle: vodName, kind: "twitch-web", source: "", glyph: "\ue0c2",   // globe
                               transient: true, private: true, url: videosUrl(vodLogin) }]
         if (vodError !== "") {
-            if (vodCode === 2) return [info("vod-error", "Not logged in", vodError, "\uf071"), loginRow("Run twitch-qs-mpv login")]   // triangle-exclamation
-            return [info("vod-error", vodCode === 3 ? "Could not reach Twitch" : vodCode === 4 ? "Unknown channel" : "Could not load past broadcasts", vodError, "\uf071")]   // triangle-exclamation
+            if (vodCode === 2) return [info("vod-error", "Not logged in", vodError, "\ue101"), loginRow("Run twitch-qs-mpv login")]   // triangle-exclamation
+            return [info("vod-error", vodCode === 3 ? "Could not reach Twitch" : vodCode === 4 ? "Unknown channel" : "Could not load past broadcasts", vodError, "\ue101")]   // triangle-exclamation
         }
         if (vodRows.length === 0) return [info("vod-empty", "No past broadcasts", vodName, "")]
         return vodRows
@@ -464,9 +464,9 @@ QtObject {
     readonly property real launchDelay: 0.25     // seconds between the launcher closing and the capture starting (old menus: 200 ms)
 
     readonly property var captureModes: [
-        { id: "region", name: "Region", sub: "Drag a rectangle", glyph: "\uf125" },   // crop
-        { id: "window", name: "Window", sub: "Click a window",   glyph: "\uf2d0" },   // window-maximize
-        { id: "output", name: "Screen", sub: "Whole monitor",    glyph: "\uf108" }   // desktop
+        { id: "region", name: "Region", sub: "Drag a rectangle", glyph: "\ue3ac" },   // crop
+        { id: "window", name: "Window", sub: "Click a window",   glyph: "\ue02e" },   // window-maximize
+        { id: "output", name: "Screen", sub: "Whole monitor",    glyph: "\ue0d3" }   // desktop
     ]
     property int lastShot: 0                     // the sections reopen on the last used mode
     property int lastRec: 0
@@ -484,15 +484,15 @@ QtObject {
         const out = []
         if (recording)
             out.push({ id: "sec:rec:stop", name: "Stop recording", subtitle: "A recording is running", kind: "rec-stop", source: "Recording",
-                       glyph: "\uf04d", iconColor: "red", transient: true, private: true })   // stop
+                       glyph: "\ue0e5", iconColor: "red", transient: true, private: true })   // stop
         const modes = modeRows("rec", "rec")
         for (const m of modes) out.push(m)
         out.push({ id: "sec:rec:opt:fps", name: "Frame rate", subtitle: "Enter switches between 30 and 60", kind: "rec-opt", opt: "fps",
-                   source: fps + " fps", glyph: "\uf008", transient: true, private: true })   // film
+                   source: fps + " fps", glyph: "\ue1e7", transient: true, private: true })   // film
         out.push({ id: "sec:rec:opt:format", name: "Format", subtitle: "Enter switches between MP4 and WebM", kind: "rec-opt", opt: "format",
-                   source: format === "mp4" ? "MP4" : "WebM", glyph: "\uf1c8", transient: true, private: true })   // file-video
+                   source: format === "mp4" ? "MP4" : "WebM", glyph: "\ue41d", transient: true, private: true })   // file-video
         out.push({ id: "sec:rec:opt:audio", name: "Record desktop audio", subtitle: "Enter turns it " + (audio ? "off" : "on"), kind: "rec-opt", opt: "audio",
-                   source: audio ? "On" : "Off", glyph: audio ? "\uf028" : "\uf026", transient: true, private: true })   // volume-high, volume-off
+                   source: audio ? "On" : "Off", glyph: audio ? "\ue12b" : "\ue129", transient: true, private: true })   // volume-high, volume-off
         return out
     }
     // row to highlight when a section opens: the last used mode (after the Stop row while recording)

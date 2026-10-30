@@ -49,7 +49,7 @@ set (dark or light variant of every state colour).
 `fontSize` 13 body · `fontSmall` 12 buttons, secondary lines, values next to sliders · `fontCaption` 11 sub lines, captions,
 section heads · `fontTiny` 10 badges. Bold only for titles and a primary button.
 
-### Icons (Font Awesome 7 Sharp Regular, brands from Font Awesome 7 Brands)
+### Icons (Vadivam outline, brands from Font Awesome 7 Brands)
 
 `iconSm` 12 inline markers (check, chevron, pill glyph, InfoTip) · `iconMd` 15 default: bar chips, buttons, compact rows ·
 `iconLg` 18 the leading icon of a list row or tile (in an `iconCol` 22 column) · `iconXl` 22 OSD, empty states.

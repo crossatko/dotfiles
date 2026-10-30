@@ -212,7 +212,7 @@ ColumnLayout {
     EmptyState {
         visible: HomeAssistant.configured && HomeAssistant.status === "ok" && hp.sectionCount === 0
         readonly property bool allHidden: hp.hiddenCount > 0 || hp.hiddenSectionCount > 0
-        icon: allHidden ? Icons.eyeOff : Icons.home
+        icon: allHidden ? Icons.eyeOff : Icons.homeAssistant
         text: allHidden ? "All hidden" : "No entities"
         hint: allHidden ? "Everything is hidden. Use the eye button to bring entities and sections back." : "No lights, switches, climate, vacuum, fan or cover entities found."
     }

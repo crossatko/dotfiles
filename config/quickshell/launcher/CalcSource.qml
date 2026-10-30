@@ -40,7 +40,7 @@ QtObject {
         if (q === expr && result !== "")
             return [{
                 id: "calc:result", name: "= " + result, subtitle: q, kind: "calc", source: "Calculator",
-                glyph: "\uf1ec", transient: true, top: true, result: result      // calculator
+                glyph: "\ue14b", transient: true, top: true, result: result      // calculator
             }]
         if (q !== expr) debounce.restart()
         return []

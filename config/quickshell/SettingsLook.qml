@@ -70,7 +70,7 @@ Item {
             title: "Mode"
             titleWidth: pg.titleW
             values: ["dark", "light"]
-            labels: ["  Dark", "  Light"]
+            labels: ["Dark", "Light"]
             objectNames: ["mode-dark", "mode-light"]
             segWidth: 90
             current: pg.colorWant !== "" ? pg.colorWant : Theme.mode

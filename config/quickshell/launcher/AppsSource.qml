@@ -31,12 +31,12 @@ QtObject {
                 kind: "app",
                 source: "Application",
                 icon: a.icon || "",
-                glyph: "\uf1b2",                 // cube
+                glyph: "\ue104",                 // cube
                 desktopId: a.id,
                 argv: (a.runInTerminal ? [] : (a.command || [])).map(String),   // launch command, matched to Hyprland binds (Binds.keysForApp)
                 // web apps from bin/webapp-install (or the old create_brave_webapp function): webapp_<slug>.desktop running
                 // a browser with --app=; Ctrl+K offers "Uninstall webapp" (WebappSource.action)
-                actions: webappSlug(a) ? [{ id: "webapp-uninstall", label: "Uninstall webapp", glyph: "\uf1f8", confirm: true,   // trash
+                actions: webappSlug(a) ? [{ id: "webapp-uninstall", label: "Uninstall webapp", glyph: "\ue100", confirm: true,   // trash
                                            confirmText: "Uninstall " + a.name + "?", sub: "Removes its launcher entry and icon; site data stays in Brave" }] : [],
                 webappSlug: webappSlug(a)
             })

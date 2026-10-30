@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Effects
 
 // Icon of one AirPods part, centred in a `size` square box: "left" / "right" bud, "case" (drawings in assets/,
-// credits in assets/CREDITS.md) or "headset" (AirPods Max: Font Awesome headphones). The drawings are plain
+// credits in assets/CREDITS.md) or "headset" (AirPods Max: Vadivam headphones). The drawings are plain
 // black-on-transparent SVGs tinted to `color` (MultiEffect: brightness lifts them to white, colorization then
 // maps white to the colour) and rasterised at their displayed size (Image renders an SVG at sourceSize x the
 // screen's device pixel ratio, so they stay crisp at fractional scales).

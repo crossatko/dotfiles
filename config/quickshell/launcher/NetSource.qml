@@ -188,7 +188,7 @@ QtObject {
 
     // ---- network ---------------------------------------------------------------------------------------------
     function wifiDev() { return nm.devices ? nm.devices.values.find(d => d.type === DeviceType.Wifi) || null : null }
-    function bars(s) { return s > 0.66 ? "\uf1eb" : s > 0.33 ? "\uf6ab" : "\uf6aa" }   // wifi, wifi-fair, wifi-weak
+    function bars(s) { return s > 0.66 ? "\ue117" : s > 0.33 ? "\ue757" : "\ue759" }   // wifi, wifi-fair, wifi-weak
     readonly property var pskTypes: [WifiSecurityType.WpaPsk, WifiSecurityType.Wpa2Psk, WifiSecurityType.Sae]
     function secLabel(t) {
         return t === WifiSecurityType.Open ? "Open" : t === WifiSecurityType.Owe ? "Enhanced open" : t === WifiSecurityType.WpaPsk ? "WPA"
@@ -211,7 +211,7 @@ QtObject {
 
     function netRows() {
         if (nm.backend === NetworkBackendType.None)
-            return [info("nm", "NetworkManager is not running", "Network and Wi-Fi need NetworkManager", "\uf071")]   // triangle-exclamation
+            return [info("nm", "NetworkManager is not running", "Network and Wi-Fi need NetworkManager", "\ue101")]   // triangle-exclamation
         const devs = nm.devices.values
         const wired = devs.filter(d => d.type === DeviceType.Wired)
         const w = wifiDev()
@@ -242,7 +242,7 @@ QtObject {
         if (on && d.linkSpeed > 0) parts.push(d.linkSpeed + " Mb/s")
         const can = on || (!!d.network && d.hasLink && !busy)
         return row(id, d, {
-            name: d.name, subtitle: parts.join("  ·  "), kind: can ? "net-wired" : "info", glyph: "\uf796",   // ethernet
+            name: d.name, subtitle: parts.join("  ·  "), kind: can ? "net-wired" : "info", glyph: "\ue3f2",   // ethernet
             iconColor: p && p.failed ? "red" : !on ? "muted" : "", source: on ? "Connected" : "",
             runLabel: on ? "Disconnect" : "Connect", keywords: ["wired", "ethernet", "cable", "lan"],
             confirm: on, confirmText: "Disconnect " + d.name + "?", confirmSub: lastLink(up)
@@ -251,7 +251,7 @@ QtObject {
     function wifiPowerRow(on, up, wifiUp) {
         return row("net:wifi-power", null, {
             name: on ? "Turn Wi-Fi off" : "Turn Wi-Fi on", subtitle: on ? "Wireless radio" : "Wi-Fi is off", kind: "net-wifi-power",
-            glyph: on ? "\uf6ac" : "\uf1eb", keywords: ["wifi", "wi-fi", "wireless", "radio", "airplane"], want: !on,   // wifi-slash, wifi
+            glyph: on ? "\ue146" : "\ue117", keywords: ["wifi", "wi-fi", "wireless", "radio", "airplane"], want: !on,   // wifi-slash, wifi
             confirm: on && wifiUp, confirmText: "Turn Wi-Fi off?", confirmSub: lastLink(up).replace("disconnect", "turn it off")
         })
     }
@@ -278,12 +278,12 @@ QtObject {
         else if (psk) { sub = [sec, pct, "Enter asks for the password"]; argument = "Password"; runLabel = "Enter password" }
         else { sub = [sec, pct, "Set it up with nmtui first"]; kind = "info" }
         const acts = []
-        if (n.known && !(n.connected && up <= 1)) acts.push({ id: "net-forget", label: "Forget network", glyph: "\uf1f8" })   // trash
+        if (n.known && !(n.connected && up <= 1)) acts.push({ id: "net-forget", label: "Forget network", glyph: "\ue100" })   // trash
         return row(id, n, {
             name: n.name, subtitle: sub.join("  ·  "), kind: kind, glyph: bars(n.signalStrength),
             iconColor: p && p.failed ? "red" : "", source: n.connected ? "Connected" : n.known ? "Saved" : "",
             keywords: ["wifi", "wi-fi", "wireless", sec.toLowerCase()], runLabel: runLabel, actions: acts,
-            argument: argument, secret: argument !== "", argGlyph: argument !== "" ? "\uf023" : "", argVerb: "connect", confirm: n.connected, confirmText: "Disconnect " + n.name + "?", confirmSub: lastLink(up)   // lock
+            argument: argument, secret: argument !== "", argGlyph: argument !== "" ? "\ue0cd" : "", argVerb: "connect", confirm: n.connected, confirmText: "Disconnect " + n.name + "?", confirmSub: lastLink(up)   // lock
         })
     }
 
@@ -292,19 +292,19 @@ QtObject {
     function named(d) { return d.name && d.name !== "" && !/^([0-9a-f]{2}[-:]){5}[0-9a-f]{2}$/i.test(d.name) }
     function devGlyph(icon) {
         const i = icon || ""
-        return /headset|headphone|earbud/.test(i) ? "\uf025" : /speaker|audio-card|audio/.test(i) ? "\uf8df" : /keyboard/.test(i) ? "\uf11c"   // headphones, speaker, keyboard
-             : /mouse|tablet/.test(i) ? "\uf8cc" : /gaming|joystick/.test(i) ? "\uf11b" : /phone/.test(i) ? "\uf3cd"   // computer-mouse, gamepad, mobile-screen-button
-             : /computer|laptop/.test(i) ? "\uf109" : /video|display|tv/.test(i) ? "\uf26c" : /printer/.test(i) ? "\uf02f"   // laptop, tv, print
-             : /camera/.test(i) ? "\uf030" : "\uf293"   // camera, bluetooth
+        return /headset|headphone|earbud/.test(i) ? "\ue48a" : /speaker|audio-card|audio/.test(i) ? "\ue64e" : /keyboard/.test(i) ? "\ue120"   // headphones, speaker, keyboard
+             : /mouse|tablet/.test(i) ? "\ue54a" : /gaming|joystick/.test(i) ? "\ue265" : /phone/.test(i) ? "\ue114"   // computer-mouse, gamepad, mobile-screen-button
+             : /computer|laptop/.test(i) ? "\ue1ed" : /video|display|tv/.test(i) ? "\ue1cb" : /printer/.test(i) ? "\ue245"   // laptop, tv, print
+             : /camera/.test(i) ? "\ue105" : "\ue148"   // camera, bluetooth
     }
     function btRows() {
         const a = bz.defaultAdapter
         if (!a) return [info("noadapter", "No Bluetooth adapter", "")]
         const busy = a.state === BluetoothAdapterState.Enabling || a.state === BluetoothAdapterState.Disabling
         if (!a.enabled) {
-            if (a.state === BluetoothAdapterState.Blocked) return [info("blocked", "Bluetooth is blocked", "Unblock it with rfkill", "\uf071")]   // triangle-exclamation
+            if (a.state === BluetoothAdapterState.Blocked) return [info("blocked", "Bluetooth is blocked", "Unblock it with rfkill", "\ue101")]   // triangle-exclamation
             return [row("bt:power", a, { name: busy ? "Turning Bluetooth on..." : "Turn Bluetooth on", subtitle: "Bluetooth is off", kind: busy ? "info" : "bt-power",
-                                         glyph: "\uf293", want: true, keywords: ["bluetooth", "power", "on"] })]   // bluetooth
+                                         glyph: "\ue148", want: true, keywords: ["bluetooth", "power", "on"] })]   // bluetooth
         }
         if (btAutoScan && !a.discovering && !btScanOwned) { btScanOwned = true; setDiscovering(a, true) }   // scan on entry / once powered on
         const devs = a.devices.values.filter(d => d.paired || d.connected || named(d))
@@ -313,9 +313,9 @@ QtObject {
         const anyOn = devs.some(d => d.connected)
         if (devs.length === 0) out.push(info("empty", a.discovering ? "Looking for devices..." : "No devices", a.discovering ? "Put the device in pairing mode" : ""))
         out.push(row("bt:scan", a, { name: a.discovering ? "Stop scanning" : "Scan for devices", subtitle: a.discovering ? "Discovering nearby devices" : "Find new devices to pair",
-                                     kind: "bt-scan", glyph: a.discovering ? "\uf04d" : "\uf002", want: !a.discovering, keywords: ["scan", "discover", "pair"] }))   // stop, magnifying-glass
+                                     kind: "bt-scan", glyph: a.discovering ? "\ue0e5" : "\ue0de", want: !a.discovering, keywords: ["scan", "discover", "pair"] }))   // stop, magnifying-glass
         out.push(row("bt:power", a, { name: busy ? "Turning Bluetooth off..." : "Turn Bluetooth off", subtitle: "Bluetooth radio", kind: busy ? "info" : "bt-power",
-                                      glyph: "\uf293", want: false, keywords: ["bluetooth", "power", "off"],   // bluetooth
+                                      glyph: "\ue148", want: false, keywords: ["bluetooth", "power", "off"],   // bluetooth
                                       confirm: anyOn, confirmText: "Turn Bluetooth off?", confirmSub: "Connected devices will disconnect. Press Enter again" }))
         return out
     }
@@ -341,7 +341,7 @@ QtObject {
         else parts.push(d.paired ? "Paired" : "Not paired  ·  Enter pairs and connects")
         if (d.batteryAvailable && (d.connected || d.paired)) parts.push("Battery " + Math.round(d.battery * 100) + "%")
         const acts = []
-        if (d.paired) acts.push({ id: "bt-forget", label: "Forget device", glyph: "\uf1f8" })   // trash
+        if (d.paired) acts.push({ id: "bt-forget", label: "Forget device", glyph: "\ue100" })   // trash
         return row(id, d, {
             name: d.name || d.address, subtitle: parts.join("  ·  "), kind: "bt-dev", glyph: devGlyph(d.icon),
             iconColor: p && p.failed ? "red" : !d.connected && !d.paired ? "muted" : "",

@@ -11,7 +11,7 @@ import Quickshell.Wayland
 // is a default; Hyprland remembers the floating size). Opened from the control center's gear,
 // or `qs ipc call settings toggle|open|close` / `qs ipc call settings page <id>`; `qs ipc call picker toggle`
 // (SUPER+T) = togglePage("wallpaper").
-// Adding a page: one entry in `allPages` (id, title, Font Awesome icon, QML file whose root fills the width).
+// Adding a page: one entry in `allPages` (id, title, Vadivam icon, QML file whose root fills the width).
 // The linter cannot see these optional page hooks on the dynamically loaded page, hence the
 // missing-property suppressions where they are read.
 // A page root may declare `readonly property bool wantsFocus: true` (gets the keyboard focus; unhandled keys
