@@ -112,7 +112,7 @@ def limit(w, stale, reset=None, title=None, detail=None):
     cells = len(txt)
     n = max(0, min(100, w["percent"])) / 100.0 * cells
     fill = min(cells, max(1 if w["percent"] > 0 else 0, int(n + 0.5)))
-    line("█" * fill + "░" * (cells - fill), **dict(MENLO, color=C_MUTED if stale else C_ACCENT))
+    line("█" * fill + "░" * (cells - fill), **dict(MENLO, color=C_MUTED if stale else C_RED if w["percent"] >= 100 else C_ACCENT))
 
 
 STATUS_ICON = {"expired": "exclamationmark.triangle", "paused": "exclamationmark.triangle", "forbidden": "exclamationmark.triangle",

@@ -150,15 +150,11 @@ def scoped_title(kind):
 
 
 def parse_usage(body):
-    """Tolerant: anything missing or of an unexpected type is skipped."""
+    """Tolerant: anything missing or of an unexpected type is skipped. Utilization is already a percent (1.0 = 1 %)."""
     windows = []
     if not isinstance(body, dict):
         return windows, None
     entries = body.get("limits") if isinstance(body.get("limits"), list) else []
-    # percent (37.0) today; older payloads used fractions (0.37). One payload, one convention.
-    raw = [num(body[k].get("utilization")) for k, _, _ in KNOWN if isinstance(body.get(k), dict)]
-    raw += [num(e.get("percent")) for e in entries if isinstance(e, dict)]
-    scale = 1.0 if any(v is not None and v > 1 for v in raw) or not any(v for v in raw if v is not None) else 100.0
 
     def add(key, title, sub, w):
         if not isinstance(w, dict):
@@ -168,7 +164,7 @@ def parse_usage(body):
             pct = num(w.get("percent"))
         if pct is None:
             return
-        windows.append({"key": key, "title": title, "detail": sub, "percent": max(0.0, pct * scale),
+        windows.append({"key": key, "title": title, "detail": sub, "percent": max(0.0, pct),
                         "resetsAt": iso_to_epoch(w.get("resets_at"))})
 
     for key, title, sub in KNOWN:
