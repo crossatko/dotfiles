@@ -35,6 +35,11 @@ Config: ${XDG_CONFIG_HOME:-~/.config}/url-router/config (optional; see config.ex
                                   yes; Hyprland only; waits up to 10 s if the browser is not running yet). Picks the
                                   most recently focused plain window of the browser's class (Brave-browser), never an
                                   --app web app window. Web app links are not focused by this.
+  replace  = <slug> [...] | *     under Hyprland: when a window of that web app is already open, the link opens in a
+                                  fresh window that takes its place (Chromium cannot navigate an open app window from
+                                  outside): the new window is focused, the most recently focused old one is closed
+                                  (waits at most 5 s for the new one; if it never appears the old one stays). Default:
+                                  off. Wins over group. The router forks first, so the caller never waits.
   group    = <slug> [...] | *     under Hyprland: when a window of that web app is already open, focus the most
                                   recently focused one, make it a group if it is not one, and open the link's new
                                   window into that group (auto_group; else joined with the Lua group:add after it
@@ -194,7 +199,7 @@ def webapps(data_home):
 
 # ---- config --------------------------------------------------------------------------------------------------------
 def load_config(config_home):
-    cfg = {"fallback": None, "disable": set(), "alias": {}, "dry_run": None, "group": set(), "focus_figma": True, "focus_browser": True}
+    cfg = {"fallback": None, "disable": set(), "alias": {}, "dry_run": None, "group": set(), "replace": set(), "focus_figma": True, "focus_browser": True}
     path = os.path.join(config_home, "url-router", "config")
     try:
         with open(path, encoding="utf-8") as f:
@@ -219,6 +224,8 @@ def load_config(config_home):
             cfg["dry_run"] = v
         elif k == "group":
             cfg["group"].update(v.split())
+        elif k == "replace":
+            cfg["replace"].update(v.split())
         elif k == "focus_browser":
             cfg["focus_browser"] = v.lower() not in ("no", "off", "false", "0")
         elif k == "focus_figma":
@@ -446,6 +453,18 @@ def group_enabled(slug, cfg):
     return bool(slug) and ("*" in cfg["group"] or slug in cfg["group"])
 
 
+def replace_enabled(slug, cfg):
+    return bool(slug) and ("*" in cfg["replace"] or slug in cfg["replace"])
+
+
+def lua_move(addr, ws):
+    return 'hl.dsp.window.move({workspace=%d, follow=false, window="address:%s"})' % (ws, addr)
+
+
+def lua_close(addr):
+    return 'hl.dsp.window.close({window="address:%s"})' % addr
+
+
 def window_host(cls):
     m = APP_CLASS.match((cls or "").lower())
     return norm_host(m.group(1)) if m else None
@@ -563,6 +582,44 @@ def group_launch(argv, app, cfg, hypr, sleep=None, clock=None):
     return "timeout"
 
 
+def replace_launch(argv, app, cfg, hypr, sleep=None, clock=None):
+    """launch argv; when a window of the app was already open, focus the new window once it appears and close the
+    most recently focused old one. Returns a short status string. Never raises; the link is always opened."""
+    import time
+    sleep = sleep or time.sleep
+    clock = clock or time.monotonic
+    old, ws, before = None, None, set()
+    try:
+        clients = hypr.clients() if hypr.ok else None
+        wins = app_windows(clients, app, cfg) if clients is not None else []
+        before = {c.get("address") for c in clients or []}
+        oldw = next((w for w in wins if ADDR.match(str(w.get("address")))), None)
+        old = oldw["address"] if oldw else None
+        ws = (oldw or {}).get("workspace")
+        ws = ws.get("id") if isinstance(ws, dict) else None
+    finally:
+        launch(argv)
+    if not old:
+        return "no-window"
+    end = clock() + GROUP_WAIT
+    while clock() < end:
+        sleep(0.1)
+        new = [c for c in app_windows(hypr.clients() or [], app, cfg) if c.get("address") not in before
+               and ADDR.match(str(c.get("address")))]
+        if new:
+            addr = new[0]["address"]
+            if isinstance(ws, int) and ws > 0:     # the new window takes the old one's place (workspace)
+                hypr.dispatch(lua_move(addr, ws))
+            hypr.dispatch(lua_close(old))
+            for _ in range(5):                     # closing hands focus elsewhere a moment later
+                sleep(0.15)
+                hypr.dispatch(lua_focus(addr))
+                if hypr.active() == addr:
+                    return "replaced"
+            return "replaced-not-focused"
+    return "timeout"
+
+
 def launch(argv):
     subprocess.Popen(argv, start_new_session=True, stdin=subprocess.DEVNULL)
 
@@ -616,6 +673,14 @@ def main(args):
         log(("web app %s" % slug) if slug else "fallback browser")
         native = slug == "figma" and argv[0] == FIGMA_APP     # not a webapp_figma.desktop entry
         try:
+            if not native and replace_enabled(slug, cfg) and hypr_available():
+                if detach():
+                    try:
+                        log("replace %s: %s" % (slug, replace_launch(argv, by_slug[slug], cfg, Hypr())))
+                    except Exception as e:      # never leave the link unopened because of this
+                        log("replace %s failed (%s)" % (slug, type(e).__name__))
+                    os._exit(0)
+                continue
             if not native and group_enabled(slug, cfg):
                 hypr = hypr or Hypr()
                 if hypr.ok:

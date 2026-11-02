@@ -16,6 +16,10 @@
 # Print the decision as JSON ("-" = stdout) or append it to a file instead of launching anything.
 #dry_run = -
 
+# Hyprland only: when a window of the web app is already open, the link opens in a fresh window that is focused
+# while the old one is closed (Chromium cannot navigate an open app window from outside). "*" = every web app. Default: off.
+#replace = tracker
+
 # Hyprland only: when a window of the web app is already open, the link's new window opens as a tab of it
 # (the most recently focused one is focused, made a group if it is not one, and the new window joins it).
 # "*" = every web app. Default: off.

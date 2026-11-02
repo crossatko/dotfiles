@@ -585,6 +585,62 @@ class Grouping(unittest.TestCase):
         self.assertEqual(len(self.launches), 1)
 
 
+class Replacing(Grouping):
+    def run_replace(self, h):
+        t = [0.0]
+
+        def clock():
+            t[0] += 0.1
+            return t[0]
+        orig = R.launch
+
+        def launch(argv):
+            h.launched = True
+            orig(argv)
+        R.launch = launch
+        try:
+            return R.replace_launch(["brave", "--app=https://design.example/x"], self.apps["design"], self.cfg, h,
+                                    sleep=lambda s: None, clock=clock)
+        finally:
+            R.launch = orig
+
+    def test_enabled(self):
+        cfg = dict(self.cfg, replace={"design"})
+        self.assertTrue(R.replace_enabled("design", cfg))
+        self.assertFalse(R.replace_enabled("tracker", cfg))
+        self.assertTrue(R.replace_enabled("tracker", dict(cfg, replace={"*"})))
+        self.assertFalse(R.replace_enabled(None, dict(cfg, replace={"*"})))
+
+    def test_no_window_just_launches(self):
+        h = FakeHypr([client("0x9", "kitty", 0)])
+        self.assertEqual(self.run_replace(h), "no-window")
+        self.assertEqual(h.calls, [])
+        self.assertEqual(len(self.launches), 1)
+
+    def test_old_window_closed_new_focused(self):
+        before = [client("0x1", "brave-design.example__-Default", 3), client("0x3", "brave-design.example__-Default", 1)]
+        after = before + [client("0x5", "brave-design.example__x-Default", 0)]
+        h = FakeHypr(before, after)
+        self.assertEqual(self.run_replace(h), "replaced")
+        self.assertEqual(h.calls, ['hl.dsp.window.move({workspace=1, follow=false, window="address:0x5"})',
+                                   'hl.dsp.window.close({window="address:0x3"})', 'hl.dsp.focus({window="address:0x5"})'])
+        self.assertEqual(len(self.launches), 1)
+
+    def test_new_window_never_appears_keeps_old(self):
+        before = [client("0x1", "brave-design.example__-Default", 0)]
+        h = FakeHypr(before, before)
+        self.assertEqual(self.run_replace(h), "timeout")
+        self.assertEqual(h.calls, [])
+        self.assertEqual(len(self.launches), 1)
+
+    def test_config_key(self):
+        e = Env(config="replace = design tracker\n")
+        try:
+            self.assertEqual(R.load_config(e.conf)["replace"], {"design", "tracker"})
+        finally:
+            e.close()
+
+
 HYPRCTL_STUB = r"""#!/usr/bin/env -S python3 -I
 # stub hyprctl: answers from $HSTATE (clients JSON), logs every call to $HLOG
 import json, os, sys
