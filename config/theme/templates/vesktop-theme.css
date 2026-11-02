@@ -253,7 +253,8 @@ code, [class*="markup"] code, [class*="hljs"] { border-color: var(--wall-line) !
   border: 1px solid var(--wall-line);
   border-radius: var(--wall-radius);
 }
-[role="dialog"] {
+/* not the image viewer: backdrop-filter makes the dialog the containing block of its fixed-position controls, which then collapse into the middle of the image */
+[role="dialog"]:not([class*="carouselModal"]):not([class*="imageModal"]):not(:has([class*="carouselModal"])):not(:has([class*="imageWrapper"])) {
   background: var(--wall-glass-dialog) !important;
   backdrop-filter: blur(24px);
   border-radius: var(--wall-radius);
