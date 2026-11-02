@@ -2,7 +2,7 @@
 
 Public repo with the user's Linux (Arch + Hyprland) and macOS configs. Read the global `CLAUDE.md` first. State document: rules, locations, traps; no config
 values (the files are the source of truth), no history. Components document themselves in their README/header; own apps (Hyprland fork, twitch-qs-mpv, tuifin,
-zellij claude-tabs, AeroSpace fork, librepods) live in their own repos, only the wiring is here.
+AeroSpace fork, librepods) live in their own repos, only the wiring is here.
 
 ## Mandatory rules
 

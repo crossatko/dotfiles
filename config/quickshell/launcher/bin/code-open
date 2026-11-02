@@ -39,21 +39,13 @@ edit=()
 [ -n "$file" ] && edit=(--close-on-exit -- sh -c "$script" sh "$file")
 what="tab $dir${file:+ edit $file}"           # for DRY
 kq() { local s=${1//\\/\\\\}; printf '"%s"' "${s//\"/\\\"}"; }   # KDL string
-# With the claude-tabs bar the tab is made from an explicit layout: a resurrected session keeps a new_tab_template whose pane has the
-# old cwd, and that beats `new-tab --cwd` (the tab would open in the wrong folder). Without the plugin the flags are enough.
 tab() {
   local args
   # a folder that already has a tab (same name) is focused instead of opened again
   if [ -z "$file" ] && timeout 10 zellij --session "$sess" action query-tab-names 2>/dev/null | grep -qxF -- "$name"; then
     timeout 10 zellij --session "$sess" action go-to-tab-name "$name" >/dev/null 2>&1 && return
   fi
-  if [ -e "${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}/plugins/claude-tabs/claude-tabs.wasm" ]; then
-    local pane="pane cwd=$(kq "$dir")"
-    [ -n "$file" ] && pane+=" command=\"sh\" close_on_exit=true { args \"-c\" $(kq "$script") \"sh\" $(kq "$file"); }"
-    args=(--name="$name" --layout-string "layout { $pane; pane size=1 borderless=true { plugin location=\"claude-tabs\"; }; }")
-  else
-    args=(--cwd="$dir" --name="$name" "${edit[@]}")
-  fi
+  args=(--cwd="$dir" --name="$name" "${edit[@]}")
   timeout 10 zellij --session "$sess" action new-tab "${args[@]}" >/dev/null 2>&1 || fail "Could not open a tab in zellij session $sess"
 }
 spawn() { command -v "$term" >/dev/null || fail "$term not found"; exec "$term" "$@"; }

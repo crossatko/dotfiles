@@ -13,7 +13,7 @@
 # Default: repos + packages + links. `system` is opt-in (--system, or --only). Skip the third-party repo with `--only links,packages`.
 # --cachyos (opt-in, needs the repos stage) also adds the CachyOS repos.
 #
-# Environment: CLAUDE_TABS_DIR (claude-tabs checkout), INSTALL_SKIP (space separated: librepods theme-blobs omz claude-tabs
+# Environment: INSTALL_SKIP (space separated: librepods theme-blobs omz
 # cachyos-repo chaotic-repo omacal), GPU_DRIVER (radeon|intel|virtio|swrast|none instead of GPU detection), PACMAN_CONF (pacman.conf to edit, default /etc/pacman.conf; for tests),
 # CACHYOS_LEVEL (force znver4|v4|v3|plain|none instead of CPU detection).
 set -euo pipefail
@@ -95,7 +95,7 @@ Environment:
                    intel, QEMU/virtio -> virtio, anything else (VMware, VirtualBox, NVIDIA, unknown) ->
                    swrast; several GPUs install all matching. NVIDIA is not supported by this installer.
                    none = no GPU driver. amd-ucode/intel-ucode is added on bare metal (not with none).
-  INSTALL_SKIP, CLAUDE_TABS_DIR, PACMAN_CONF, CACHYOS_LEVEL   see the header of install.sh
+  INSTALL_SKIP, PACMAN_CONF, CACHYOS_LEVEL   see the header of install.sh
 EOF
 }
 
@@ -920,23 +920,6 @@ stage_links() {
     fi
   fi
 
-  log "Zellij claude-tabs plugin"
-  # Standalone package in its own repo (default checkout below). Its setup.sh links the plugin into
-  # ~/.config/zellij/plugins, installs the WC3 icon font, pre-grants permissions and adds the Claude Code hooks.
-  local ct="${CLAUDE_TABS_DIR:-$HOME/code/crossatko/zellij-wc3cz-claude}"
-  if skipped claude-tabs; then
-    echo "    skipped (INSTALL_SKIP)"
-  elif [ -f "$ct/setup.sh" ]; then
-    if [ "$DRY" = 1 ]; then
-      echo "    [dry-run] sh $ct/setup.sh"
-    else
-      sh "$ct/setup.sh" || warn "claude-tabs setup failed (use default_layout 'compact' as a fallback)"
-      FONTS_DIRTY=1
-    fi
-  else
-    info "claude-tabs checkout not found at $ct: clone it and run its setup.sh, or set default_layout 'compact' in config/zellij/config.kdl"
-  fi
-
   # Icon font for the Quickshell shell (MIT, from npm). Code points are positional, so the version is pinned: Icons.qml and the
   # launcher sources hold literal code points of this release; bump both together.
   log "Vadivam icon font"
@@ -1245,7 +1228,6 @@ Manual steps (not automated):
   - The Paper Mono font into ~/.local/share/fonts/ (the Vadivam icon font is fetched from npm by the links stage; needs nodejs).
   - omacal is built by the packages stage from the author's pinned PKGBUILD (skip: INSTALL_SKIP=omacal). It stores its Google sign-in in the Secret
     Service: gnome-keyring is installed, but a keyring must be unlocked/created in your session (Seahorse or first sign-in prompt).
-  - zellij claude-tabs: clone its repo to ~/code/crossatko/zellij-wc3cz-claude (or set CLAUDE_TABS_DIR), then re-run `--only links`.
   - Sign in: 1Password, Mullvad, `sudo tailscale up`, `jellyfin-qs login`, Brave/Firefox profiles.
   - Optional privacy deny-list for the pre-commit hook: ~/.config/dotfiles-private/denylist.
   - Machine-specific hardware setup beyond the GPU stack and CPU microcode (bootloader config, NVIDIA).

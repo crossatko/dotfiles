@@ -48,36 +48,6 @@ function _zellij_tab_name_update() {
 }
 add-zsh-hook chpwd _zellij_tab_name_update
 
-# config.kdl and layouts/*.kdl use the claude-tabs plugin (linked into config/zellij/plugins by its package's
-# setup.sh, git-ignored). KDL has no conditionals, so where the plugin file is missing (fresh box, the Mac)
-# this wrapper falls back to the stock bar: layout compact / nvim-compact, and `options --default-layout
-# compact` for attach -c/-b. Only touches commands that can start a session; everything else passes through.
-function zellij() {
-  local plugin=${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}/plugins/claude-tabs/claude-tabs.wasm
-  if [[ -e $plugin ]]; then
-    command zellij "$@"
-    return
-  fi
-  local -a args=("$@")
-  local i has_layout=0
-  for ((i = 1; i <= $#args; i++)); do
-    case $args[i] in
-      -l|--layout)
-        has_layout=1
-        [[ $args[i+1] == nvim ]] && args[i+1]=nvim-compact ;;
-      --layout=nvim) has_layout=1; args[i]=--layout=nvim-compact ;;
-      --layout=*|--layout-string|--layout-string=*) has_layout=1 ;;
-    esac
-  done
-  if (( ! has_layout )); then
-    case ${args[1]:-} in
-      "" | -*) args=(--layout compact "${args[@]}") ;;
-      attach|a) [[ " ${args[*]} " == *" -c "* || " ${args[*]} " == *" -b "* || " ${args[*]} " == *" -cb "* || " ${args[*]} " == *" -bc "* ]] \
-        && args+=(options --default-layout compact) ;;
-    esac
-  fi
-  command zellij "${args[@]}"
-}
 # Also set on shell startup
 _zellij_tab_name_update
 

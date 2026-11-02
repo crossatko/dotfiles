@@ -30,7 +30,3 @@ config/theme/out/
 config/theme/theme.local.toml
 config/theme/blobs/target/
 __pycache__/
-
-# claude-tabs zellij plugin: standalone package (~/code/crossatko/zellij-wc3cz-claude); its setup.sh
-# creates the host-local link config/zellij/plugins/claude-tabs -> the checkout
-config/zellij/plugins/
