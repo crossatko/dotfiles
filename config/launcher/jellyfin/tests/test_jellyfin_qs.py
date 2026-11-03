@@ -220,6 +220,36 @@ class Play(Base):
         self.assertIn("--start=2", a)
         self.assertIn(self.url + "/Videos/m1/stream?static=true", a)
         self.assertNotIn("--no-video", a)
+        # an explicit start (the TV's position) wins over the server's resume point; 0 = from the beginning
+        self.assertEqual(self.run_cli("play", "m1", "--start", "754").returncode, 0)
+        self.assertIn("--start=754", self.args())
+        self.assertEqual(self.run_cli("play", "m1", "--resume", "--start", "0").returncode, 0)
+        self.assertFalse(any(x.startswith("--start=") for x in self.args()))
+
+    def test_playing_other_clients(self):
+        self.login_files()
+        fj.SESSIONS[:] = [
+            {"UserId": fj.UID, "DeviceId": "tv1", "Client": "Wholphin", "DeviceName": "Living room",
+             "LastActivityDate": "2026-01-01T10:00:00Z",
+             "NowPlayingItem": {"Id": "e2", "Name": "Second", "Type": "Episode", "SeriesName": "Dark Show",
+                                "ParentIndexNumber": 1, "IndexNumber": 2, "RunTimeTicks": 600000000},
+             "PlayState": {"PositionTicks": 123 * 10000000, "IsPaused": True}},
+            {"UserId": fj.UID, "DeviceId": "dev1", "Client": "jellyfin-qs",           # this PC's own player: skipped
+             "NowPlayingItem": {"Id": "m1", "Name": "M", "Type": "Movie"}, "PlayState": {"PositionTicks": 1}},
+            {"UserId": "someone-else", "DeviceId": "x", "Client": "Web",
+             "NowPlayingItem": {"Id": "m1", "Name": "M", "Type": "Movie"}, "PlayState": {}},
+            {"UserId": fj.UID, "DeviceId": "phone", "Client": "Android", "LastActivityDate": "2026-01-01T09:00:00Z"},   # idle
+        ]
+        try:
+            os.makedirs(self.tmp + "/s", exist_ok=True)
+            json.dump({"device_id": "dev1"}, open(self.tmp + "/s/device.json", "w"))
+            r = self.data("playing", "--json")
+        finally:
+            fj.SESSIONS[:] = []
+        self.assertEqual(r, [{"id": "e2", "name": "Second", "type": "Episode", "title": "Dark Show S01E02 - Second", "series": "Dark Show",
+                              "position_s": 123, "runtime_s": 60, "paused": True, "client": "Wholphin", "device": "Living room",
+                              "last_activity": "2026-01-01T10:00:00Z"}])
+        self.assertTrue(any(x["path"] == "/Sessions" and x["query"].get("ActiveWithinSeconds") == "120" for x in self.srv.log))
 
     def test_report_with_real_mpv(self):
         if not shutil.which("mpv"):

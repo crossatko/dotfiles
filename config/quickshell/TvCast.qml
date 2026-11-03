@@ -77,7 +77,10 @@ Singleton {
     property var tabs: ({})                       // browser|title|artist -> the tab URL ("" = none found yet)
     property var tabTries: ({})                   // key -> lookups so far
     property var tabWanted: null                  // the source whose miss the retry timer asks again
-    function tabKey(p) { return Js.browserKey(p.identity, p.desktopEntry) + "\t" + (p.trackTitle || "") + "\t" + (p.trackArtist || "") }
+    // the track's length in seconds: > 0 = it has an end (a Twitch past broadcast), 0 = the player reports none (live),
+    // -1 = not reported (yet): the helper then accepts both, a title match first
+    function lengthOf(p) { return !p || !p.lengthSupported ? -1 : p.length > 0 && isFinite(p.length) ? Math.floor(p.length) : 0 }
+    function tabKey(p) { const l = lengthOf(p); return Js.browserKey(p.identity, p.desktopEntry) + "\t" + (p.trackTitle || "") + "\t" + (p.trackArtist || "") + "\t" + (l > 0 ? "end" : l === 0 ? "live" : "?") }
     function dataOf(src, tabsMap) {
         if (!src) return null
         if (src.kind === "twitch") return { source: "twitch", channel: src.channel, title: src.title }
@@ -86,12 +89,25 @@ Singleton {
         const md = p.metadata || {}
         return { source: "mpris", identity: p.identity || "", desktopEntry: p.desktopEntry || "", url: String(md["xesam:url"] || ""),
                  artUrl: p.trackArtUrl || "", title: p.trackTitle || "", artist: p.trackArtist || "", position: p.position,
-                 tabUrl: (tabsMap || tabs)[tabKey(p)] }
+                 length: lengthOf(p), tabUrl: (tabsMap || tabs)[tabKey(p)] }
     }
     function identify(src) { return Js.identify(dataOf(src, tabs)) }
     // the button's rule (reactive: reads tvState, reachable, tabs, prefs)
     function shownFor(src) {
         return Js.shown({ configured: HomeAssistant.configured, haOk: haOk, entity: entity, adapter: adapter, state: tvState, media: identify(src) })
+    }
+    // the Send button's hover detail: where the TV will start (" at 12:34", a Twitch past broadcast: the account's resume
+    // point, since the TV app takes no start position)
+    function startNote(src) {
+        const m = identify(src)
+        const app = Js.APPS[m.kind]
+        if (!app) return ""
+        if (app.start === "account") return " (resumes where your Twitch account left off)"
+        if (app.start === "exact" && m.startSeconds > 0) {
+            const s = m.startSeconds, h = Math.floor(s / 3600), mm = Math.floor(s % 3600 / 60), x = s % 60
+            return " at " + (h > 0 ? h + ":" + String(mm).padStart(2, "0") : mm) + ":" + String(x).padStart(2, "0")
+        }
+        return ""
     }
     // a browser source whose tab URL is not known yet: ask the helper (one at a time, latest wins). Works for paused
     // players too (the card shows them); the arguments go as argv (no shell: quotes / non-ASCII are safe).
@@ -104,7 +120,7 @@ Singleton {
         const t = Object.assign({}, tabTries); t[k] = (t[k] || 0) + 1; tabTries = t
         tabWanted = src
         tabProc.key = k
-        tabProc.command = [helper, Js.browserKey(d.identity, d.desktopEntry), d.title, d.artist]
+        tabProc.command = [helper, Js.browserKey(d.identity, d.desktopEntry), d.title, d.artist].concat(d.length >= 0 ? [String(d.length)] : [])
         tabProc.running = true
         tabWatchdog.restart()
     }
@@ -326,11 +342,19 @@ Singleton {
         if (src && flowMedia && flowMedia.kind !== "youtube-home")
             TvSession.begin({ name: tvName, kind: flowMedia.kind, ref: flowMedia.ref, startSeconds: flowMedia.startSeconds || 0,
                               title: flowInfo ? flowInfo.title : "", subtitle: flowInfo ? flowInfo.subtitle : "", artUrl: flowInfo ? flowInfo.artUrl : "",
-                              members: members, sentVia: adapter })
+                              members: members, sentVia: adapter, origin: originOf(src) })
         phase = "sent"
         clearT.interval = sentMs
         clearT.restart()
         log = log.slice()
+    }
+    // which PC player it came from (TvPc sends it back there): the Twitch app, mpv, or a browser
+    function originOf(src) {
+        if (!src) return ""
+        if (src.kind === "twitch") return "twitch-app"
+        const p = src.mpris
+        if (!p) return ""
+        return Js.isBrowser(p.identity, p.desktopEntry) ? "browser" : /mpv/i.test(String(p.identity || "") + " " + String(p.desktopEntry || "")) ? "mpv" : ""
     }
     function pauseHere(src) {
         if (src.kind === "mpris" && src.mpris) { if (src.mpris.isPlaying && src.mpris.canPause) src.mpris.pause() }

@@ -8,7 +8,9 @@ Small Jellyfin CLI for the Quickshell launcher (python3 stdlib only) plus an mpv
 - Commands (JSON on stdout): `status [--json]`, `resume [--library ID]`, `nextup [--library ID]`,
   `latest [--library ID]`, `libraries`, `search <q> [--limit N] [--types ...] [--parent ID]`,
   `children <id> [--types auto|T1,T2] [--sort name|added|year] [--start N] [--limit N] [--paged]`, `item <id>`,
-  `playlists`, `play <id> [--resume] [--shuffle]`, `logout`.
+  `playlists`, `play <id> [--resume] [--start S] [--shuffle]` (`--start` = seconds, wins over the resume point), `playing [--json]
+  [--within N]` (the user's other clients playing an item now: `{id, name, type, title, series, position_s, runtime_s, paused,
+  client, device, last_activity}`, newest first, this device's own player left out; Play on PC), `logout`.
 - `--library` / `--parent` scope a list or search to one library (Jellyfin `ParentId`).
 - `children` without options keeps the old output (direct children, sorted locally). With `--types` it lists a library
   recursively: `auto` = what the library shows (movies: `Movie,BoxSet`, tvshows: `Series`, music: album artists via

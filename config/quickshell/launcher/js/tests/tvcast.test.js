@@ -27,7 +27,6 @@ test("Twitch: the app's channel, a browser tab, a live preview cover", () => {
     eq(T.identify({ source: "twitch", channel: "Some_Streamer", title: "Stream" }), { kind: "twitch", ref: "some_streamer", startSeconds: 0, title: "Stream" });
     eq(T.identify({ source: "twitch", channel: "bad name" }), { kind: "unsupported" });
     eq(T.identify(Object.assign({}, brave, { tabUrl: "https://www.twitch.tv/streamer?referrer=raid", position: 999 })).ref, "streamer");
-    eq(T.identify(Object.assign({}, brave, { tabUrl: "https://www.twitch.tv/videos/123456" })), { kind: "unsupported" });
     eq(T.identify(Object.assign({}, brave, { tabUrl: "https://www.twitch.tv/directory" })), { kind: "unsupported" });
     eq(T.identify({ source: "mpris", identity: "Firefox", artUrl: "https://static-cdn.jtvnw.net/previews-ttv/live_user_streamer-1280x720.jpg", title: "x" }).ref, "streamer");
 });
@@ -189,4 +188,54 @@ test("Wholphin: VIEW opens details, so OK is pressed once it is up; ADB sends th
     // YouTube / Twitch links play by themselves
     assert.strictEqual(T.plan("remote_androidtv_remote", "remote.tv", { kind: "youtube", ref: "dQw4w9WgXcQ", startSeconds: 0 }).afterOpen, null);
     assert.strictEqual(T.plan("remote_androidtv_remote", "remote.tv", T.TEST).afterOpen, null);
+});
+
+test("Twitch past broadcasts and clips: their own kinds, never the channel", () => {
+    eq(T.identify(Object.assign({}, brave, { tabUrl: "https://www.twitch.tv/videos/1234567890", position: 21186.1, length: 46280 })),
+        { kind: "twitch-vod", ref: "1234567890", startSeconds: 21186, title: "Some video" });
+    eq(T.identify(Object.assign({}, brave, { tabUrl: "https://www.twitch.tv/videos/123?t=1h2m3s" })).startSeconds, 3723);   // no position: the URL's time
+    eq(T.parseUrl("https://m.twitch.tv/videos/123"), { kind: "twitch-vod", ref: "123", t: 0 });
+    eq(T.parseUrl("https://www.twitch.tv/streamer/v/123"), { kind: "twitch-vod", ref: "123", t: 0 });
+    eq(T.parseUrl("https://player.twitch.tv/?video=v123&parent=x&time=10m"), { kind: "twitch-vod", ref: "123", t: 600 });
+    eq(T.parseUrl("https://clips.twitch.tv/FunnySlug-Ab_9"), { kind: "twitch-clip", ref: "FunnySlug-Ab_9", t: 0 });
+    eq(T.parseUrl("https://clips.twitch.tv/embed?clip=FunnySlug&parent=x"), { kind: "twitch-clip", ref: "FunnySlug", t: 0 });
+    eq(T.parseUrl("https://www.twitch.tv/streamer/clip/FunnySlug?filter=clips"), { kind: "twitch-clip", ref: "FunnySlug", t: 0 });
+    eq(T.parseUrl("https://player.twitch.tv/?channel=Streamer&parent=x"), { kind: "twitch", ref: "streamer", t: 0 });
+    eq(T.parseUrl("https://www.twitch.tv/videos/abc"), null);
+    eq(T.parseUrl("https://www.twitch.tv/streamer/videos"), null);
+    eq(T.parseUrl("https://www.twitch.tv/streamer/clips"), null);
+    eq(T.identify(Object.assign({}, brave, { tabUrl: "https://clips.twitch.tv/FunnySlug", position: 12 })).startSeconds, 0);   // a clip plays from 0
+    const r = T.plan("remote_androidtv_remote", "remote.tv", { kind: "twitch-vod", ref: "1234567890", startSeconds: 21186 });
+    eq(r.launch[0].data.activity, "twitch://video/1234567890");        // the TV app ignores a start: resumes from the account
+    eq(r.verify, { attr: "current_activity", value: "tv.twitch.android.app" });
+    eq(T.plan("media_player_androidtv", "media_player.tv", { kind: "twitch-clip", ref: "FunnySlug", startSeconds: 0 }).launch[0].data.command,
+        "am start -a android.intent.action.VIEW -d 'twitch://clip/FunnySlug' tv.twitch.android.app");
+    eq(T.plan("media_player_cast", "media_player.tv", { kind: "twitch-vod", ref: "1", startSeconds: 0 }), null);   // never the cast receiver
+    eq(T.APPS["twitch-vod"].start, "account");
+});
+
+test("YouTube URL forms and time parameters", () => {
+    const yt = (u) => T.parseUrl(u);
+    eq(yt("https://youtu.be/" + YT + "?t=42"), { kind: "youtube", ref: YT, t: 42 });
+    eq(yt("https://m.youtube.com/watch?feature=share&v=" + YT + "#t=1m5s"), { kind: "youtube", ref: YT, t: 65 });
+    eq(yt("https://music.youtube.com/watch?v=" + YT + "&list=RD"), { kind: "youtube", ref: YT, t: 0 });
+    eq(yt("https://www.youtube.com/live/" + YT + "?si=x"), { kind: "youtube", ref: YT, t: 0 });
+    eq(yt("https://www.youtube-nocookie.com/embed/" + YT + "?start=30"), { kind: "youtube", ref: YT, t: 30 });
+    eq(yt("https://www.youtube.com/watch?v=" + YT + "&t=1h0m5s"), { kind: "youtube", ref: YT, t: 3605 });
+    eq(yt("https://www.youtube.com/watch?v=tooShort"), null);
+    eq(yt("https://www.youtube.com/@channel"), null);
+    eq(yt("https://notyoutube.com/watch?v=" + YT), null);
+    eq(yt("http://"), null);
+    eq(T.timeOf("1:02:03"), 3723);
+    eq(T.timeOf("90s"), 90);
+    eq(T.timeOf("garbage"), 0);
+});
+
+test("start position: seconds, the URL's time as a fallback, nothing past the length", () => {
+    eq(T.startOf("youtube", 61.9, 0, 0), 61);
+    eq(T.startOf("youtube", 0, 0, 30), 30);
+    eq(T.startOf("youtube", NaN, 0, 0), 0);
+    eq(T.startOf("youtube", 900, 300, 0), 0);          // past the length (ended, or another unit): from the start
+    eq(T.startOf("twitch", 500, 0, 0), 0);
+    eq(T.startOf("twitch-vod", 21186.2, 46280, 0), 21186);
 });

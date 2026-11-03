@@ -202,6 +202,9 @@ EngineVideoSlot 1.0 EngineVideoSlot.qml
 singleton TvPrefs 1.0 TvPrefs.qml
 singleton TvCast 1.0 TvCast.qml
 TvButton 1.0 TvButton.qml
+HandoffButton 1.0 HandoffButton.qml
+PcButton 1.0 PcButton.qml
+singleton TvPc 1.0 TvPc.qml
 SettingsTv 1.0 SettingsTv.qml
 singleton TvSession 1.0 TvSession.qml
 TvSource 1.0 TvSource.qml

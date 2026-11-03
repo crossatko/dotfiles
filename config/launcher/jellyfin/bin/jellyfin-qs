@@ -483,7 +483,9 @@ def cmd_play(a):
             "--force-seekable=yes", "--idle=no"]
     opts = ["jellyfin-qs-session=" + pre]
     resume = (queue[0].get("UserData") or {}).get("PlaybackPositionTicks", 0) // 10000000
-    if a.resume and resume > 0:
+    if a.start is not None:                 # an explicit start (seconds) wins over the server's resume point
+        resume = max(0, a.start)
+    if (a.resume or a.start is not None) and resume > 0:
         if len(queue) == 1:
             args.append("--start=%d" % resume)
         else:
@@ -506,6 +508,30 @@ def cmd_play(a):
                          stderr=subprocess.DEVNULL, start_new_session=True)
     except OSError:
         raise Err(1, "cannot start mpv")
+
+
+def cmd_playing(a):
+    """What this user plays on other Jellyfin clients (a TV's Wholphin, a phone): the server's sessions with an item."""
+    api = Api()
+    me = device_id()
+    rows = []
+    for x in api.get("/Sessions", ActiveWithinSeconds=a.within) or []:
+        it = x.get("NowPlayingItem") or {}
+        if not it.get("Id") or x.get("UserId") not in (None, api.uid) or x.get("DeviceId") == me:
+            continue
+        ps = x.get("PlayState") or {}
+        rows.append({"id": it["Id"], "name": it.get("Name") or "", "type": it.get("Type") or "",
+                     "title": title_of(it), "series": it.get("SeriesName") or "",
+                     "position_s": int(ps["PositionTicks"] // 10000000) if isinstance(ps.get("PositionTicks"), (int, float)) else None,
+                     "runtime_s": int((it.get("RunTimeTicks") or 0) // 10000000) or None,
+                     "paused": bool(ps.get("IsPaused")), "client": x.get("Client") or "", "device": x.get("DeviceName") or "",
+                     "last_activity": x.get("LastPlaybackCheckIn") or x.get("LastActivityDate") or ""})
+    rows.sort(key=lambda r: r["last_activity"], reverse=True)
+    if a.json:
+        out(rows)
+    else:
+        for r in rows:
+            print("%s\t%d\t%s\t%s" % (r["id"], r["position_s"], r["client"], r["title"]))
 
 
 def main():
@@ -553,7 +579,12 @@ def main():
         IncludeItemTypes="Playlist", Recursive="true")))
     x = s.add_parser("play"); x.add_argument("id")
     x.add_argument("--resume", action="store_true"); x.add_argument("--shuffle", action="store_true")
+    x.add_argument("--start", type=int, help="start at this many seconds (overrides --resume)")
     x.set_defaults(fn=cmd_play)
+    x = s.add_parser("playing")
+    x.add_argument("--json", action="store_true")
+    x.add_argument("--within", type=int, default=120, help="sessions active in the last N seconds")
+    x.set_defaults(fn=cmd_playing)
     try:
         a = p.parse_args()
     except SystemExit as e:

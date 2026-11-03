@@ -14,6 +14,7 @@ def it(i, name, typ, **kw):
     return d
 
 
+SESSIONS = []                     # GET /Sessions (tests fill it)
 ITEMS = [
     it("v1", "Movies", "CollectionFolder", CollectionType="movies"),
     it("m1", "Heat", "Movie", ProductionYear=1995, RunTimeTicks=6000 * T, ParentId="v1",
@@ -124,6 +125,8 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/Sessions/Logout":
             srv.logged_out = True
             return self.reply(204)
+        if p == "/Sessions" and method == "GET":
+            return self.reply(200, SESSIONS)
         if p.startswith("/Sessions/Playing"):
             return self.reply(204)
         if p.startswith(("/Videos/", "/Audio/")):

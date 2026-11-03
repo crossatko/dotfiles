@@ -10,7 +10,7 @@ import Quickshell.Io
 //                 adapter preference order); null = none. Written with `entity` = its first entity
 //   entity        the TV's first entity id ("" = none: no button). A file with only `entity` (older) still works: TvCast
 //                 sends to that entity and fills `tv` in once it has read HA's devices
-//   pauseAfter    pause the player here once the TV opened it (default on)
+//   pauseAfter    pause the player here once the TV opened it, and the TV once Play on PC opened it here (default on)
 //   autoDetect    show what the TV plays by itself (a remote, a phone's cast, its own app) as the TV card (TvSession; default on)
 //   dryRun        log the calls (qs ipc call tvcast last) instead of sending them; default: on while no entity is set,
 //                 off once one is (an explicit value always wins)

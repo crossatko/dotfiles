@@ -118,6 +118,41 @@ class BrowserTabUrl(unittest.TestCase):
                 f.write(b"not a database")
             self.assertEqual(self.run_bin(c, "brave", "x"), "")
 
+    def test_twitch_vod_never_answered_with_its_channel(self):
+        # Brave plays a past broadcast: the MPRIS title is the video's title, the artist the channel; History has the
+        # channel's live page ("<channel> - Twitch", an artist match): the video's own tab must win
+        vod = "Speedrun day 3 | !commands"
+        with tempfile.TemporaryDirectory() as c:
+            write_profile(c, [nav(1, 0, "https://www.twitch.tv/videos/123456789", vod)])
+            write_history(c, [("https://www.twitch.tv/streamer", "streamer - Twitch", 500)])
+            self.assertEqual(self.run_bin(c, "brave", vod, "Streamer"), "https://www.twitch.tv/videos/123456789")
+            self.assertEqual(self.run_bin(c, "brave", vod, "Streamer", "29448"), "https://www.twitch.tv/videos/123456789")
+            # no end (live): a video never matches, the channel page does
+            self.assertEqual(self.run_bin(c, "brave", vod, "Streamer", "0"), "https://www.twitch.tv/streamer")
+        with tempfile.TemporaryDirectory() as c:
+            # in-page navigation from the channel to a video: the session file still has the channel page, History the video
+            write_profile(c, [nav(1, 0, "https://www.twitch.tv/streamer", "streamer - Twitch")])
+            write_history(c, [("https://www.twitch.tv/videos/123456789?t=1h2m3s", vod, 400)])
+            self.assertEqual(self.run_bin(c, "brave", vod, "Streamer"), "https://www.twitch.tv/videos/123456789?t=1h2m3s")
+            # with an end the channel page never answers (no title match anywhere -> nothing)
+            self.assertEqual(self.run_bin(c, "brave", "Other video", "Streamer", "120"), "")
+            self.assertEqual(self.run_bin(c, "brave", "Other video", "Streamer"), "https://www.twitch.tv/streamer")
+
+    def test_open_live_tab_beats_an_old_youtube_title_in_history(self):
+        with tempfile.TemporaryDirectory() as c:
+            write_profile(c, [nav(1, 0, "https://www.twitch.tv/somechan", "somechan - Twitch")])
+            write_history(c, [("https://www.youtube.com/watch?v=AAAAAAAAAAA", "chill stream highlights - YouTube", 900)])
+            self.assertEqual(self.run_bin(c, "brave", "chill stream", "somechan", "0"), "https://www.twitch.tv/somechan")
+            self.assertEqual(self.run_bin(c, "brave", "chill stream", "somechan"), "https://www.twitch.tv/somechan")
+
+    def test_twitch_clip_urls(self):
+        with tempfile.TemporaryDirectory() as c:
+            write_profile(c, [nav(1, 0, "https://clips.twitch.tv/FunnySlug-Ab_9", "Huge play - streamer"),
+                              nav(2, 0, "https://www.twitch.tv/streamer/clip/OtherSlug?filter=clips", "Other clip - streamer"),
+                              nav(3, 0, "https://www.twitch.tv/streamer/videos?filter=archives", "Huge play videos")])
+            self.assertEqual(self.run_bin(c, "brave", "Huge play", "", "30"), "https://clips.twitch.tv/FunnySlug-Ab_9")
+            self.assertEqual(self.run_bin(c, "brave", "Other clip", "", "30"), "https://www.twitch.tv/streamer/clip/OtherSlug?filter=clips")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -237,3 +237,33 @@ test("routes: Android TV Remote media_player services only where supported_featu
     eq(S.caps(mp, bare), { toggle: false, prevNext: false, seek: false, volumeStep: false, volumeSet: false, mute: false, stop: false });
     assert.strictEqual(S.control(mp, bare, "toggle", 0), null);
 });
+
+test("pause: an explicit pause (never resumes) on every route", () => {
+    const s = sess("twitch-vod");
+    eq(s.pkg, "tv.twitch.android.app");
+    const k = S.control(s, {}, "pause", 0);
+    eq([k.calls[0].data.command, k.expect], ["MEDIA_PAUSE", { playing: false }]);
+    const adb = sess("twitch", [{ id: "media_player.adb", adapter: "media_player_androidtv" }], "media_player_androidtv");
+    eq(S.control(adb, {}, "pause", 0).calls[0].data.command, "input keyevent KEYCODE_MEDIA_PAUSE");
+    const yt = sess("youtube");
+    const cast = { "media_player.tv_cast": st("playing", { app_id: "233637DE", supported_features: 1 | 16384 }) };
+    eq(S.control(yt, cast, "pause", 0).calls[0], { domain: "media_player", service: "media_pause", data: { entity_id: "media_player.tv_cast" } });
+});
+
+test("Cast's mirror of a native app: position, length and play state for a sent session (never for another app)", () => {
+    const s = sess("twitch-vod");
+    const at = "2026-01-01T00:00:00Z";
+    const mirror = (a) => ({ "media_player.tv_cast": st("paused", Object.assign({ app_id: "AndroidNativeApp", app_name: "Twitch", media_position: 123.008, media_position_updated_at: at }, a)) });
+    const v = S.view(s, mirror({}), 0);
+    eq([v.position, v.positionAt, v.duration, v.playing], [123.008, Date.parse(at), -1, false]);
+    eq(S.view(s, mirror({ app_name: "Netflix" }), 0).position, -1);
+    // the TV's own YouTube app as Cast sees it (2C6A6E3D): title + position
+    const y = sess("youtube");
+    const yv = S.view(y, { "media_player.tv_cast": st("playing", { app_id: "2C6A6E3D", app_name: "YouTube", media_title: "Other video", media_position: 6.2, media_duration: 19 }) }, 0);
+    eq([yv.position, yv.duration, yv.tvTitle], [6.2, 19, "Other video"]);
+});
+
+test("start keeps the PC player it came from (known values only)", () => {
+    eq(S.start({ kind: "youtube", members: ATV, origin: "mpv" }).origin, "mpv");
+    eq(S.start({ kind: "youtube", members: ATV, origin: "rm -rf" }).origin, "");
+});

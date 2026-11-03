@@ -282,9 +282,14 @@ config/aerospace karabiner swiftbar  macOS only
   family (Brave, Chromium, Chrome, Vivaldi, Edge: no URL over MPRIS, cover = a local temp file) = `bin/browser-tab-url`
   reads the profile's newest `Sessions/Session_*` (SNSS, read-only) and prints the URL of the tab whose title contains the
   track title (Twitch: starts with the artist), else the newest matching row of the profile's `History` (SQLite, immutable
-  read-only: Brave's session file can lag minutes behind an in-page YouTube navigation), youtube / twitch URLs only; asked
+  read-only: Brave's session file can lag minutes behind an in-page YouTube navigation), youtube / twitch URLs only (a title match
+  beats a Twitch "<channel> - Twitch" artist match, open tabs then History; the player's length is passed: with one a live
+  channel page never answers, without one a past broadcast / clip never does); asked
   when the card shows a title (paused too), a miss asked again every 5 s while the popup is open (24 tries per title, reset
-  on reopen), a hit kept; the helper is killed after 5 s. Start position = MPRIS position (YouTube, Jellyfin); Twitch joins live.
+  on reopen), a hit kept; the helper is killed after 5 s. URL forms (`parseUrl`, tests): YouTube watch / youtu.be / shorts / live /
+  embed / music / m. / nocookie; Twitch channel, `videos/<id>`, `<ch>/v/<id>`, `<ch>/clip/<slug>`, `clips.twitch.tv`, `player.twitch.tv`;
+  time params `t` / `start` / `#t` (`90`, `1h2m3s`, `1:02:03`). Start position = MPRIS position (seconds; dropped past the track's
+  length), else the URL's time; Twitch live joins live, a clip plays from 0.
   Button rule (`Js.shown`): shown only when it would work: HA configured and answering, TV entity set and not
   unavailable / unknown / missing (off / standby SHOWS: waking is the point), recognised kind with an id the adapter
   supports; otherwise hidden (no disabled state). TV state = one `GET /api/states/<id>` on popup open and every 10 s while it
@@ -296,8 +301,12 @@ config/aerospace karabiner swiftbar  macOS only
   androidtv_remote = `turn_on`, then `play_media {media_content_type: url}`; androidtv (ADB) = `turn_on`, then
   `androidtv.adb_command "am start -a <action> -d '<link>' <package>"` (VIEW; Wholphin: its PLAYBACK action); cast = YouTube only:
   `play_media {media_content_type: cast, media_content_id: {"app_name":"youtube","media_id":ID}}` + `media_seek`. Links
-  (`APPS`): YouTube `https://www.youtube.com/watch?v=ID&t=Ns` (com.google.android.youtube.tv), Twitch
-  `twitch://stream/<login>` (tv.twitch.android.app), Jellyfin = Wholphin `wholphin://play?itemId=<id>&position=<ms>`
+  (`APPS`, `start` = where the TV starts): YouTube `https://www.youtube.com/watch?v=ID&t=Ns` (com.google.android.youtube.tv; `t=`
+  checked on the TV), Twitch (tv.twitch.android.app, scheme `twitch`) live `twitch://stream/<login>`, past broadcast
+  `twitch://video/<id>` (plays VODs the app's own lists hide; checked on the TV), clip `twitch://clip/<slug>` (unchecked). The
+  Twitch app ignores every start parameter (`?t=600s` / `1h0m0s` / `timestamp=` / `start=` / `position=`, checked on the TV): a VOD
+  resumes from the Twitch account's synced watch progress, else from 0 (the Send tooltip says so). VODs / clips never go through
+  Cast (Twitch's cast receiver seeks by downloading from the start, minutes for a long VOD on this TV). Jellyfin = Wholphin `wholphin://play?itemId=<id>&position=<ms>`
   (com.github.damontecres.wholphin, its Intents.md; needs Wholphin's auto sign-in). Wholphin plays only on action
   `com.github.damontecres.wholphin.PLAYBACK` (IntentService.kt: the action wins, the URI host counts only without one); a
   VIEW (all Android TV Remote sends) opens the item's details page, so `APPS.jellyfin.afterOpen` presses `DPAD_CENTER` once
@@ -313,8 +322,9 @@ config/aerospace karabiner swiftbar  macOS only
   `qs ipc call tvcast test` + `tvcast last` (the planned call), Dry run off, `tvcast test` again (wakes the TV, opens YouTube's
   home), then the button on a playing YouTube video. Caveats: verified against the mock only (never a real TV / HA); YouTube
   `t=` seeking, Twitch's TV app handling `twitch://stream/`, Wholphin's deep link and Android TV Remote's launch-while-booting
-  are unverified on a device; Firefox tabs are not read (only its cover URL); a browser playing two tabs with the same title
-  picks the most recent.
+  are unverified on a device (YouTube `t=` and Twitch's video / stream links are checked over adb); Firefox tabs are not read
+  (only its cover URL); a browser playing two tabs with the same title picks the most recent; a Chromium live stream is assumed
+  to report no MPRIS length.
 - **TV session** ("playing on TV", after a successful Send to TV): `TvSession.qml` (singleton: session, polling, controls,
   IPC `tvsession status|control <what>|disconnect|stop|poll|log`, tv-session.json next to tv.json, `QS_TVSESSION_FILE`,
   `QS_TVSESSION_TIMES` poll,off,away,hold ms) + `TvSource.qml` (a MediaSource, kind `tv`, key `tv`: first in `MediaSources`
@@ -324,11 +334,13 @@ config/aerospace karabiner swiftbar  macOS only
   never Cast's `AndroidNativeApp`, a native app Cast only mirrors: HA accepts media commands to it and the TV ignores them),
   else the Android TV Remote / ADB media_player), `route` per control (Cast services while castActive and Cast's
   `supported_features` has that control (e.g. no PREVIOUS / NEXT on Cast: keys), else Android key codes on the remote.* via
-  `remote.send_command` (MEDIA_PLAY_PAUSE, MEDIA_PREVIOUS / NEXT, MEDIA_REWIND / FAST_FORWARD, VOLUME_UP / DOWN / MUTE,
+  `remote.send_command` (MEDIA_PLAY_PAUSE, MEDIA_PAUSE (`pause`: explicit, used by Play on PC), MEDIA_PREVIOUS / NEXT, MEDIA_REWIND / FAST_FORWARD, VOLUME_UP / DOWN / MUTE,
   Stop = BACK (MEDIA_STOP is accepted and ignored by native apps like Twitch; BACK leaves the player, a live stream may keep playing on its page), else ADB `input keyevent`, else the media_player's services where its features allow; `caps` = controls with
   a route). Every sent call is logged with its outcome: `tvsession: <what> -> <domain.service> [KEY] (<route>): ok` or
   `: HTTP <n> <HA's message>` (failure also rolls the optimistic state back), `tvsession: <what>: no route on this TV`. `view` (Cast title / position /
-  volume where castActive, else what we sent + our optimistic play / pause; a control's expectation shows for 3 s, then the
+  volume where castActive, else what we sent + our optimistic play / pause; position / length / play state also from Cast's
+  mirror of a native app (`mirrorOf`: AndroidNativeApp with the app's `app_name`, or 2C6A6E3D = the TV's own YouTube app; the
+  position matches the app's own on the TV, never a content id); a control's expectation shows for 3 s, then the
   TV's state wins where it has one), `judge` (ends after 25 s off / unavailable / idle (a Cast send), or 20 s with another
   app in front; unread entities keep the timers). Polls every 5 s only while a session exists. Card: tv glyph art /
   chip (iconFont: `glyphBrand: false`), tv badge with the TV's name (`device`), transport prev / seek -10 s / play /
@@ -337,6 +349,25 @@ config/aerospace karabiner swiftbar  macOS only
   `TvCast.finish` (not for the test / dry run), replaces an older one; the local player was paused there. Dry run logs
   controls. Caveats: verified against the mock only; Android TV Remote reports no play state (card = optimistic), the
   REWIND / FAST_FORWARD step is the TV app's own; the lock card in session mode was not checked visually.
+- **Play on PC** (the reverse of Send to TV; media popup only): `PcButton` (shown with the TV card, `TvSource`; same slot as
+  `TvButton`, the TV card's wider transport moves left only as far as it must) -> `TvPc.qml` (singleton: flow, IPC `tvpc
+  status|press|cancel|last`). Both buttons are a `HandoffButton` (glyph = progress: rest glyph, search (lookup), power, circle-play,
+  check, warning; dimmed + reason tooltip when `usable` is false). Pure logic in `launcher/js/TvPc.js` (node tests `tvpc.test.js`):
+  `resolve` (the TV card -> target + how it starts), `matchYoutube`, `pickJellyfin`, `settle`, `command` (argv). Per source:
+  sent session (kind / ref / `origin` = the PC player it came from, kept in tv-session.json) = always; YouTube at the TV's
+  position (Cast / its mirror), back to mpv (`--start`) or the default browser (`&t=`); a different title on the TV = the search
+  below; Twitch live = `twitch-qs-mpv watch` (the browser when it came from one, or without the app); past broadcast = the browser
+  `twitch.tv/videos/<id>?t=XhYmZs` at the TV's position (Cast mirror), else without `t` (the site resumes from the account);
+  clip = the browser; Jellyfin = `jellyfin-qs play <id> --start <s>` (TV position), else `--resume` (the server's point, which
+  Wholphin reports). Auto-detected: YouTube = `yt-dlp ytsearch5:<title> <channel>`, only an exact title + channel (+ length
+  within 3 s) match (Cast gives no video id); Wholphin / Jellyfin = `jellyfin-qs playing --json` (the user's other client
+  playing an item, a TV client first; checked against the real server with Wholphin); Twitch's TV app = cannot (Cast's mirror
+  has its position only: no title / channel / id), other apps = cannot (dimmed, the tooltip says why). After the launch:
+  `TvPrefs.pauseAfter` (Settings "Pause here after sending") also pauses the TV (`pause`), a sent session ends ("moved to PC"). Dry run logs the argv. Test hooks:
+  `QS_TVPC_RUN` (gets the argv instead), `QS_TVPC_YTDLP`, `LAUNCHER_TWITCH_DIR`. Nested-verified against a websocket HA mock
+  (sent YouTube with a mirror position, auto Twitch disabled, auto YouTube found / not found, lookup in progress) with stub
+  players; caveats: never run against the real players / TV from the button, Cast commands to 2C6A6E3D (pause) unverified on
+  the TV, `xdg-open` failures are not seen (detached).
 - **TV auto-detect** (the same TV card for what the TV plays by itself: a remote, a phone's cast, its own app): `TvPrefs.autoDetect`
   (tv.json, default on; Settings > TV "Show TV playback"). The picked TV's entities (`tv.entities`, never hard-coded) are watched
   over HA's websocket (`HaWatch.qml`: `/api/websocket`, auth, `subscribe_entities` for those ids; HA pushes changes; backoff 2 s

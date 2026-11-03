@@ -12,8 +12,9 @@ Import in QML: `import "launcher/js/Ranker.js" as Ranker` (Ranker imports Frecen
 - `Frecency.prune(usage, now)` -> new usage without entries unused > 180 days (pinned/hidden kept)
 - `MonitorShown.shown(enabled, hidden, key)`, `toggle(state, keys, key, on)`, `setAll(state, keys, on)` -> the per-monitor rule of the desktop and lock clocks
   (state `{enabled, hidden}`, keys = connected monitor keys; see the file header)
-- `TvCast.identify(d)` -> `{kind: youtube|twitch|jellyfin, ref, startSeconds, title}` | `{kind: pending|unsupported}`, `TvCast.plan(adapter, entity, media)`
+- `TvCast.identify(d)` -> `{kind: youtube|twitch|twitch-vod|twitch-clip|jellyfin, ref, startSeconds, title}` | `{kind: pending|unsupported}`, `TvCast.plan(adapter, entity, media)`
   -> the Home Assistant calls, `TvCast.shown(o)` -> the media card's TV button rule (Send to TV; see the file header)
+- `TvPc.resolve(o, now)`, `settle(t, answer)`, `command(t, env)` -> Play on PC: the TV card -> the PC player's argv (see the file header)
 - `TvSession.start(o)`, `view(s, states, now)`, `control(s, states, what, now)` -> `{calls, expect, ends}`, `caps`, `judge(s, states, now, offMs, awayMs)`
   -> the TV session after a send (see the file header)
 - usage: `{[id]: {count, times:[ms], terms:{[q]:n}, pinned?, hidden?}}` (plain JSON, never mutated)

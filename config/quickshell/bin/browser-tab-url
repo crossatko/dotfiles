@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""browser-tab-url BROWSER TITLE [ARTIST]: the YouTube / Twitch URL of the open tab that plays TITLE.
+"""browser-tab-url BROWSER TITLE [ARTIST [LENGTH]]: the YouTube / Twitch URL of the open tab that plays TITLE.
 
 Used by TvCast.qml (Send to TV): Chromium-family browsers export no URL over MPRIS (xesam:url is missing and the cover is
 a local temp file), but they write every tab's current URL and title to the profile's session file
@@ -9,7 +9,10 @@ prints the URL of the tab whose title contains TITLE (or, for Twitch, starts wit
 "<channel> - Twitch"). The session file can lag minutes behind the tab (seen with Brave after an in-page YouTube
 navigation), so when no open tab matches, the profile's History database (SQLite, opened read-only + immutable: no lock,
 never written) is searched the same way, newest visit first. Only youtube.com / youtu.be / twitch.tv URLs are ever
-printed; anything else prints nothing.
+printed; anything else prints nothing. A tab whose title contains TITLE beats one that only starts with ARTIST (open tabs,
+then History, for each), so a past broadcast (twitch.tv/videos/<id>, titled like the video) is never answered with its
+channel's live page. LENGTH (the player's track length in seconds, optional): > 0 = a video with an end, so a Twitch live
+channel page never matches; 0 = no end (live), so a Twitch past broadcast or clip never matches; absent = both.
 BROWSER: brave | chromium | chrome | vivaldi | edge. Exit 0 always (no output = not found). Config dir: $XDG_CONFIG_HOME
 or ~/.config (tests point HOME / XDG_CONFIG_HOME at a fixture).
 """
@@ -29,7 +32,10 @@ DIRS = {
     "edge": "microsoft-edge",
 }
 UPDATE_NAV, SELECTED_NAV, TAB_CLOSED = 6, 7, 16
-ALLOWED = re.compile(r"^https?://((www\.|m\.|music\.)?youtube\.com/(watch\?|shorts/|live/)|youtu\.be/|(www\.|m\.)?twitch\.tv/[A-Za-z0-9_]{1,25}/?([?#]|$))")
+TW_LIVE = re.compile(r"^https?://(www\.|m\.)?twitch\.tv/[A-Za-z0-9_]{1,25}/?([?#]|$)")
+TW_VIDEO = re.compile(r"^https?://((www\.|m\.)?twitch\.tv/(videos/[0-9]{1,15}|[A-Za-z0-9_]{1,25}/(v|video)/[0-9]{1,15}|[A-Za-z0-9_]{1,25}/clip/[A-Za-z0-9][A-Za-z0-9_-]{0,99})"
+                      r"|clips\.twitch\.tv/[A-Za-z0-9][A-Za-z0-9_-]{0,99})/?([?#]|$)")
+ALLOWED = re.compile(r"^https?://((www\.|m\.|music\.)?youtube\.com/(watch\?|shorts/|live/)|youtu\.be/)")
 MAX_BYTES = 64 << 20
 HISTORY_ROWS = 5000                                  # newest visited YouTube / Twitch URLs scanned in History
 
@@ -90,11 +96,30 @@ def norm(s):
     return re.sub(r"\s+", " ", s).strip().casefold()
 
 
-def matches(url, tt, t, a):
-    if not ALLOWED.match(url or ""):
-        return False
+def allowed(url, length):
+    """Is this URL one to print, given the player's length (None = unknown)?"""
+    url = url or ""
+    if ALLOWED.match(url):
+        return True
+    if TW_LIVE.match(url):
+        return length is None or length <= 0
+    if TW_VIDEO.match(url):
+        return length is None or length > 0
+    return False
+
+
+def rank(url, tt, t, a, length=None):
+    """2 = the tab title contains TITLE, 1 = a Twitch live page titled "<ARTIST> - Twitch", 0 = no match."""
+    if not allowed(url, length):
+        return 0
     n = norm(tt)
-    return t in n or ("twitch.tv/" in url and bool(a) and n.startswith(a))
+    if t in n:
+        return 2
+    return 1 if TW_LIVE.match(url or "") and bool(a) and n.startswith(a) else 0
+
+
+def matches(url, tt, t, a, length=None):
+    return rank(url, tt, t, a, length) > 0
 
 
 def history_rows(path):
@@ -109,7 +134,7 @@ def history_rows(path):
         con.close()
 
 
-def find(browser, title, artist=""):
+def find(browser, title, artist="", length=None):
     base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
     root = os.path.join(base, DIRS.get(browser, ""))
     if browser not in DIRS or not os.path.isdir(root):
@@ -117,7 +142,7 @@ def find(browser, title, artist=""):
     t, a = norm(title), norm(artist)
     if not t:
         return ""
-    best = None
+    tabs_best, hist_best = {}, {}                     # rank -> ((mtime, order) | visit time, url)
     for prof in glob.glob(os.path.join(root, "*", "Sessions")):
         files = glob.glob(os.path.join(prof, "Session_*"))
         if not files:
@@ -129,31 +154,47 @@ def find(browser, title, artist=""):
             continue
         mtime = os.path.getmtime(newest)
         for url, tt, order in tabs.values():
-            if matches(url, tt, t, a):
+            r = rank(url, tt, t, a, length)
+            if r:
                 key = (mtime, order)
-                if best is None or key > best[0]:
-                    best = (key, url)
-    if best:
-        return best[1]
-    # the open tab is not in the session file yet: the newest matching visit in History
+                if r not in tabs_best or key > tabs_best[r][0]:
+                    tabs_best[r] = (key, url)
+    if 2 in tabs_best:
+        return tabs_best[2][1]
+    # the open tab is not in the session file yet (or still shows the page it navigated from): History, newest first
     for hist in glob.glob(os.path.join(root, "*", "History")):
         try:
             rows = history_rows(hist)
         except (sqlite3.Error, OSError):
             continue
         for url, tt, when in rows:
-            if matches(url, tt or "", t, a):
-                if best is None or (when or 0) > best[0]:
-                    best = (when or 0, url)
+            r = rank(url, tt or "", t, a, length)
+            if r and (r not in hist_best or (when or 0) > hist_best[r][0]):
+                hist_best[r] = (when or 0, url)
+            if r == 2:
                 break
-    return best[1] if best else ""
+    # an open channel tab (rank 1) yields to a History title match only for a Twitch video / clip (the in-page navigation
+    # from the channel page to a past broadcast); any other History title match (an old YouTube visit) never beats it
+    h2 = hist_best.get(2)
+    if h2 and 1 in tabs_best and not TW_VIDEO.match(h2[1]):
+        h2 = None
+    for best in (h2, tabs_best.get(1), hist_best.get(1)):
+        if best:
+            return best[1]
+    return ""
 
 
 def main(argv):
     if len(argv) < 3:
         print(__doc__.strip().splitlines()[0], file=sys.stderr)
         return 0
-    url = find(argv[1], argv[2], argv[3] if len(argv) > 3 else "")
+    length = None
+    if len(argv) > 4:
+        try:
+            length = float(argv[4])
+        except ValueError:
+            length = None
+    url = find(argv[1], argv[2], argv[3] if len(argv) > 3 else "", length)
     if url:
         print(url)
     return 0

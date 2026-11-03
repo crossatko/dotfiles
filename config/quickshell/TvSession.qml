@@ -19,6 +19,8 @@ import "launcher/js/TvSession.js" as Js
 // whose controls drive the TV the same way (no disconnect: nothing to detach). Js.detect decides what counts (on, playing /
 // paused, not a home screen, a title or a known app); a gap (track change) is held for gapMs, the TV going off is not.
 //   qs ipc call tvsession status | control <what> | disconnect | stop | poll | auto
+// The card also carries what Play on PC (TvPc) needs: kind / ref / origin of a sent session, the TV's own title and position
+// (Cast, or Cast's mirror of a native app), the app in front.
 // Test hook: QS_TVSESSION_TIMES="poll,off,away,hold,gap,autoPoll" ms.
 Singleton {
     id: ts
@@ -40,7 +42,9 @@ Singleton {
     // what the TV card shows (TvSource): the sent session, else what auto-detect found; null = no card
     readonly property var card: session && view && caps
         ? { sent: true, name: session.name, title: view.title, subtitle: view.subtitle, artUrl: session.artUrl, playing: view.playing,
-            muted: view.muted, volume: view.volume, live: session.kind === "twitch", caps: caps, position: -1, positionAt: 0, duration: -1 }
+            muted: view.muted, volume: view.volume, live: session.kind === "twitch", caps: caps, position: session.kind === "twitch" ? -1 : view.position,
+            positionAt: view.positionAt, duration: session.kind === "twitch" ? -1 : view.duration,
+            kind: session.kind, ref: session.ref, origin: session.origin || "", tvTitle: view.tvTitle, tvArtist: view.tvArtist, appId: session.pkg, app: "" }
         : autoView ? Object.assign({ sent: false, name: autoName, artUrl: Js.pictureUrl(HomeAssistant.base || HomeAssistant.url, autoView.picture),
                                      live: false, caps: autoCaps }, autoView) : null
     property string lastEnd: ""                   // why the last session ended

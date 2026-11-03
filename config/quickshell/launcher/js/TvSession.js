@@ -6,6 +6,7 @@
 //
 // session = { v: 1, name (the TV), kind, ref, title, subtitle, artUrl, startSeconds, startedAt (ms), pkg (the TV app),
 // castApp (Cast app id, "" = none), members: [{ id, adapter }] (the TV's entities), sentVia (adapter of the send),
+// origin (the PC player it came from: browser | mpv | twitch-app | ""),
 // playing / muted (our last known, optimistic), volume (-1 = unknown), pend: { playing?, muted?, volume?, until } (a
 // control's expected result, shown until `until`, then the TV's own state wins where it reports one), badSince /
 // awaySince (ms, 0 = no: see judge) }.
@@ -20,7 +21,7 @@
 // app's state, HA accepts media commands to it (200) and the TV ignores them, so that is never castActive.
 
 var KEYS = {      // control -> Android key code (remote.send_command / adb input keyevent KEYCODE_<x>)
-    toggle: "MEDIA_PLAY_PAUSE", previous: "MEDIA_PREVIOUS", next: "MEDIA_NEXT", back: "MEDIA_REWIND",
+    toggle: "MEDIA_PLAY_PAUSE", pause: "MEDIA_PAUSE", previous: "MEDIA_PREVIOUS", next: "MEDIA_NEXT", back: "MEDIA_REWIND",
     forward: "MEDIA_FAST_FORWARD", volup: "VOLUME_UP", voldown: "VOLUME_DOWN", mute: "VOLUME_MUTE", stop: "BACK"   // stop = BACK: MEDIA_STOP is accepted (200) and ignored by native TV apps (Twitch); BACK leaves the player (a live stream may keep audio on its page); never HOME / force-stop / power off
 }
 var SEEK_S = 10                     // seek back / forward step (Cast: media_seek; keys: whatever the app's REWIND does)
@@ -29,7 +30,7 @@ var PLAYERISH = ["playing", "paused", "buffering"]
 var CAST_NATIVE = "AndroidNativeApp"   // Cast's app id for a native app it only mirrors (no Cast receiver: commands are ignored)
 // HA MediaPlayerEntityFeature bits a control needs (HA rejects a service the entity does not support)
 var F = { PAUSE: 1, SEEK: 2, VOLUME_SET: 4, VOLUME_MUTE: 8, PREVIOUS: 16, NEXT: 32, VOLUME_STEP: 1024, STOP: 4096, PLAY: 16384 }
-var NEEDS = { toggle: F.PLAY | F.PAUSE, previous: F.PREVIOUS, next: F.NEXT, stop: F.STOP, back: F.SEEK, forward: F.SEEK,
+var NEEDS = { toggle: F.PLAY | F.PAUSE, pause: F.PAUSE, previous: F.PREVIOUS, next: F.NEXT, stop: F.STOP, back: F.SEEK, forward: F.SEEK,
               mute: F.VOLUME_MUTE, unmute: F.VOLUME_MUTE, volume: F.VOLUME_SET }
 
 function roleOf(members, adapter) {
@@ -95,36 +96,58 @@ function caps(s, states) {
              volumeSet: has("volume:0"), mute: has("mute"), stop: has("stop") }
 }
 
+// Cast's mirror of a native app (AndroidNativeApp, or the TV's own YouTube app 2C6A6E3D): its media session's state,
+// position and length (checked on a device: the position matches the app's own), never a content id. The Cast state
+// when it mirrors the app `pkg` (app_name or Cast id maps to it), else null.
+function mirrorOf(members, states, pkg) {
+    var id = roles(members).cast
+    var st = id ? states[id] : null
+    if (!st || !pkg || PLAYERISH.indexOf(st.state) < 0) return null
+    var a = String(attr(st, "app_id") || ""), n = String(attr(st, "app_name") || "")
+    if (CAST_PKG[a] === pkg) return st
+    return (a === CAST_NATIVE || a === "") && n !== "" && APP_NAMES[pkg] === n ? st : null
+}
+function stamp(st) { var t = Date.parse(String(attr(st, "media_position_updated_at") || "")); return isFinite(t) ? t : 0 }
+
 function metaState(s, states) {
     var r = roles(s.members)
     if (castActive(s, states)) return states[r.cast]
     return states[r.atv] || states[r.adb] || null
 }
-// what the card shows: { title, subtitle, playing, position, duration, volume, muted, via }
+// what the card shows: { title, subtitle, playing, position (s at positionAt ms, -1 = unknown), positionAt, duration,
+// volume, muted, via }. Position / length: Cast where castActive, else Cast's mirror of the session's app.
 function view(s, states, now) {
     var meta = metaState(s, states)
     var cast = castActive(s, states)
+    var mirror = cast ? null : mirrorOf(s.members, states, s.pkg)
+    var pos = cast ? meta : mirror
     var p = s.pend && now < s.pend.until ? s.pend : {}
     var playing = p.playing !== undefined ? p.playing
-        : meta && PLAYERISH.indexOf(meta.state) >= 0 ? meta.state !== "paused" : !!s.playing
+        : meta && PLAYERISH.indexOf(meta.state) >= 0 ? meta.state !== "paused"
+        : mirror ? mirror.state !== "paused" : !!s.playing
     var vol = p.volume !== undefined ? p.volume : typeof attr(meta, "volume_level") === "number" ? attr(meta, "volume_level") : (s.volume !== undefined ? s.volume : -1)
     var muted = p.muted !== undefined ? p.muted : typeof attr(meta, "is_volume_muted") === "boolean" ? attr(meta, "is_volume_muted") : !!s.muted
     var title = cast && attr(meta, "media_title") ? String(attr(meta, "media_title")) : s.title
     return {
         title: title, subtitle: s.subtitle || "", playing: playing, volume: vol, muted: muted, via: via(s, states),
-        position: cast && typeof attr(meta, "media_position") === "number" ? attr(meta, "media_position") : -1,
-        duration: cast && typeof attr(meta, "media_duration") === "number" ? attr(meta, "media_duration") : -1
+        tvTitle: pos && attr(pos, "media_title") ? String(attr(pos, "media_title")) : "",
+        tvArtist: pos && attr(pos, "media_artist") ? String(attr(pos, "media_artist")) : "",
+        position: pos && typeof attr(pos, "media_position") === "number" ? attr(pos, "media_position") : -1,
+        positionAt: pos ? stamp(pos) : 0,
+        duration: pos && typeof attr(pos, "media_duration") === "number" ? attr(pos, "media_duration") : -1
     }
 }
 
 // a control -> { calls: [{ domain, service, data }], expect: { playing?, muted?, volume? }, ends: bool, via } | null
-// what: toggle | previous | next | back | forward | volup | voldown | mute | unmute | stop | volume:<0..100>
+// what: toggle | pause (explicit: never resumes) | previous | next | back | forward | volup | voldown | mute | unmute | stop |
+// volume:<0..100>
 function control(s, states, what, now) {
     var rt = route(s, states, what)
     if (!rt) return null
     var cur = view(s, states, now || 0)
     var expect = {}
     if (what === "toggle") expect.playing = !cur.playing
+    if (what === "pause") expect.playing = false
     if (what === "mute" || what === "unmute") { expect.muted = what === "mute"; if (cur.muted === expect.muted) return { calls: [], expect: expect, ends: false, via: rt.via } }
     var key = KEYS[what === "unmute" ? "mute" : what]
     var calls = [], id = rt.id, e = { entity_id: id }
@@ -136,6 +159,7 @@ function control(s, states, what, now) {
         calls.push({ domain: "media_player", service: "volume_set", data: { entity_id: id, volume_level: lv } })
     }
     else if (what === "toggle") calls.push({ domain: "media_player", service: "media_play_pause", data: e })
+    else if (what === "pause") calls.push({ domain: "media_player", service: "media_pause", data: e })
     else if (what === "previous") calls.push({ domain: "media_player", service: "media_previous_track", data: e })
     else if (what === "next") calls.push({ domain: "media_player", service: "media_next_track", data: e })
     else if (what === "stop") calls.push({ domain: "media_player", service: "media_stop", data: e })
@@ -191,9 +215,11 @@ function start(o) {
         artUrl: String(o.artUrl || ""), startSeconds: o.startSeconds || 0, startedAt: o.now || 0,
         pkg: Cast.APPS[o.kind] ? Cast.APPS[o.kind].package : "", castApp: Cast.APPS[o.kind] && Cast.APPS[o.kind].castApp ? Cast.APPS[o.kind].castApp : "",
         members: (o.members || []).map(function (m) { return { id: m.id, adapter: m.adapter } }), sentVia: o.sentVia || "",
+        origin: ORIGINS.indexOf(o.origin) >= 0 ? o.origin : "",
         playing: true, muted: false, volume: -1, pend: null, badSince: 0, awaySince: 0
     }
 }
+var ORIGINS = ["browser", "mpv", "twitch-app"]      // the PC player a send came from (TV -> PC goes back there)
 // a stored session (tv-session.json) -> session or null
 function parse(text) {
     var o
@@ -224,9 +250,11 @@ var APP_NAMES = {
     "com.github.damontecres.wholphin": "Wholphin", "org.jellyfin.androidtv": "Jellyfin", "com.netflix.ninja": "Netflix",
     "com.amazon.amazonvideo.livingroom": "Prime Video", "com.disney.disneyplus": "Disney+", "com.plexapp.android": "Plex",
     "org.xbmc.kodi": "Kodi", "com.spotify.tv.android": "Spotify", "com.google.android.videos": "Google TV",
-    "com.apple.atve.androidtv.appletv": "Apple TV", "233637DE": "YouTube"
+    "com.apple.atve.androidtv.appletv": "Apple TV", "233637DE": "YouTube", "2C6A6E3D": "YouTube"
 }
-var CAST_PKG = { "233637DE": "com.google.android.youtube.tv" }     // Cast app id -> the TV app it runs as
+// Cast app id -> the TV app it runs as (233637DE = YouTube's cast receiver, 2C6A6E3D = the TV's own YouTube app as Cast
+// sees it: title, artist, position, length, no video id)
+var CAST_PKG = { "233637DE": "com.google.android.youtube.tv", "2C6A6E3D": "com.google.android.youtube.tv" }
 
 function isPackage(s) { return /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)+$/.test(s) || /^[0-9A-F]{8}$/.test(s) }
 function appOf(st, key) {
