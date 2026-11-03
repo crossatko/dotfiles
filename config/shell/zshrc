@@ -28,6 +28,7 @@ alias udd="update-desktop-database ~/.local/share/applications"
 
 alias :q="exit"
 alias vim="nvim"
+alias lg="lazygit"
 alias up="make up"
 alias upd="make up.d"
 alias down="make down"

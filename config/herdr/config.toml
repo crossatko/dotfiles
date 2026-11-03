@@ -11,6 +11,8 @@ new_workspace = "prefix+n"
 close_tab = "prefix+x"
 # pane close moves to shift+x (herdr shares one key map between prefix and navigate mode, so x cannot also close workspaces)
 close_pane = "prefix+shift+x"
+edit_scrollback = "prefix+shift+e"
+open_notification_target = "prefix+shift+o"
 next_workspace = ["prefix+j", "alt+j"]
 previous_workspace = ["prefix+k", "alt+k"]
 # pane up/down move to the arrow keys (j/k now switch workspaces)
@@ -27,6 +29,19 @@ key = "prefix+p"
 type = "shell"
 command = "$HOME/dotfiles/config/herdr/auto-split.sh"
 description = "split along the longer side"
+
+# herdr-nvim (plugin chmarax.herdr-nvim); its keys took over herdr's defaults for scrollback edit and notification target
+[[keys.command]]
+key = "prefix+e"
+type = "plugin_action"
+command = "chmarax.herdr-nvim.toggle"
+description = "nvim sidebar"
+
+[[keys.command]]
+key = "prefix+o"
+type = "plugin_action"
+command = "chmarax.herdr-nvim.pick-file"
+description = "open file from agent output"
 
 [ui]
 prompt_new_tab_name = false
