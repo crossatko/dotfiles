@@ -60,6 +60,7 @@ ModalMenu {
     property int first: 0                           // first visible result (scroll offset)
     property bool actionsOpen: false
     property int asel: 0                            // selected action
+    readonly property int afirst: Math.max(0, Math.min(asel - numResults + 1, actions.length - numResults))   // first visible action (the panel scrolls past numResults)
     property var usage: ({})
     property var history: []                        // last 20 queries, newest first
     property int histPos: -1                        // -1 = not recalling
@@ -718,7 +719,7 @@ ModalMenu {
         GlideHighlight {
             glide: false   // arrow keys move the tint instantly
             visible: lc.actionsOpen && lc.actions.length > 0
-            want: Qt.rect(0, lc.asel * (lc.rowH + list.gap), list.width, lc.rowH)
+            want: Qt.rect(0, (lc.asel - lc.afirst) * (lc.rowH + list.gap), list.width, lc.rowH)
             radius: Theme.radiusModal
             color: Theme.alpha(Theme.accent, 0.26)
             border.width: 1
@@ -831,12 +832,12 @@ ModalMenu {
             width: parent.width
             spacing: list.gap
             Repeater {
-                model: lc.actions
+                model: lc.actions.slice(lc.afirst, lc.afirst + lc.numResults)
                 ListRow {
                     id: arow
                     required property var modelData
                     required property int index
-                    readonly property bool sel: index === lc.asel
+                    readonly property bool sel: index + lc.afirst === lc.asel
                     readonly property bool arming: lc.actionConfirm === modelData.id
                     width: parent.width
                     rowH: lc.rowH
