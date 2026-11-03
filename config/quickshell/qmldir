@@ -54,7 +54,13 @@ HaStrip 1.0 HaStrip.qml
 HaEntity 1.0 HaEntity.qml
 HaVacuum 1.0 HaVacuum.qml
 singleton AiUsage 1.0 AiUsage.qml
+singleton Btc 1.0 Btc.qml
 AiLimit 1.0 AiLimit.qml
+singleton Weather 1.0 Weather.qml
+singleton WeatherBlur 1.0 WeatherBlur.qml
+WeatherStat 1.0 WeatherStat.qml
+WeatherDay 1.0 WeatherDay.qml
+WeatherHour 1.0 WeatherHour.qml
 Settings 1.0 Settings.qml
 SettingsBar 1.0 SettingsBar.qml
 SettingsLook 1.0 SettingsLook.qml
@@ -201,3 +207,4 @@ singleton TvSession 1.0 TvSession.qml
 TvSource 1.0 TvSource.qml
 HaWatch 1.0 HaWatch.qml
 MediaVolumeSteps 1.0 MediaVolumeSteps.qml
+SettingsWeather 1.0 SettingsWeather.qml

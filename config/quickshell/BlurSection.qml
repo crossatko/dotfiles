@@ -25,6 +25,14 @@ ColumnLayout {
         Layout.topMargin: 6
         detail: bs.cur ? bs.cur.label : ""
         InfoTip { text: "The compositor blur behind translucent windows. Variants are Hyprland's own blur styles; some animate and cost GPU. The shell's glass look (lenses, rims) is only on with Solid glass." }
+        // Weather blur (Settings > Weather) runs another variant on top of the saved one: say so, the page still edits the saved one
+        InfoTip {
+            objectName: "blur-weather-override"
+            visible: bs.ctl.weatherOverride
+            icon: Icons.weatherPartlyDay
+            text: bs.ctl.variantSaved ? "Weather is overriding: " + (bs.ctl.variantById(bs.ctl.liveVariant)?.label ?? bs.ctl.liveVariant) + ". This page edits your own choice, which returns when Weather blur is off."
+                                      : "Weather blur is active and may be changing the variant shown here. Pick a variant to save your own choice."
+        }
     }
 
     Label {

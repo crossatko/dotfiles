@@ -36,6 +36,8 @@ Singleton {
         { id: "tray",       title: "Tray",         icon: Icons.ellipsis, section: "right" },   // a row of app indicators
         { id: "dnd",        title: "Do not disturb", icon: Icons.bellOff, section: "right", before: "clock" },   // visible only while do-not-disturb is on
         { id: "calendar",   title: "Calendar",     icon: Icons.calendar, section: "right", before: "clock" },   // icon-only chip; a layout file without it gets it right before the clock
+        { id: "weather",    title: "Weather",      icon: Icons.weatherPartlyDay, section: "right", before: "calendar" },   // icon + temperature; polls Open-Meteo only while shown
+        { id: "btc",        title: "Bitcoin price", icon: Icons.bitcoin, section: "right", hiddenByDefault: true },   // off by default (enable in Settings > Bar); price + 24 h trend; polls CoinGecko only while shown
         { id: "clock",      title: "Clock",        icon: Icons.clock, section: "right" },   // opens the notification center
         { id: "controlcenter", title: "Control center", icon: Icons.menu, section: "right" }   // last = rightmost by default; never hideable
     ]
@@ -53,7 +55,7 @@ Singleton {
                     if (typeof id === "string" && !seen[id] && widgets.some(w => w.id === id) && !(s === "hidden" && id === pinnedId)) { seen[id] = true; out[s].push(id) }
         // widgets the layout doesn't mention yet: appended to their default section; those with `before` go right
         // before that widget wherever it is (so a new widget sits next to its neighbour in an old layout file)
-        for (const w of widgets) if (!seen[w.id] && !w.before) out[w.section].push(w.id)
+        for (const w of widgets) if (!seen[w.id] && !w.before) out[w.hiddenByDefault ? "hidden" : w.section].push(w.id)
         for (const w of widgets) if (!seen[w.id] && w.before) {
             const s = sections.find(k => out[k].indexOf(w.before) >= 0 && k !== "hidden")
             if (s) out[s].splice(out[s].indexOf(w.before), 0, w.id)

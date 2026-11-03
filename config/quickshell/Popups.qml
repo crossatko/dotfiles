@@ -33,6 +33,7 @@ Singleton {
         audio:  { source: "AudioPanel.qml",  width: Theme.popupW },
         ha:     { source: "HaPanel.qml",     width: 400 },               // entity cards with controls
         ai:     { source: "AiPanel.qml",     width: 400 },               // profile cards
+        weather: { source: "WeatherPanel.qml", width: Theme.popupW },   // current conditions, hours, days
         vm:     { source: "VmPanel.qml",     width: 440 }                // VM cards with meters
     })
 

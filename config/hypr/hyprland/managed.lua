@@ -703,26 +703,67 @@ function M.apply_groupbar_colors()
 	} } } })
 end
 
+-- Pure: one blur option value -> the value to send (bools as booleans, numbers clamped to M.BLUR_OPTS, ints rounded,
+-- colours as AARRGGBB integers from a number or a "0x..." / "rgba(...)" string), nil when it is unknown or not valid.
+function M.blur_value(key, v)
+	local lim = M.BLUR_OPTS[key]
+	if lim == nil then
+		return nil
+	end
+	if lim.bool then
+		if type(v) == "boolean" then
+			return v
+		end
+		local n = tonumber(v)
+		if n == nil or n ~= n then
+			return nil
+		end
+		return n >= 0.5
+	end
+	if lim == COLOR then
+		local okb, bw = pcall(require, "hyprland.blurweather")
+		return okb and type(bw) == "table" and type(bw.colour_value) == "function" and bw.colour_value(v) or nil
+	end
+	local n = type(v) == "number" and v or (type(v) == "string" and tonumber(v)) or nil
+	if n == nil or n ~= n or n == math.huge or n == -math.huge then
+		return nil
+	end
+	n = math.max(lim[1], math.min(lim[2], n))
+	if lim.int then
+		n = math.tointeger(math.floor(n + 0.5)) or lim[1]
+	end
+	return n
+end
+
 -- parsed "blur" object -> applies the options the running Hyprland has, then the variant when its options exist
--- there. Nothing saved = nothing touched (settings.lua stays in charge).
+-- there. Nothing saved = nothing touched (settings.lua stays in charge). Every value is validated (M.blur_value) and an
+-- invalid one is skipped; normally one hl.config call, and if that raises, each key and the variant go on their own so
+-- one bad key cannot block the rest (the variant revert above all).
 function M.apply_blur(b)
 	if type(b) ~= "table" then
 		return false, "no blur object"
 	end
-	local t = {}
-	for key, v in pairs(b.opts or {}) do
-		local path = "decoration.blur." .. key:gsub(":", ".")
-		if option_exists(path) then
+	local t, single = {}, {}
+	for key, raw in pairs(b.opts or {}) do
+		local v
+		if type(key) == "string" then
+			v = M.blur_value(key, raw)
+		end
+		if v ~= nil and option_exists("decoration.blur." .. key:gsub(":", ".")) then
 			local parts = {}
 			for part in key:gmatch("[^:]+") do
 				parts[#parts + 1] = part
 			end
-			local node = t
+			local node, one = t, {}
+			single[#single + 1] = one
 			for i = 1, #parts - 1 do
 				node[parts[i]] = node[parts[i]] or {}
 				node = node[parts[i]]
+				one[parts[i]] = {}
+				one = one[parts[i]]
 			end
 			node[parts[#parts]] = v
+			one[parts[#parts]] = v
 		end
 	end
 	local changed_variant = false
@@ -738,10 +779,212 @@ function M.apply_blur(b)
 		return true
 	end
 	local ok, err = pcall(hl.config, { decoration = { blur = t } })
-	if ok and changed_variant then
+	if not ok then
+		-- one key at a time; the variant first
+		local okv = not changed_variant or pcall(hl.config, { decoration = { blur = { variant = b.variant } } })
+		ok = changed_variant and okv
+		for _, one in ipairs(single) do
+			ok = pcall(hl.config, { decoration = { blur = one } }) or ok
+		end
+		changed_variant = changed_variant and okv
+	end
+	if changed_variant then
 		pcall(M.apply_groupbar_colors)
 	end
-	return ok, err
+	return ok, not ok and err or nil
+end
+
+-- ---------------------------------------------------------------- weather blur + theme colours
+-- Settings > Weather > Weather blur (opt-in): Quickshell (WeatherBlur.qml) writes the weather state to weather-blur.json
+-- next to glass.json and calls weather_blur_apply(); blurweather.lua (pure, tested) turns it into a variant (a weather
+-- rule, else its default: solid_glass where this Hyprland has it, else kawase). The result is applied ON TOP of
+-- glass.json "blur", which is never written here: the effective blur is
+--   settings.lua (M.blur_base) < saved glass.json "blur" < weather options < theme colours for colours nobody saved
+-- (the weather's variant replaces the saved one) so with the switch off, no or too old weather (checked again by a
+-- timer when it expires), the saved choice (else settings.lua's) is what applies. Colour options of
+-- the colour variants (aurora, acrylic, fluid_jar) come from the palette (theme.colors, so a theme change + config reload
+-- recolours them) unless glass.json holds that colour explicitly. Everything is probed (option_exists) and pcall'ed.
+function M.weather_blur_path()
+	local p = os.getenv("QS_WEATHER_BLUR_FILE")
+	if p and p ~= "" then
+		return p
+	end
+	return (M.glass_path():match("^(.*)/[^/]*$") or ".") .. "/weather-blur.json"
+end
+
+local function blur_weather_module()
+	local ok, bw = pcall(require, "hyprland.blurweather")
+	return ok and type(bw) == "table" and bw or nil
+end
+
+local function palette_colors()
+	local ok, theme = pcall(require, "hyprland.theme")
+	return ok and type(theme) == "table" and type(theme.colors) == "table" and theme.colors or {}
+end
+
+-- variant option value (enum number or name) -> name, nil when unknown
+function M.blur_variant_name(v)
+	if type(v) == "string" and M.BLUR_VARIANTS[v] then
+		return v
+	end
+	for name, spec in pairs(M.BLUR_VARIANTS) do
+		if spec.id == v then
+			return name
+		end
+	end
+	return nil
+end
+
+-- M.blur_base: the variant and the options the weather may touch as settings.lua left them, so turning the weather off
+-- puts them back. Read once per Lua state at load, BEFORE the first M.apply_blur_all: a config reload resets every
+-- option to its built-in default and starts a fresh Lua state before settings.lua runs again (Hyprland 0.57
+-- CConfigManager::reload), so the weather's own variant / speeds / colours are never seen here. Never after the
+-- weather layer applied in this state (M.blur_touched set).
+function M.capture_blur_base()
+	if M.blur_base ~= nil or M.blur_touched ~= nil then
+		return
+	end
+	local base = { opts = {} }
+	local _, cur = pcall(hl.get_config, "decoration.blur.variant")
+	base.variant = M.blur_variant_name(cur)
+	local bw = blur_weather_module()
+	local keys = {}
+	if bw then
+		for _, r in ipairs(bw.RULES) do
+			for key in pairs(r.opts) do
+				keys[key] = true
+			end
+		end
+		for _, cols in pairs(bw.COLOURS) do
+			for key in pairs(cols) do
+				keys[key] = true
+			end
+		end
+	end
+	for key in pairs(keys) do
+		-- colours come back from hl.get_config as the string "0xAARRGGBB": M.blur_value turns them into integers; a value
+		-- it cannot read is not recorded (nothing is restored for that key rather than a bad value)
+		local ok, v = pcall(hl.get_config, "decoration.blur." .. key:gsub(":", "."))
+		local n = ok and M.blur_value(key, v)
+		if n ~= nil then
+			base.opts[key] = n
+		end
+	end
+	M.blur_base = base
+end
+
+-- Does the running Hyprland have the solid_glass variant? (the weather's default variant, else kawase)
+function M.has_solid_glass()
+	return option_exists("decoration.blur." .. M.BLUR_VARIANTS.solid_glass.probe)
+end
+
+-- -> the weather's decision (blurweather.decide: a rule, else the default variant) from weather-blur.json and the epoch
+-- second it expires at; nil when off / unavailable / too old
+function M.read_weather_decision()
+	local bw = blur_weather_module()
+	if not bw then
+		return nil
+	end
+	local ok, d, expires = pcall(function()
+		local text = M.read_small_file(M.weather_blur_path(), 4096)
+		local st = text and bw.parse_state(text)
+		if st and bw.usable(st, os.time()) then
+			return bw.decide(st, st.thresholds, M.has_solid_glass()), st.at + bw.MAX_AGE_S
+		end
+	end)
+	if not ok then
+		return nil
+	end
+	return d, expires
+end
+
+-- Runtime expiry: a weather state is only acted on while younger than MAX_AGE_S, and Quickshell rewrites it with every
+-- answer. If the shell is gone nothing would rewrite it, so one oneshot hl.timer per applied state re-runs
+-- weather_blur_apply() right after it expires (it then finds the state too old and restores the saved blur). A newer
+-- apply disables the previous timer (and the generation check makes a late one a no-op); a reload drops all timers.
+-- -> true when a timer was armed
+function M.arm_weather_expiry(expires)
+	M.weather_expiry_gen = (M.weather_expiry_gen or 0) + 1
+	if M.weather_expiry_timer ~= nil then
+		pcall(function()
+			M.weather_expiry_timer:set_enabled(false)
+		end)
+		M.weather_expiry_timer = nil
+	end
+	if type(expires) ~= "number" or hl.timer == nil then
+		return false
+	end
+	local gen = M.weather_expiry_gen
+	local ms = math.floor((expires - os.time() + 5) * 1000)
+	ms = math.max(1000, math.min(ms, 4 * 3600 * 1000))
+	local ok, timer = pcall(hl.timer, function()
+		if M.weather_expiry_gen == gen and type(rawget(_G, "weather_blur_apply")) == "function" then
+			pcall(rawget(_G, "weather_blur_apply"))
+		end
+	end, { timeout = ms, type = "oneshot" })
+	if ok then
+		M.weather_expiry_timer = timer
+	end
+	return ok
+end
+
+-- Applies the effective blur (see above). -> ok, err
+function M.apply_blur_all()
+	local saved = M.read_blur()
+	local bw = blur_weather_module()
+	if not bw then
+		return M.apply_blur(saved)
+	end
+	local base = M.blur_base or { opts = {} }
+	local decision, expires = M.read_weather_decision()
+	local eff = bw.compose(saved, decision, base.variant, palette_colors())
+	local touched = {}
+	for key in pairs(eff.opts) do
+		if saved.opts[key] == nil then
+			touched[key] = true
+		end
+	end
+	for key in pairs(M.blur_touched or {}) do
+		if eff.opts[key] == nil and base.opts[key] ~= nil then
+			eff.opts[key] = base.opts[key]
+		end
+	end
+	M.blur_touched = touched
+	M.blur_weather = eff.weather
+	pcall(M.arm_weather_expiry, decision and expires or nil)
+	return M.apply_blur(eff)
+end
+
+-- Theme colours for the variant that is active now (after a manual variant change at runtime, no reload), plus the
+-- palette colour of every key in `unset` (colour keys a Settings reset just removed from glass.json, whatever variant
+-- they belong to: the theme colour applies to them again).
+function M.apply_blur_colours(unset)
+	local bw = blur_weather_module()
+	if not bw then
+		return false
+	end
+	local pal = palette_colors()
+	local saved = M.read_blur().opts
+	local skip = {}
+	if type(unset) == "table" then
+		for _, key in ipairs(unset) do
+			if type(key) == "string" then
+				skip[key] = true
+			end
+		end
+	end
+	local without = {}
+	for k, v in pairs(saved) do
+		if not skip[k] then
+			without[k] = v
+		end
+	end
+	local _, cur = pcall(hl.get_config, "decoration.blur.variant")
+	local cols = bw.theme_colours(M.blur_variant_name(cur), without, pal)
+	for key in pairs(skip) do
+		cols[key] = cols[key] or bw.theme_colour(key, pal)
+	end
+	return M.apply_blur({ opts = cols })
 end
 
 -- ---------------------------------------------------------------- per-surface glass (glass.json "surfaces")
@@ -1493,9 +1736,7 @@ function M.apply(s)
 	pcall(function()
 		M.apply_glass(M.read_glass())
 	end)
-	pcall(function()
-		M.apply_blur(M.read_blur())
-	end)
+	pcall(M.apply_blur_all)
 	local ok, err = pcall(M.apply_smart, s)
 	if not ok and ok_all then
 		ok_all, first_err = false, err
@@ -1516,9 +1757,8 @@ pcall(function()
 	M.apply_glass(M.read_glass())
 end)
 pcall(M.apply_glass_layer_alpha)
-pcall(function()
-	M.apply_blur(M.read_blur())
-end)
+pcall(M.capture_blur_base)
+pcall(M.apply_blur_all)
 pcall(function()
 	M.apply_surfaces(M.read_surfaces())
 end)
@@ -1606,10 +1846,28 @@ function layout_apply()
 	return ok2, err
 end
 
--- Global entry point for Settings > Look & feel > Blur (BlurTuneCtl.qml): after it changed decoration:blur:variant at
--- runtime, the group bar colours follow (glass fills only on solid_glass).
-function blur_variant_changed()
+-- Global entry point for Settings > Look & feel > Blur (BlurTuneCtl.qml), after every live blur change:
+--   hyprctl eval "if blur_variant_changed then blur_variant_changed({variant = true, unset = {"aurora:color1"}}) end"
+-- The group bar colours always follow (glass fills only on solid_glass with blur enabled); the theme colours are filled
+-- in only after a variant change (`variant`) or for colour keys a reset removed from glass.json (`unset`). No argument
+-- = a variant change.
+function blur_variant_changed(opts)
+	opts = type(opts) == "table" and opts or { variant = true }
+	if opts.variant or type(opts.unset) == "table" then
+		pcall(M.apply_blur_colours, opts.unset)
+	end
 	return pcall(M.apply_groupbar_colors)
+end
+
+-- Global entry point for WeatherBlur.qml (Settings > Weather > Weather blur): hyprctl eval "if weather_blur_apply then
+-- weather_blur_apply() end" after it rewrote weather-blur.json. -> true, or false plus the error message.
+function weather_blur_apply()
+	local ok, ok2, err = pcall(M.apply_blur_all)
+	if not ok then
+		return false, ok2
+	end
+	pcall(M.apply_groupbar_colors)
+	return ok2, err
 end
 
 -- Global entry point for Settings > Glass > Surfaces: hyprctl eval "if glass_surfaces_apply then return

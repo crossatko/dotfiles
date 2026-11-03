@@ -1,0 +1,90 @@
+#!/usr/bin/env -S python3 -I
+"""Bitcoin price and 24 h change as JSON on stdout (Btc.qml runs this; `btc | jq` to look).
+
+Data: CoinGecko's keyless /coins/markets endpoint (price and 24 h change in percent in one call).
+Option --currency CODE (default USD): any CoinGecko vs_currency (usd, eur, gbp, ...), case-insensitive.
+Output: {ok, error, currency, price, changePct, label, symbol, generatedAt}. `label` is the compact bar text
+("$77.7k"), `symbol` the currency prefix. A failure prints {ok: false, error} (HTTP 429 = "rate limited"); the caller keeps
+its last good answer.
+Env (tests): QS_BTC_MOCK = dir with markets.json = {"status": 200, "body": [...]} used instead of the network
+(a missing file = network error).
+"""
+import argparse
+import json
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+URL = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=%s&ids=bitcoin"
+SYMBOLS = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "CHF": "CHF ", "CAD": "$", "AUD": "$"}
+
+
+def symbol(cur):
+    return SYMBOLS.get(cur, cur + " ")
+
+
+def compact(price, sym):
+    """77692 -> $77.7k, 1234567 -> $1.23M, 950.5 -> $950"""
+    if price >= 1e6:
+        return "%s%.2fM" % (sym, price / 1e6)
+    if price >= 1e4:
+        return "%s%.1fk" % (sym, price / 1e3)
+    return "%s%s" % (sym, format(round(price), ","))
+
+
+def num(v):
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def fetch(cur):
+    mock = os.environ.get("QS_BTC_MOCK")
+    if mock:
+        try:
+            with open(os.path.join(mock, "markets.json")) as f:
+                m = json.load(f)
+        except (OSError, ValueError):
+            raise OSError("network error")
+        return m.get("status", 200), m.get("body")
+    req = urllib.request.Request(URL % urllib.parse.quote(cur.lower()), headers={"User-Agent": "quickshell-btc", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.status, json.load(r)
+    except urllib.error.HTTPError as e:
+        return e.code, None
+
+
+def parse(status, body, cur):
+    if status == 429:
+        return {"ok": False, "error": "rate limited"}
+    if status != 200:
+        return {"ok": False, "error": "HTTP %s" % status}
+    try:
+        row = body[0]
+        price = num(row["current_price"])
+    except (TypeError, KeyError, IndexError):
+        price = None
+    if price is None or price <= 0:
+        return {"ok": False, "error": "no price in the answer"}
+    sym = symbol(cur)
+    return {"ok": True, "error": "", "currency": cur, "price": price, "changePct": num(row.get("price_change_percentage_24h")),
+            "label": compact(price, sym), "symbol": sym, "generatedAt": int(time.time())}
+
+
+def main(argv):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--currency", default="USD")
+    a = ap.parse_args(argv)
+    cur = a.currency.upper() if re.fullmatch(r"[A-Za-z]{2,10}", a.currency) else "USD"
+    try:
+        out = parse(*fetch(cur), cur)
+    except (OSError, ValueError):
+        out = {"ok": False, "error": "offline"}
+    print(json.dumps(out))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

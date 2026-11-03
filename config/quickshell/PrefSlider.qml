@@ -14,6 +14,7 @@ SettingRow {
     property var format: v => String(v)
     property var extras: []                // further notches in the key's units (e.g. Presets.lockSize.map(p => p.v))
     property real valueWidth: 62           // the value column of every Settings slider row (GlassOptRow's valueW)
+    property real unitStep: Math.pow(10, -range[2])   // one arrow-key step in key units (default: the key's last decimal)
     readonly property var range: store ? store.spec[key] : [0, 1, 0]
     readonly property real current: store ? store.value(key) : 0
     readonly property bool own: store ? store.overridden(key) : false
@@ -27,7 +28,7 @@ SettingRow {
         Layout.fillWidth: true
         value: row.norm(row.current)
         notches: row.store ? [{ v: row.norm(row.store.defaults[row.key]), kind: "default" }].concat((row.extras || []).map(e => ({ v: row.norm(e), kind: "extra" }))) : []
-        step: Math.max(0.01, Math.pow(10, -row.range[2]) / (row.range[1] - row.range[0]))
+        step: Math.max(0.01, row.unitStep / (row.range[1] - row.range[0]))
         resetToNotch: false
         onResetRequested: if (row.own) row.store.unset(row.key)
         onMoved: v => { hold.restart(); row.store.set(row.key, row.range[0] + v * (row.range[1] - row.range[0])) }

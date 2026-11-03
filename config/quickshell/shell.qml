@@ -9,6 +9,7 @@ ShellRoot {
     // Which screens get a bar and on which edge: BarConfig (on / off: Settings -> Monitors; edge and look: Settings -> Bar).
     readonly property var bars: BarConfig.bars
     Binding { target: Popups; property: "bars"; value: root.bars }
+    readonly property var weatherBlur: WeatherBlur   // Weather blur (Settings > Weather): writes the state the compositor reads
     readonly property var tvCast: TvCast     // Send to TV: its `tvcast` IPC target exists from the start (idle until used)
 
     // the desktop wallpaper (theme.py wallpaper_backend "quickshell"; Wallpaper.qml): background layer, first so it maps early

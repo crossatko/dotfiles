@@ -115,6 +115,24 @@ Singleton {
     readonly property string sun: "\ue0e7"   // sun
     readonly property string moon: "\ue0d4"   // moon
     readonly property string palette: "\ue0d5"   // palette
+    // weather (Weather.qml, WMO conditions): weatherGlyph(kind, isDay) picks among these
+    readonly property string weatherOvercast: "\ue392"   // cloudy
+    readonly property string weatherPartlyDay: "\ue38f"   // cloud-sun
+    readonly property string weatherPartlyNight: "\ue389"   // cloud-moon
+    readonly property string weatherFog: "\ue386"   // cloud-fog
+    readonly property string weatherDrizzle: "\ue385"   // cloud-drizzle
+    readonly property string weatherRain: "\ue38c"   // cloud-rain
+    readonly property string weatherShowersDay: "\ue390"   // cloud-sun-rain
+    readonly property string weatherShowersNight: "\ue38a"   // cloud-moon-rain
+    readonly property string weatherSnow: "\ue38e"   // cloud-snow
+    readonly property string weatherStorm: "\ue388"   // cloud-lightning
+    readonly property string weatherOff: "\ue38b"   // cloud-off (no data)
+    readonly property string bitcoin: "\ue2d1"   // bitcoin (Btc.qml chip)
+    readonly property string arrowUpRight: "\ue05b"   // arrow-up-right (price up)
+    readonly property string arrowDownRight: "\ue044"   // arrow-down-right (price down)
+    readonly property string humidity: "\ue294"   // droplet
+    readonly property string wind: "\ue75d"   // wind
+    readonly property string thermometer: "\ue1ca"   // thermometer
     readonly property string layerGroup: "\ue0ca"   // layers
     readonly property string tableColumns: "\ue173"   // columns-2
     readonly property string download: "\ue0b7"   // download
@@ -194,6 +212,14 @@ Singleton {
     function volumeGlyph(muted, v) { return muted ? volumeMuted : v < 0.01 ? volumeOff : v < 0.5 ? volumeLow : volumeHigh }
     // Wi-Fi signal strength 0..1 -> three bars / two / one
     function wifiGlyph(s) { return s > 0.66 ? wifi : s > 0.33 ? wifiFair : wifiWeak }
+    // weather condition kind (bin/weather: clear partly cloudy fog drizzle rain showers snow storm) -> glyph; night swaps the sun for the moon
+    function weatherGlyph(kind, isDay) {
+        const day = isDay !== false
+        return kind === "clear" ? (day ? sun : moon) : kind === "partly" ? (day ? weatherPartlyDay : weatherPartlyNight)
+            : kind === "cloudy" ? weatherOvercast : kind === "fog" ? weatherFog : kind === "drizzle" ? weatherDrizzle
+            : kind === "rain" ? weatherRain : kind === "showers" ? (day ? weatherShowersDay : weatherShowersNight)
+            : kind === "snow" ? weatherSnow : kind === "storm" ? weatherStorm : weatherOff
+    }
     // battery level 0..100 (charging = bolt)
     function batteryGlyph(p, charging) {
         return charging ? batteryBolt : p >= 88 ? batteryFull : p >= 63 ? batteryThreeQuarters : p >= 38 ? batteryHalf : p >= 13 ? batteryQuarter : batteryEmpty

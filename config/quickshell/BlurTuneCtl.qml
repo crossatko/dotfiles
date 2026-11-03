@@ -17,9 +17,13 @@ import Quickshell.Hyprland
 // uses). Persistence: GlassTuneCtl.blur = glass.json's "blur" object, {"variant": "acrylic", "acrylic:refraction": 30,
 // "size": 6, ...} (keys = the option path under decoration:blur: with ":", bools 0 / 1, colours AARRGGBB), applied at config
 // load by hypr/hyprland/managed.lua (M.apply_blur, which mirrors the names and ranges here). Only what the user touched is
-// stored; a reset stores the upstream default as a change (as GlassTuneCtl does).
-// After a variant change `Theme.checkGlass()` re-reads the glass test (Theme.glass = solid_glass only) and managed.lua
-// recolours the group bar (global `blur_variant_changed`).
+// stored; a reset stores the upstream default as a change (as GlassTuneCtl does), except for a colour: its reset removes
+// the key, so the theme colour (managed.lua / blurweather.lua COLOURS) applies again, and only a stored colour counts as
+// changed. `variant` is the SAVED variant (glass.json, else the live one when nothing is saved): Weather blur
+// (WeatherBlur.qml) is a layer on top that changes only the live variant (`liveVariant`, `weatherOverride`).
+// After every live change managed.lua recolours the group bar (global `blur_variant_changed`: blur on / off and the
+// variant decide its glass fills) and, after a variant change or a colour reset, fills in the theme colours;
+// `Theme.checkGlass()` re-reads the glass test (Theme.glass = solid_glass only).
 Singleton {
     id: ctl
 
@@ -122,13 +126,22 @@ Singleton {
         return Math.round(n * p) / p
     }
     function defOf(key) { return spec(key).def }
-    function isChanged(key) { return Math.abs((values[key] ?? defOf(key)) - defOf(key)) > 1e-6 }
+    // a colour's live value is usually the theme's (not the upstream default): it is changed only while glass.json holds it
+    function isChanged(key) {
+        if (spec(key).kind === "color") return overrides[key] !== undefined
+        return Math.abs((values[key] ?? defOf(key)) - defOf(key)) > 1e-6
+    }
     function changedCount(list) { return list.filter(o => isChanged(o.key)).length }
 
     // ---- state ----
     property var present: ({})           // option key -> true when getoption knows it (filled by the probe)
     property var values: defaults()      // live values
-    property string variant: ""          // id of the live variant ("" until read)
+    property string liveVariant: ""      // id of the variant Hyprland runs ("" until read; can be the weather's)
+    // the variant this page shows and edits: the saved one, else (nothing saved) the live one
+    readonly property string variant: variantSaved && savedVariant !== "" ? savedVariant : liveVariant
+    // Weather blur runs another variant than the saved one right now (shown as a note, never edited here)
+    // (nothing saved: `variant` is the live one, so the base is unknown and the note shows whenever Weather blur is usable)
+    readonly property bool weatherOverride: WeatherBlur.usable && liveVariant !== "" && (!variantSaved || liveVariant !== variant)
     property bool known: false           // the probe answered
     function defaults() {
         const v = {}
@@ -144,12 +157,13 @@ Singleton {
 
     function persist() {
         const o = {}
-        if (variant !== "" && variantSaved) o.variant = variant
+        if (savedVariant !== "" && variantSaved) o.variant = savedVariant     // never the live one: the weather may have set it
         for (const k of Object.keys(overrides)) o[k] = overrides[k]
         GlassTuneCtl.setBlur(o)
     }
     property var overrides: ({})
     property bool variantSaved: false
+    property string savedVariant: ""     // the variant glass.json holds (the live `variant` can be the weather's)
 
     function set(key, x) {
         if (!ready || !spec(key) || present[key] !== true || typeof x !== "number" || isNaN(x)) return false
@@ -160,12 +174,27 @@ Singleton {
         const o = Object.assign({}, overrides)
         o[key] = c
         overrides = o
+        if (unsetColours.indexOf(key) >= 0) unsetColours = unsetColours.filter(k => k !== key)   // set after a reset in one flush window
         dirty[key] = true
         throttle.start()
         persist()
         return true
     }
-    function reset(key) { return set(key, defOf(key)) }
+    // a colour goes back to "not set by the user" (the theme colour); everything else to the upstream default
+    property var unsetColours: []        // colour keys reset since the last flush (managed.lua re-themes them)
+    function reset(key) {
+        const o = spec(key)
+        if (!o || o.kind !== "color") return set(key, defOf(key))
+        if (!ready || present[key] !== true) return false
+        const ov = Object.assign({}, overrides)
+        delete ov[key]
+        overrides = ov
+        delete dirty[key]
+        if (unsetColours.indexOf(key) < 0) unsetColours = unsetColours.concat([key])
+        throttle.start()
+        persist()
+        return true
+    }
     // "shared" = every shared option, otherwise a variant id
     function resetGroup(which) {
         const list = which === "shared" ? sharedAny : variantOpts(which)
@@ -174,7 +203,7 @@ Singleton {
     function setVariant(id) {
         const vr = variantById(id)
         if (!ready || !vr || available.indexOf(vr) < 0) return false
-        variant = id
+        savedVariant = id
         variantSaved = true
         variantDirty = present["variant"] === true    // Hyprland 0.56 has no decoration:blur:variant: the choice is only saved
         throttle.start()
@@ -211,7 +240,7 @@ Singleton {
                 for (const k of Object.keys(ctl.overrides)) if (pr[k]) v[k] = ctl.overrides[k]
                 ctl.present = pr
                 ctl.values = v
-                if (vid !== "" && !ctl.variantDirty) ctl.variant = vid
+                if (vid !== "") ctl.liveVariant = vid
                 ctl.known = true
             }
         }
@@ -238,18 +267,25 @@ Singleton {
     Timer { id: throttle; interval: 40; onTriggered: ctl.flush() }
     property bool queued: false
     property bool afterVariant: false
+    property bool readBack: false        // after a variant change / colour reset: read the theme colours back
     function flush() {
         if (!ready) return
         if (applyProc.running) { queued = true; return }
         const ks = Object.keys(dirty)
         const vd = variantDirty
-        if (ks.length === 0 && !vd) return
+        const un = unsetColours
+        if (ks.length === 0 && !vd && un.length === 0) return
         dirty = ({})
         variantDirty = false
+        unsetColours = []
         let body = ks.length ? luaTable(ks).slice(1, -1) : ""
         if (vd) body = (body ? body + "," : "") + 'variant="' + variant + '"'
         afterVariant = vd
-        applyProc.command = ["hyprctl", "eval", "hl.config({decoration={blur={" + body + "}}}) if blur_variant_changed then blur_variant_changed() end"]
+        readBack = readBack || vd || un.length > 0
+        // always: the group bar follows blur on / off and the variant; theme colours only after a variant change / reset
+        const after = "{variant=" + vd + (un.length ? ",unset={" + un.map(k => '"' + k + '"').join(",") + "}" : "") + "}"
+        applyProc.command = ["hyprctl", "eval", (body ? "hl.config({decoration={blur={" + body + "}}}) " : "")
+            + "if blur_variant_changed then blur_variant_changed(" + after + ") end"]
         applyProc.running = true
     }
     Process {
@@ -259,6 +295,7 @@ Singleton {
         onExited: {
             if (ctl.afterVariant) { ctl.afterVariant = false; Theme.checkGlass() }
             if (ctl.queued) { ctl.queued = false; ctl.flush() }
+            else if (ctl.readBack) { ctl.readBack = false; ctl.load() }
         }
     }
 
@@ -270,7 +307,7 @@ Singleton {
         overrides = o
         const vr = typeof s.variant === "string" ? variantById(s.variant) : undefined
         variantSaved = vr !== undefined
-        if (vr) variant = vr.id
+        if (vr) savedVariant = vr.id
     }
     onSavedChanged: if (!throttle.running && !applyProc.running) loadSaved()
 
@@ -289,6 +326,11 @@ Singleton {
             } else ctl.load()
         }
     }
+    // the weather blur applied a state: the live variant / options may differ now
+    Connections {
+        target: WeatherBlur
+        function onApplied() { if (GlassTuneCtl.reachable && !throttle.running && !applyProc.running) ctl.load() }
+    }
     Component.onCompleted: { loadSaved(); if (GlassTuneCtl.reachable) load() }
 
     IpcHandler {
@@ -302,7 +344,7 @@ Singleton {
             return "bad target"
         }
         function dump(): string {
-            return "variant=" + ctl.variant + " available=" + ctl.available.map(v => v.id).join(",") + "\n"
+            return "variant=" + ctl.variant + " live=" + ctl.liveVariant + " available=" + ctl.available.map(v => v.id).join(",") + "\n"
                 + ctl.opts.filter(o => ctl.present[o.key] === true).map(o => o.key + "=" + ctl.fmt(o, ctl.values[o.key])).join("\n")
         }
     }

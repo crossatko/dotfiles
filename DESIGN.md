@@ -155,7 +155,7 @@ States: hover = the item's hover fill + `HoverGlow`; press = `PressFeedback`; di
 ## 6. Settings
 
 Pages: Look & feel (Colour mode; Glass / Motion / Shape presets with previews and `GlassAdvanced` / `MotionAdvanced` /
-`ShapeAdvanced` folds), Monitors, Wallpaper, Bar, Lock screen, Desktop clock. Page pattern: title only; the one to three primary choices
+`ShapeAdvanced` folds), Monitors, Wallpaper, Bar, Lock screen, Desktop clock, TV, Weather. Page pattern: title only; the one to three primary choices
 first (`PresetCards` = visual cards with a live preview and a tick, `ChoiceRow` = `Segmented` + `CustomTag` + a hint of five
 words at most + `InfoTip`), then one `AdvancedFold` ("Customise…", `detail` = a short badge) with every detailed row
 (`PrefSlider` / `PrefToggle` / `PrefSwitch` / `GlassOptRow`), then `PageReset`.

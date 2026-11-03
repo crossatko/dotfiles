@@ -187,7 +187,7 @@ PanelWindow {
     readonly property var layout: BarWidgets.layoutFor(BarWidgets.keyOf(bar.screen))
     readonly property var widgetComps: ({
         workspaces: wsComp, recording: recComp, vm: vmComp, media: mediaComp, caffeine: caffeineComp, cpu: cpuComp, memory: memComp,
-        homeassistant: haComp, ai: aiComp, volume: volumeComp, network: netComp, bluetooth: btComp,
+        homeassistant: haComp, ai: aiComp, btc: btcComp, weather: weatherComp, volume: volumeComp, network: netComp, bluetooth: btComp,
         tray: trayComp, dnd: dndComp, calendar: calComp, clock: clockComp, controlcenter: bellComp
     })
 
@@ -403,6 +403,49 @@ PanelWindow {
                 horizontalAlignment: Text.AlignHCenter
                 Layout.preferredWidth: blocked ? Math.max(implicitWidth, aiTm.width) : implicitWidth
                 TextMetrics { id: aiTm; font: aiLbl.font; text: "23h 59m" }
+            }
+        }
+    }
+    // Weather (Weather.qml): condition glyph + temperature; opens the forecast popup. Muted while there is no data
+    // or only stale values; right click refreshes.
+    Component {
+        id: weatherComp
+        Chip {
+            id: weatherChip
+            Component.onCompleted: bar.reg("weather", weatherChip)
+            active: bar.isOpen("weather")
+            onClicked: mouse => mouse.button === Qt.RightButton ? Weather.refresh(true) : bar.pop("weather", weatherChip)
+            BarIcon {
+                text: Weather.current ? Icons.weatherGlyph(Weather.current.kind, Weather.current.isDay) : Icons.weatherOff
+                color: Weather.ok && !Weather.stale ? ink.fg : ink.muted
+            }
+            BarLabel {
+                visible: Weather.current !== null
+                text: Weather.current ? Weather.temp(Weather.current.temp) : ""
+                color: Weather.stale ? ink.muted : ink.fg
+            }
+        }
+    }
+    // Bitcoin price (Btc.qml): icon + compact price + 24 h trend arrow (accent up, plain fg down: a falling price is
+    // information, not "off"). Everything muted while the last poll failed or there is no data; right click refreshes.
+    Component {
+        id: btcComp
+        Chip {
+            id: btcChip
+            Component.onCompleted: bar.reg("btc", btcChip)
+            onClicked: mouse => { if (mouse.button === Qt.RightButton) Btc.refresh() }
+            BarIcon {
+                text: Icons.bitcoin
+                color: Btc.has && !Btc.stale ? ink.fg : ink.muted
+            }
+            BarLabel {
+                text: Btc.label
+                color: Btc.has && !Btc.stale ? ink.fg : ink.muted
+            }
+            BarIcon {
+                visible: Btc.has
+                text: Btc.up ? Icons.arrowUpRight : Icons.arrowDownRight
+                color: Btc.stale ? ink.muted : Btc.up ? ink.accent : ink.fg
             }
         }
     }
