@@ -4,7 +4,7 @@ import QtQuick.Layouts
 
 // Now playing for any media source (MediaSources: MPRIS players and the Twitch app): art, title / subtitle (FitLabel: 2
 // lines, then elided, the full text on hover), category, stats (MediaStats: LIVE, viewers, stream time, the caption),
-// seek bar (MPRIS; the TV card's `progress`), transport controls (+ Send to TV: TvButton; the TV session (TvSource): a tv badge, its controls drive the TV, Play on PC: PcButton), volume (a source with its own: Twitch v2). With more than one source a switcher
+// seek bar (MPRIS; the TV card's `progress`), transport controls (+ Send to TV: TvButton), then volume steps | session actions (MediaActions; the TV session (TvSource): a tv badge, its controls drive the TV, Play on PC: PcButton), volume (a source with its own: Twitch v2). With more than one source a switcher
 // row comes first (the active source first). The parts (MediaArt, MediaSeek, MediaTransport, MediaStats, FitLabel) are
 // shared with the lock screen's playback card (LockMedia).
 ColumnLayout {
@@ -71,18 +71,14 @@ ColumnLayout {
         MediaSeek { anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter } player: media.seekPlayer }
     }
 
-    // transport centred; Send to TV (TvButton) / Play on PC (PcButton, the TV card) at the row's end, outside the layout:
-    // appearing never moves the transport (the two never show together: the TV source is not one TvCast can send)
+    // transport centred; Send to TV (TvButton) at the row's end, outside the layout: appearing never moves the transport
     Item {
-        visible: transport.any || tv.shown || pcBtn.shown
+        visible: transport.any || tv.shown
         Layout.fillWidth: true
-        Layout.preferredHeight: Math.max(transport.implicitHeight, tv.implicitHeight, pcBtn.implicitHeight)
-        // the TV card's transport is wide (7 buttons): with Play on PC shown it moves left only as far as it must not to sit
-        // under the button (Play on PC shows for the whole TV card, so nothing moves while it stays)
+        Layout.preferredHeight: Math.max(transport.implicitHeight, tv.implicitHeight)
         MediaTransport {
             id: transport
             anchors.centerIn: parent
-            anchors.horizontalCenterOffset: pcBtn.shown ? -Math.max(0, transport.implicitWidth / 2 + Theme.gapRow + pcBtn.width - parent.width / 2) : 0
             source: media.source
         }
         TvButton {
@@ -90,17 +86,17 @@ ColumnLayout {
             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
             source: media.source
         }
-        PcButton {
-            id: pcBtn
-            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-            source: media.source
-        }
     }
 
-    // the TV session over key presses: mute / down / up (no level to show)
-    MediaVolumeSteps {
+    // under the transport, centred: volume steps (the TV session over key presses: down / up / mute, no level to show) |
+    // session actions (MediaActions: mute, stop, show window, disconnect, Play on PC); a hairline between the two groups
+    RowLayout {
+        visible: steps.any || actions.any
         Layout.alignment: Qt.AlignHCenter
-        source: media.source
+        spacing: Theme.pad
+        MediaVolumeSteps { id: steps; source: media.source }
+        VDivider { visible: steps.any && actions.any }
+        MediaActions { id: actions; source: media.source }
     }
 
     // a source with its own volume (Twitch app v2): the speaker mutes, the slider sets it

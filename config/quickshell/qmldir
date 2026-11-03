@@ -211,3 +211,5 @@ TvSource 1.0 TvSource.qml
 HaWatch 1.0 HaWatch.qml
 MediaVolumeSteps 1.0 MediaVolumeSteps.qml
 SettingsWeather 1.0 SettingsWeather.qml
+MediaActions 1.0 MediaActions.qml
+VDivider 1.0 VDivider.qml

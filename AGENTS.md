@@ -345,12 +345,13 @@ config/aerospace karabiner swiftbar  macOS only
   app in front; unread entities keep the timers). Polls every 5 s only while a session exists. Card: tv glyph art /
   chip (iconFont: `glyphBrand: false`), tv badge with the TV's name (`device`), transport prev / seek -10 s / play /
   seek +10 s / next / stop (stops the TV, ends) / disconnect (`linkOff`, detach; the TV keeps playing); volume = Cast's
-  level slider, else `MediaVolumeSteps` (mute, down, up); lock card: play / pause only (`lockTransport: false`). Starts in
+  level slider, else `MediaVolumeSteps` (down, up, mute); popup layout: transport row (`MediaTransport`), under it volume steps | `VDivider` |
+  `MediaActions` (stop, disconnect, Play on PC; Twitch: mute, stop, raise); lock card: play / pause only (`lockTransport: false`). Starts in
   `TvCast.finish` (not for the test / dry run), replaces an older one; the local player was paused there. Dry run logs
   controls. Caveats: verified against the mock only; Android TV Remote reports no play state (card = optimistic), the
   REWIND / FAST_FORWARD step is the TV app's own; the lock card in session mode was not checked visually.
-- **Play on PC** (the reverse of Send to TV; media popup only): `PcButton` (shown with the TV card, `TvSource`; same slot as
-  `TvButton`, the TV card's wider transport moves left only as far as it must) -> `TvPc.qml` (singleton: flow, IPC `tvpc
+- **Play on PC** (the reverse of Send to TV; media popup only): `PcButton` (shown with the TV card, `TvSource`; the last of
+  `MediaActions`, under the transport) -> `TvPc.qml` (singleton: flow, IPC `tvpc
   status|press|cancel|last`). Both buttons are a `HandoffButton` (glyph = progress: rest glyph, search (lookup), power, circle-play,
   check, warning; dimmed + reason tooltip when `usable` is false). Pure logic in `launcher/js/TvPc.js` (node tests `tvpc.test.js`):
   `resolve` (the TV card -> target + how it starts), `matchYoutube`, `pickJellyfin`, `settle`, `command` (argv). Per source:

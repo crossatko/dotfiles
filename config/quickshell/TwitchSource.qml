@@ -9,7 +9,7 @@ import Quickshell.Io
 // startedAt (epoch ms | null), caps: ["pause", "mute", "volume", "stop", "raise"]}: a control shows only when its cap
 // is listed (no `caps` = a v1 app: stop + raise, popup only). Every field is optional here. Actions run the app's CLI
 // (`twitch-qs-mpv pause on|off`, `mute on|off`, `volume <0-100>`, `quit`); raise = hyprctl focus by title. Play / pause
-// also works from the lock card; stop / raise / volume are popup-only (MediaTransport `lock`). Picture: the channel
+// also works from the lock card; stop / raise / volume are popup-only (MediaActions, MediaTransport `lock`). Picture: the channel
 // avatar the app caches for the launcher (<cache>/avatars/<login>.<ext>, only if it was fetched).
 // Test hooks: QS_TWITCH_NOW_FILE, QS_TWITCH_CACHE_DIR, LAUNCHER_TWITCH_DIR (the app's bin/, as the launcher).
 MediaSource {
