@@ -903,6 +903,7 @@ stage_links() {
   for app in hypr nvim kitty zellij theme quickshell opencode wivrn alacritty ghostty fastfetch; do
     link "$CONFIG_DIR/$app" "$HOME/.config/$app"
   done
+  link "$CONFIG_DIR/herdr-automatic-rename" "$HOME/.config/herdr-automatic-rename"
   link "$CONFIG_DIR/brave-flags.conf" "$HOME/.config/brave-flags.conf"
   link "$CONFIG_DIR/vesktop-flags.conf" "$HOME/.config/vesktop-flags.conf"
 

@@ -1,5 +1,36 @@
 onboarding = false
 
+[keys]
+prefix = ["f4", "f3", "ctrl+b"]
+previous_tab = "alt+h"
+focus_pane_left = ["prefix+h", "ctrl+alt+h"]
+focus_pane_right = ["prefix+l", "ctrl+alt+l"]
+next_tab = "alt+l"
+new_tab = "prefix+t"
+new_workspace = "prefix+n"
+close_tab = "prefix+x"
+# pane close moves to shift+x (herdr shares one key map between prefix and navigate mode, so x cannot also close workspaces)
+close_pane = "prefix+shift+x"
+next_workspace = ["prefix+j", "alt+j"]
+previous_workspace = ["prefix+k", "alt+k"]
+# pane up/down move to the arrow keys (j/k now switch workspaces)
+focus_pane_down = ["prefix+down", "ctrl+alt+j"]
+focus_pane_up = ["prefix+up", "ctrl+alt+k"]
+# navigate mode: j/k move between workspaces, panes move to the arrow keys (h/l stay for left/right)
+navigate_workspace_up = "k"
+navigate_workspace_down = "j"
+navigate_pane_up = "up"
+navigate_pane_down = "down"
+
+[[keys.command]]
+key = "prefix+p"
+type = "shell"
+command = "$HOME/dotfiles/config/herdr/auto-split.sh"
+description = "split along the longer side"
+
+[ui]
+prompt_new_tab_name = false
+
 # >>> theme (generated, do not edit) >>>
 [theme]
 name = "catppuccin"

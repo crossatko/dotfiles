@@ -163,6 +163,13 @@ if [[ -d /opt/android-sdk ]]; then
   export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
 fi
 
+# herdr-automatic-rename: renames the herdr tab as soon as a command starts (no-op outside herdr)
+for _f in ${HOME}/.config/herdr/plugins/github-installations/herdr-automatic-rename-*/*/checkout/shell/hook.zsh(N) \
+          ${HOME}/.config/herdr/plugins/github/herdr-automatic-rename-*/shell/hook.zsh(N); do
+  source $_f; break
+done
+unset _f
+
 # Machine-local additions (git-ignored): installer-appended lines, per-host PATH, aliases. Keeps this file stable across machines.
 [[ -r $HOME/.zshrc.local ]] && source "$HOME/.zshrc.local"
 
