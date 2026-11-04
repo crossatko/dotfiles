@@ -1,0 +1,21 @@
+[Unit]
+Description=Local push-to-talk dictation service (whisper.cpp)
+# Docs: config/dictation/README.md in the dotfiles. No [Install] section: the shell starts it on the first key press
+# (systemctl --user start dictation.service), after Hyprland imported WAYLAND_DISPLAY and HYPRLAND_INSTANCE_SIGNATURE
+# into the user manager (config/hypr/hyprland/autostart.lua), which wtype and hyprctl need. XDG_RUNTIME_DIR is set by
+# the user manager (pw-record's PipeWire socket and the control socket live there).
+After=pipewire.service
+
+[Service]
+Type=simple
+# pw-record and wtype are in /usr/bin; the launcher script (python3 via env) is in ~/.local/bin.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin
+ExecStart=%h/.local/bin/dictation serve
+# SIGTERM cancels a running session (nothing more is typed) and stops the recorder and the worker; this is only the
+# upper bound before systemd kills the whole group.
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=3
+# The control socket is created 0600 in the runtime dir; nothing else is written.
+NoNewPrivileges=yes
+PrivateTmp=yes

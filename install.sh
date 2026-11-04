@@ -959,6 +959,10 @@ stage_links() {
   link "$CONFIG_DIR/xdg-desktop-portal/portals.conf" "$HOME/.config/xdg-desktop-portal/portals.conf"
   link "$CONFIG_DIR/systemd/user/xdg-desktop-portal-gnome.service" "$HOME/.config/systemd/user/xdg-desktop-portal-gnome.service"
   link "$CONFIG_DIR/systemd/user/librepods.service" "$HOME/.config/systemd/user/librepods.service"
+  # Dictation (config/dictation): the CLI/service launcher and its user unit, started by the shell on the first push-to-talk
+  # press (systemctl --user start dictation.service). The whisper.cpp worker and the models are per machine (README).
+  link "$CONFIG_DIR/dictation/bin/dictation" "$HOME/.local/bin/dictation"
+  link "$CONFIG_DIR/systemd/user/dictation.service" "$HOME/.config/systemd/user/dictation.service"
   # Launcher shim: applies the wallpaper theme to Brave's profile just before it starts
   link "$CONFIG_DIR/theme/bin/brave" "$HOME/.local/bin/brave"
   link "$CONFIG_DIR/launcher/jellyfin/bin/jellyfin-qs" "$HOME/.local/bin/jellyfin-qs"

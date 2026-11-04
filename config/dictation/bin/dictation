@@ -1,0 +1,262 @@
+#!/usr/bin/env -S python3 -I
+"""dictation: local push-to-talk dictation service (whisper.cpp) and its client.
+
+    dictation serve [--no-gpu] [--live NAME] [--final NAME]   run the service (the user unit runs this);
+                    [--dry-run] [--audio-file [MODE=]FILE]    --dry-run types nothing, --audio-file replaces the mic
+    dictation begin cs|en|translate                           start a session (key pressed)
+    dictation end                                             final pass and flush (key released)
+    dictation cancel | status                                 drop the session | print the service status
+    dictation listen                                          print every event as a JSON line
+    dictation replay FILE.wav --mode cs [--realtime]          offline: run a recording through the real models,
+                                                              print the edit operations instead of typing them
+
+Models: --live / --final, else the shell's choice in DICTATION_MODELS_FILE (default
+${XDG_STATE_HOME:-~/.local/state}/quickshell/stt-models.json, written by Settings > Voice), else large-v3-turbo /
+large-v3. A chosen model that is not installed is an error (code no-model), never replaced by another one.
+Voice preferences (mic, gpu, idle_timeout_s) come from DICTATION_PREFS_FILE (default
+${XDG_STATE_HOME:-~/.local/state}/quickshell/dictation-prefs.json, written by Settings > Voice), read at every begin.
+The models load on the first begin and are unloaded after idle_timeout_s without a session.
+
+Configuration (environment): DICTATION_MODEL_DIR (default ${XDG_DATA_HOME:-~/.local/share}/dictation/models, files
+ggml-<name>.bin), DICTATION_WORKER (default ${XDG_DATA_HOME:-~/.local/share}/dictation/bin/dictation-whisper, built by
+config/dictation/worker/build.sh), DICTATION_SOCKET (default $XDG_RUNTIME_DIR/dictation.sock).
+"""
+import argparse
+import array
+import asyncio
+import json
+import os
+import socket
+import statistics
+import subprocess
+import sys
+import threading
+import time
+import wave
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+
+from dictation import prefs, whisper  # noqa: E402
+from dictation.cleanup import Cleanup  # noqa: E402
+from dictation.engine import MODES, SAMPLE_RATE, Config, Dictation  # noqa: E402
+from dictation.service import default_socket  # noqa: E402
+
+
+def chosen(args):
+    return whisper.chosen_models(live=args.live, final=args.final)
+
+
+def use_gpu(args):
+    """--no-gpu, or the shell's choice (Settings > Voice: prefs gpu=false); read at every begin."""
+    return not args.no_gpu and prefs.load().gpu
+
+
+def recognizer(args):
+    models = whisper.model_paths(chosen(args))
+    gpu = use_gpu(args)
+    # a live pass that takes 20 s on the GPU is a hung worker; on the CPU passes are much slower
+    return whisper.WhisperRecognizer(models, gpu=gpu, final_beam=args.final_beam, verbose=args.verbose,
+                                     timeout=20.0 if gpu else 90.0)
+
+
+def audio_files(specs):
+    """--audio-file [MODE=]PATH (repeatable) -> {mode or None: path}; a path without a mode is for every mode."""
+    files = {}
+    for spec in specs or []:
+        mode, sep, path = spec.partition("=")
+        if sep and mode in MODES:
+            files[mode] = path
+        else:
+            files[None] = spec
+    return files
+
+
+class DryRun:
+    """Injector for `serve --dry-run`: types nothing (edit events are still published)."""
+
+    def apply(self, backspace, text):
+        pass
+
+
+def cmd_serve(args):
+    from dictation.audio import FileCapture, PwRecord
+    from dictation.inject import WtypeInjector, hyprland_focus
+    from dictation.service import Service
+
+    files = audio_files(args.audio_file)
+
+    def capture(on_pcm, mode):
+        path = files.get(mode, files.get(None))
+        if path:  # read at every begin: a test can swap the file between sessions
+            return FileCapture(on_pcm, read_wav(path))
+        return PwRecord(on_pcm, target=args.target or prefs.load().mic or None)
+
+    if not args.dry_run and not os.environ.get("WAYLAND_DISPLAY"):
+        print("dictation: WAYLAND_DISPLAY is not set, typing will fail (the user manager needs the session environment: "
+              "systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE)", file=sys.stderr, flush=True)
+
+    svc = Service(args.socket, lambda: recognizer(args), DryRun() if args.dry_run else WtypeInjector(),
+                  hyprland_focus, capture, cleanup=Cleanup(), config=Config(max_window=args.max_window),
+                  models_key=lambda: (tuple(sorted(chosen(args).items())), use_gpu(args)), prefs=prefs.load)
+    asyncio.run(svc.serve())
+
+
+def send(path, line, *, wait_reply=False):
+    s = socket.socket(socket.AF_UNIX)
+    try:
+        s.connect(path)
+    except OSError as exc:
+        sys.exit(f"dictation: service not running ({path}: {exc.strerror})")
+    with s, s.makefile("rb") as f:
+        f.readline()  # greeting status
+        s.sendall(line.encode() + b"\n")
+        while wait_reply:
+            line = f.readline()
+            if not line or json.loads(line).get("event") == "status":
+                print(line.decode().strip())
+                break
+
+
+def cmd_listen(args):
+    s = socket.socket(socket.AF_UNIX)
+    try:
+        s.connect(args.socket)
+    except OSError as exc:
+        sys.exit(f"dictation: service not running ({args.socket}: {exc.strerror})")
+    with s, s.makefile("rb") as f:
+        for line in f:
+            print(line.decode().rstrip(), flush=True)
+
+
+def read_wav(path):
+    """float32 16 kHz mono bytes; other formats go through ffmpeg."""
+    try:
+        with wave.open(path) as w:
+            if (w.getframerate(), w.getnchannels(), w.getsampwidth()) == (SAMPLE_RATE, 1, 2):
+                pcm = array.array("h")
+                pcm.frombytes(w.readframes(w.getnframes()))
+                return array.array("f", (x / 32768 for x in pcm)).tobytes()
+    except wave.Error:
+        pass
+    return subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-f", "f32le", "-ac", "1", "-ar", str(SAMPLE_RATE), "-"],
+                          check=True, capture_output=True).stdout
+
+
+class PrintRecorder:
+    def __init__(self, t0):
+        self.ops, self.t0 = [], t0
+
+    def apply(self, backspace, text):
+        self.ops.append({"at": round(time.monotonic() - self.t0, 2), "backspace": backspace, "text": text})
+
+
+def cmd_replay(args):
+    audio = read_wav(args.file)
+    t_load = time.monotonic()
+    rec_engine = recognizer(args)
+    load = time.monotonic() - t_load
+    try:
+        passes, previews, final_passes = [], [], []
+        released_flag = threading.Event()
+        t0 = time.monotonic()
+        ops = PrintRecorder(t0)
+
+        def emit(ev):
+            if ev["event"] == "pass":
+                (final_passes if released_flag.is_set() else passes).append(ev)
+            elif ev["event"] == "preview":
+                previews.append(ev["text"])
+            elif ev["event"] == "aborted":
+                print(json.dumps(ev), file=sys.stderr)
+
+        d = Dictation(rec_engine, ops, emit=emit, cleanup=Cleanup(), config=Config(max_window=args.max_window))
+        d.begin(args.mode)
+        chunk = int(0.1 * SAMPLE_RATE) * 4
+        if args.realtime:
+            # audio arrives at speaking speed while passes run back to back, like the service
+            done = threading.Event()
+
+            def feeder():
+                start = time.monotonic()
+                for i in range(0, len(audio), chunk):
+                    d.feed(audio[i : i + chunk])
+                    delay = start + (i + chunk) / 4 / SAMPLE_RATE - time.monotonic()
+                    if delay > 0:
+                        time.sleep(delay)
+                done.set()
+
+            threading.Thread(target=feeder, daemon=True).start()
+            while not done.is_set():
+                if not d.step():
+                    time.sleep(0.01)
+            released = time.monotonic()
+        else:
+            for i in range(0, len(audio), chunk):
+                d.feed(audio[i : i + chunk])
+                d.step()
+            released = time.monotonic()
+        released_flag.set()
+        text = d.end()
+        live = [p["ms"] for p in passes]
+        final = [p["ms"] for p in final_passes]
+        print(json.dumps({
+            "file": os.path.basename(args.file), "mode": args.mode, "audio_s": round(len(audio) / 4 / SAMPLE_RATE, 2),
+            "load_s": round(load, 2), "live_passes": len(live),
+            "live_ms_median": statistics.median(live) if live else None, "live_ms_max": max(live) if live else None,
+            "final_ms": final[0] if final else None,
+            "release_to_done_ms": round((time.monotonic() - released) * 1000),
+            "text": text, "ops": ops.ops,
+            "previews": previews[-3:] if args.mode == "translate" else None,
+        }, ensure_ascii=False, indent=None if args.compact else 1))
+    finally:
+        rec_engine.close()
+
+
+def main():
+    p = argparse.ArgumentParser(prog="dictation", description=__doc__.split("\n")[0])
+    p.add_argument("--socket", default=default_socket())
+    sub = p.add_subparsers(dest="cmd", required=True)
+    for name in ("serve", "replay"):
+        sp = sub.add_parser(name)
+        sp.add_argument("--live", help="model for live passes (ggml-<name>.bin; default: the shell's choice)")
+        sp.add_argument("--final", help="model for the final pass and translation (default: the shell's choice)")
+        sp.add_argument("--no-gpu", action="store_true")
+        sp.add_argument("--verbose", action="store_true", help="show whisper.cpp's own log")
+        sp.add_argument("--final-beam", type=int, default=5, help="beam size of the final pass (0 = greedy)")
+        sp.add_argument("--max-window", type=float, default=Config.max_window, help="seconds of audio per live pass")
+        if name == "serve":
+            sp.add_argument("--target", help="PipeWire source (default: the default source)")
+            sp.add_argument("--dry-run", action="store_true", help="never type; edit events are still published")
+            sp.add_argument("--audio-file", action="append", metavar="[MODE=]FILE",
+                            help="play this recording instead of the microphone (in every session, or only for MODE: "
+                                 "cs, en, translate; repeatable); for tests without a mic")
+        else:
+            sp.add_argument("file")
+            sp.add_argument("--mode", choices=list(MODES), required=True)
+            sp.add_argument("--realtime", action="store_true", help="feed at speaking speed, passes back to back")
+            sp.add_argument("--compact", action="store_true")
+    b = sub.add_parser("begin")
+    b.add_argument("mode", choices=list(MODES))
+    for name in ("end", "cancel", "status", "listen"):
+        sub.add_parser(name)
+    args = p.parse_args()
+    if args.cmd == "serve":
+        cmd_serve(args)
+    elif args.cmd == "replay":
+        cmd_replay(args)
+    elif args.cmd == "listen":
+        cmd_listen(args)
+    elif args.cmd == "begin":
+        # detached: the session outlives this short-lived connection (the shell's own begin is cancelled when it drops)
+        send(args.socket, json.dumps({"cmd": "begin", "mode": args.mode, "detached": True}))
+    else:
+        send(args.socket, args.cmd, wait_reply=args.cmd == "status")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (whisper.ModelMissing, whisper.WorkerFailed) as exc:
+        sys.exit(f"dictation: {exc}")
+    except KeyboardInterrupt:
+        pass

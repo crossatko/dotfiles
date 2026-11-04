@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "fillers": {
+    "cs": ["ehm", "eh", "ehh", "ee", "eee", "hm", "hmm", "mhm"],
+    "en": ["uh", "uhm", "um", "umm", "hmm", "hm", "er", "erm", "ah", "mhm"]
+  },
+  "replacements": [],
+  "hints": false
+}
