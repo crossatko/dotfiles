@@ -36,6 +36,7 @@ ShellRoot {
     Toasts { bars: root.bars }
     Osd { id: osd; bars: root.bars }
     DictationController {}   // push-to-talk dictation: keys -> service (DictationClient) -> pill (IPC dictation, dictation-pill)
+    DiacPill {}   // "fix Czech diacritics" pill: follows the diacritics service over its socket (DiacClient)
     BtNotifier {}
     Lock { id: lockService }
     // opt-in glass clock on the desktop (Settings > Desktop clock): stays in the lock's desktop snapshot and fades out on
