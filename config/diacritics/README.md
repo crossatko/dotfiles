@@ -11,7 +11,7 @@ Diacritics) are Quickshell code and talk to the service over its socket and the 
 |---|---|
 | `bin/diacritics` | CLI: `serve`, `fix` (stdin to stdout), `run` (key flow, exits with the flow's status), `status`, `listen` |
 | `lib/diacritics/service.py` | unix socket service: ops `fix`, `state`, `subscribe`, `status`; state machine; idle reaper; whitespace handling (`restore_whitespace`, `keep_spacing`) |
-| `lib/diacritics/llama.py` | `llama-server` child (free port, health wait, stop), the chat completions request, input size limit, `finish_reason` check |
+| `lib/diacritics/llama.py` | `llama-server` child (free port, health wait, stop), the streamed chat completions request, input size limit, `finish_reason` check |
 | `lib/diacritics/htmlmode.py` | HTML fragments: strip the clipboard wrapper, detect real markup, same-tags check, plain text of a fragment |
 | `lib/diacritics/client.py` | socket client (timeouts); starts `diacritics.service` when nothing listens |
 | `lib/diacritics/paths.py` | runtime/state locations and the environment names of the Python side |
@@ -31,8 +31,15 @@ prefs (`../quickshell/DiacriticsPrefs.qml`).
 ## Service
 
 - Socket `$XDG_RUNTIME_DIR/diacritics.sock`, one JSON line per request (`fix`, `state`, `status`), `subscribe` streams
-  `{"event":"state","state":"idle|loading|working|done|failed|unsupported","text":...,"fixed":...}` (text only while working, fixed only on done).
+  `{"event":"state","state":"idle|loading|working|done|failed|unsupported","text":...,"fixed":...}` (text only while working; `fixed` on
+  done = the fixed text, and while working = the part finished so far, see below).
   After done, failed or unsupported the state returns to idle after 1.2 s.
+- The reply is read as a stream (SSE). While working the service sends `working` events with `fixed` = the fixed text so far as plain
+  text: whole words only (the last unfinished word is held back), at most every 60 ms and only when a whole new word is complete.
+  HTML fragments: an unfinished tag or character reference is cut off and the plain text derived from the rest, so `fixed` is plain
+  text there too. The first `working` event has no `fixed`; a late subscriber gets the current partial. All guards apply to the
+  finished reply as before (`finish_reason` must be `stop`, whitespace restored at the end), and the final text is the same as
+  without streaming. The pill uses the partial words to flare the marks while the model works.
 - `llama-server` starts on the first fix (state loading), is restarted when it died or the model preference changed,
   and is stopped after `idle_timeout_s` without a fix (0 or negative = never). Flags: `-ngl 99 -c 8192 --no-webui
   --jinja --reasoning off -fa on`; request: temperature 0, top_k 1.
