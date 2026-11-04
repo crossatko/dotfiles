@@ -31,10 +31,9 @@ Singleton {
     readonly property string dir: filePath.substring(0, filePath.lastIndexOf("/")) || "/"
 
     readonly property var langs: PttPrefs.languages
-    // the language choices of a replacement: Any and the selected languages (names while they are few, else codes)
+    // the language choices of a replacement: Any and the selected languages
     readonly property var replLangs: ["any"].concat(langs)
-    readonly property var replLabels: replLangs.map(l => labelOf(l))
-    function labelOf(l) { return l === "any" ? "Any" : langs.length <= 3 ? D.name(l) : l.toUpperCase() }
+    function labelOf(l) { return l === "any" ? "Any" : D.name(l) }
     // ... plus `lang` when a row still has a language that is no longer selected
     function replLangsFor(lang) { return replLangs.indexOf(lang) < 0 ? replLangs.concat([lang]) : replLangs }
     function replLabelsFor(lang) { return replLangsFor(lang).map(l => labelOf(l)) }

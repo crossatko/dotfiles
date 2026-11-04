@@ -74,7 +74,13 @@ PanelWindow {
     readonly property string srcLang: langs[0] || ""
     readonly property string dstLang: langs[1] || (look === "translating" ? "en" : "")
     // Czech and English keep their colours, Auto and every other language one of the palette's, by its code
-    readonly property var langPalette: [Theme.blue, Theme.green, Theme.orange, Theme.cyan, Theme.yellow, Theme.fg]
+    // (a colour whose hue is near accent or accent2 would read as Czech or English: left out)
+    function hueGap(a, b) { const d = Math.abs(a.hsvHue - b.hsvHue); return Math.min(d, 1 - d) }
+    readonly property var langPalette: {
+        const all = [Theme.blue, Theme.green, Theme.orange, Theme.cyan, Theme.yellow, Theme.red, Theme.fg]
+        const ok = all.filter(c => c.hsvHue < 0 || (hueGap(c, Theme.accent) > 0.07 && hueGap(c, Theme.accent2) > 0.07))
+        return ok.length ? ok : [Theme.fg]
+    }
     function langColor(code) {
         if (code === "en") return Theme.accent2
         if (code === "cs") return Theme.accent

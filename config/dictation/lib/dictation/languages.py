@@ -1,7 +1,7 @@
 """The languages whisper can transcribe (languages.json) and the session modes built from them.
 
 A mode is a language code ("cs", "ja": dictate in it), "auto" (detect the language, then pin it) or "translate:<code>" (speak it, type English; whisper can only
-translate into English). Plain "translate" is "translate:cs" (the first translate key). A code outside the list is
+translate into English; "translate:auto" detects it first). Plain "translate" is "translate:cs" (the first translate key). A code outside the list is
 refused, so nothing unvalidated reaches the recognizer."""
 from __future__ import annotations
 
@@ -44,6 +44,8 @@ def parse_mode(name) -> Mode | None:
         return Mode(name, "cs", True)
     if name.startswith("translate:"):
         code = name[len("translate:"):]
+        if code == AUTO:  # detect the language once, pin it, then translate
+            return Mode(name, AUTO, True)
         return Mode(name, code, True) if is_language(code) and code != "en" else None
     return Mode(name, name, False) if is_language(name) else None
 

@@ -3,7 +3,7 @@
 
     dictation serve [--no-gpu] [--live NAME] [--final NAME]   run the service (the user unit runs this);
                     [--dry-run] [--audio-file [MODE=]FILE]    --dry-run types nothing, --audio-file replaces the mic
-    dictation begin <code>|translate:<code>|translate|auto [<codes>]                  start a session (key pressed)
+    dictation begin <code>|translate:<code>|translate|auto|translate:auto [<codes>]                  start a session (key pressed)
     dictation end                                             final pass and flush (key released)
     dictation cancel | status                                 drop the session | print the service status
     dictation listen                                          print every event as a JSON line

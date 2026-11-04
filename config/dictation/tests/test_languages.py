@@ -39,6 +39,8 @@ class Modes(unittest.TestCase):
         m = parse_mode("auto")
         self.assertEqual((m.name, m.language, m.translate), ("auto", "auto", False))
         self.assertFalse(is_language("auto"))
+        m = parse_mode("translate:auto")
+        self.assertEqual((m.name, m.language, m.translate), ("translate:auto", "auto", True))
         self.assertEqual(clean_languages("cs, de,xx"), ("cs",), "a space inside a code makes it invalid")
         self.assertEqual(clean_languages("cs,de,cs"), ("cs", "de"))
         self.assertEqual(clean_languages(["ja", "ja", "x", 3]), ("ja",))
@@ -169,6 +171,21 @@ class Auto(unittest.TestCase):
         self.assertEqual(r.detected, ["final"])
         self.assertEqual({c[1] for c in r.calls}, {"de"})
         self.assertEqual(rec.screen(), "Hallo liebe Leute heute.")
+
+    def test_auto_to_english_detects_once_then_translates_with_english_cleanup(self):
+        r = Detecting([{"ja": 0.7, "de": 0.2}], ["I made"], final="I made a commit.")
+        rec, events = Recorder(), []
+        d = Dictation(r, rec, emit=events.append, config=Config(trailing_space=False))
+        d.begin("translate:auto", ("de", "ja"))
+        d.feed(tone(3.0))
+        d.step()
+        d.end()
+        self.assertEqual(r.detected, ["final"], "translate runs on the final model, so the detection does too")
+        self.assertEqual({c[1:3] for c in r.calls}, {("ja", True)})
+        self.assertEqual(d.mode, None)
+        self.assertEqual([e for e in events if e["event"] == "language"],
+                         [{"event": "language", "language": "ja", "detected": True}])
+        self.assertEqual(rec.screen(), "I made a commit.")
 
     def test_a_cancelled_session_announces_no_language(self):
         events = []

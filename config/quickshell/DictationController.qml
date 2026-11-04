@@ -4,15 +4,15 @@ import Quickshell.Io
 
 // Push-to-talk dictation: the keys (PttShortcuts; PttPrefs.entries: Auto, and per selected language its own key and its
 // "to English" key) drive the service (DictationClient) and the pill shows it.
-// Hold a key: `begin <code>|translate:<code>|auto <selected codes>` and the pill opens on the focused monitor (mode
-// <code>, <code>-en or auto, listening; Auto shows the language the service detected once it has); release: `end`, the pill stays until the final text is typed (or nothing was said, or
+// Hold a key: `begin <code>|translate:<code>|auto|translate:auto <selected codes>` and the pill opens on the focused monitor (mode
+// <code>, <code>-en, auto or auto-en, listening; Auto shows the language the service detected once it has); release: `end`, the pill stays until the final text is typed (or nothing was said, or
 // typing stopped) and then fades. One session at a time: another key pressed meanwhile is ignored.
 // Pill state: listening while quiet, speaking (translate: translating) while the mic level is above `loud` (held
 // `quietMs` after the last loud frame); the caption is the service's preview (transcribe: the text being typed, the
 // pill shows its end; translate: the English preview, nothing is typed until release). Errors (service `error`
 // events, a service that cannot be started, no speech model) turn the pill into its generic error line; the detail goes
 // to DictationStatus through the pill (errorText / errorCode).
-//   qs ipc call dictation press <code>|<code>-en|auto | release | cancel | status   (the keys' code path, for tests)
+//   qs ipc call dictation press <code>|<code>-en|auto|auto-en | release | cancel | status   (the keys' code path, for tests)
 Scope {
     id: ctl
 
@@ -26,7 +26,7 @@ Scope {
     property bool session: false             // a session was asked for and has not finished yet
     property bool waiting: false             // released, waiting for the final text
     property bool finishing: false           // ... and the service started its final pass
-    readonly property bool translating: /^[a-z]+-en$/.test(pill.mode)
+    property bool translating: false           // the held key translates to English (PttPrefs entry .translate)
 
     DictationPill { id: pill }
 
@@ -41,6 +41,7 @@ Scope {
         if (!m || key !== "" || session) return
         closeTimer.stop()
         key = name
+        translating = m.translate
         waiting = false
         if (pill.state !== "error") { pill.errorCode = ""; pill.errorText = "" }   // the same no-model error shown again is not a new record
         pill.captionText = ""
@@ -50,7 +51,7 @@ Scope {
         if (pill.state === "error") return    // no usable speech model: the pill said so (SttModels), nothing to record
         session = true
         // Auto picks among the selected languages (none selected = any)
-        DictationClient.begin(m.service === "auto" && PttPrefs.languages.length ? "auto " + PttPrefs.languages.join(",") : m.service)
+        DictationClient.begin((m.lang === "auto" && PttPrefs.languages.length) ? m.service + " " + PttPrefs.languages.join(",") : m.service)
     }
     function release() {
         key = ""
@@ -109,7 +110,10 @@ Scope {
 
     Connections {
         target: DictationClient
-        function onLanguageDetected(code) { if (ctl.session && pill.mode === "auto" && code !== "") pill.mode = code }
+        // Auto: the pill says AUTO until the language is known; a fallback guess (detected false) is not shown as detected
+        function onLanguageDetected(code, detected) {
+            if (ctl.session && detected && code !== "" && pill.mode.startsWith("auto")) pill.mode = ctl.translating && code !== "en" ? code + "-en" : code
+        }
         function onLevelEvent(value) {
             if (!ctl.session || pill.state === "error" || pill.state === "hidden") return
             pill.level = value

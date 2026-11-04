@@ -14,7 +14,6 @@ ColumnLayout {
 
     SectionHead {
         title: "Replacements"
-        detail: DictationWords.replacements.length > 0 ? DictationWords.replacements.length + (DictationWords.replacements.length === 1 ? " entry" : " entries") : ""
         InfoTip { text: "Whole words or phrases, any capitalisation, e.g. “century” → “sentry”. The first letter's capital carries over. Edit a row and press Enter, or leave it, to save." }
     }
     AdvancedFold {

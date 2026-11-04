@@ -17,21 +17,25 @@ test("normalize: valid, unique, in order", () => {
 });
 
 test("entries: Auto always, a key per language, a translate key for every language but English", () => {
-    assert.deepStrictEqual(plain(D.entriesFor([]).map(e => e.name)), ["ptt-auto"]);
+    assert.deepStrictEqual(plain(D.entriesFor([]).map(e => e.name)), ["ptt-auto", "ptt-auto-en"]);
     const e = D.entriesFor(["cs", "en", "ja"]);
-    assert.deepStrictEqual(plain(e.map(x => x.name)), ["ptt-auto", "ptt-cs", "ptt-cs-en", "ptt-en", "ptt-ja", "ptt-ja-en"]);
+    assert.deepStrictEqual(plain(e.map(x => x.name)), ["ptt-auto", "ptt-auto-en", "ptt-cs", "ptt-cs-en", "ptt-en", "ptt-ja", "ptt-ja-en"]);
     const t = e.find(x => x.name === "ptt-cs-en");
     assert.strictEqual(t.service, "translate:cs");
     assert.strictEqual(t.pill, "cs-en");
     assert.strictEqual(t.label, "Czech → English");
     assert.strictEqual(e.find(x => x.name === "ptt-en").service, "en");
     assert.strictEqual(e[0].service, "auto");
+    assert.strictEqual(e[1].service, "translate:auto");
+    assert.strictEqual(e[1].pill, "auto-en");
+    assert.ok(e[0].always && e[1].always && !e[2].always);
 });
 
 test("parseName", () => {
     assert.deepStrictEqual(plain(D.parseName("ptt-ja")), { lang: "ja", translate: false });
     assert.deepStrictEqual(plain(D.parseName("ptt-cs-en")), { lang: "cs", translate: true });
     assert.deepStrictEqual(plain(D.parseName("ptt-auto")), { lang: "auto", translate: false });
+    assert.deepStrictEqual(plain(D.parseName("ptt-auto-en")), { lang: "auto", translate: true });
     for (const bad of ["ptt-en-en", "ptt-xx", "ptt-", "ptt-cs-de", "quickshell:ptt-cs", "x", "ptt-CS"])
         assert.strictEqual(D.parseName(bad), null, bad);
 });

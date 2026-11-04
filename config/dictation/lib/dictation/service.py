@@ -3,7 +3,7 @@
 Protocol: newline-delimited, both directions. Every connected client receives every event as one JSON object per
 line. Commands are either JSON ({"cmd": "begin", "mode": "cs"}) or plain words ("begin cs"):
 
-    begin <code>|translate:<code>|translate|auto [<codes>]
+    begin <code>|translate:<code>|translate|auto|translate:auto [<codes>]
                              start a session (opens the mic); ignored while one is running. auto detects the
                              language once and pins it, among <codes> (comma separated; JSON "languages": [..]) when given
     end                      key released: final pass, flush the rest, close the mic

@@ -2,7 +2,7 @@
 
 Interface (everything else is internal):
     d = Dictation(recognizer, injector, focus=..., emit=..., cleanup=..., config=Config())
-    d.begin("<language code>" | "translate:<language code>" | "translate")   # pinned language per session, never auto-detect
+    d.begin("<language code>" | "translate:<language code>" | "translate" | "auto" | "translate:auto")   # pinned language per session, never auto-detect
     d.feed(pcm)                          # float32 little-endian, 16 kHz mono; thread-safe, publishes levels
     d.step()                             # runs one live pass when enough new audio arrived
     d.end()                              # final pass over the whole session, flushes the rest
@@ -678,8 +678,9 @@ class Dictation:
         pool = s.allowed or tuple(probs)
         best = max((c for c in pool if c in probs), key=lambda c: probs[c], default=None)
         s.language = best or (s.allowed[0] if s.allowed else "en")
-        s.text_language = s.language
-        s.prompt = self.cleanup.begin(s.language, False)
+        if not s.mode.translate:  # translating: the cleanup works on the English text, as from the start
+            s.text_language = s.language
+            s.prompt = self.cleanup.begin(s.language, False)
         if self._s is s:  # not when the session was cancelled meanwhile
             self.emit({"event": "language", "language": s.language, "detected": best is not None})
 

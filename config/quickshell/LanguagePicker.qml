@@ -24,7 +24,7 @@ ColumnLayout {
         objectName: "lang-search"
         Layout.preferredWidth: 220
         implicitHeight: 26
-        placeholder: "Add a language: name or code"
+        placeholder: "Add a language…"
         outerRadius: Theme.radiusPage; inset: 9
         onAccepted: if (pick.firstFree) pick.choose(pick.firstFree.code)
         onCancelled: box.text = ""

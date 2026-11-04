@@ -14,6 +14,7 @@ ColumnLayout {
     property var options: []
     property int currentIndex: -1
     property bool open: false
+    property real headHeight: Theme.controlH           // the box showing the current choice
     property string emptyText: "None"
     property string headText: ""
     property string headIcon: ""
@@ -26,7 +27,7 @@ ColumnLayout {
     Rectangle {
         id: headBox
         Layout.fillWidth: true
-        implicitHeight: Theme.controlH
+        implicitHeight: dsel.headHeight
         radius: Theme.radiusItem
         color: dsel.open ? Theme.itemActive : headGlow.hovered ? Theme.itemHover : Theme.itemFill
         border.width: dsel.open ? 1 : 0

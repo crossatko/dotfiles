@@ -1,5 +1,5 @@
 -- Push-to-talk keys (Settings > Voice, Quickshell PttPrefs.qml). Quickshell registers the global shortcuts
--- (quickshell:ptt-auto, and per selected language quickshell:ptt-<code> and quickshell:ptt-<code>-en; PttShortcuts.qml) and writes the keys the user chose to a
+-- (quickshell:ptt-auto, quickshell:ptt-auto-en and per selected language quickshell:ptt-<code> and quickshell:ptt-<code>-en; PttShortcuts.qml) and writes the keys the user chose to a
 -- generated state file OUTSIDE the repo, one bind per line, '#' lines are comments:
 --   <keys>|<appid:name>|<description>[|<flags>]   e.g.  SUPER + F9|quickshell:ptt-cs|Push-to-talk: Czech
 --                                                       mouse:276|quickshell:ptt-en|Push-to-talk: English|non_consuming
@@ -14,12 +14,12 @@
 local M = {}
 
 M.MAX_BYTES = 16384 -- as PttPrefs.parse reads ptt.json
--- the only global shortcuts a line may bind (PttPrefs.qml entries, PttShortcuts.qml): quickshell:ptt-auto and
+-- the only global shortcuts a line may bind (PttPrefs.qml entries, PttShortcuts.qml): quickshell:ptt-auto, ptt-auto-en and
 -- quickshell:ptt-<code> / quickshell:ptt-<code>-en for a language code of two or three lowercase letters (the selected
 -- languages change, so the set is a pattern, not a list; English has no -en key). A hand-edited or crafted file cannot
 -- bind another app's shortcut
 function M.allowed(id)
-	if id == "quickshell:ptt-auto" then
+	if id == "quickshell:ptt-auto" or id == "quickshell:ptt-auto-en" then
 		return true
 	end
 	local code, tr = id:match("^quickshell:ptt%-(%l%l%l?)(%-?e?n?)$")

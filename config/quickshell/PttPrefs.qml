@@ -8,7 +8,8 @@ import "launcher/js/DictLangs.js" as D
 
 // Push-to-talk keys (Settings > Voice): the hold-to-talk keys, each a keyboard combo or a mouse button in Hyprland's
 // bind syntax (launcher/js/PttKeys.js): "ptt-auto" (always there: dictate in the detected language), and per selected
-// language "ptt-<code>" (dictate in it) and, but for English, "ptt-<code>-en" (speak it, type English)
+// language "ptt-<code>" (dictate in it) and, but for English, "ptt-<code>-en" (speak it, type English), and "ptt-auto-en"
+// (detect the language, type English)
 // (launcher/js/DictLangs.js). The selected languages are Settings > Voice > Languages, Czech and English until changed.
 // No default keys: all unset until the user picks them. Saved in ${XDG_STATE_HOME:-~/.local/state}/quickshell/ptt.json (QS_PTT_FILE overrides), this singleton
 // is the only writer:
@@ -16,6 +17,7 @@ import "launcher/js/DictLangs.js" as D
 //     "languages": ["cs", "en", "ja"] }
 //   keys      name -> key string; a missing name = no key
 //   languages the selected language codes; missing = Czech and English (a file from before languages were selectable)
+//             Keys of a language that is not selected stay in the file (no bind is made for them) and return with it.
 //   through   name -> the key / click also reaches the focused window (bind option non_consuming); default: on for a
 //             mouse button (side buttons keep working as back / forward), off for a key (it would type)
 // Applying: every change also rewrites the generated ptt-binds.txt next to it (QS_PTT_BINDS_FILE; one
@@ -56,9 +58,13 @@ Singleton {
         const l = D.normalize(list)
         const d = copy()
         d.languages = JSON.stringify(l) === JSON.stringify(D.DEFAULTS) ? null : l
-        const keep = D.entriesFor(l).map(e => e.name)
-        for (const n of Object.keys(d.keys)) if (keep.indexOf(n) < 0) delete d.keys[n]      // a removed language loses its keys
-        for (const n of Object.keys(d.through)) if (keep.indexOf(n) < 0) delete d.through[n]
+        // a removed language keeps its stored keys (no binds are made for it; adding it again brings them back), except
+        // one that now collides with the key of an entry that is in use
+        const live = D.entriesFor(l).map(e => e.name)
+        for (const n of Object.keys(d.keys)) {
+            const mine = live.indexOf(n) >= 0 && entries.every(e => e.name !== n)    // an entry this change brings back
+            if (mine && live.some(o => o !== n && d.keys[o] && K.same(d.keys[o], d.keys[n]))) delete d.keys[n]
+        }
         commit(d)
     }
     function addLanguage(code) { if (D.isCode(code) && !hasLanguage(code)) setLanguages(languages.concat([code])) }
@@ -119,7 +125,7 @@ Singleton {
             const l = D.normalize(o.languages)
             out.languages = JSON.stringify(l) === JSON.stringify(D.DEFAULTS) ? null : l
         }
-        for (const n of D.entriesFor(languagesOf(out)).map(e => e.name)) {
+        for (const n of D.entriesFor(D.LANGS.map(x => x[0])).map(e => e.name)) {       // every language: keys outlive a removed language
             if (o.keys && typeof o.keys[n] === "string") { const p = K.parse(o.keys[n]); if (p.keys !== "") out.keys[n] = p.keys }
             if (o.through && typeof o.through[n] === "boolean") out.through[n] = o.through[n]
         }
@@ -215,7 +221,8 @@ Singleton {
     property var binds: []                   // hyprctl binds -j
     property var shortcuts: []               // registered global shortcut ids (hyprctl globalshortcuts -j)
     property bool loaded: false              // first binds answer arrived
-    function isOwn(b) { return /\(global\)$/.test(String(b.dispatcher || "")) && entries.some(e => e.desc === b.description) }
+    // ours: any push-to-talk bind (also one of a language that was just removed and is not unbound yet)
+    function isOwn(b) { return /\(global\)$/.test(String(b.dispatcher || "")) && /^Push-to-talk: /.test(String(b.description || "")) }
     function bound(name) {
         const e = entry(name), k = keysOf(name)
         const want = K.split(k)

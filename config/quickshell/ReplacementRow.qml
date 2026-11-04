@@ -16,8 +16,8 @@ ColumnLayout {
     property string lang: entry.lang
     property string problem: ""
     spacing: Theme.gapTight
-    // many languages: the choice does not fit beside the fields, it wraps on a line of its own below them
-    readonly property bool manyLangs: DictationWords.replLangsFor(lang).length > 4
+    // more than three choices (Any and 2+ languages) do not fit beside the fields as buttons: a dropdown with the names
+    readonly property bool manyLangs: DictationWords.replLangsFor(lang).length > 3
 
     Layout.fillWidth: true
 
@@ -42,7 +42,7 @@ ColumnLayout {
         FieldBox {
             id: heardBox
             objectName: "repl-heard-" + rr.index
-            Layout.fillWidth: true; Layout.preferredWidth: 100
+            Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             implicitHeight: 26
             placeholder: "You say"
             text: rr.entry.heard
@@ -54,11 +54,11 @@ ColumnLayout {
             onFocusedChanged: if (!focused) leave.restart()
             Connections { target: heardBox.input; function onTextChanged() { if (rr.problem !== "" && heardBox.text !== rr.entry.heard) rr.problem = "" } }
         }
-        Icon { text: Icons.arrowRight; font.pixelSize: Theme.iconSm; color: Theme.muted }
+        Icon { text: Icons.arrowRight; font.pixelSize: Theme.iconSm; color: Theme.muted; Layout.alignment: Qt.AlignTop; Layout.topMargin: 5 }
         FieldBox {
             id: typedBox
             objectName: "repl-typed-" + rr.index
-            Layout.fillWidth: true; Layout.preferredWidth: 100
+            Layout.fillWidth: true; Layout.preferredWidth: 100; Layout.alignment: Qt.AlignTop
             implicitHeight: 26
             placeholder: "Typed instead"
             text: rr.entry.typed
@@ -72,6 +72,7 @@ ColumnLayout {
         }
         Segmented {
             visible: !rr.manyLangs
+            Layout.alignment: Qt.AlignTop
             objectNames: values.map(v => "repl-lang-" + v + "-" + rr.index)
             values: DictationWords.replLangsFor(rr.lang)
             labels: DictationWords.replLabelsFor(rr.lang)
@@ -80,27 +81,27 @@ ColumnLayout {
             segHeight: 26
             onPicked: v => { rr.lang = v; if (!rr.isNew) rr.commit() }
         }
+        DropSelect {
+            visible: rr.manyLangs
+            objectName: "repl-lang-drop-" + rr.index
+            Layout.preferredWidth: 150
+            Layout.alignment: Qt.AlignTop
+            headHeight: 26
+            options: DictationWords.replLangsFor(rr.lang).map(l => ({ label: DictationWords.labelOf(l) }))
+            currentIndex: DictationWords.replLangsFor(rr.lang).indexOf(rr.lang)
+            onPicked: i => { rr.lang = DictationWords.replLangsFor(rr.lang)[i]; if (!rr.isNew) rr.commit() }
+        }
         Btn {
             objectName: rr.isNew ? "btn-repl-add" : "btn-repl-remove-" + rr.index
             glyph: rr.isNew ? Icons.plus : Icons.xmark
             tip: rr.isNew ? "Add this replacement" : "Remove"
             minWidth: 26
+            Layout.alignment: Qt.AlignTop
             implicitHeight: 26
             enabledLook: !rr.isNew || heardBox.text.trim() !== "" || typedBox.text.trim() !== ""
             outerRadius: Theme.radiusPage; inset: 9
             onClicked: if (rr.isNew) rr.add(); else DictationWords.removeReplacement(rr.index)
         }
-    }
-    WrapChoice {
-        visible: rr.manyLangs
-        Layout.fillWidth: true; Layout.preferredWidth: 100
-        objectNames: values.map(v => "repl-lang-" + v + "-" + rr.index)
-        values: DictationWords.replLangsFor(rr.lang)
-        labels: DictationWords.replLabelsFor(rr.lang)
-        current: rr.lang
-        outerRadius: Theme.radiusPage; inset: 9
-        segHeight: 26
-        onPicked: v => { rr.lang = v; if (!rr.isNew) rr.commit() }
     }
     Label {
         objectName: "repl-problem-" + rr.index

@@ -380,6 +380,7 @@ class Parse(unittest.TestCase):
     def test_words_and_json(self):
         self.assertEqual(parse_command("begin translate"), {"cmd": "begin", "mode": "translate"})
         self.assertEqual(parse_command("begin auto cs,en"), {"cmd": "begin", "mode": "auto", "languages": "cs,en"})
+        self.assertEqual(parse_command("begin translate:auto cs"), {"cmd": "begin", "mode": "translate:auto", "languages": "cs"})
         self.assertEqual(parse_command("begin translate:ja"), {"cmd": "begin", "mode": "translate:ja"})
         self.assertEqual(parse_command('{"cmd":"end"}'), {"cmd": "end"})
         self.assertEqual(parse_command("{oops"), {"cmd": "invalid"})

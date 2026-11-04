@@ -97,8 +97,8 @@ eq(live(), "SUPER + D=launcher", "no file")
 -- parser edge cases
 local P = ptt.parse
 eq(#P("F1|quickshell:ptt-cs\nF2|quickshell:ptt-en\nF3|quickshell:ptt-cs-en\nF4|quickshell:ptt-cs\n"), 3, "one bind per id")
-eq(#P("F1|quickshell:launcher\nF2|obs:record\nF3|quickshell:ptt-cs:x\nF4|quickshell:ptt-csxx\nF5|quickshell:ptt-c\nF6|quickshell:ptt-CS\nF7|quickshell:ptt-en-en\nF8|quickshell:ptt-cs-de\nF9|other:ptt-cs\nF10|quickshell:ptt-\nF11|quickshell:ptt-cs-\nF12|quickshell:ptt-cs-en-en\n"), 0, "unknown ids refused")
-eq(#P("F1|quickshell:ptt-auto\nF2|quickshell:ptt-ja\nF3|quickshell:ptt-ja-en\nF4|quickshell:ptt-yue-en\nF5|quickshell:ptt-haw\n"), 5, "selected languages' ids accepted")
+eq(#P("F1|quickshell:launcher\nF2|obs:record\nF3|quickshell:ptt-cs:x\nF4|quickshell:ptt-csxx\nF5|quickshell:ptt-c\nF6|quickshell:ptt-CS\nF7|quickshell:ptt-en-en\nF8|quickshell:ptt-cs-de\nF9|other:ptt-cs\nF10|quickshell:ptt-\nF11|quickshell:ptt-cs-\nF12|quickshell:ptt-cs-en-en\nF13|quickshell:ptt-auto-\nF14|quickshell:ptt-auto-cs\nF15|quickshell:ptt-auto-en-en\n"), 0, "unknown ids refused")
+eq(#P("F1|quickshell:ptt-auto\nF2|quickshell:ptt-ja\nF3|quickshell:ptt-ja-en\nF4|quickshell:ptt-yue-en\nF5|quickshell:ptt-haw\nF7|quickshell:ptt-auto-en\n"), 6, "selected languages' ids accepted")
 eq(#P("F1 ; exec|quickshell:ptt-cs\nF1)|quickshell:ptt-en\n"), 0, "bad key characters refused")
 eq(#P(" + |quickshell:ptt-cs\n|quickshell:ptt-en\nF1\n"), 0, "empty keys / no id refused")
 local d = P("SUPER + F9|quickshell:ptt-cs\nsuper+f9|quickshell:ptt-en\n")

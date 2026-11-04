@@ -6,7 +6,7 @@ import "launcher/js/DictLangs.js" as D
 // Settings > Voice > Languages: the languages you dictate in (PttPrefs.languages, ptt.json), as removable chips and a
 // search field to add more (LanguagePicker over whisper's languages). Each language gets its own push-to-talk key
 // (PttKeysSection) and filler word list; every language but English also a key that types it as English. Czech and
-// English until changed (a long list folds, AdvancedFold). Adding keeps the languages and their keys as they are. Removing a language also clears its keys.
+// English until changed (a long list folds, AdvancedFold). Adding keeps the languages and their keys as they are. Removing a language keeps its keys stored (no bind is made for it); adding it again brings them back.
 ColumnLayout {
     id: sec
     property real titleWidth: 120
@@ -16,7 +16,6 @@ ColumnLayout {
 
     SectionHead {
         title: "Languages"
-        detail: PttPrefs.languages.length + (PttPrefs.languages.length === 1 ? " language" : " languages")
         InfoTip { text: "The languages you dictate in. Each gets its own push-to-talk key, and a key that types it as English (whisper can only translate into English). The Auto key works with or without any: it detects the language when you start talking, among these when there are any." }
     }
     SettingRow {

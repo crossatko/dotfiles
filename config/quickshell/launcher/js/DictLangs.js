@@ -139,17 +139,20 @@ function search(query, skip) {
     return starts.concat(inside).map(function (l) { return { code: l[0], name: l[1] }; });
 }
 
-// the key that is always there, whatever the selection: dictate in the language it detects (the dictation service's
+// the keys that are always there, whatever the selection: dictate in the language it detects (the dictation service's
 // "auto" mode, among the selected languages when there are any)
 var AUTO = { name: "ptt-auto", lang: "auto", translate: false, label: "Auto-detect", desc: "Push-to-talk: auto-detect language",
-             service: "auto", pill: "auto" };
+             service: "auto", pill: "auto", always: true };
+// ... and its "-> English" twin: detect the language, type it as English
+var AUTO_EN = { name: "ptt-auto-en", lang: "auto", translate: true, label: "Auto-detect \u2192 English",
+                desc: "Push-to-talk: auto-detect language to English", service: "translate:auto", pill: "auto-en", always: true };
 
-// the push-to-talk entries of a language selection, in order: the Auto key, then per language its own key and its
+// the push-to-talk entries of a language selection, in order: the two Auto keys (`always`: shown whatever the selection), then per language its own key and its
 // "-> English" key.
 // name = the global shortcut name (PttPrefs, hypr/hyprland/ptt.lua), service = the dictation service's mode,
 // pill = the pill's mode ("cs", "cs-en")
 function entriesFor(codes) {
-    var out = [AUTO];
+    var out = [AUTO, AUTO_EN];
     normalize(codes).forEach(function (c) {
         var n = name(c);
         out.push({ name: "ptt-" + c, lang: c, translate: false, label: n, desc: "Push-to-talk: " + n,
@@ -164,6 +167,7 @@ function entriesFor(codes) {
 // "ptt-auto" / "ptt-ja" / "ptt-ja-en" -> { lang, translate } (null: not a push-to-talk name)
 function parseName(s) {
     if (s === AUTO.name) return { lang: "auto", translate: false };
+    if (s === AUTO_EN.name) return { lang: "auto", translate: true };
     var m = /^ptt-([a-z]{2,3})(-en)?$/.exec(String(s));
     if (!m || !isCode(m[1]) || (m[2] && m[1] === "en")) return null;
     return { lang: m[1], translate: !!m[2] };
