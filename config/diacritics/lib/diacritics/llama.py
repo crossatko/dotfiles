@@ -6,6 +6,7 @@ and its libraries, put on LD_LIBRARY_PATH), DIACRITICS_MODEL_DIR (default .../di
 """
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import socket
@@ -149,8 +150,8 @@ class LlamaServer:
     def complete(self, system: str, text: str, timeout: float = REQUEST_TIMEOUT, on_delta=None) -> str:
         """The model's reply for `text`, verbatim, read as a stream (SSE). `on_delta(reply_so_far)` is called after every piece.
         Only a reply that ended by itself (finish_reason "stop") counts: a cut-off one (length, anything else, a stream that
-        just ended) is ServerError("truncated"), it must never be pasted. `timeout` bounds both one silent gap and the whole
-        request. Leaving early (an error, a raising on_delta) closes the connection, which makes llama-server stop generating."""
+        just ended) is ServerError("truncated"), it must never be pasted. `timeout` bounds the whole request: every read
+        gets only what is left of it. Leaving early (an error, a raising on_delta) closes the connection, which makes llama-server stop generating."""
         check_fits(system, text)
         body = json.dumps({
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": text}],
@@ -158,32 +159,46 @@ class LlamaServer:
             "max_tokens": max(512, min(CONTEXT - estimate_tokens(system) - estimate_tokens(text) - 64,
                                        int(REPLY_FACTOR * estimate_tokens(text)) + 256)),
         }).encode()
-        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/v1/chat/completions", data=body,
-                                     headers={"Content-Type": "application/json", "Accept": "text/event-stream"})
         deadline = time.monotonic() + timeout
         pieces: list[str] = []
         finish = None
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=timeout)
+
+        def remaining() -> float:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise ServerError("timeout", "request timed out")
+            return left
+
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                for raw in r:
-                    if time.monotonic() > deadline:
-                        raise ServerError("timeout", "request timed out")
-                    line = raw.decode("utf-8").strip()
-                    if not line.startswith("data:"):
-                        continue
-                    data = line[5:].strip()
-                    if data == "[DONE]":
-                        break
-                    got = False
-                    for choice in json.loads(data).get("choices") or []:
-                        piece = (choice.get("delta") or {}).get("content")
-                        if piece:
-                            pieces.append(piece)
-                            got = True
-                        if choice.get("finish_reason"):
-                            finish = choice["finish_reason"]
-                    if got and on_delta is not None:
-                        on_delta("".join(pieces))
+            conn.request("POST", "/v1/chat/completions", body=body,
+                         headers={"Content-Type": "application/json", "Accept": "text/event-stream", "Connection": "close"})
+            sock = conn.sock
+            sock.settimeout(remaining())
+            r = conn.getresponse()
+            if r.status != 200:
+                raise ServerError("server", f"HTTP {r.status}")
+            while finish != "stop":          # a reply that ended by itself needs no more reads (not even the [DONE] line)
+                sock.settimeout(remaining())   # every read is bounded by what is left of the whole request
+                raw = r.readline()
+                if not raw:
+                    break
+                line = raw.decode("utf-8").strip()
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                got = False
+                for choice in json.loads(data).get("choices") or []:
+                    piece = (choice.get("delta") or {}).get("content")
+                    if piece:
+                        pieces.append(piece)
+                        got = True
+                    if choice.get("finish_reason"):
+                        finish = choice["finish_reason"]
+                if got and on_delta is not None:
+                    on_delta("".join(pieces))
             if finish != "stop":
                 raise ServerError("truncated", f"finish_reason {finish!r}")
             return "".join(pieces)
@@ -191,9 +206,7 @@ class LlamaServer:
             raise
         except (socket.timeout, TimeoutError):
             raise ServerError("timeout", "request timed out")
-        except urllib.error.URLError as exc:
-            if isinstance(exc.reason, (socket.timeout, TimeoutError)):
-                raise ServerError("timeout", "request timed out")
-            raise ServerError("server", str(exc))
-        except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:
+        except (OSError, http.client.HTTPException, ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:
             raise ServerError("server", f"bad reply: {exc}")
+        finally:
+            conn.close()           # also ends llama-server's generation when we leave early

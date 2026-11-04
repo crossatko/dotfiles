@@ -96,7 +96,7 @@ function acc(chars, bases, mark) { for (var i = 0; i < chars.length; i++) accent
 acc("ÁÉÍÓÚÝ", "AEIOUY", "acute"); acc("áéóúý", "aeouy", "acute"); accented["í"] = ["ı", "acute"];
 acc("ČĚŇŘŠŽĎŤ", "CENRSZDT", "caron"); acc("ěčňřšž", "ecnrsz", "caron");
 accented["Ů"] = ["U", "ring"]; accented["ů"] = ["u", "ring"];
-accented["ď"] = ["d", "apos", 5, 0]; accented["ť"] = ["t", "apos", 3, 0];
+accented["ď"] = ["d", "apos", 4, 0]; accented["ť"] = ["t", "apos", 3, 0];
 
 // a character's glyph (and mark); characters the font lacks fall back to their base letter without the accent (ö -> o), else null
 function glyphOf(ch) {
@@ -107,11 +107,11 @@ function glyphOf(ch) {
     }
     return g ? { g: g, a: a } : null;
 }
-// advance in columns (width + 1 gap); an apostrophe sticks out to the right
+// advance in columns (width + 1 gap); an accented letter is as wide as its base letter (an apostrophe sits in the gap column or inside the
+// glyph), so fixing a letter never changes the layout
 function advance(ch) {
     var o = glyphOf(ch);
-    if (!o) return 0;
-    return Math.max(o.g.w, o.a && o.a[1] === "apos" ? o.a[2] + 1 : 0) + 1;
+    return o ? o.g.w + 1 : 0;
 }
 function hasMark(ch) { return !!accented[ch]; }
 function top(g) { return g.rows.findIndex(function (r) { return r.indexOf("1") >= 0; }); }

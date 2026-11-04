@@ -31,14 +31,17 @@ prefs (`../quickshell/DiacriticsPrefs.qml`).
 ## Service
 
 - Socket `$XDG_RUNTIME_DIR/diacritics.sock`, one JSON line per request (`fix`, `state`, `status`), `subscribe` streams
-  `{"event":"state","state":"idle|loading|working|done|failed|unsupported","text":...,"fixed":...}` (text only while working; `fixed` on
-  done = the fixed text, and while working = the part finished so far, see below).
+  `{"event":"state","state":"idle|loading|working|done|failed|unsupported","text":...,"fixed":...}` (`text` only while working, and
+  only in the first `working` event and in the one a late subscriber gets on joining; the partial events carry just `fixed`;
+  `fixed` on done = the fixed text, and while working = the part finished so far, see below). Every subscriber has its own
+  writer thread and a bounded queue: a reader that stalls (a write takes over 2 s) or falls far behind is dropped and never
+  holds up the fix.
   After done, failed or unsupported the state returns to idle after 1.2 s.
 - The reply is read as a stream (SSE). While working the service sends `working` events with `fixed` = the fixed text so far as plain
   text: whole words only (the last unfinished word is held back), at most every 60 ms and only when a whole new word is complete.
   HTML fragments: an unfinished tag or character reference is cut off and the plain text derived from the rest, so `fixed` is plain
   text there too. The first `working` event has no `fixed`; a late subscriber gets the current partial. All guards apply to the
-  finished reply as before (`finish_reason` must be `stop`, whitespace restored at the end), and the final text is the same as
+  finished reply (`finish_reason` must be `stop`, whitespace restored at the end), and the final text is the same as
   without streaming. The pill uses the partial words to flare the marks while the model works.
 - `llama-server` starts on the first fix (state loading), is restarted when it died or the model preference changed,
   and is stopped after `idle_timeout_s` without a fix (0 or negative = never). Flags: `-ngl 99 -c 8192 --no-webui

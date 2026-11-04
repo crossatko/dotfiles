@@ -11,6 +11,7 @@ import Quickshell.Io
 //   text    the text being fixed (sent while working; kept until the next idle)
 //   fixed   the fixed text, when the service sends it (field `fixed` of a state event): while working the whole words finished so far
 //           (partial, grows), on done the whole fixed text; cleared when a run starts
+//   partial `fixed` while working, "" in every other state (set before `fixed` and `state` change, so the finished text is never seen as a partial)
 //   qs ipc call diacritics-client status
 Singleton {
     id: root
@@ -25,6 +26,8 @@ Singleton {
     property string state: ""
     property string text: ""
     property string fixed: ""
+    property string partial: ""     // `fixed` while the state is working, "" in every other state (updated before `fixed` and `state`, so a
+                                    // listener never sees the finished text as a partial)
 
     Socket {
         id: sock
@@ -38,6 +41,7 @@ Singleton {
             root.state = ""
             root.text = ""
             root.fixed = ""
+            root.partial = ""
         }
         parser: SplitParser {
             onRead: line => {
@@ -64,11 +68,13 @@ Singleton {
 
     function handle(e) {
         const s = String(e.state || "")
+        if (s !== "working") partial = ""                                      // the finished text is never a partial
         if (s === "idle") { text = ""; fixed = "" }
         else {
-            if (s === "working" && state !== "working") fixed = ""            // a new run (the same text again): no result of the last one
-            if (typeof e.text === "string" && e.text !== "" && e.text !== text) { text = e.text; fixed = "" }   // a new text: the old result is gone
+            if (s === "working" && state !== "working") { fixed = ""; partial = "" }   // a new run (the same text again): no result of the last one
+            if (typeof e.text === "string" && e.text !== "" && e.text !== text) { text = e.text; fixed = ""; partial = "" }   // a new text: the old result is gone
             if (typeof e.fixed === "string") fixed = e.fixed
+            if (s === "working") partial = fixed
         }
         state = s
     }

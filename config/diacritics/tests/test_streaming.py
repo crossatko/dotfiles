@@ -1,7 +1,9 @@
 """Streaming reply: llama.complete against a fake SSE server, and the service's partial events. Run: python3 -m unittest discover -s config/diacritics/tests"""
+import http.client
 import http.server
 import json
 import os
+import socket
 import sys
 import threading
 import time
@@ -22,9 +24,10 @@ FINAL = "".join(PIECES)
 class Fake(http.server.ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, pieces, finish="stop", delay=0.0, die_after=None):
+    def __init__(self, pieces, finish="stop", delay=0.0, die_after=None, cut_after=None, done_line=True, close_header=False):
         super().__init__(("127.0.0.1", 0), Handler)
         self.pieces, self.finish, self.delay, self.die_after = pieces, finish, delay, die_after
+        self.cut_after, self.done_line, self.close_header = cut_after, done_line, close_header
         self.requests, self.disconnected, self.finished = [], threading.Event(), threading.Event()
         threading.Thread(target=self.serve_forever, daemon=True).start()
 
@@ -47,6 +50,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Transfer-Encoding", "chunked")
+        if s.close_header:
+            self.send_header("Connection", "close")
+            self.close_connection = True
         self.end_headers()
         try:
             self.chunk({"choices": [{"delta": {"role": "assistant", "content": None}}]})
@@ -54,12 +60,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if s.die_after is not None and i == s.die_after:
                     self.connection.close()
                     return
+                if s.cut_after is not None and i == s.cut_after:   # a chunk that promises more bytes than arrive
+                    self.wfile.write(b"ff\r\ndata: {\"choices\": [{\"delta\": {\"con")
+                    self.wfile.flush()
+                    self.connection.shutdown(socket.SHUT_RDWR)
+                    return
                 time.sleep(s.delay)
                 self.chunk({"choices": [{"index": 0, "delta": {"content": p}, "finish_reason": None}]})
             self.chunk({"choices": [{"index": 0, "delta": {}, "finish_reason": s.finish}]})
             self.chunk({"choices": [], "usage": {"completion_tokens": len(s.pieces)}})
-            self.chunk("data: [DONE]")
-            self.wfile.write(b"0\r\n\r\n")
+            if s.done_line:
+                self.chunk("data: [DONE]")
+                self.wfile.write(b"0\r\n\r\n")
             s.finished.set()
         except OSError:
             s.disconnected.set()
@@ -129,6 +141,28 @@ class Complete(unittest.TestCase):
         with self.assertRaises(ServerError) as cm:
             llama_for(f).complete("sys", SRC)
         self.assertIn(cm.exception.code, ("truncated", "server"))
+
+    def test_chunk_cut_mid_way_is_a_server_error(self):
+        f = self.fake(PIECES, cut_after=5)
+        with self.assertRaises(ServerError) as cm:
+            llama_for(f).complete("sys", SRC)
+        self.assertEqual(cm.exception.code, "server")
+
+    def test_reply_with_connection_close(self):                 # llama-server answers like this; the socket reference must survive
+        f = self.fake(PIECES, close_header=True)
+        self.assertEqual(llama_for(f).complete("sys", SRC), FINAL)
+
+    def test_complete_reply_needs_no_done_line(self):
+        f = self.fake(PIECES, done_line=False)
+        self.assertEqual(llama_for(f).complete("sys", SRC), FINAL)
+
+    def test_total_timeout_is_exact(self):
+        f = self.fake(PIECES * 5, delay=0.08)
+        t0 = time.monotonic()
+        with self.assertRaises(ServerError) as cm:
+            llama_for(f).complete("sys", SRC, timeout=0.4)
+        self.assertEqual(cm.exception.code, "timeout")
+        self.assertLess(time.monotonic() - t0, 0.4 + 0.15)
 
     def test_toolong_before_any_request(self):
         f = self.fake(PIECES)
@@ -231,6 +265,47 @@ class Partials(unittest.TestCase):
         svc.set_partial("zzz")                                  # ignored outside working
         self.assertEqual(json.loads(svc.event())["fixed"], "á b č")
 
+    def subscribe(self, svc):
+        a, b = socket.socketpair()
+        a.sendall(b'{"op":"subscribe"}\n')
+        threading.Thread(target=svc.handle, args=(b,), daemon=True).start()
+        a.settimeout(3)
+        return a, a.makefile("rb")
+
+    def test_text_only_in_the_first_working_event_and_for_late_subscribers(self):
+        svc = Service("/nonexistent", load_prefs=lambda: prefs.Prefs())
+        early, ef = self.subscribe(svc)
+        self.assertEqual(json.loads(ef.readline())["state"], "idle")
+        svc.set_state("working", "a b c d")
+        svc.set_partial("á b")
+        svc.set_partial("á b č")
+        evs = [json.loads(ef.readline()) for _ in range(3)]
+        self.assertEqual(evs[0], {"event": "state", "state": "working", "text": "a b c d"})
+        self.assertEqual(evs[1], {"event": "state", "state": "working", "fixed": "á b"})
+        self.assertEqual(evs[2], {"event": "state", "state": "working", "fixed": "á b č"})
+        late, lf = self.subscribe(svc)
+        self.assertEqual(json.loads(lf.readline()),
+                         {"event": "state", "state": "working", "text": "a b c d", "fixed": "á b č"})
+        svc.set_state("done", fixed="á b č d")
+        self.assertEqual(json.loads(ef.readline()), {"event": "state", "state": "done", "fixed": "á b č d"})
+        early.close()
+        late.close()
+
+    def test_a_stalled_subscriber_does_not_block_the_fix(self):
+        svc = Service("/nonexistent", load_prefs=lambda: prefs.Prefs())
+        stuck, _ = self.subscribe(svc)                          # never reads
+        time.sleep(0.1)
+        svc.set_state("working", "x " * 10)
+        t0 = time.monotonic()
+        for i in range(3000):
+            svc.set_partial("y" * 2000 + f" {i}")
+        self.assertLess(time.monotonic() - t0, 1.0)
+        svc.set_state("done", fixed="z")                        # the other subscribers still get everything
+        ok, of = self.subscribe(svc)
+        self.assertEqual(json.loads(of.readline())["state"], "done")
+        stuck.close()
+        ok.close()
+
     def test_first_working_event_has_no_fixed(self):
         svc = Service("/nonexistent", load_prefs=lambda: prefs.Prefs())
         svc.set_state("working", "a b")
@@ -249,6 +324,39 @@ class Partials(unittest.TestCase):
             self.assertNotIn("<", p)
             self.assertNotIn("&", p)
             self.assertEqual(p.split(), final_words[:len(p.split())])
+
+    def test_chunk_cut_mid_way_ends_failed_not_working(self):
+        reply, ev = self.run_fix(PIECES, cut_after=8)
+        self.assertEqual(reply, {"ok": False, "error": "server"})
+        self.assertEqual(ev[-1][1], "failed")
+
+    def test_unexpected_exception_ends_failed(self):
+        f = Fake(PIECES)
+        self.fakes.append(f)
+        ev = []
+        svc = service(f, ev)
+        svc.server_factory = lambda m: type("S", (), {"alive": lambda s: True, "stop": lambda s: None, "model": m,
+                                                      "start": lambda s, log=None: None,
+                                                      "complete": lambda s, *a, **k: (_ for _ in ()).throw(http.client.IncompleteRead(b"x"))})()
+        self.assertEqual(svc.fix(SRC), {"ok": False, "error": "server"})
+        self.assertEqual(svc.state, "failed")
+        self.assertFalse(svc.fix_lock.locked())
+
+    def test_pushed_failed_replaces_a_stuck_working_state(self):
+        svc = Service("/nonexistent", load_prefs=lambda: prefs.Prefs())
+        svc.set_state("working", "a b")                         # no fix is running
+        a, b = socket.socketpair()
+        a.sendall(b'{"op":"state","state":"failed"}\n')
+        svc.handle(b)
+        self.assertEqual(svc.state, "failed")
+        a.close()
+        svc.fix_lock.acquire()                                  # a fix is running: the push is refused
+        svc.set_state("working", "a b")
+        c, d = socket.socketpair()
+        c.sendall(b'{"op":"state","state":"failed"}\n')
+        svc.handle(d)
+        self.assertEqual(svc.state, "working")
+        c.close()
 
     def test_server_dies_mid_stream_is_failed(self):
         reply, ev = self.run_fix(PIECES, die_after=8)
@@ -269,6 +377,9 @@ class Hold(unittest.TestCase):
         self.assertEqual(finished_words("<p>Ahoj &am", True), "Ahoj")
         self.assertEqual(finished_words("<p>Ahoj &amp; svete", True), "Ahoj &")
         self.assertEqual(finished_words('<a href="https://x.example/?a=1&b=2">Ahoj sv', True), "Ahoj")
+        self.assertEqual(finished_words("<p>R&D a dalsi slova", True), "R&D a dalsi")
+        self.assertEqual(finished_words("<p>R&D a dalsi &", True), "R&D a dalsi")
+        self.assertEqual(finished_words("<p>Ahoj &#26", True), "Ahoj")
         self.assertEqual(finished_words("<ul><li>jedna</li><li>dva", True), "- jedna\n-")
 
 

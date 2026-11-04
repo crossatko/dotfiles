@@ -5,7 +5,8 @@ Protocol: newline-delimited JSON, one request per connection except subscribe.
     {"op":"fix","text":"..."}        -> {"ok":true,"text":"..."} | {"ok":false,"error":"timeout|server|empty|busy|toolong|truncated"}
     {"op":"state","state":"unsupported"|"failed"}   set a transient state (the key flow, for terminals and failures)
     {"op":"subscribe"}               stream {"event":"state","state":"idle|loading|working|done|failed|unsupported",
-                                     "text":"<the text being fixed, only while working>",
+                                     "text":"<the text being fixed: in the first working event and in what a late subscriber
+                                     gets, not in the later partial events>",
                                      "fixed":"<while working: the part of the fixed text finished so far (whole words only,
                                      plain text, absent until the first word); on done: the fixed text>"}; the current state first
     {"op":"status"}                  -> {"ok":true,"state":"...","model_loaded":bool,"model":"file.gguf"}
@@ -20,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import re
 import signal
 import socket
@@ -35,6 +37,8 @@ IDLE_RETURN = 1.2
 QUEUE_WAIT = 30.0
 PUSHABLE = ("unsupported", "failed")
 PARTIAL_INTERVAL = 0.06  # s between partial `fixed` events while working
+SEND_TIMEOUT = 2.0       # s one write to a subscriber may take before it is dropped
+QUEUE_MAX = 256          # events a subscriber may be behind
 
 
 default_socket = paths.socket_path
@@ -72,12 +76,52 @@ def finished_words(reply: str, html: bool = False) -> str:
         i = reply.rfind("<")
         if i >= 0 and ">" not in reply[i:]:
             reply = reply[:i]
-        j = reply.rfind("&")
-        if j > reply.rfind(">") and ";" not in reply[j:] and not reply[j:].isspace():
-            reply = reply[:j]
+        m = re.search(r"&#?[A-Za-z0-9]*$", reply)   # an unfinished character reference at the very end
+        if m:
+            reply = reply[:m.start()]
         reply = htmlmode.to_plain(reply)
     m = re.search(r"\s\S*$", reply)
     return reply[:m.start()] if m else ""
+
+
+class Subscriber:
+    """One subscribed connection with its own writer thread and a bounded queue: the fix never waits for a slow reader. A reader
+    that stalls (SEND_TIMEOUT on one write) or falls QUEUE_MAX events behind is dropped."""
+
+    def __init__(self, conn: socket.socket, on_dead):
+        self.conn, self.on_dead = conn, on_dead
+        self.q: queue.Queue = queue.Queue(maxsize=QUEUE_MAX)
+        conn.settimeout(SEND_TIMEOUT)
+        threading.Thread(target=self.run, daemon=True).start()
+
+    def push(self, data: bytes) -> bool:
+        """Never blocks; False = the reader is too far behind (the caller drops it)."""
+        try:
+            self.q.put_nowait(data)
+            return True
+        except queue.Full:
+            return False
+
+    def run(self) -> None:
+        while True:
+            data = self.q.get()
+            if data is None:
+                return
+            try:
+                self.conn.sendall(data)
+            except OSError:
+                self.on_dead(self)
+                return
+
+    def close(self) -> None:
+        try:
+            self.q.put_nowait(None)
+        except queue.Full:
+            pass
+        try:
+            self.conn.close()
+        except OSError:
+            pass
 
 
 class Service:
@@ -88,18 +132,22 @@ class Service:
         self.server = None
         self.state, self.text, self.fixed = "idle", "", ""
         self.gen = 0
-        self.subs: list[socket.socket] = []
-        self.lock = threading.Lock()      # state, subscribers
+        self.subs: list[Subscriber] = []
+        self.lock = threading.Lock()      # state, subscribers (held only to queue events, never for a socket write)
+        self.dead_lock = threading.Lock()  # subs list edits from writer threads
         self.fix_lock = threading.Lock()  # one fix at a time; also guards the server process
         self.last_used = time.monotonic()
         self.stopping = threading.Event()
 
     # state ------------------------------------------------------------------------------------------------------
 
-    def event(self) -> bytes:
+    def event(self, partial: bool = False) -> bytes:
+        """The current state as one event line. While working the original `text` is in every full event (the first one and what a
+        late subscriber gets); a `partial` event carries only `fixed`."""
         ev = {"event": "state", "state": self.state}
         if self.state == "working":
-            ev["text"] = self.text
+            if not partial:
+                ev["text"] = self.text
             if self.fixed:
                 ev["fixed"] = self.fixed
         elif self.state == "done":
@@ -112,16 +160,23 @@ class Service:
             self.gen += 1
             gen = self.gen
             data = self.event()
-            for s in list(self.subs):
-                try:
-                    s.sendall(data)
-                except OSError:
-                    self.subs.remove(s)
-                    s.close()
+            self.broadcast(data)
         if state in ("done", "failed", "unsupported"):
             t = threading.Timer(IDLE_RETURN, self.back_to_idle, (gen,))
             t.daemon = True
             t.start()
+
+    def broadcast(self, data: bytes) -> None:
+        """Queue `data` for every subscriber (self.lock held); one that is too far behind is dropped."""
+        for sub in list(self.subs):
+            if not sub.push(data):
+                self.drop(sub)
+
+    def drop(self, sub: Subscriber) -> None:
+        with self.dead_lock:
+            if sub in self.subs:
+                self.subs.remove(sub)
+        sub.close()
 
     def set_partial(self, fixed: str) -> None:
         """While working: the fixed text finished so far, sent to the subscribers (late ones get it with the state)."""
@@ -129,13 +184,8 @@ class Service:
             if self.state != "working":
                 return
             self.fixed = fixed
-            data = self.event()
-            for s in list(self.subs):
-                try:
-                    s.sendall(data)
-                except OSError:
-                    self.subs.remove(s)
-                    s.close()
+            data = self.event(partial=True)
+            self.broadcast(data)
 
     def partial_sink(self, html: bool):
         """The on_delta callback of a request: sends the whole words finished so far, at most every PARTIAL_INTERVAL and only
@@ -191,9 +241,9 @@ class Service:
                     print("diacritics: markup changed by the model, result dropped", file=sys.stderr, flush=True)
                     self.set_state("failed")
                     return {"ok": False, "error": "markup"}
-            except (ServerError, OSError) as exc:
+            except Exception as exc:    # whatever goes wrong, the state must end in failed
                 if not isinstance(exc, ServerError):
-                    exc = ServerError("server", str(exc))
+                    exc = ServerError("server", f"{type(exc).__name__}: {exc}")
                 print(f"diacritics: {exc.code}: {exc}", file=sys.stderr, flush=True)
                 if exc.code != "empty" and self.server is not None and not self.server.alive():
                     self.server = None
@@ -202,6 +252,8 @@ class Service:
             self.set_state("done", fixed=htmlmode.to_plain(result) if html else result)
             return {"ok": True, "text": result}
         finally:
+            if self.state in ("loading", "working"):    # left by something that is not an Exception: never stay stuck
+                self.set_state("failed")
             self.last_used = time.monotonic()
             self.fix_lock.release()
 
@@ -238,16 +290,17 @@ class Service:
             if op == "fix" and isinstance(req.get("text"), str):
                 reply = self.fix(req["text"], "html" if req.get("format") == "html" else "text")
             elif op == "state" and req.get("state") in PUSHABLE:
-                if self.state not in ("loading", "working"):
+                if self.state not in ("loading", "working") or not self.fix_lock.locked():   # (a state stuck without a fix is replaced)
                     self.set_state(req["state"])
                 reply = {"ok": True}
             elif op == "status":
                 reply = self.status()
             elif op == "subscribe":
+                sub = Subscriber(conn, self.drop)
                 with self.lock:
-                    conn.settimeout(2)
-                    conn.sendall(self.event())
-                    self.subs.append(conn)
+                    sub.push(self.event())
+                    with self.dead_lock:
+                        self.subs.append(sub)
                 keep = True
                 return
             else:
