@@ -13,6 +13,7 @@ flow (`diacritics run`), the pill and the Settings page live elsewhere and talk 
 | `lib/diacritics/client.py` | socket client; starts `diacritics.service` when nothing listens |
 | `lib/diacritics/prefs.py` | reads the Settings file |
 | `prompt.txt` | system prompt, a plain file; `install.sh` links it to `~/.local/share/diacritics/prompt.txt` |
+| `prompt-html.txt` | system prompt for `"format":"html"` requests (an HTML fragment: only the text content is fixed); linked next to `prompt.txt` |
 | `tests/` | unit tests without a model (`python3 -m unittest discover -s config/diacritics/tests`) |
 | `../systemd/user/diacritics.service` | user unit (`diacritics serve`), no `[Install]`: started on demand |
 

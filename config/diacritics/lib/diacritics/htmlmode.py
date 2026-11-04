@@ -104,3 +104,33 @@ def to_plain(html: str) -> str:
         return re.sub(r"<[^>]*>", "", html)
     text = "".join(p.out)
     return re.sub(r"\n[ ]+", "\n", re.sub(r"[ ]+\n", "\n", text)).strip("\n")
+
+
+class _Sequence(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.seq: list = []
+
+    def handle_starttag(self, tag, attrs):
+        self.seq.append(("start", tag, tuple(attrs)))
+
+    def handle_startendtag(self, tag, attrs):
+        self.seq.append(("startend", tag, tuple(attrs)))
+
+    def handle_endtag(self, tag):
+        self.seq.append(("end", tag))
+
+
+def tag_sequence(html: str) -> list:
+    """Every tag of the fragment in order (kind, name, attributes), for checking that a fix left the markup alone."""
+    p = _Sequence()
+    p.feed(html)
+    p.close()
+    return p.seq
+
+
+def same_markup(before: str, after: str) -> bool:
+    try:
+        return tag_sequence(before) == tag_sequence(after)
+    except Exception:  # noqa: BLE001 - unparsable: do not trust it
+        return False

@@ -46,9 +46,17 @@ def prompt_file() -> str:
     return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "prompt.txt")
 
 
-def read_prompt() -> str:
+def prompt_file_html() -> str:
+    """The system prompt for HTML fragments: DIACRITICS_PROMPT_HTML, else prompt-html.txt in the data dir, else the repo copy."""
+    path = os.environ.get("DIACRITICS_PROMPT_HTML") or os.path.join(data_dir(), "prompt-html.txt")
+    if os.path.exists(path) or os.environ.get("DIACRITICS_PROMPT_HTML"):
+        return path
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "prompt-html.txt")
+
+
+def read_prompt(fmt: str = "text") -> str:
     try:
-        with open(prompt_file(), encoding="utf-8") as f:
+        with open(prompt_file_html() if fmt == "html" else prompt_file(), encoding="utf-8") as f:
             return f.read().rstrip("\n")
     except OSError as exc:
         raise ServerError("server", f"prompt: {exc}")

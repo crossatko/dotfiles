@@ -25,6 +25,7 @@ import sys
 import threading
 import time
 
+from . import htmlmode
 from . import prefs as prefs_mod
 from .llama import LlamaServer, ServerError, read_prompt
 
@@ -108,7 +109,8 @@ class Service:
         self.server = self.server_factory(model)
         self.server.start(log_file())
 
-    def fix(self, text: str) -> dict:
+    def fix(self, text: str, fmt: str = "text") -> dict:
+        html = fmt == "html"
         if not text.strip():
             return {"ok": True, "text": text}
         if not self.fix_lock.acquire(timeout=QUEUE_WAIT):
@@ -116,11 +118,15 @@ class Service:
         try:
             try:
                 self.ensure_server(self.load_prefs().model)
-                self.set_state("working", text)
-                reply = self.server.complete(read_prompt(), text.strip())
+                self.set_state("working", htmlmode.to_plain(text) if html else text)
+                reply = self.server.complete(read_prompt(fmt), text.strip())
                 if not reply.strip():
                     raise ServerError("empty")
                 result = restore_whitespace(text, reply)
+                if html and not htmlmode.same_markup(text, result):
+                    print("diacritics: markup changed by the model, result dropped", file=sys.stderr, flush=True)
+                    self.set_state("failed")
+                    return {"ok": False, "error": "markup"}
             except (ServerError, OSError) as exc:
                 if not isinstance(exc, ServerError):
                     exc = ServerError("server", str(exc))
@@ -129,7 +135,7 @@ class Service:
                     self.server = None
                 self.set_state("failed")
                 return {"ok": False, "error": exc.code}
-            self.set_state("done", fixed=result)
+            self.set_state("done", fixed=htmlmode.to_plain(result) if html else result)
             return {"ok": True, "text": result}
         finally:
             self.last_used = time.monotonic()
@@ -166,7 +172,7 @@ class Service:
             except ValueError:
                 req, op = {}, None
             if op == "fix" and isinstance(req.get("text"), str):
-                reply = self.fix(req["text"])
+                reply = self.fix(req["text"], "html" if req.get("format") == "html" else "text")
             elif op == "state" and req.get("state") in PUSHABLE:
                 if self.state not in ("loading", "working"):
                     self.set_state(req["state"])
