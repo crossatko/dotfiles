@@ -5,7 +5,8 @@ Protocol: newline-delimited JSON, one request per connection except subscribe.
     {"op":"fix","text":"..."}        -> {"ok":true,"text":"..."} | {"ok":false,"error":"timeout|server|empty|busy"}
     {"op":"state","state":"unsupported"|"failed"}   set a transient state (the key flow, for terminals and failures)
     {"op":"subscribe"}               stream {"event":"state","state":"idle|loading|working|done|failed|unsupported",
-                                     "text":"<the text being fixed, only while working>"}; the current state first
+                                     "text":"<the text being fixed, only while working>",
+                                     "fixed":"<the fixed text, only on done>"}; the current state first
     {"op":"status"}                  -> {"ok":true,"state":"...","model_loaded":bool,"model":"file.gguf"}
 
 llama-server starts on the first fix (state loading), is restarted when it died or the model preference changed, and
@@ -57,7 +58,7 @@ class Service:
         self.load_prefs = load_prefs
         self.server_factory = server_factory
         self.server = None
-        self.state, self.text = "idle", ""
+        self.state, self.text, self.fixed = "idle", "", ""
         self.gen = 0
         self.subs: list[socket.socket] = []
         self.lock = threading.Lock()      # state, subscribers
@@ -71,11 +72,13 @@ class Service:
         ev = {"event": "state", "state": self.state}
         if self.state == "working":
             ev["text"] = self.text
+        elif self.state == "done":
+            ev["fixed"] = self.fixed
         return json.dumps(ev, ensure_ascii=False).encode() + b"\n"
 
-    def set_state(self, state: str, text: str = "") -> None:
+    def set_state(self, state: str, text: str = "", fixed: str = "") -> None:
         with self.lock:
-            self.state, self.text = state, text
+            self.state, self.text, self.fixed = state, text, fixed
             self.gen += 1
             gen = self.gen
             data = self.event()
@@ -126,7 +129,7 @@ class Service:
                     self.server = None
                 self.set_state("failed")
                 return {"ok": False, "error": exc.code}
-            self.set_state("done")
+            self.set_state("done", fixed=result)
             return {"ok": True, "text": result}
         finally:
             self.last_used = time.monotonic()

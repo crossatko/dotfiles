@@ -19,7 +19,7 @@ flow (`diacritics run`), the pill and the Settings page live elsewhere and talk 
 ## Behaviour
 
 - Socket `$XDG_RUNTIME_DIR/diacritics.sock`, one JSON line per request (`fix`, `state`, `status`), `subscribe` streams
-  `{"event":"state","state":"idle|loading|working|done|failed|unsupported","text":...}` (text only while working).
+  `{"event":"state","state":"idle|loading|working|done|failed|unsupported","text":...,"fixed":...}` (text only while working, fixed only on done).
   After done, failed or unsupported the state returns to idle after 1.2 s.
 - `llama-server` starts on the first fix (state loading), is restarted when it died or the model preference changed,
   and is stopped after `idle_timeout_s` without a fix (0 or negative = never). Flags: `-ngl 99 -c 4096 --no-webui
