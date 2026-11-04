@@ -230,6 +230,7 @@ FillerWordsSection 1.0 FillerWordsSection.qml
 ReplacementsSection 1.0 ReplacementsSection.qml
 ReplacementRow 1.0 ReplacementRow.qml
 WordChip 1.0 WordChip.qml
+WrapChoice 1.0 WrapChoice.qml
 WordListEditor 1.0 WordListEditor.qml
 singleton PttPrefs 1.0 PttPrefs.qml
 singleton PttShortcuts 1.0 PttShortcuts.qml

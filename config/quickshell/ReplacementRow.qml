@@ -16,6 +16,8 @@ ColumnLayout {
     property string lang: entry.lang
     property string problem: ""
     spacing: Theme.gapTight
+    // many languages: the choice does not fit beside the fields, it wraps on a line of its own below them
+    readonly property bool manyLangs: DictationWords.replLangsFor(lang).length > 4
 
     Layout.fillWidth: true
 
@@ -69,6 +71,7 @@ ColumnLayout {
             Connections { target: typedBox.input; function onTextChanged() { if (rr.problem !== "" && typedBox.text !== rr.entry.typed) rr.problem = "" } }
         }
         Segmented {
+            visible: !rr.manyLangs
             objectNames: values.map(v => "repl-lang-" + v + "-" + rr.index)
             values: DictationWords.replLangsFor(rr.lang)
             labels: DictationWords.replLabelsFor(rr.lang)
@@ -87,6 +90,17 @@ ColumnLayout {
             outerRadius: Theme.radiusPage; inset: 9
             onClicked: if (rr.isNew) rr.add(); else DictationWords.removeReplacement(rr.index)
         }
+    }
+    WrapChoice {
+        visible: rr.manyLangs
+        Layout.fillWidth: true; Layout.preferredWidth: 100
+        objectNames: values.map(v => "repl-lang-" + v + "-" + rr.index)
+        values: DictationWords.replLangsFor(rr.lang)
+        labels: DictationWords.replLabelsFor(rr.lang)
+        current: rr.lang
+        outerRadius: Theme.radiusPage; inset: 9
+        segHeight: 26
+        onPicked: v => { rr.lang = v; if (!rr.isNew) rr.commit() }
     }
     Label {
         objectName: "repl-problem-" + rr.index

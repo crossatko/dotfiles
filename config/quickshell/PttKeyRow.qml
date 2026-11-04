@@ -15,6 +15,7 @@ SettingRow {
     property real statusMaxW: 300      // the status text; its InfoTip follows it
 
     title: entry.label
+    titleWrap: true                    // "Haitian Creole → English" wraps in the title column
     readonly property string saved: PttPrefs.keysOf(entry.name)
     readonly property var check: PttPrefs.check(entry.name, field.text)
     readonly property bool pending: field.text.trim() !== "" && check.keys !== saved

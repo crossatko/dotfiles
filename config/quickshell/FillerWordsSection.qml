@@ -18,14 +18,23 @@ ColumnLayout {
         detail: DictationWords.fillersCustom ? "edited" : ""
         InfoTip { text: "Sounds removed from what you dictate, whole words only, per language. Keep it to real filler sounds: a word that is also a word of the language (such as Czech “no”) would vanish from your text." }
     }
-    Repeater {
-        model: DictationWords.langs
-        WordListEditor { id: wl; required property string modelData; title: D.name(wl.modelData); titleWidth: sec.titleWidth; lang: wl.modelData }
+    AdvancedFold {
+        objectName: "fold-fillers"
+        visible: DictationWords.langs.length > 0
+        label: DictationWords.langs.length + (DictationWords.langs.length === 1 ? " language" : " languages")
+        count: DictationWords.langs.length
+        Repeater {
+            model: DictationWords.langs
+            WordListEditor { id: wl; required property string modelData; title: D.name(wl.modelData); titleWidth: sec.titleWidth; lang: wl.modelData }
+        }
     }
-    Label {
+    SettingRow {
         visible: DictationWords.langs.length === 0
-        text: "Select a language above to edit its filler words."
-        color: Theme.muted; font.pixelSize: Theme.fontCaption
+        titleWidth: sec.titleWidth
+        Label {
+            text: "Select a language above to edit its filler words."
+            color: Theme.muted; font.pixelSize: Theme.fontCaption
+        }
     }
     SettingRow {
         titleWidth: sec.titleWidth

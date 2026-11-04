@@ -4,15 +4,17 @@ import QtQuick.Layouts
 import "launcher/js/DictLangs.js" as D
 
 // A search field over whisper's languages (launcher/js/DictLangs.js): type a name or a code, the best matches that are
-// not chosen yet list below (LanguageOption), click one or press Enter (the first) to choose it: `picked(code)`. The
-// list shows while the field has text; Esc clears it. `skip` = the codes already chosen, `maxRows` the list's length.
+// best matches list below (LanguageOption; one already added shows as added and cannot be picked again), click one or
+// press Enter (the first not added) to choose it: `picked(code)`. The list shows while the field has text; Esc clears
+// it. `added` = the codes already chosen, `maxRows` the list's length.
 ColumnLayout {
     id: pick
-    property var skip: []
+    property var added: []
     property int maxRows: 6
     signal picked(string code)
 
-    readonly property var matches: box.text.trim() === "" ? [] : D.search(box.text, skip).slice(0, maxRows)
+    readonly property var matches: box.text.trim() === "" ? [] : D.search(box.text).slice(0, maxRows)
+    readonly property var firstFree: matches.find(m => added.indexOf(m.code) < 0)
     function choose(code) { pick.picked(code); box.text = "" }
 
     spacing: Theme.gapTight
@@ -24,7 +26,7 @@ ColumnLayout {
         implicitHeight: 26
         placeholder: "Add a language: name or code"
         outerRadius: Theme.radiusPage; inset: 9
-        onAccepted: if (pick.matches.length) pick.choose(pick.matches[0].code)
+        onAccepted: if (pick.firstFree) pick.choose(pick.firstFree.code)
         onCancelled: box.text = ""
     }
     Repeater {
@@ -33,9 +35,10 @@ ColumnLayout {
             id: lo
             required property var modelData
             required property int index
-            Layout.preferredWidth: 220
+            Layout.fillWidth: false; Layout.preferredWidth: 220
             code: lo.modelData.code; name: lo.modelData.name
-            highlighted: lo.index === 0
+            added: pick.added.indexOf(lo.modelData.code) >= 0
+            highlighted: lo.modelData === pick.firstFree
             onPicked: pick.choose(lo.modelData.code)
         }
     }

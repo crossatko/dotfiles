@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 
 // Settings > Voice: the push-to-talk keys (PttPrefs, one PttKeyRow each): Auto (always there) and per selected language
-// its own key and its "to English" key. No default keys: until one is set a
+// its own key and its "to English" key, folded when there are many (AdvancedFold). No default keys: until one is set a
 // Notice asks for them. Customise… holds the per-key click-through switches (the key / click also reaches the window;
 // on by default for a mouse button). `titleWidth` lines the rows up with the rest of the page.
 ColumnLayout {
@@ -25,9 +25,16 @@ ColumnLayout {
         Label { text: "No push-to-talk keys yet: choose one for Auto or for each language."; color: Theme.fgDim; font.pixelSize: Theme.fontSmall; wrapMode: Text.Wrap; Layout.fillWidth: true }
     }
 
-    Repeater {
-        model: PttPrefs.entries
-        PttKeyRow { id: kr; required property var modelData; entry: kr.modelData; titleWidth: sec.titleWidth }
+    AdvancedFold {
+        objectName: "fold-ptt-keys"
+        label: PttPrefs.entries.length + " keys"
+        detail: PttPrefs.entries.filter(e => PttPrefs.keysOf(e.name) !== "").length + " set"
+        count: PttPrefs.entries.length
+        bodySpacing: Theme.gapRow
+        Repeater {
+            model: PttPrefs.entries
+            PttKeyRow { id: kr; required property var modelData; entry: kr.modelData; titleWidth: sec.titleWidth }
+        }
     }
 
     AdvancedFold {

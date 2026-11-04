@@ -6,12 +6,18 @@ import QtQuick.Layouts
 // closed by default, so the page shows only its few primary choices. The head is an explicit action (a Btn-like row:
 // chevron + label + an optional `detail` badge such as "3 changed", never a sentence); the body unfolds with the fold motion (FoldBox:
 // Motion.moveMs, fades in; reduced motion = instant) and keeps the page's row layout (`titleWidth` for the rows).
+// Settings > Voice also folds its long lists with it (`count`, `label` = "17 languages").
 // Usage:   AdvancedFold { Layout.fillWidth: true;  PrefSlider { ... }  PrefToggle { ... } }
 ColumnLayout {
     id: af
     property string label: "Customise…"
     property string detail: ""
     property bool open: false
+    // a long list in a fold: with `count` >= 0 the fold starts open only when the list has at most `autoOpenMax` items
+    // (decided once at load, so adding an item never folds it under the user)
+    property int count: -1
+    property int autoOpenMax: 6
+    Component.onCompleted: if (count >= 0) open = count <= autoOpenMax
     property alias bodySpacing: body.spacing
     default property alias content: body.data
 
