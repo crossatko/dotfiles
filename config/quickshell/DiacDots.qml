@@ -7,8 +7,11 @@ import "launcher/js/DiacScene.js" as Scene
 //   kind    words (the text's real words) | neutral (generic loop, no text) | loading (the neutral loop, dim and slow)
 //   phase   working | done | failed | unsupported (the end states fade the picture, then draw their icon)
 //   text    the words to show (kind words)
-//   replayText  the fixed text (kind words): on phase done it is replayed first (Scene.replayPlan: every chunk with its marks flaring
-//           in, at most 1.5 s), then the check draws; a new phase (the next run) cancels the replay. `busy` = replay or check still
+//   partial the fixed words finished so far, while working (kind words): the first one starts the live view (Scene.liveNew; the chunks stop
+//           looping and follow the model: each word is put in, its marks flare one by one as it arrives), every update feeds the new words
+//   replayText  the fixed text (kind words): on phase done the live view carries on with what is left (Scene.liveFinish, at most 1.5 s), or,
+//           when there was no live view or it could not follow the text, every chunk is replayed with its marks flaring in (Scene.replayPlan);
+//           then the check draws; a new phase (the next run) cancels the replay. `busy` = replay or check still
 //           playing (the pill stays open for it, the service goes idle sooner)
 //   running the clock runs and the picture redraws (false while the pill is hidden)
 // restart() starts the working picture from its first chunk. Reduced motion (Motion.reduced): the end icons still draw, the working
@@ -18,6 +21,7 @@ Item {
     property string kind: "words"
     property string phase: "working"
     property string text: ""
+    property string partial: ""
     property string replayText: ""
     property bool running: true
 
@@ -32,11 +36,31 @@ Item {
     function startReplay() {
         replaying = false; replayed = false
         if (kind !== "words" || replayText === "" || Motion.reduced) return
+        if (live) {
+            const p = Scene.liveFinish(live, replayText, lT)
+            if (p) {
+                if (!p.items.length) return                    // everything flared already: the live picture stays, the check follows
+                replayPrep = live.prep; plan = p
+                rT = 0; replaying = true; replayed = true
+                return
+            }
+            live = null                                        // could not follow the text live: replay the fixed text whole
+        }
         replayPrep = Scene.prepare(replayText)
         plan = Scene.replayPlan(replayPrep)
         if (!plan.items.length) return
         rT = 0; replaying = true; replayed = true
     }
+
+    // the live view (see partial): null until the first fixed words arrive
+    property var live: null
+    property real lT: 0                   // its clock, seconds since restart()
+    onPartialChanged: {
+        if (partial === "" || phase !== "working" || kind !== "words" || Motion.reduced) return
+        if (!live) live = Scene.liveNew(text, lT)
+        if (live) { Scene.liveFeed(live, partial, lT); refresh() }
+    }
+    onTextChanged: live = null
 
     readonly property bool working: phase === "working" || replaying
     readonly property var prep: Scene.prepare(text)
@@ -48,17 +72,17 @@ Item {
     readonly property color accentLight: Qt.tint(Theme.accent, Qt.rgba(1, 1, 1, 0.3))
     readonly property color stateColor: Qt.tint(phase === "done" ? Theme.green : phase === "failed" ? Theme.red : Theme.fgDim, Qt.rgba(1, 1, 1, 0.25))
 
-    function restart() { replaying = false; replayed = false; t = 0; sT = 0; last = Date.now(); refresh() }
+    function restart() { replaying = false; replayed = false; live = null; lT = 0; t = 0; sT = 0; last = Date.now(); refresh() }
     function refresh() {
         dots.grid = replayed ? Scene.scene("replay", replaying ? "working" : phase, rT, sT, replayPrep, plan)
-                             : Scene.scene(kind, phase, t, sT, prep, null)
+                             : Scene.scene(kind, phase, live ? lT : t, sT, prep, null, live)
     }
     onPhaseChanged: {
         sT = 0
         if (phase === "done") startReplay(); else { replaying = false; replayed = false }
         refresh()
     }
-    onKindChanged: refresh()
+    onKindChanged: { live = null; refresh() }
     onPrepChanged: refresh()
 
     Timer {
@@ -71,6 +95,7 @@ Item {
             dd.last = now
             if (Motion.reduced && dd.working) return
             dd.t = (dd.t + dt) % 3600
+            dd.lT += dt
             if (dd.replaying) {
                 dd.rT += dt
                 if (dd.rT >= dd.plan.total) { dd.rT = dd.plan.total; dd.replaying = false; dd.sT = 0 }

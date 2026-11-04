@@ -9,7 +9,8 @@ import Quickshell.Io
 // every `retryMs`, and a lost connection clears the state.
 //   state   "" (not connected) | idle | loading | working | done | failed | unsupported
 //   text    the text being fixed (sent while working; kept until the next idle)
-//   fixed   the fixed text, when the service sends it (field `fixed` of a state event): the pill then shows it, marks and all
+//   fixed   the fixed text, when the service sends it (field `fixed` of a state event): while working the whole words finished so far
+//           (partial, grows), on done the whole fixed text; cleared when a run starts
 //   qs ipc call diacritics-client status
 Singleton {
     id: root
@@ -65,6 +66,7 @@ Singleton {
         const s = String(e.state || "")
         if (s === "idle") { text = ""; fixed = "" }
         else {
+            if (s === "working" && state !== "working") fixed = ""            // a new run (the same text again): no result of the last one
             if (typeof e.text === "string" && e.text !== "" && e.text !== text) { text = e.text; fixed = "" }   // a new text: the old result is gone
             if (typeof e.fixed === "string") fixed = e.fixed
         }

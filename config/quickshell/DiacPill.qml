@@ -7,10 +7,11 @@ import Quickshell.Wayland
 // past the bar edge of the focused monitor, overlay layer `qs-diacritics`, no input or keyboard focus, so typing always goes to the
 // focused window). It only renders what the service reports (DiacClient, subscribed to its socket; the pill never starts the service):
 //   loading      the model is starting: a dim, slow neutral loop
-//   working      the real words of the text being fixed as dot-matrix letters, swapped word over word, the diacritics flaring in one by
-//                one (DiacDots / DiacScene.js); with Settings > Diacritics "show text" off (DiacPillPrefs.showText) the generic neutral loop
-//   done         the service has the fixed text only now: a fast replay of it (every chunk, its marks flaring in one by one, at most
-//                1.5 s), then the dotted check; failed / unsupported: the picture lets go, then a dotted cross / no-sign draws in
+//   working      the real words of the text being fixed as dot-matrix letters, chunk by chunk; the service streams the fixed words as the
+//                model writes them and each word's diacritics flare in one by one as it arrives (DiacDots / DiacScene.js, live view; before the
+//                first word the chunks loop); with Settings > Diacritics "show text" off (DiacPillPrefs.showText) the generic neutral loop
+//   done         the replay carries on from the chunk on screen (what already flared is not played again; a fixed text that could not be
+//                followed live is replayed whole), at most 1.5 s, then the dotted check; failed / unsupported: the picture lets go, then a dotted cross / no-sign draws in
 //   idle         the card fades out (it keeps the last look while it does)
 // Fixed size (pillW x 64); the dot row is 300 x 50 (78 x 13 dots of 3.85 px), the base letters on the card's centre line.
 // Test hook: qs ipc call diacritics-pill status
@@ -37,9 +38,12 @@ PanelWindow {
         if (svc === "working" || svc === "loading") shownText = DiacClient.text
         if ((svc === "working" || svc === "loading") && !(before === "working" || before === "loading") || !motion.shown) dots.restart()
     }
-    // the service sends the text with `working` and the fixed text only with `done` (replayed then): while working show the original
+    // the service sends the text with `working` (the original is what the card shows) and the fixed text with `done`
     readonly property string liveText: DiacClient.text
     onLiveTextChanged: if (svc === "working" || svc === "loading") shownText = liveText
+
+    // while working the service streams the fixed words finished so far: DiacDots puts them in and flares their marks as they come
+    readonly property string livePartial: svc === "working" ? DiacClient.fixed : ""
 
     readonly property bool words: DiacPillPrefs.showText && shownText !== ""
 
@@ -96,6 +100,7 @@ PanelWindow {
             kind: pill.look === "loading" ? "loading" : pill.words ? "words" : "neutral"
             phase: pill.look === "loading" ? "working" : pill.look
             text: pill.words ? pill.shownText : ""
+            partial: pill.livePartial
             replayText: pill.replayText
         }
     }
