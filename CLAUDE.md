@@ -1,5 +1,12 @@
 # Global instructions (all projects)
 
+## How to write replies
+- Write in Simplified Technical English (ASD-STE100): short sentences, simple words, active voice, one idea per sentence.
+- Use the words from the repo's `GLOSSARY.md` when the repo has one (follow `GLOSSARY-MAP.md` if there are several).
+- Put the most important item first: a decision for the user, a risk, a failure, or something that needs action now.
+- Cut information the user does not need. No long background, no recap of work the user already saw.
+- Put questions last. List them one per line, each on its own row. Never hide a question inside a long sentence.
+
 ## Delegate to subagents
 - Delegate by default for real work; the main thread plans, delegates, verifies and reports. Investigation, multi-step edits, debugging, live-state probing, hypothesis loops, and anything spanning several files go to an agent.
 - Handle small, fast tasks inline when that costs fewer tokens than writing a brief and reading a report back: a known-file read, a grep, a one-line or few-line edit, a single quick command, a short check. Rule of thumb: if the brief would be longer than the work, do it inline. Never inline long-running or multi-step work, even if it looks like "just a quick look".
