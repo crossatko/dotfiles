@@ -33,9 +33,9 @@ Item {
 
         PageReset {
             objectName_: "btn-diacritics-reset"
-            dirty: DiacriticsPrefs.changed || DiacriticsWords.changed
-            info: "Key, model, idle time, ignored windows, corrections and the pill option, saved in diacritics.json and diacritics-words.json."
-            onReset: { DiacriticsPrefs.resetAll(); DiacriticsWords.resetAll() }
+            dirty: DiacriticsPrefs.changed
+            info: "Key, model, idle time, ignored windows and the pill option, saved in diacritics.json. Your corrections are kept."
+            onReset: DiacriticsPrefs.resetAll()
         }
     }
 }
