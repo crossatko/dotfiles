@@ -238,22 +238,29 @@ function liveFeed(live, fixedText, t) {
 }
 
 // the chunk's mark landing times relative to its entry E, whether all its words arrived, and when the last mark has landed
+// A chunk whose words all arrived before it came on screen (the display is behind the model) is "late": it plays faster
+// (LATE_START / LATE_GAP / LATE_HOLD), so the picture catches up instead of lagging behind the finished text.
+var LATE_START = SWAP, LATE_GAP = 0.03, LATE_HOLD = 0.07;
 function liveChunk(live, c, E) {
-    var lands = [], prev = MARK_START - MARK_GAP, ready = true, lastArr = 0, k;
+    var ready = true, lastArr = -1e9, k, ch, a;
     for (k = 0; k < c.chars.length; k++) {
-        var ch = c.chars[k], a = live.arr[ch.wi];
-        if (a === undefined) { ready = false; continue; }
-        lastArr = Math.max(lastArr, a - E);
-        if (ch.mark) { prev = Math.max(MARK_START, a - E, prev + MARK_GAP); lands.push(prev); }
+        a = live.arr[c.chars[k].wi];
+        if (a === undefined) ready = false; else lastArr = Math.max(lastArr, a - E);
     }
-    return { lands: lands, ready: ready, last: Math.max(lands.length ? prev : MARK_START, lastArr) };
+    var late = ready && lastArr <= 0, start = late ? LATE_START : MARK_START, gap = late ? LATE_GAP : MARK_GAP;
+    var lands = [], prev = start - gap;
+    for (k = 0; k < c.chars.length; k++) {
+        ch = c.chars[k]; a = live.arr[ch.wi];
+        if (a !== undefined && ch.mark) { prev = Math.max(start, a - E, prev + gap); lands.push(prev); }
+    }
+    return { lands: lands, ready: ready, hold: late ? LATE_HOLD : LIVE_HOLD, last: Math.max(lands.length ? prev : start, lastArr) };
 }
 
 // move on to the next chunk(s) while the one on screen is complete at clock t
 function liveStep(live, t) {
     var n = live.prep.chunks.length;
     while (live.ci < n - 1) {
-        var info = liveChunk(live, live.prep.chunks[live.ci], live.entry), end = live.entry + info.last + LIVE_HOLD;
+        var info = liveChunk(live, live.prep.chunks[live.ci], live.entry), end = live.entry + info.last + info.hold;
         if (!info.ready || t < end) break;
         live.ci++;
         live.entry = end;
@@ -265,7 +272,7 @@ function liveScene(live, t) {
     liveStep(live, t);
     var c = live.prep.chunks[live.ci], q = t - live.entry, info = liveChunk(live, c, live.entry);
     var alpha = F.clamp01(q / SWAP);
-    if (info.ready && live.ci < live.prep.chunks.length - 1) alpha = Math.min(alpha, 1 - F.clamp01((q - (info.last + LIVE_HOLD - SWAP)) / SWAP));
+    if (info.ready && live.ci < live.prep.chunks.length - 1) alpha = Math.min(alpha, 1 - F.clamp01((q - (info.last + info.hold - SWAP)) / SWAP));
     drawChunk(g, c, BASE_Y, q, alpha, 0, 0, info.lands);
     return g;
 }

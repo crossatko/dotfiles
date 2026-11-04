@@ -299,3 +299,13 @@ test("scene: with a live state the live picture is shown (and fades in the end s
     assert.ok(markN(g) > 0);
     assert.ok(lit(S.scene("words", "failed", 0.5, 0.05, null, null, live)) > 0);
 });
+
+test("live: a chunk whose words all arrived before it came on screen plays faster than one followed live", () => {
+    const early = S.liveNew("ctrnact ruzi", 0), late = S.liveNew("ctrnact ruzi", 0);
+    S.liveFeed(early, "čtrnáct růži", -1.0);                  // arrived before the chunk entered
+    S.liveFeed(late, "čtrnáct růži", 1.0);
+    const a = S.liveChunk(early, early.prep.chunks[0], 0), b = S.liveChunk(late, late.prep.chunks[0], 0);
+    assert.ok(a.hold < b.hold);
+    assert.ok(a.lands[1] - a.lands[0] < b.lands[1] - b.lands[0]);
+    assert.ok(a.last + a.hold < 0.4);
+});
