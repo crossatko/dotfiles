@@ -260,10 +260,13 @@ FloatingWindow {
                     }
                 }
 
-                Flickable {
+                Item {
+                  Layout.fillWidth: true
+                  Layout.fillHeight: true
+                  ScrollTrack { target: flick; z: 10; anchors { right: parent.right; top: parent.top; bottom: parent.bottom } }
+                  Flickable {
                     id: flick
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    anchors.fill: parent
                     clip: true
                     contentWidth: width
                     contentHeight: pageLoader.item ? (pageLoader.item as Item).implicitHeight : 0
@@ -275,7 +278,7 @@ FloatingWindow {
                     Reveal { id: pageReveal; target: pageLoader; rise: 10 }
                     Loader {
                         id: pageLoader
-                        width: flick.width
+                        width: flick.width - 12   // room for the scrollbar
                         active: win.shown
                         source: win.current.source
                         onLoaded: {
@@ -290,6 +293,7 @@ FloatingWindow {
                             win.focusPage()
                         }
                     }
+                  }
                 }
             }
         }

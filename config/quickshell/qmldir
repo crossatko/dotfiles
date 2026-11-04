@@ -173,6 +173,7 @@ FitLabel 1.0 FitLabel.qml
 PressFeedback 1.0 PressFeedback.qml
 GlideHighlight 1.0 GlideHighlight.qml
 Reveal 1.0 Reveal.qml
+ScrollTrack 1.0 ScrollTrack.qml
 OpenMotion 1.0 OpenMotion.qml
 MotionCard 1.0 MotionCard.qml
 FoldBox 1.0 FoldBox.qml

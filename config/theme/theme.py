@@ -5841,7 +5841,8 @@ def apply_status(**kw):
 
 def hyprpaper_wanted(mons, text=None):
     """{connector: (selector, image)} out/hyprpaper.conf asks for, per connected monitor: a block naming the connector
-    or `desc:<description>` wins over the catch-all `monitor =` block (which is set per connector)."""
+    or `desc:<description>` wins over the catch-all `monitor =` block (which is set per connector);
+    among several naming the same monitor the LAST wins (machine-local static_blocks first, per-monitor picks after)."""
     try:
         text = (OUT / "hyprpaper.conf").read_text() if text is None else text
     except OSError:
@@ -5850,7 +5851,7 @@ def hyprpaper_wanted(mons, text=None):
     res = {}
     for m in mons:
         own = [b for b in blocks if b[0] == m["name"] or (b[0].startswith("desc:") and b[0][5:].strip() and m["key"].startswith(b[0][5:].strip()))]
-        hit = own[0] if own else next((b for b in reversed(blocks) if not b[0]), None)
+        hit = own[-1] if own else next((b for b in reversed(blocks) if not b[0]), None)
         if hit:
             res[m["name"]] = (hit[0] or m["name"], hit[1])
     return res

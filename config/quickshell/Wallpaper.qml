@@ -12,7 +12,7 @@ import Quickshell.Io
 //                  "fit": "cover" | "contain" | "fill" | "tile", "w": px, "h": px (the file's own size, when known),
 //                  "pending": true (file not there yet) } ] }
 // Primary / links / "Follow primary" and machine-local blocks are already resolved into the rules by theme.py. A monitor
-// takes the first rule naming its connector or whose desc: prefix starts its key (Appearance.monitorKey), else the
+// takes the last rule naming its connector or whose desc: prefix starts its key (Appearance.monitorKey), else the
 // last catch-all (monitor ""): theme.py hyprpaper_wanted. A video wallpaper's rule is its still (mpvpaper plays above).
 // No file yet (a seeded out/, before the first theme.py render / apply) = the layer draws nothing and pathFor gives
 // Theme.wallpaper, cover. backend "hyprpaper" = the shell draws nothing either (`drawn` false). QS_WALLPAPER_FILE overrides the path (tests).
@@ -43,7 +43,7 @@ Singleton {
         for (const r of rules) {
             const m = r.monitor
             if (m === "") { any = r; continue }
-            if (!hit && (m === conn || (m.startsWith("desc:") && m.length > 5 && key.startsWith(m.slice(5).trim())))) hit = r
+            if ((m === conn || (m.startsWith("desc:") && m.length > 5 && key.startsWith(m.slice(5).trim())))) hit = r
         }
         const r = hit || any
         return r ? { path: r.path, fit: r.fit, w: r.w, h: r.h, pending: r.pending } : fallback()

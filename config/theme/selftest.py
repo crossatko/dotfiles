@@ -364,6 +364,8 @@ with tempfile.TemporaryDirectory() as d:
     mons = [{"name": "DP-9", "key": "Example Panel A"}, {"name": "DP-8", "key": "Example Panel B"}, {"name": "HDMI-A-9", "key": "Example TV"}]
     c_check("hyprpaper targets per output", theme.hyprpaper_wanted(mons, conf) == {"DP-9": ("DP-9", "/w/a.jpg"), "DP-8": ("desc:Example Panel B", "/w/b.jpg"),
                                                                                   "HDMI-A-9": ("HDMI-A-9", "/w/c.jpg")})
+    conf3 = conf + "\n\nwallpaper {\n    monitor = desc:Example Panel B\n    path = /w/d.jpg\n    fit_mode = cover\n}"
+    c_check("hyprpaper: a later block for the same monitor wins", theme.hyprpaper_wanted(mons, conf3)["DP-8"] == ("desc:Example Panel B", "/w/d.jpg"))
     # out/wallpaper.json (the shell's wallpaper layer): the same blocks, image sizes from the header, pending = not there yet
     for fmt, (w, h) in (("png", (37, 21)), ("jpg", (64, 40)), ("webp", (50, 30))):
         f = d / f"dims.{fmt}"
