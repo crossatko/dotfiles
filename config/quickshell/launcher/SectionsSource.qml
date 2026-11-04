@@ -17,10 +17,10 @@ import Quickshell.Io
 //     `twitch-qs-mpv vod <id>`, else mpv / xdg-open on https://www.twitch.tv/videos/<id>. Without the app the action opens
 //     https://www.twitch.tv/<login>/videos in the browser.
 //   screenshot / record: the former standalone menus. Rows start hypr/scripts/screenshot.sh <mode> /
-//     screenrec.sh <mode> --fps N --format F --audio|--no-audio. The launcher closes first (Launcher.runItem sets
+//     screenrec.sh <mode> --fps N --format F --audio-source off|desktop|mic|both. The launcher closes first (Launcher.runItem sets
 //     shown=false before run()), and the script starts after a short sleep so the layer is unmapped before slurp /
 //     the recorder; record also has a "Stop recording" row while one runs (screenrec.sh status) and option rows
-//     (frame rate, format, desktop audio) that stay open and save to $XDG_STATE_HOME/quickshell/screenrec.conf.
+//     (frame rate, format, audio source: off / desktop / microphone / both) that stay open and save to $XDG_STATE_HOME/quickshell/screenrec.conf.
 // Test hooks: $LAUNCHER_TWITCH_DIR replaces ~/code/crossatko/twitch-qs-mpv/bin; $QS_SHOT_SCRIPT / $QS_RECORD_SCRIPT
 // replace the capture scripts.
 QtObject {
@@ -64,7 +64,7 @@ QtObject {
         "screenshot":   { title: "Screenshot", glyph: "\ue105", sub: "Region, window or screen",   // camera
                           aliases: ["print", "grab", "snip", "capture"], words: ["screen", "region", "window", "monitor", "image"] },
         "record":       { title: "Record", glyph: "\ue128", sub: "Screen recording: region, window or screen",   // video
-                          aliases: ["screenrec", "video", "screencast", "recording", "capture"], words: ["screen", "region", "window", "monitor", "fps", "audio", "stop"] }
+                          aliases: ["screenrec", "video", "screencast", "recording", "capture"], words: ["screen", "region", "window", "monitor", "fps", "audio", "mic", "stop"] }
     })
 
     readonly property var items: Object.keys(sections).map(k => ({
@@ -185,7 +185,7 @@ QtObject {
                 let m = /^\s*Name: (.*)$/.exec(line); if (m) name = m[1]
                 m = /^\s*Description: (.*)$/.exec(line); if (m) desc = m[1]
             }
-            if (name === "" || (kind === "sound-in" && /\.monitor$/.test(name))) continue
+            if (name === "" || name === "screenrec_mix" || (kind === "sound-in" && /\.monitor$/.test(name))) continue
             const isCur = name === current
             const row = {
                 id: "sec:" + kind + ":" + name, name: shortName(desc === "" ? name : desc),
@@ -472,7 +472,14 @@ QtObject {
     property int lastRec: 0
     property int fps: 60                         // saved choices (screenrec.conf, shared with screenrec.sh)
     property string format: "mp4"
-    property bool audio: false
+    property string audio: "off"                 // off | desktop | mic | both
+    readonly property var audioSources: [
+        { id: "off",     name: "Off",                  glyph: "\ue129" },   // volume-off
+        { id: "desktop", name: "Desktop",              glyph: "\ue12b" },   // volume-high
+        { id: "mic",     name: "Microphone",           glyph: "\ue10f" },   // mic
+        { id: "both",    name: "Desktop + microphone", glyph: "\ue10f" }
+    ]
+    readonly property var audioInfo: audioSources.find(a => a.id === audio) || audioSources[0]
     property bool recording: false
 
     function modeRows(kind, prefix, verb) {
@@ -491,8 +498,8 @@ QtObject {
                    source: fps + " fps", glyph: "\ue1e7", transient: true, private: true })   // film
         out.push({ id: "sec:rec:opt:format", name: "Format", subtitle: "Enter switches between MP4 and WebM", kind: "rec-opt", opt: "format",
                    source: format === "mp4" ? "MP4" : "WebM", glyph: "\ue41d", transient: true, private: true })   // file-video
-        out.push({ id: "sec:rec:opt:audio", name: "Record desktop audio", subtitle: "Enter turns it " + (audio ? "off" : "on"), kind: "rec-opt", opt: "audio",
-                   source: audio ? "On" : "Off", glyph: audio ? "\ue12b" : "\ue129", transient: true, private: true })   // volume-high, volume-off
+        out.push({ id: "sec:rec:opt:audio", name: "Audio", subtitle: "Enter cycles off, desktop, microphone, both", kind: "rec-opt", opt: "audio",
+                   source: audioInfo.name, glyph: audioInfo.glyph, transient: true, private: true })
         return out
     }
     // row to highlight when a section opens: the last used mode (after the Stop row while recording)
@@ -505,7 +512,7 @@ QtObject {
     function setOption(opt) {
         if (opt === "fps") fps = fps === 60 ? 30 : 60
         else if (opt === "format") format = format === "mp4" ? "webm" : "mp4"
-        else if (opt === "audio") audio = !audio
+        else if (opt === "audio") audio = audioSources[(audioSources.findIndex(a => a.id === audio) + 1) % audioSources.length].id
         saver.restart()
     }
 
@@ -518,7 +525,7 @@ QtObject {
     }
     property var saver: Timer {
         interval: 400
-        onTriggered: prefs.setText("fps=" + src.fps + "\nformat=" + src.format + "\naudio=" + (src.audio ? 1 : 0) + "\n")
+        onTriggered: prefs.setText("fps=" + src.fps + "\nformat=" + src.format + "\naudio=" + src.audio + "\n")
     }
     property var prefs: FileView {
         path: src.prefsDir + "/screenrec.conf"
@@ -530,7 +537,8 @@ QtObject {
                 const k = line.slice(0, i).trim(), v = line.slice(i + 1).trim()
                 if (k === "fps" && ["30", "60"].includes(v)) src.fps = parseInt(v)
                 else if (k === "format" && ["mp4", "webm"].includes(v)) src.format = v
-                else if (k === "audio" && (v === "0" || v === "1")) src.audio = v === "1"
+                else if (k === "audio" && ["off", "desktop", "mic", "both"].includes(v)) src.audio = v
+                else if (k === "audio" && (v === "0" || v === "1")) src.audio = v === "1" ? "desktop" : "off"
             }
             src.updated()
         }
@@ -585,7 +593,7 @@ QtObject {
         if (item.kind === "shot") { lastShot = item.modeIndex; later([shotScript, item.mode]); return true }
         if (item.kind === "rec") {
             lastRec = item.modeIndex
-            later([recScript, item.mode, "--fps", String(fps), "--format", format, audio ? "--audio" : "--no-audio"])
+            later([recScript, item.mode, "--fps", String(fps), "--format", format, "--audio-source", audio])
             return true
         }
         if (item.kind === "rec-stop") { Quickshell.execDetached([recScript, "stop"]); return true }

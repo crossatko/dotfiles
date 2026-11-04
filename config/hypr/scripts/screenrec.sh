@@ -10,15 +10,19 @@
 #
 #   opts: --fps 30|60      constant frame rate (wf-recorder -r)
 #         --format mp4|webm   mp4 = H.264 + AAC, webm = AV1 (GPU) or VP9 (CPU) + Opus
-#         --audio | --no-audio   desktop audio (monitor of the default PipeWire/Pulse sink)
+#         --audio-source off|desktop|mic|both   what to record: nothing, desktop audio (monitor of the default
+#                                PipeWire/Pulse sink), the primary microphone (default source), or both mixed
+#                                (a temporary null sink fed by two loopbacks, unloaded when the recording ends)
+#         --audio | --no-audio | --mic   shorthands for desktop | off | mic
 # Options not given come from the menu's saved choices, $XDG_STATE_HOME/quickshell/screenrec.conf
-# (key=value lines fps=, format=, audio=; values are whitelisted, the file is never executed), else
-# 60 fps, mp4, no audio. Invalid values are rejected (exit 2).
+# (key=value lines fps=, format=, audio=; audio is off|desktop|mic|both, or 0/1 = off/desktop; values are
+# whitelisted, the file is never executed), else 60 fps, mp4, no audio. Invalid values are rejected (exit 2).
 #
 # Every start mode is a toggle: while a recording runs, any of them stops it instead. Stop = SIGINT to the
 # recorder so it finalizes the file; this script waits for it and then sends a "Recording saved"
 # notification. State: $XDG_RUNTIME_DIR/screenrec/state (key=value: pid, comm, wrapper, started, file,
-# mode, audio, enc, codec, fps, format), written once the recorder runs and removed when it exits. A stale
+# mode, audio = off|desktop|mic|both, modules = ids of the temporary Pulse modules of
+# "both", enc, codec, fps, format), written once the recorder runs and removed when it exits. A stale
 # file (recorder gone) is cleaned up by the next call. Quickshell's bar chip reads the same file.
 #
 # Encoder: GPU by default. The render node of the GPU that drives the recorded monitor is used (sysfs
@@ -56,7 +60,7 @@ notify() { # notify <urgency> <summary> <body>
 
 usage() {
 	[ -n "${1:-}" ] && echo "${0##*/}: $1" >&2
-	echo "usage: ${0##*/} region|window|output [--fps 30|60] [--format mp4|webm] [--audio|--no-audio] | stop | status" >&2
+	echo "usage: ${0##*/} region|window|output [--fps 30|60] [--format mp4|webm] [--audio-source off|desktop|mic|both] | stop | status" >&2
 	exit 2
 }
 
@@ -69,6 +73,34 @@ read_state() {
 	[ -n "${st[pid]:-}" ]
 }
 
+# audio source word from a CLI/pref value (0/1 = off/desktop); empty = invalid
+norm_audio() {
+	case $1 in
+	0 | off) echo off ;;
+	1 | desktop) echo desktop ;;
+	mic | both) echo "$1" ;;
+	esac
+}
+
+# temporary Pulse modules of the "both" mix (null sink + two loopbacks); the sink name tags them, so leftovers
+# of a recording whose wrapper died are found by name too
+MIX=screenrec_mix
+unload_mix() {
+	local id name rest
+	while IFS=$'\t' read -r id name rest; do
+		case $name in
+		module-null-sink | module-loopback) [[ $rest == *"$MIX"* ]] && pactl unload-module "$id" 2>/dev/null ;;
+		esac
+	done < <(pactl list short modules 2>/dev/null)
+	return 0
+}
+# unload exactly these module ids (comma separated); the wrapper uses it so it never touches a newer recording's mix
+unload_ids() {
+	local id
+	for id in ${1//,/ }; do [[ $id =~ ^[0-9]+$ ]] && pactl unload-module "$id" 2>/dev/null; done
+	return 0
+}
+
 # defaults from the recording menu's saved choices; unknown keys and values are ignored, nothing is executed
 read_prefs() {
 	local k v
@@ -78,7 +110,7 @@ read_prefs() {
 		case $k in
 		fps) [ -z "$fps" ] && [[ $v =~ ^(30|60)$ ]] && fps=$v ;;
 		format) [ -z "$format" ] && [[ $v =~ ^(mp4|webm)$ ]] && format=$v ;;
-		audio) [ -z "$audio" ] && [[ $v =~ ^[01]$ ]] && audio=$v ;;
+		audio) [ -z "$audio" ] && audio=$(norm_audio "$v") ;;
 		esac
 	done < <(head -c 4096 -- "$PREFS" 2>/dev/null)
 }
@@ -121,6 +153,7 @@ stop_recording() {
 	for i in $(seq 30); do [ -f "$STATE" ] || return 0; sleep 0.1; done
 	if [ -z "$wrapper" ] || ! [ -d "/proc/$wrapper" ]; then
 		rm -f "$STATE"
+		unload_mix
 		[ -s "${st[file]}" ] && saved_notice "${st[file]}" "${st[started]}"
 	fi
 }
@@ -232,8 +265,14 @@ cmd=${1:-region}
 fps="" format="" audio=""
 while [ $# -gt 0 ]; do
 	case $1 in
-	--audio) audio=1 ;;
-	--no-audio) audio=0 ;;
+	--audio) audio=desktop ;;
+	--no-audio) audio=off ;;
+	--mic) audio=mic ;;
+	--audio-source=*) audio=$(norm_audio "${1#*=}"); [ -n "$audio" ] || usage "--audio-source must be off, desktop, mic or both" ;;
+	--audio-source)
+		[ $# -ge 2 ] || usage "--audio-source needs a value"
+		audio=$(norm_audio "$2"); [ -n "$audio" ] || usage "--audio-source must be off, desktop, mic or both"
+		shift ;;
 	--fps=*) fps=${1#*=} ;;
 	--fps) [ $# -ge 2 ] || usage "--fps needs a value"; fps=$2; shift ;;
 	--format=*) format=${1#*=} ;;
@@ -267,11 +306,12 @@ fi
 
 # options not given: the menu's saved choices, then the built-in defaults
 read_prefs
-fps=${fps:-60} format=${format:-mp4} audio=${audio:-0}
+fps=${fps:-60} format=${format:-mp4} audio=${audio:-off}
 
 # one selection at a time: a second press while slurp is up does nothing (Escape cancels slurp)
 exec 9>"$LOCK"
 flock -n 9 || exit 0
+unload_mix        # leftovers of a recording whose wrapper died
 
 need "$RECORDER" wf-recorder
 need hyprctl hyprland
@@ -353,14 +393,40 @@ fi
 mapfile -t codec < <(enc_args "$enc" "$dev")
 args=(-y -f "$file" -r "$fps")
 if [ -n "$geom" ]; then args+=(-g "$geom"); else args+=(-o "$output"); fi
-if [ "$audio" = 1 ]; then
-	sink=$(pactl get-default-sink 2>/dev/null)
-	if [ -n "$sink" ]; then
-		args+=(--audio="$sink.monitor")
+modules=""
+load_mod() { # load_mod <module args...>; prints the module id
+	local id; id=$(pactl load-module "$@" 2>/dev/null) && [[ $id =~ ^[0-9]+$ ]] && { modules+="${modules:+,}$id"; return 0; }
+	return 1
+}
+if [ "$audio" != off ]; then
+	sink=$(pactl get-default-sink 2>/dev/null) src=$(pactl get-default-source 2>/dev/null)
+	rec_src=""
+	case $audio in
+	desktop) [ -n "$sink" ] && rec_src=$sink.monitor ;;
+	mic) rec_src=$src ;;
+	both)
+		if [ -n "$sink" ] && [ -n "$src" ]; then
+			if load_mod module-null-sink sink_name=$MIX "sink_properties=device.description=$MIX" \
+				&& load_mod module-loopback "source=$sink.monitor" sink=$MIX latency_msec=50 \
+				&& load_mod module-loopback "source=$src" sink=$MIX latency_msec=50; then
+				rec_src=$MIX.monitor
+			else
+				unload_ids "$modules"; modules=""
+			fi
+		fi
+		;;
+	esac
+	if [ -n "$rec_src" ]; then
+		args+=(--audio="$rec_src")
 		if [ "$format" = webm ]; then args+=(-C libopus); else args+=(-C aac); fi
 	else
-		audio=0
-		notify normal "Recording without audio" "No default audio output found"
+		case $audio in
+		mic) why="No default microphone found" ;;
+		both) why="No default audio output or microphone found" ;;
+		*) why="No default audio output found" ;;
+		esac
+		audio=off modules=""
+		notify normal "Recording without audio" "$why"
 	fi
 fi
 
@@ -379,19 +445,23 @@ comm=$(cat "/proc/$pid/comm" 2>/dev/null)
 if [ -z "$comm" ] || ! running "$pid"; then
 	wait "$pid"
 	rm -f "$file"
+	unload_ids "$modules"
 	notify critical "Recording failed" "$(tail -n 3 "$LOG")"
 	exit 1
 fi
 started=$(date +%s)
-printf 'pid=%s\ncomm=%s\nwrapper=%s\nstarted=%s\nfile=%s\nmode=%s\naudio=%s\nenc=%s\ncodec=%s\nfps=%s\nformat=%s\n' \
-	"$pid" "$comm" "$$" "$started" "$file" "$cmd" "$audio" "$enc" "$(codec_of "$enc")" "$fps" "$format" \
+printf 'pid=%s\ncomm=%s\nwrapper=%s\nstarted=%s\nfile=%s\nmode=%s\naudio=%s\nmodules=%s\nenc=%s\ncodec=%s\nfps=%s\nformat=%s\n' \
+	"$pid" "$comm" "$$" "$started" "$file" "$cmd" "$audio" "$modules" "$enc" "$(codec_of "$enc")" "$fps" "$format" \
 	>"$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
 exec 9>&-
 
 wait "$pid"
 rc=$?
-# only remove the state file if it is still ours (a new recording may have started meanwhile)
-read_state && [ "${st[pid]}" = "$pid" ] && rm -f "$STATE"
+# under the lock (a starting recording holds it until its state file is written): if a new recording has taken
+# over meanwhile, its start already removed our leftovers and Pulse may have reused our module ids, so unload nothing
+exec 9>"$LOCK"; flock 9
+if read_state && [ "${st[pid]}" != "$pid" ]; then :; else rm -f "$STATE"; unload_ids "$modules"; fi
+exec 9>&-
 
 # told only now so the notification isn't in the video
 [ -n "$fallback" ] && notify normal "Recorded with the CPU encoder" "GPU encoding unavailable: $fallback"

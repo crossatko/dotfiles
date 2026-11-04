@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Io
 
 // Screen recording (~/.config/hypr/scripts/screenrec.sh, SHIFT+Print & co.): the script writes key=value
-// lines (pid, comm, started, file, mode, audio) to $XDG_RUNTIME_DIR/screenrec/state while its recorder runs
+// lines (pid, comm, started, file, mode, audio = off|desktop|mic|both) to $XDG_RUNTIME_DIR/screenrec/state while its recorder runs
 // and removes the file when it exits. Polled once a second (the file comes and goes, so a watch alone
 // misses its creation) while a recording chip is in a bar layout, one poller for all bars; the recorder's
 // /proc/<pid>/comm is checked too, so a recorder that died without its wrapper cleaning up doesn't leave

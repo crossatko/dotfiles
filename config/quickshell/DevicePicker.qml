@@ -13,7 +13,8 @@ DropSelect {
     readonly property var pwCurrent: isSink ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource
     readonly property string wantClass: isSink ? "Audio/Sink" : "Audio/Source"
     readonly property var devices: Pipewire.nodes.values.filter(n =>   // qmllint disable missing-property
-        !n.isStream && n.isSink === isSink && n.properties && n.properties["media.class"] === wantClass)
+        !n.isStream && n.isSink === isSink && n.properties && n.properties["media.class"] === wantClass
+        && n.name !== "screenrec_mix")   // the temporary mix sink of screen recording
 
     function label(n) { return n ? (n.description || n.nickname || n.name) : "No device" }
 

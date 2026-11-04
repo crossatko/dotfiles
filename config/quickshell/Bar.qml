@@ -304,7 +304,8 @@ PanelWindow {
             onClicked: bar.run([Recording.script, "stop"])
             StatusDot { tint: recChip.ink.red; pulse: Recording.recording; Layout.alignment: Qt.AlignVCenter }
             BarLabel { text: Recording.elapsed; color: ink.red }
-            BarIcon { visible: Recording.recording && Recording.state.audio === "1"; text: Icons.volumeHigh; color: ink.fgDim }
+            BarIcon { visible: Recording.recording && ["1", "desktop", "both"].includes(Recording.state.audio); text: Icons.volumeHigh; color: ink.fgDim }
+            BarIcon { visible: Recording.recording && ["mic", "both"].includes(Recording.state.audio); text: Icons.mic; color: ink.fgDim }
         }
     }
     // virtual machines (VmService.qml): only while a VM runs or a VM download / install prep is in progress; icon + count of
