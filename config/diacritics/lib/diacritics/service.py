@@ -2,7 +2,7 @@
 
 Protocol: newline-delimited JSON, one request per connection except subscribe.
 
-    {"op":"fix","text":"..."}        -> {"ok":true,"text":"..."} | {"ok":false,"error":"timeout|server|empty|busy"}
+    {"op":"fix","text":"..."}        -> {"ok":true,"text":"..."} | {"ok":false,"error":"timeout|server|empty|busy|toolong|truncated"}
     {"op":"state","state":"unsupported"|"failed"}   set a transient state (the key flow, for terminals and failures)
     {"op":"subscribe"}               stream {"event":"state","state":"idle|loading|working|done|failed|unsupported",
                                      "text":"<the text being fixed, only while working>",
@@ -26,22 +26,20 @@ import sys
 import threading
 import time
 
-from . import htmlmode
+from . import htmlmode, paths
 from . import prefs as prefs_mod
-from .llama import LlamaServer, ServerError, read_prompt
+from .llama import LlamaServer, ServerError, check_fits, read_prompt
 
 IDLE_RETURN = 1.2
 QUEUE_WAIT = 30.0
 PUSHABLE = ("unsupported", "failed")
 
 
-def default_socket() -> str:
-    return os.environ.get("DIACRITICS_SOCK") or os.path.join(
-        os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "diacritics.sock")
+default_socket = paths.socket_path
 
 
 def log_file() -> str:
-    return os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "diacritics-llama.log")
+    return os.path.join(paths.runtime_dir(), "diacritics-llama.log")
 
 
 def restore_whitespace(text: str, reply: str) -> str:
@@ -129,9 +127,11 @@ class Service:
             return {"ok": False, "error": "busy"}
         try:
             try:
+                system = read_prompt(fmt)
+                check_fits(system, text.strip())  # before the model loads: too long means nothing is sent
                 self.ensure_server(self.load_prefs().model)
                 self.set_state("working", htmlmode.to_plain(text) if html else text)
-                reply = self.server.complete(read_prompt(fmt), text.strip())
+                reply = self.server.complete(system, text.strip())
                 if not reply.strip():
                     raise ServerError("empty")
                 result = restore_whitespace(text, reply)

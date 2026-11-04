@@ -14,13 +14,14 @@ import time
 import urllib.error
 import urllib.request
 
-FLAGS = ["-ngl", "99", "-c", "4096", "--no-webui", "--jinja", "--reasoning", "off", "-fa", "on"]
+CONTEXT = 8192  # tokens for prompt + input + reply together
+FLAGS = ["-ngl", "99", "-c", str(CONTEXT), "--no-webui", "--jinja", "--reasoning", "off", "-fa", "on"]
 START_TIMEOUT = 180.0  # a cold 12B load from disk
 REQUEST_TIMEOUT = 90.0
 
 
 class ServerError(RuntimeError):
-    """code: server | timeout | empty"""
+    """code: server | timeout | empty | toolong | truncated"""
 
     def __init__(self, code: str, message: str = ""):
         super().__init__(message or code)
@@ -60,6 +61,28 @@ def read_prompt(fmt: str = "text") -> str:
             return f.read().rstrip("\n")
     except OSError as exc:
         raise ServerError("server", f"prompt: {exc}")
+
+
+# Rough token estimate, deliberately pessimistic: Czech text with diacritics can cost one token per 2 UTF-8 bytes, and
+# the reply (diacritics added) is about as long as the input, a little longer.
+BYTES_PER_TOKEN = 2
+REPLY_FACTOR = 1.3
+
+
+def estimate_tokens(text: str) -> int:
+    return -(-len(text.encode()) // BYTES_PER_TOKEN)
+
+
+def max_input_bytes(system: str) -> int:
+    """The longest input (UTF-8 bytes) whose prompt + input + reply fit the context."""
+    room = CONTEXT - estimate_tokens(system) - 64  # 64: chat template
+    return int(room / (1 + REPLY_FACTOR)) * BYTES_PER_TOKEN
+
+
+def check_fits(system: str, text: str) -> None:
+    """ServerError("toolong") when the text cannot fit the context together with the prompt and a reply of its length."""
+    if len(text.encode()) > max_input_bytes(system):
+        raise ServerError("toolong", f"{len(text.encode())} bytes, at most {max_input_bytes(system)}")
 
 
 def free_port() -> int:
@@ -124,17 +147,24 @@ class LlamaServer:
                 p.wait()
 
     def complete(self, system: str, text: str, timeout: float = REQUEST_TIMEOUT) -> str:
-        """The model's reply for `text`, verbatim."""
+        """The model's reply for `text`, verbatim. Only a reply that ended by itself (finish_reason "stop") counts: a cut-off
+        one (length, anything else) is ServerError("truncated"), it must never be pasted."""
+        check_fits(system, text)
         body = json.dumps({
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": text}],
-            "temperature": 0, "top_k": 1, "max_tokens": min(3000, max(512, 2 * len(text.encode()))),
+            "temperature": 0, "top_k": 1, "max_tokens": max(512, min(CONTEXT - estimate_tokens(system) - estimate_tokens(text) - 64,
+                                       int(REPLY_FACTOR * estimate_tokens(text)) + 256)),
         }).encode()
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/v1/chat/completions", data=body,
                                      headers={"Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 reply = json.load(r)
-            return reply["choices"][0]["message"]["content"] or ""
+            choice = reply["choices"][0]
+            content = choice["message"]["content"] or ""
+            if choice.get("finish_reason") != "stop":
+                raise ServerError("truncated", f"finish_reason {choice.get('finish_reason')!r}")
+            return content
         except (socket.timeout, TimeoutError):
             raise ServerError("timeout", "request timed out")
         except urllib.error.URLError as exc:
