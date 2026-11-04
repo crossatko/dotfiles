@@ -5041,7 +5041,17 @@ def apply_vesktop(cfg):
     write_atomic(sf, json.dumps(d, indent=4) + "\n")
 
 
+def linked_worktree():
+    """True when this theme.py lives in a linked git worktree (its repo root has a `.git` FILE, not a directory).
+    A worktree has its own empty out/, so deploying from it would point the machine's home links (gtk.css, ...) at a
+    folder that goes away with the worktree. THEME_ALLOW_WORKTREE=1 overrides it (developing the theme on purpose)."""
+    return not os.environ.get("THEME_ALLOW_WORKTREE") and (ROOT.parent.parent / ".git").is_file()
+
+
 def deploy(cfg, pal, mode=None):
+    if linked_worktree():
+        print("theme: linked git worktree, not deploying to the home directory (THEME_ALLOW_WORKTREE=1 overrides)")
+        return
     mode = mode or get_mode()
     link_omarchy()
     link("~/.config/gtk-3.0/gtk.css", HOST_OUT / "gtk3.css")  # gtk.css + glass for CSD GTK3 windows (Gecko excluded)

@@ -11,6 +11,13 @@
 #     default) or the host outputs (out/host: GTK, Kvantum, Brave) are missing. macOS never renders (theme.py exits there).
 # Never fails the git command. Skip step 2 and 3 once with THEME_RENDER_SKIP=1 git pull (THEME_SEED_ONLY=1: step 1 only).
 top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+# A linked worktree has its own empty out/ and would re-render there and point the machine's home links at it
+# (they dangle once the worktree is removed). THEME_ALLOW_WORKTREE=1 overrides.
+if [ -z "${THEME_ALLOW_WORKTREE:-}" ]; then
+	gd=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null)
+	cd_=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+	[ -n "$gd" ] && [ "$gd" != "$cd_" ] && exit 0
+fi
 seed="$top/config/theme/bin/theme-seed"
 theme="$top/config/theme/theme.py"
 out="$top/config/theme/out"
