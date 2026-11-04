@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "note": "Phrases whisper invents on silence or noise. Dropped only when the session had little voiced audio (Config.junk_voiced). Compared without case, diacritics and punctuation; an entry ending in ... also matches anything after it.",
+  "cs": [
+    "Děkuji.",
+    "Děkuji vám.",
+    "Děkuji za pozornost.",
+    "Děkujeme za pozornost.",
+    "Děkuji za sledování.",
+    "Děkujeme za sledování.",
+    "Díky.",
+    "Díky za sledování.",
+    "Na shledanou.",
+    "Titulky vytvořil ...",
+    "Titulky: ...",
+    "Titulky ...",
+    "Překlad: ...",
+    "Přeložil ...",
+    "Konec."
+  ],
+  "en": [
+    "Thank you.",
+    "Thank you very much.",
+    "Thank you for watching.",
+    "Thanks for watching.",
+    "Thanks for watching!",
+    "Thanks.",
+    "Bye.",
+    "Bye bye.",
+    "you",
+    "Please subscribe.",
+    "Subtitles by ...",
+    "Subtitled by ...",
+    "Translated by ...",
+    "Transcribed by ...",
+    "Amara.org ..."
+  ]
+}

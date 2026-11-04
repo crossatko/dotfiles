@@ -24,6 +24,7 @@ class FakeCapture:
 
     def start(self):
         def pump():
+            self.on_pcm(tone(0.1, 0.01))  # the room first (over the speech gate, 20 dB under the speech), so the tone is voiced
             while not self._stop.is_set():
                 self.on_pcm(tone(0.1))
                 time.sleep(0.01)

@@ -292,7 +292,7 @@ class Silence(unittest.TestCase):
 class TrailingSilence(unittest.TestCase):
     def test_a_pause_is_not_recognised_again_and_silence_is_trimmed(self):
         r = Scripted(["Hello there", "Hello there friend"], final="Hello there friend.")
-        d, rec, _ = make(r)
+        d, rec, _ = make(r, config=Config(trailing_space=False, pause_silence=0))  # no closing pass: only the pad is tested
         d.begin("en")
         speak(d, 2)
         for _ in range(4):  # two seconds of pause with the key held

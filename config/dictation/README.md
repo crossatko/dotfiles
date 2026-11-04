@@ -16,6 +16,7 @@ service core; the shell drives it: the three push-to-talk keys (Settings > Voice
 | `lib/dictation/whisper.py` | recognizer client for the worker; model and worker paths |
 | `lib/dictation/audio.py` | `pw-record` capture (PipeWire default source), `FileCapture` stand-in |
 | `lib/dictation/level.py` | noise-floor-aware level (the `level` events) and the voiced flag of the end-of-speech detector |
+| `lib/dictation/hallucinations.json` | stock phrases whisper invents on noise, dropped when little voiced audio |
 | `lib/dictation/inject.py` | `wtype` adapter, Hyprland focused-window probe |
 | `worker/dictation-whisper.c`, `worker/build.sh` | small C program that keeps both models loaded and answers requests on stdin/stdout |
 | `tests/` | unit tests (the seam: audio in, edit operations out, recorder injector) and an opt-in real-model test |
@@ -80,7 +81,7 @@ Events (one JSON object per line):
 | `preview` | `text` (whole current hypothesis; in translate mode the English preview), `typed` |
 | `edit` | `backspace`, `text`: an operation already applied to the focused field |
 | `pass` | `slot` (`live`/`final`), `ms`, `audio` seconds |
-| `final` | `text` typed this session (with its trailing space), `ms`; `retried: true` only when the final pass needed a retry |
+| `final` | `text` typed this session (with its trailing space; empty when nothing was typed), `ms` (0 when a session without speech ran no final pass); `retried: true` only when the final pass needed a retry |
 | `retry` | `what` (`final`), `message`, `code`: informational, the final pass failed and is being run again (see Behaviour) |
 | `aborted` | `reason` (`focus`: the focused window changed, typing stopped for the session; `inject`) |
 | `error` | `message`, `code` |
@@ -182,7 +183,14 @@ Shell: `dictation begin cs`, `dictation end`, `dictation listen`.
   past 13 a capital or accented letter was dropped (14 = BackSpace), letters became Ctrl chords (29) and F-key or
   keypad codes typed escape sequences.
 - Silence (no 32 ms frame above RMS 0.005 in the window) is never sent to the recognizer (whisper hallucinates on
-  silence).
+  silence). Nor is a session without clear speech: fewer than `min_voiced` (0.25 s) of voiced frames (at the speech
+  gate and 8 dB above the noise floor: breath, a key click or tap, room noise) runs no live and no final pass, types
+  nothing (no trailing space either) and ends with a normal `final` event with empty text. Whisper returns junk on such
+  audio every time (measured: `.`, `Thank you.`, `Titulky vytvořil JohnyX.` on 3 s of silence or noise, 30 of 30
+  tries). A pass whose text has no letter or digit (`.`, `...`, `♪`) is empty, and with less than `junk_voiced`
+  (0.5 s) of voiced audio the stock phrases of `hallucinations.json` (cs and en, `...` at the end = any rest) are
+  empty too; a clearly spoken `Thank you.` has more voiced audio and is typed. Limit: a breath loud and long enough
+  (over half a second above the room noise) counts as speech, so the phrase list no longer applies to it.
 - Levels (`level.py`): noise floor = a running minimum of the lightly smoothed frame level that follows drops at
   once and rises 1.5 dB/s, 0.3 dB/s while voiced (fluent speech never lifts it; digital zeros never move it); up to 6 dB above it is silence, exactly 0; above that the
   level is scaled against a slowly decaying running peak (at least 14 dB of range), eased with a smoothstep and

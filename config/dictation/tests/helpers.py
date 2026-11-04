@@ -12,7 +12,13 @@ from dictation.engine import SAMPLE_RATE, Recognition, Segment  # noqa: E402
 
 def tone(seconds, value=0.1):
     """Loud enough to pass the speech gate; the content does not matter to the scripted recognizers."""
-    return array.array("f", [value]).tobytes() * int(seconds * SAMPLE_RATE)
+    n = int(seconds * SAMPLE_RATE)
+    samples = array.array("f", [value]) * n
+    if seconds >= 1.0 and value >= 0.05:
+        # a real mic has a floor under the speech: the first frame is 20 dB lower (still over the speech gate), so the
+        # tone that follows is "voiced" (a constant level from the very first frame is indistinguishable from noise)
+        samples[:512] = array.array("f", [value * 0.1]) * 512
+    return samples.tobytes()
 
 
 def silence(seconds):

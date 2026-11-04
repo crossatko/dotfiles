@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import array
 import difflib
+import json
 import math
 import os
 import re
@@ -35,6 +36,7 @@ from typing import Callable, NamedTuple, Protocol
 from .level import LevelMeter
 
 SAMPLE_RATE = 16000
+HALLUCINATIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hallucinations.json")
 _BPS = 4  # bytes per float32 sample
 
 
@@ -99,6 +101,12 @@ class Config:
     level_frame: int = 512  # samples per published level (32 ms)
     speech_rms: float = 0.005  # a window with no frame this loud is silence and is never recognised
     silence_pad: float = 0.5  # seconds of silence kept around speech when trimming it
+    # Evidence of speech, counted in voiced frames (at the speech gate and above the noise floor, like the end-of-speech
+    # detector): less than min_voiced seconds and the session had no speech (breath, a key click, room noise): no pass,
+    # no final pass, nothing typed. With less than junk_voiced seconds the stock phrases whisper invents on noise
+    # (hallucinations.json) are dropped as well; a clearly spoken "Thank you." has more.
+    min_voiced: float = 0.25
+    junk_voiced: float = 0.5
 
 
 class NoCleanup:
@@ -140,6 +148,38 @@ def _norm(word: str) -> str:
     base = "".join(c for c in unicodedata.normalize("NFKD", word) if not unicodedata.combining(c)).casefold()
     stripped = base.strip("".join(chr(c) for c in range(0x21, 0x80) if not chr(c).isalnum()) + "…–—„“”‚‘’«»¿¡")
     return stripped or base
+
+
+def _plain(text: str) -> str:
+    """Words only: no case, diacritics or punctuation, single spaces."""
+    base = "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c)).casefold()
+    return " ".join("".join(c if c.isalnum() else " " for c in base).split())
+
+
+def _load_hallucinations() -> tuple:
+    """(exact phrases, prefixes) from hallucinations.json; an entry ending in ... is a prefix."""
+    try:
+        with open(HALLUCINATIONS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return frozenset(), ()
+    exact, prefixes = set(), []
+    for key, entries in data.items():
+        for entry in entries if key != "note" and isinstance(entries, list) else ():
+            if entry.rstrip().endswith(("...", "…")):
+                prefixes.append(_plain(entry))
+            else:
+                exact.add(_plain(entry))
+    return frozenset(exact), tuple(p for p in prefixes if p)
+
+
+_HALLUCINATIONS = _load_hallucinations()
+
+
+def _is_hallucination(text: str) -> bool:
+    plain = _plain(text)
+    exact, prefixes = _HALLUCINATIONS
+    return plain in exact or any(plain == p or plain.startswith(p + " ") for p in prefixes)
 
 
 def _lcp(a: list, b: list) -> int:
@@ -245,6 +285,7 @@ class _Session:
         self.level_acc = array.array("f")
         self.meter = LevelMeter()  # noise-floor-aware level for the pill and the voiced flag
         self.first_loud: int | None = None  # first frame at the speech gate
+        self.voiced_frames = 0  # frames that counted as speech (see Config.min_voiced)
         self.last_voiced: int | None = None  # last frame well above the noise floor (end-of-speech detector)
         self.pending_flush: tuple | None = None  # (typed, target, last_voiced, bare): what a pause would type
         self.bare: int | None = None  # index (in typed words) of the word a pause typed without its punctuation
@@ -335,6 +376,7 @@ class Dictation:
             # room is noisy (a quiet room's floor lies far under the gate: soft speech still counts there)
             if loud and (voiced or s.meter.floor is not None and s.meter.floor <= gate_db - QUIET_ROOM_DB):
                 s.last_voiced, s.floor_at_voiced = index, s.meter.floor
+                s.voiced_frames += 1
             self.emit({"event": "level", "value": round(value, 3)})
 
     def step(self) -> bool:
@@ -346,7 +388,7 @@ class Dictation:
         frame = cfg.level_frame
         with self._lock:
             total = len(s.pcm) // _BPS
-        if s.first_loud is None:
+        if s.first_loud is None or not self._has_voice(s, cfg.min_voiced):
             return False
         last_voiced = s.last_voiced  # read once: the capture thread moves it
         closing = self._closing_due(s, last_voiced)
@@ -448,7 +490,9 @@ class Dictation:
                 return s.typed
             with self._lock:
                 total = len(s.pcm) // _BPS
-            if total == 0 or not self._has_speech(s, 0, total):
+            if total == 0 or not self._has_speech(s, 0, total) or not self._has_voice(s, self.config.min_voiced):
+                # nothing was said (silence, breath, a key click): no final pass, nothing typed, a normal final event
+                self.emit({"event": "final", "text": s.typed, "ms": 0})
                 return s.typed
             start, end = self._speech_start(s), self._speech_end(s, total)
             with self._lock:
@@ -569,6 +613,9 @@ class Dictation:
         frame = self.config.level_frame
         return any(rms >= self.config.speech_rms for rms in s.levels[start // frame : -(-end // frame)])
 
+    def _has_voice(self, s: _Session, seconds: float) -> bool:
+        return s.voiced_frames * self.config.level_frame >= seconds * SAMPLE_RATE
+
     def _speech_end(self, s: _Session, total: int) -> int:
         """Sample after the last loud frame plus a short pad: trailing silence is where whisper hallucinates."""
         frame, pad = self.config.level_frame, int(self.config.silence_pad * SAMPLE_RATE)
@@ -589,8 +636,18 @@ class Dictation:
         """([(segment, words)], hold) after the cleanup stage, which sees the whole pass (phrases may span
         segments)."""
         raw = [_sanitize(_ANNOTATION.sub(" ", unicodedata.normalize("NFC", seg.text))).split() for seg in segments]
+        if self._junk(s, raw):
+            raw = [[] for _ in raw]
         cleaned, hold = self.cleanup.apply(raw, s.text_language)
         return [(seg, _sanitize(" ".join(ws)).split()) for seg, ws in zip(segments, cleaned)], hold
+
+    def _junk(self, s: _Session, raw: list) -> bool:
+        """A pass that is no text (only punctuation or symbols: '.', '...', '♪') or, with little voiced audio, only
+        a stock phrase whisper invents on noise ('Thank you.', 'Titulky vytvořil ...')."""
+        text = " ".join(w for ws in raw for w in ws)
+        if not any(c.isalnum() for c in text):
+            return True
+        return not self._has_voice(s, self.config.junk_voiced) and _is_hallucination(text)
 
     def _type(self, s: _Session, target: str) -> None:
         with self._type_lock:
