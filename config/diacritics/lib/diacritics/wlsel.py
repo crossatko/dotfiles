@@ -15,12 +15,15 @@ import array
 import base64
 import json
 import os
+import signal
 import socket
 import struct
 import sys
 
 MANAGERS = ("zwlr_data_control_manager_v1", "ext_data_control_manager_v1")
 DISPLAY_ID, REGISTRY_ID = 1, 2
+SETUP_TIMEOUT_S = 5.0  # a compositor that does not answer: give up (serving afterwards has no timeout)
+STDIN_TIMEOUT_S = 5.0
 
 
 class WlError(Exception):
@@ -46,6 +49,7 @@ class Conn:
             self.sock.connect(path)
         except OSError as e:
             raise WlError(f"cannot connect to {path}: {e}") from e
+        self.sock.settimeout(SETUP_TIMEOUT_S)
         self.buf = b""
         self.fds: list = []
         self.next_id = 1  # ids must be allocated one after the other (libwayland refuses gaps)
@@ -123,6 +127,7 @@ def serve(offers: dict, announce=None) -> None:
     c.send(mgr, 1, struct.pack("<II", device, seat))             # get_data_device
     c.send(device, 0, struct.pack("<I", source))                 # set_selection
     c.roundtrip(lambda *a: None)
+    c.sock.settimeout(None)
     if announce:
         announce()
     for obj, op, payload in c.events():
@@ -145,7 +150,9 @@ def serve(offers: dict, announce=None) -> None:
 
 def main() -> int:
     try:
+        signal.alarm(int(STDIN_TIMEOUT_S))  # the parent closes stdin right after writing; a stuck parent ends us
         raw = json.load(sys.stdin)
+        signal.alarm(0)
         offers = {m: base64.b64decode(b) for m, b in raw.items()}
         if not offers:
             raise WlError("nothing to offer")
