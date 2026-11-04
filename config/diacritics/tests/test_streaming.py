@@ -24,10 +24,10 @@ FINAL = "".join(PIECES)
 class Fake(http.server.ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, pieces, finish="stop", delay=0.0, die_after=None, cut_after=None, done_line=True):
+    def __init__(self, pieces, finish="stop", delay=0.0, die_after=None, cut_after=None, done_line=True, close_header=False):
         super().__init__(("127.0.0.1", 0), Handler)
         self.pieces, self.finish, self.delay, self.die_after = pieces, finish, delay, die_after
-        self.cut_after, self.done_line = cut_after, done_line
+        self.cut_after, self.done_line, self.close_header = cut_after, done_line, close_header
         self.requests, self.disconnected, self.finished = [], threading.Event(), threading.Event()
         threading.Thread(target=self.serve_forever, daemon=True).start()
 
@@ -50,6 +50,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Transfer-Encoding", "chunked")
+        if s.close_header:
+            self.send_header("Connection", "close")
+            self.close_connection = True
         self.end_headers()
         try:
             self.chunk({"choices": [{"delta": {"role": "assistant", "content": None}}]})
@@ -144,6 +147,10 @@ class Complete(unittest.TestCase):
         with self.assertRaises(ServerError) as cm:
             llama_for(f).complete("sys", SRC)
         self.assertEqual(cm.exception.code, "server")
+
+    def test_reply_with_connection_close(self):                 # llama-server answers like this; the socket reference must survive
+        f = self.fake(PIECES, close_header=True)
+        self.assertEqual(llama_for(f).complete("sys", SRC), FINAL)
 
     def test_complete_reply_needs_no_done_line(self):
         f = self.fake(PIECES, done_line=False)

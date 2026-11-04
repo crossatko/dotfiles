@@ -173,12 +173,13 @@ class LlamaServer:
         try:
             conn.request("POST", "/v1/chat/completions", body=body,
                          headers={"Content-Type": "application/json", "Accept": "text/event-stream", "Connection": "close"})
-            conn.sock.settimeout(remaining())
+            sock = conn.sock
+            sock.settimeout(remaining())
             r = conn.getresponse()
             if r.status != 200:
                 raise ServerError("server", f"HTTP {r.status}")
             while finish != "stop":          # a reply that ended by itself needs no more reads (not even the [DONE] line)
-                conn.sock.settimeout(remaining())   # every read is bounded by what is left of the whole request
+                sock.settimeout(remaining())   # every read is bounded by what is left of the whole request
                 raw = r.readline()
                 if not raw:
                     break
