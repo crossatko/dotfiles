@@ -20,11 +20,14 @@ import Quickshell
 // frame in which they changed.
 // Without solid_glass (Theme.glass false: stock Hyprland, other blur variant) the whole window is declared instead, so
 // the blur stays what the qs-.* layer rule (blur + ignore_alpha) gave before: an empty region would disable it.
+// `itemsOnly`: declare the glass items there too, for a window larger than its card (the dictation pill keeps room to
+// grow): the whole window would blur its empty part wherever no ignore_alpha rule masks it.
 Item {
     id: g
     required property Item root
     property bool active: true
     property bool hidden: false   // declare nothing at all (a surface that is fully transparent: no blurred box may stay behind)
+    property bool itemsOnly: false
     property int interval: 250
     property var items: []
     property var transforms: []   // per item: the Transform objects on it and its ancestors (collected at search time)
@@ -47,7 +50,7 @@ Item {
         const found = []
         if (g.hidden)
             found.length = 0
-        else if (Theme.glass)
+        else if (Theme.glass || (g.itemsOnly && Theme.glassKnown))
             g.find(g.root, found)
         else if (Theme.glassKnown)          // nothing until known: a whole-window region would flash as glass
             found.push(g.root)

@@ -33,16 +33,9 @@ PanelWindow {
     readonly property real topInset: gap + (edge === "top" ? BarConfig.insetOf(screen) : 0)
     readonly property real bottomInset: gap + (edge === "bottom" ? BarConfig.insetOf(screen) : 0)
     color: "transparent"
-    // -1 = ignore the monitor's reserved area (the pinned-video strip), so it stays in the screen corner; 0 = follow the bar
-    // (Settings > Bar). This window hops between screens: a zone changed in the same tick as the screen was not applied to the
-    // re-created layer surface, so it is set a moment after the screen / the option changed.
-    readonly property bool respectReserved: BarConfig.respectReserved(screen)
-    property int zone: -1
-    onRespectReservedChanged: zoneTimer.restart()
-    onScreenChanged: zoneTimer.restart()
-    Component.onCompleted: zone = respectReserved ? 0 : -1
-    Timer { id: zoneTimer; interval: 80; onTriggered: win.zone = win.respectReserved ? 0 : -1 }
-    exclusiveZone: zone
+    // follow the bar's reserved-area option (BarZone: -1 = the screen corner, 0 = inside the reserved area like the bar)
+    BarZone { id: zone; screen: win.screen }
+    exclusiveZone: zone.zone
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "qs-toast"
     BackgroundEffect.blurRegion: Region { regions: glass.instances }

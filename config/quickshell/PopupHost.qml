@@ -146,7 +146,7 @@ PanelWindow {
         // motion instead (glassScale below, Theme.glassScaleAt).
         // bar edge: past the bar (incl. a floating bar's CURRENT gap, so it follows the compact animation) plus popupGap; other sides: `side` from the screen
         // edge (docked keeps the old 8 px, floating lines up with the bar's gapOut)
-        readonly property real inset: (host.hasBar ? BarConfig.heightOf(host.modelData) - (BarConfig.flushMode(host.modelData) ? BarConfig.padSide(host.modelData) : 0) + Popups.barGapOf(host.modelData.name) - BarConfig.zoneOf(host.modelData) : 0) + BarConfig.popupGapOf(host.modelData)
+        readonly property real inset: Popups.cardInsetOf(host.modelData)
         readonly property real side: BarConfig.floating(host.modelData) ? BarConfig.edgeGapOf(host.modelData) : 8
 
         // target size; the card itself follows it with a Behavior while `morphing`

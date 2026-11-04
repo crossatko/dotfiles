@@ -40,16 +40,9 @@ PanelWindow {
     implicitWidth: pillW
     implicitHeight: pillH
     color: "transparent"
-    // -1 = ignore the monitor's reserved area (the pinned-video strip), so it stays in the screen corner; 0 = follow the bar
-    // (Settings > Bar). This window hops between screens: a zone changed in the same tick as the screen was not applied to the
-    // re-created layer surface, so it is set a moment after the screen / the option changed.
-    readonly property bool respectReserved: BarConfig.respectReserved(screen)
-    property int zone: -1
-    onRespectReservedChanged: zoneTimer.restart()
-    onScreenChanged: zoneTimer.restart()
-    Component.onCompleted: zone = respectReserved ? 0 : -1
-    Timer { id: zoneTimer; interval: 80; onTriggered: osd.zone = osd.respectReserved ? 0 : -1 }
-    exclusiveZone: zone
+    // follow the bar's reserved-area option (BarZone: -1 = the screen corner, 0 = inside the reserved area like the bar)
+    BarZone { id: zone; screen: osd.screen }
+    exclusiveZone: zone.zone
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "qs-osd"
     BackgroundEffect.blurRegion: Region { regions: glass.instances }
@@ -121,22 +114,10 @@ PanelWindow {
         amount: Math.max(0, Math.min(1, osd.grow * 3))
     }
 
-    Rectangle {
+    MotionCard {
         id: card
-        readonly property bool isGlassItem: true
+        openMotion: motion
         anchors.fill: parent
-        opacity: Math.max(0, Math.min(1, motion.t))
-        readonly property real glassScale: Theme.glassScaleAt(motion.t)   // see PopupHost's card
-        layer.enabled: motion.moving                                      // fade as one texture
-        transform: [
-            Scale { origin.x: card.width / 2; origin.y: card.height; xScale: motion.popScale; yScale: motion.popScale },
-            Translate { y: motion.slide }
-        ]
-        radius: Theme.radius
-        color: Theme.alpha(Theme.bg, Theme.cardFill)
-        border.width: 1
-        border.color: Theme.edge
-        GlassEdge { anchors.fill: parent; radius: parent.radius }   // the rim without the compositor's glass
 
         RowLayout {
             anchors { fill: parent; leftMargin: osd.sidePad; rightMargin: osd.sidePad }
