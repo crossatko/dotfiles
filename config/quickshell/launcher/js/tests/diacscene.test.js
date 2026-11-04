@@ -151,3 +151,14 @@ test("flareLife: 1 at once, 0 after 0.25 s", () => {
     assert.strictEqual(S.flareLife(0.25), 0);
     assert.strictEqual(S.flareLife(-1), 0);
 });
+
+test("i, í, l, 1, I are five distinct shapes; i is a dot over a plain stem (no flag, no foot)", () => {
+    const k = ch => glyphRows(ch).join("/");
+    const all = ["i", "í", "l", "1", "I", "Í", "j"].map(k);
+    assert.strictEqual(new Set(all).size, all.length);
+    const i = glyphRows("i");
+    assert.deepStrictEqual(i.slice(1), Array(5).fill(i[1]));                // five identical stem rows
+    assert.deepStrictEqual(glyphRows("í").slice(2), Array(5).fill(i[1]));   // í = the same stem, the acute instead of the dot
+    assert.strictEqual(glyphRows("í")[0].replace(/\./g, "").length, 1);      // acute: one dot per row (a diagonal pair)
+    assert.strictEqual(glyphRows("l").length, 7);
+});

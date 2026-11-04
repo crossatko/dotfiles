@@ -56,10 +56,11 @@ G("e", 5, X(2, ["01110", "10001", "11111", "10000", "01110"]));
 G("f", 4, X(0, ["0110", "1000", "1110", "1000", "1000", "1000", "1000"]));
 G("g", 5, X(2, ["01110", "10001", "10001", "01111", "00001"], ["10001", "01110"]));
 G("h", 5, X(0, ["10000", "10000", "10110", "11001", "10001", "10001", "10001"]));
-// i: a dot, a gap, a stem with a serif on top and a foot (an unmarked i must not read as the digit 1: that has a diagonal flag and a wide foot)
-G("i", 3, X(0, ["010", "000", "110", "010", "010", "010", "111"]));
-G("ı", 3, X(2, ["010", "010", "010", "010", "111"]));          // dotless i (for í): a plain stem with a foot, no serif, so the acute above never makes a "1"
-G("j", 3, X(0, ["001", "000", "011", "001", "001", "001", "001"], ["101", "010"]));
+// i: a dot, one empty row, a plain x-height stem (no flag, no foot: that would read as the digit 1; l is the same stem running up to the ascender
+// row); j the same with a hooked descender; the dotless i (for í) is the bare stem, the acute stands where the dot was
+G("i", 3, X(0, ["010", "000", "010", "010", "010", "010", "010"]));
+G("ı", 3, X(2, ["010", "010", "010", "010", "010"]));
+G("j", 3, X(0, ["001", "000", "001", "001", "001", "001", "001"], ["001", "110"]));
 G("k", 5, X(0, ["10000", "10000", "10010", "10100", "11000", "10100", "10010"]));
 G("l", 3, X(0, ["010", "010", "010", "010", "010", "010", "010"]));
 G("m", 5, X(2, ["11010", "10101", "10101", "10101", "10101"]));
