@@ -50,6 +50,17 @@ class IgnoredClasses(unittest.TestCase):
         self.assertEqual(self.load(json.dumps({"ignored_classes": ["Kitty ", ""]})), ("kitty",))
         self.assertEqual(self.load(json.dumps({"ignored_classes": []})), ())
 
+    def test_shell_only_keys_are_ignored(self):
+        # the Settings page also saves the key, show_text and where the pill sits: the service and the flow ignore them
+        shell = {"key": "SUPER + SHIFT + D", "show_text": False, "pill_edge": "top", "pill_gap": 3.5, "pill_x": 0,
+                 "pill_screen": "Some monitor", "model": "m.gguf", "idle_timeout_s": 30}
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write(json.dumps(shell))
+        try:
+            self.assertEqual(prefs.load(f.name), prefs.Prefs(model="m.gguf", idle_timeout_s=30.0))
+        finally:
+            os.unlink(f.name)
+
 
 if __name__ == "__main__":
     unittest.main()

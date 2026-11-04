@@ -1,7 +1,7 @@
 """Voice preferences from the shell (Settings > Voice writes them): the service re-reads the file at every `begin`.
 
     {"version": 1, "mic": "", "gpu": true, "idle_timeout_s": 600, "prompt_hints": false, "pause_silence_s": 1.0,
-     "trailing_space": true, "gpu_device": 0, "pill_bottom": false, "lowercase_fragments": true,
+     "trailing_space": true, "gpu_device": 0, "pill_edge": "bar", "lowercase_fragments": true,
      "strip_single_word_punct": true}
 
 mic          PipeWire source name to record from, "" = the system default source
@@ -10,7 +10,8 @@ idle_timeout_s  seconds without a session before both models are unloaded; 0 or 
 gpu_device   which GPU the worker uses when gpu is true: the index of `dictation-whisper --list-devices` (0 = the first,
              the default; a negative number is 0, anything that is not a whole number is 0); an index that does not
              exist is a `gpu-failed` error
-pill_bottom  read by the shell only (the pill sits at the bottom edge even with a top bar), ignored here
+pill_edge, pill_gap, pill_x, pill_screen  where the pill sits: read by the shell only, ignored here (pill_bottom = their
+             legacy form, also the shell's)
 prompt_hints read by the cleanup module, not here
 pause_silence_s  seconds of silence after speech that type the words still waiting (the last word); 0 = only on
              release; no UI, the engine default (engine.PAUSE_SILENCE) when missing; clamped to 0.3..10

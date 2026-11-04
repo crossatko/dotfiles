@@ -3,7 +3,7 @@ import QtQuick.Layouts
 
 // Settings > Diacritics > Model: which .gguf file of the models folder fixes the text (DropSelect over
 // DiacriticsPrefs.models; the saved one stays listed, marked "not found", when its file is gone) and how long it stays
-// loaded after the last run (ChoiceRow, DiacriticsPrefs.idleValues). The service applies both to the next run.
+// loaded after the last run (IdleUnloadRow, DiacriticsPrefs.idleValues; the same row as the Voice page's models section). The service applies both to the next run.
 ColumnLayout {
     id: sec
     property real titleWidth: 120
@@ -40,12 +40,5 @@ ColumnLayout {
         }
         Item { Layout.fillWidth: true }
     }
-    ChoiceRow {
-        objectName: "diac-idle"
-        title: "Unload model"; titleWidth: sec.titleWidth
-        values: DiacriticsPrefs.idleValues; labels: DiacriticsPrefs.idleLabels
-        current: DiacriticsPrefs.idleTimeoutS
-        info: "How long the model stays in memory after the last run. Unloading frees the memory; the next run loads it again."
-        onPicked: v => DiacriticsPrefs.set("idle_timeout_s", v)
-    }
+    IdleUnloadRow { objectName: "diac-idle"; titleWidth: sec.titleWidth; store: DiacriticsPrefs; use: "run" }
 }

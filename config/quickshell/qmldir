@@ -257,6 +257,16 @@ DiacriticsPillSection 1.0 DiacriticsPillSection.qml
 DotGridCanvas 1.0 DotGridCanvas.qml
 DiacDots 1.0 DiacDots.qml
 singleton DiacClient 1.0 DiacClient.qml
-singleton DiacPillPrefs 1.0 DiacPillPrefs.qml
 DiacPill 1.0 DiacPill.qml
 PillPlacement 1.0 PillPlacement.qml
+DictationPillCard 1.0 DictationPillCard.qml
+DiacPillCard 1.0 DiacPillCard.qml
+SpeechDemoLevel 1.0 SpeechDemoLevel.qml
+IdleUnloadRow 1.0 IdleUnloadRow.qml
+ScreenFrame 1.0 ScreenFrame.qml
+PillPreview 1.0 PillPreview.qml
+PillBarSketch 1.0 PillBarSketch.qml
+ScreenBackdrop 1.0 ScreenBackdrop.qml
+PillPositionRows 1.0 PillPositionRows.qml
+PillSection 1.0 PillSection.qml
+DictationPillSection 1.0 DictationPillSection.qml
