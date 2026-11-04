@@ -9,7 +9,8 @@ import Quickshell.Wayland
 //   loading      the model is starting: a dim, slow neutral loop
 //   working      the real words of the text being fixed as dot-matrix letters, swapped word over word, the diacritics flaring in one by
 //                one (DiacDots / DiacScene.js); with Settings > Diacritics "show text" off (DiacPillPrefs.showText) the generic neutral loop
-//   done / failed / unsupported   the picture lets go, then a dotted check / cross / no-sign draws in
+//   done         the service has the fixed text only now: a fast replay of it (every chunk, its marks flaring in one by one, at most
+//                1.5 s), then the dotted check; failed / unsupported: the picture lets go, then a dotted cross / no-sign draws in
 //   idle         the card fades out (it keeps the last look while it does)
 // Fixed size (pillW x 64); the dot row is 300 x 50 (78 x 13 dots of 3.85 px), the base letters on the card's centre line.
 // Test hook: qs ipc call diacritics-pill status
@@ -19,22 +20,26 @@ PanelWindow {
     id: pill
 
     readonly property string svc: DiacClient.state
-    readonly property bool open: svc !== "" && svc !== "idle"
+    // the service goes idle about 1.2 s after done; the replay and the check take longer (DiacDots.busy), so the card stays for them
+    readonly property bool open: (svc !== "" && svc !== "idle") || dots.busy
     // what the card shows: the last visible state and text, kept while it fades out
     property string look: "working"
     property string shownText: ""
+    property string replayText: ""                // the fixed text of the last done, replayed by DiacDots
     property bool engaged: false              // shown since the last finished close: the screen was picked then
     onSvcChanged: {
         if (svc === "" || svc === "idle") return          // (`open` may not have followed yet)
         if (!engaged) { screen = Popups.focusedScreen(); engaged = true }
         const before = look
+        if (svc === "done") replayText = DiacClient.fixed
+        else replayText = ""
         look = svc
-        if (svc === "working" || svc === "loading") shownText = DiacClient.fixed !== "" ? DiacClient.fixed : DiacClient.text
+        if (svc === "working" || svc === "loading") shownText = DiacClient.text
         if ((svc === "working" || svc === "loading") && !(before === "working" || before === "loading") || !motion.shown) dots.restart()
     }
-    // the service sends the text with `working` and the fixed text later: show the newest while it is working
-    readonly property string liveText: DiacClient.fixed !== "" ? DiacClient.fixed : DiacClient.text
-    onLiveTextChanged: if (open && look !== "unsupported") shownText = liveText
+    // the service sends the text with `working` and the fixed text only with `done` (replayed then): while working show the original
+    readonly property string liveText: DiacClient.text
+    onLiveTextChanged: if (svc === "working" || svc === "loading") shownText = liveText
 
     readonly property bool words: DiacPillPrefs.showText && shownText !== ""
 
@@ -53,7 +58,7 @@ PanelWindow {
         id: motion
         open: pill.open
         delay: 40
-        onClosed: if (!pill.open) { pill.engaged = false; pill.shownText = "" }
+        onClosed: if (!pill.open) { pill.engaged = false; pill.shownText = ""; pill.replayText = "" }
     }
     anchors { top: atTop; bottom: !atTop }
     // qmllint disable missing-property
@@ -91,6 +96,7 @@ PanelWindow {
             kind: pill.look === "loading" ? "loading" : pill.words ? "words" : "neutral"
             phase: pill.look === "loading" ? "working" : pill.look
             text: pill.words ? pill.shownText : ""
+            replayText: pill.replayText
         }
     }
 

@@ -8,6 +8,8 @@
 //            (MARK_GAP apart), each with a short accent flare that settles to white while its letter pulses once; READ s dwell after the last
 //   neutral  the same look without the words (Settings: show text off): pseudo-words as dotted lines fill the row left to right, marks
 //            pop up over some of them with the same flare; `dim` = the loading variant (slower, no marks, half bright)
+//   replay   when the service reports `done` with the fixed text (it only has it at the end), a fast replay of the whole fixed text:
+//            every chunk in turn with its marks flaring in one by one, at most REPLAY_MAX s in all (replayPlan / replay), then the check
 //   end states  the working picture lets go (0.2 s), then the icon draws in dot by dot: done = check + sparks, failed = cross that
 //            shakes, unsupported = no-sign
 // Timings are seconds; the grid is COLS x ROWS with the 7-row base band on rows 3..9 (the card's centre line).
@@ -84,13 +86,21 @@ function chunkAt(prep, q) {
     return lo;
 }
 
-// the mark's moment: the letter pulses once, the mark gets a glow behind it (flare layer)
+// the flare of a mark that landed `age` s ago: 1 at once, fading to 0 over FLARE s (the glow, the oversize white mark)
+var FLARE = 0.25;
+function flareLife(age) {
+    if (age < 0 || age >= FLARE) return 0;
+    var k = 1 - age / FLARE;
+    return k * k;
+}
+
+// the mark's moment: the letter pulses once, the mark gets a glow behind it (flare layer) and starts oversize (DotGridCanvas)
 function flareMark(g, x, y, w, age) {
-    var fl = Math.exp(-age / 0.12), pu = Math.exp(-age / 0.16), x1 = x + Math.max(w, 6), rx, ry;
+    var fl = flareLife(age), pu = Math.exp(-age / 0.16), x1 = x + Math.max(w, 6), rx, ry;
     for (ry = 0; ry < 9; ry++) for (rx = x; rx < x1; rx++) {         // the letter pulses once; the mark gets a glow behind it
         var j = (y + ry) * COLS + rx;
         if (rx >= COLS || g.v[j] <= 0) continue;
-        if (g.m[j] > 0.5) F.fxPut(g, rx, y + ry, fl, 0); else g.lf[j] = pu * 0.9;
+        if (g.m[j] > 0.5) F.fxPut(g, rx, y + ry, fl, 0); else g.lf[j] = pu;
     }
     for (ry = -3; ry < 0; ry++) for (rx = x; rx < x1; rx++) {
         var k = (y + ry) * COLS + rx;
@@ -98,21 +108,66 @@ function flareMark(g, x, y, w, age) {
     }
 }
 
-function words(prep, t) {
-    var g = F.blank(COLS, ROWS), y = BASE_Y;
-    if (!prep || !prep.chunks.length) return g;
-    var q = t % prep.total, i = chunkAt(prep, q);
-    q -= prep.starts[i];
-    var c = prep.chunks[i], dur = c.dur, x0 = Math.floor((COLS - c.width) / 2);
-    var alpha = Math.min(F.clamp01(q / SWAP), 1 - F.clamp01((q - (dur - SWAP)) / SWAP));
-    var n = 0;
+// one chunk at time q: letters dissolved in by `alpha`, mark n landing at markStart + n * markGap
+function drawChunk(g, c, y, q, alpha, markStart, markGap) {
+    var x0 = Math.floor((COLS - c.width) / 2), n = 0;
     for (var k = 0; k < c.chars.length; k++) {
         var ch = c.chars[k], x = x0 + ch.x;
-        var age = ch.mark ? q - (MARK_START + n * MARK_GAP) : -1;
+        var age = ch.mark ? q - (markStart + n * markGap) : -1;
         if (ch.mark) n++;
         F.stampChar(g, ch.ch, x, y, alpha, age >= 0 ? alpha : 0, 0, 0);
         if (age >= 0 && age < 0.5) flareMark(g, x, y, ch.w, age);
     }
+}
+
+function words(prep, t) {
+    var g = F.blank(COLS, ROWS);
+    if (!prep || !prep.chunks.length) return g;
+    var q = t % prep.total, i = chunkAt(prep, q);
+    q -= prep.starts[i];
+    var c = prep.chunks[i], dur = c.dur;
+    var alpha = Math.min(F.clamp01(q / SWAP), 1 - F.clamp01((q - (dur - SWAP)) / SWAP));
+    drawChunk(g, c, BASE_Y, q, alpha, MARK_START, MARK_GAP);
+    return g;
+}
+
+// ---- replay of the fixed text on `done` ----
+// The service has the fixed text only at the end, so the marks cannot flare while it works. On `done` the pill plays the whole
+// fixed text again, fast: each chunk in turn (R_IN dissolve in, the marks R_GAP apart, R_HOLD after the last), chunks without marks
+// flash by (R_BARE). Everything fits REPLAY_MAX s: first the unmarked chunks are dropped, then the speed rises (down to R_MINSCALE),
+// then only the first chunks that fit are shown. The last chunk stays R_TAIL s so its flare can settle before the check.
+var REPLAY_MAX = 1.5, R_IN = 0.04, R_GAP = 0.04, R_HOLD = 0.10, R_BARE = 0.05, R_OUT = 0.03, R_TAIL = 0.20, R_MINSCALE = 0.6;
+
+// prep -> { items: [{ i: chunk index, start, dur, s: speed scale }], total }; no marks anywhere = no items (nothing to replay)
+function replayPlan(prep, max) {
+    var chunks = (prep && prep.chunks) || [], budget = (max || REPLAY_MAX) - R_TAIL, items = [], i;
+    function nat(i) { return chunks[i].marks ? R_IN + chunks[i].marks * R_GAP + R_HOLD : R_BARE; }
+    function sum(list) { return list.reduce(function (a, k) { return a + nat(k); }, 0); }
+    var list = [];
+    for (i = 0; i < chunks.length; i++) list.push(i);
+    if (!list.some(function (k) { return chunks[k].marks; })) return { items: items, total: 0 };
+    if (sum(list) > budget) list = list.filter(function (k) { return chunks[k].marks; });
+    var s = Math.max(R_MINSCALE, Math.min(1, budget / sum(list))), t = 0;
+    for (i = 0; i < list.length; i++) {
+        var d = nat(list[i]) * s;
+        if (items.length && t + d > budget) break;
+        items.push({ i: list[i], start: t, dur: d, s: s });
+        t += d;
+    }
+    items[items.length - 1].dur += R_TAIL;
+    return { items: items, total: t + R_TAIL };
+}
+
+// the replay picture at time t (held on the last frame after plan.total)
+function replay(prep, plan, t) {
+    var g = F.blank(COLS, ROWS), items = plan && plan.items;
+    if (!items || !items.length) return g;
+    var k = 0;
+    while (k < items.length - 1 && items[k + 1].start <= t) k++;
+    var it = items[k], c = prep.chunks[it.i], q = Math.max(0, Math.min(t, plan.total) - it.start), last = k === items.length - 1;
+    var alpha = F.clamp01(q / (R_IN * it.s));
+    if (!last) alpha = Math.min(alpha, 1 - F.clamp01((q - (it.dur - R_OUT * it.s)) / (R_OUT * it.s)));
+    drawChunk(g, c, BASE_Y, q, alpha, R_IN * it.s, R_GAP * it.s);
     return g;
 }
 
@@ -147,11 +202,11 @@ function neutral(t, dim) {
         var dots = caron ? [[-1, 3], [1, 3], [0, 4]] : [[1, 3], [0, 4]];
         dots.forEach(function (d) { F.put(g, mx + d[0], d[1], F.clamp01(a), 1); });
         if (age < 0.5) {
-            var fl = Math.exp(-age / 0.12), pu = Math.exp(-age / 0.16);
+            var fl = flareLife(age), pu = Math.exp(-age / 0.16);
             dots.forEach(function (d) { F.fxPut(g, mx + d[0], d[1], fl, 0); });
             for (var px = x0 + s.x; px < x0 + s.x + s.w; px++) for (var py = 5; py <= 7; py++) {
                 var j = py * COLS + px;
-                if (g.v[j] > 0) g.lf[j] = pu * 0.9;
+                if (g.v[j] > 0) g.lf[j] = pu;
             }
         }
     }
@@ -159,9 +214,9 @@ function neutral(t, dim) {
 }
 
 // ---- the end states over the fading working picture. state: working | done | failed | unsupported; sT = seconds since the state began ----
-function scene(kind, state, t, sT, prep) {
-    var v = kind === "neutral" ? neutral(t, false) : kind === "loading" ? neutral(t, true) : words(prep, t);
-    if (state === "working" || state === "loading") return v;
+function scene(kind, state, t, sT, prep, plan) {
+    var v = kind === "neutral" ? neutral(t, false) : kind === "loading" ? neutral(t, true) : kind === "replay" ? replay(prep, plan, t) : words(prep, t);
+    if (state === "working" || state === "loading" || state === "replay") return v;
     var g = F.blank(COLS, ROWS), fade = 1 - F.clamp01(sT / 0.2), i;
     if (fade > 0) for (i = 0; i < g.v.length; i++) { g.v[i] = v.v[i] * fade; g.m[i] = v.m[i]; g.fv[i] = v.fv[i] * fade; g.fs[i] = v.fs[i]; g.lf[i] = v.lf[i]; }
     var d = F.clamp01((sT - 0.15) / (state === "unsupported" ? 0.6 : 0.35));

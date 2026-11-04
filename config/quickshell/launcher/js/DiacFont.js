@@ -7,8 +7,8 @@
 //   fv  accent flare intensity (the mark's glow)          fs  flare position 0..1 (0 = bright head)
 //   lf  letter pulse 0..1 (the letter that just got its mark)
 // A glyph is up to 9 rows: capitals and ascenders on rows 0..6, the x-height band on rows 2..6, descenders on rows 7..8; the base band
-// (rows 0..6) is what the scene centres. Widths vary (i l j f t are narrow), advance = width + 1. A mark sits right above the glyph's
-// top row; d / t take the apostrophe to their right instead. Marks differ in SHAPE, not just position, so they read apart at 3.8 px
+// (rows 0..6) is what the scene centres. Widths vary (i l j f t are narrow), advance = width + 1. A mark sits above the glyph's
+// top row (acute and caron with one empty row between, the ring right on it); d / t take the apostrophe to their right instead. Marks differ in SHAPE, not just position, so they read apart at 3.8 px
 // pitch: acute = two dots on a slant, caron = a V, ring = a closed 3x3 diamond (three rows tall).
 
 var glyphs = {};
@@ -56,10 +56,11 @@ G("e", 5, X(2, ["01110", "10001", "11111", "10000", "01110"]));
 G("f", 4, X(0, ["0110", "1000", "1110", "1000", "1000", "1000", "1000"]));
 G("g", 5, X(2, ["01110", "10001", "10001", "01111", "00001"], ["10001", "01110"]));
 G("h", 5, X(0, ["10000", "10000", "10110", "11001", "10001", "10001", "10001"]));
-// i: a dot, a gap, a stem with a serif on top and a foot (an unmarked i must not read as the digit 1: that has a diagonal flag and a wide foot)
-G("i", 3, X(0, ["010", "000", "110", "010", "010", "010", "111"]));
-G("ı", 3, X(2, ["110", "010", "010", "010", "111"]));          // dotless i (for í)
-G("j", 3, X(0, ["001", "000", "011", "001", "001", "001", "001"], ["101", "010"]));
+// i: a dot, one empty row, a plain x-height stem (no flag, no foot: that would read as the digit 1; l is the same stem running up to the ascender
+// row); j the same with a hooked descender; the dotless i (for í) is the bare stem, the acute stands where the dot was
+G("i", 3, X(0, ["010", "000", "010", "010", "010", "010", "010"]));
+G("ı", 3, X(2, ["010", "010", "010", "010", "010"]));
+G("j", 3, X(0, ["001", "000", "001", "001", "001", "001", "001"], ["001", "110"]));
 G("k", 5, X(0, ["10000", "10000", "10010", "10100", "11000", "10100", "10010"]));
 G("l", 3, X(0, ["010", "010", "010", "010", "010", "010", "010"]));
 G("m", 5, X(2, ["11010", "10101", "10101", "10101", "10101"]));
@@ -82,6 +83,9 @@ G("(", 2, X(0, ["01", "10", "10", "10", "10", "10", "01"])); G(")", 2, X(0, ["10
 G(";", 2, X(3, ["01", "00", "00", "01"], ["10"])); G("\"", 3, X(0, ["101", "101"]));
 
 // marks by glyph width (rows top to bottom, centred over the glyph)
+// An acute or caron floats one empty row above the letter (GAP) so it never merges with the stem (an acute on the stem of i reads as
+// the digit 1, one on the a blobs into it); the ring is a closed shape and sits right on the letter.
+var GAP = { acute: 1, caron: 1, ring: 0 };
 var marks = {
     5: { caron: ["01010", "00100"], acute: ["00010", "00100"], ring: ["010", "101", "010"] },
     3: { caron: ["101", "010"], acute: ["001", "010"], ring: ["010", "101", "010"] }
@@ -152,7 +156,7 @@ function stampChar(g, ch, x, y, a, markA, markDy, tint) {
         if (ac[1] === "apos") {
             for (var k = 0; k < 2; k++) draw(ac[2], ac[3] + k, 9);
         } else {
-            var mr = (marks[gl.w] || marks[5])[ac[1]], t = top(gl), off = Math.floor((gl.w - mr[0].length) / 2);
+            var mr = (marks[gl.w] || marks[5])[ac[1]], t = top(gl) - GAP[ac[1]], off = Math.floor((gl.w - mr[0].length) / 2);
             for (var my = 0; my < mr.length; my++) for (var mx = 0; mx < mr[0].length; mx++)
                 if (mr[my][mx] === "1") draw(mx + off, t - mr.length + my, 9);
         }
