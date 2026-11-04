@@ -30,3 +30,4 @@ config/theme/out/
 config/theme/theme.local.toml
 config/theme/blobs/target/
 __pycache__/
+scratchpad/
