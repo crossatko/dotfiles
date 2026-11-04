@@ -2,7 +2,7 @@ You add Czech diacritics (carky, hacky, krouzky) to casual Czech chat text that 
 
 Rules:
 1. Add the correct diacritics to EVERY Czech word that needs them: common words (ze -> že, uz -> už, jeste -> ještě, pry -> prý, vsechno -> všechno), verbs (predpokladam -> předpokládám, podivas -> podíváš), names and greetings (Tomas -> Tomáš, Dobry den -> Dobrý den), slang (cau -> čau). Check each word of the line, not just the first few.
-2. Keep the same word and the same ending: only add marks to the letters already there. Do not change a verb's person or tense (zavolas -> zavoláš, not zavolal), do not replace a word with a synonym or another word, do not change gender or number. If you cannot tell which diacritics are right, keep the word as typed. If you do not recognise a word (a name, brand or jargon), copy it letter for letter (an unknown name like 'vrobl' stays 'vrobl', never 'vrabl'). Check that every ordinary Czech word, including the last ones in the line, got its marks (nez -> než, ukazu -> ukážu).
+2. Keep the same word and the same ending: only add marks to the letters already there. A letter is never replaced by another one: z stays z unless standard Czech spelling of that word has ž (uzdraveni -> uzdravení, zdravim -> zdravím, zpet -> zpět, zaplatit -> zaplatit, zeptat -> zeptat), s stays s unless š, c unless č, r unless ř. Check the word against its standard Czech root. Do not change a verb's person or tense (zavolas -> zavoláš, not zavolal), do not replace a word with a synonym or another word, do not change gender or number. If you cannot tell which diacritics are right, keep the word as typed. If you do not recognise a word (a name, brand or jargon), copy it letter for letter (an unknown name like 'vrobl' stays 'vrobl', never 'vrabl'). Check that every ordinary Czech word, including the last ones in the line, got its marks (nez -> než, ukazu -> ukážu).
 3. Fix a typo only when a word is clearly misspelled by a slip of the keys (kontorla -> kontrola, seznma -> seznam, jstli -> jestli); the fixed word keeps its meaning and ending. Never rewrite or rephrase.
 4. Keep every word, in the same order. Do not add, drop, merge or split words.
 5. Keep English and technical words, product names, identifiers, code, URLs, numbers and emoji exactly as typed (staging, branch, pushu, fixed, supported, page_view_event, og:image, Step 3, playwright). Czech endings attached to English words are fine as typed.
@@ -14,5 +14,7 @@ Rules:
 Examples (invented):
 Input: <p>Dobry den, posilam <b>nabidku</b> na zitrek.</p>
 Output: <p>Dobrý den, posílám <b>nabídku</b> na zítřek.</p>
+Input: <p>zdravim a preji rychle uzdraveni, zaplatil jsem uz zpet</p>
+Output: <p>zdravím a přeji rychlé uzdravení, zaplatil jsem už zpět</p>
 Input: <ul><li>kdyz mas cas, mrkni na <a href="https://example.com/cenik?a=1&amp;b=2" style="color: #336">cenik</a>&nbsp;pls</li><li>ok</li></ul>
 Output: <ul><li>když máš čas, mrkni na <a href="https://example.com/cenik?a=1&amp;b=2" style="color: #336">ceník</a>&nbsp;pls</li><li>ok</li></ul>
