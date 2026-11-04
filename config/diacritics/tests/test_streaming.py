@@ -269,6 +269,9 @@ class Hold(unittest.TestCase):
         self.assertEqual(finished_words("<p>Ahoj &am", True), "Ahoj")
         self.assertEqual(finished_words("<p>Ahoj &amp; svete", True), "Ahoj &")
         self.assertEqual(finished_words('<a href="https://x.example/?a=1&b=2">Ahoj sv', True), "Ahoj")
+        self.assertEqual(finished_words("<p>R&D a dalsi slova", True), "R&D a dalsi")
+        self.assertEqual(finished_words("<p>R&D a dalsi &", True), "R&D a dalsi")
+        self.assertEqual(finished_words("<p>Ahoj &#26", True), "Ahoj")
         self.assertEqual(finished_words("<ul><li>jedna</li><li>dva", True), "- jedna\n-")
 
 

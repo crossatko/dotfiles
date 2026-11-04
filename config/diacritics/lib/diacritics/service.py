@@ -72,9 +72,9 @@ def finished_words(reply: str, html: bool = False) -> str:
         i = reply.rfind("<")
         if i >= 0 and ">" not in reply[i:]:
             reply = reply[:i]
-        j = reply.rfind("&")
-        if j > reply.rfind(">") and ";" not in reply[j:] and not reply[j:].isspace():
-            reply = reply[:j]
+        m = re.search(r"&#?[A-Za-z0-9]*$", reply)   # an unfinished character reference at the very end
+        if m:
+            reply = reply[:m.start()]
         reply = htmlmode.to_plain(reply)
     m = re.search(r"\s\S*$", reply)
     return reply[:m.start()] if m else ""
