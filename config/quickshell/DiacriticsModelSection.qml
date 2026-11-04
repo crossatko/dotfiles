@@ -3,10 +3,11 @@ import QtQuick.Layouts
 
 // Settings > Diacritics > Model: which .gguf file of the models folder fixes the text (DropSelect over
 // DiacriticsPrefs.models; the saved one stays listed, marked "not found", when its file is gone) and how long it stays
-// loaded after the last run (IdleUnloadRow, DiacriticsPrefs.idleValues; the same row as the Voice page's models section). The service applies both to the next run.
+// loaded after the last run (IdleUnloadRow over the shared steps, launcher/js/IdleSteps.js; the same row as the Voice page's models section). The service applies both to the next run.
 ColumnLayout {
     id: sec
     property real titleWidth: 120
+    readonly property bool dragging: idle.dragging      // the idle slider: the page must not scroll
 
     // the files of the folder, then the saved one when it is not among them
     readonly property var modelOptions: {
@@ -40,5 +41,5 @@ ColumnLayout {
         }
         Item { Layout.fillWidth: true }
     }
-    IdleUnloadRow { objectName: "diac-idle"; titleWidth: sec.titleWidth; store: DiacriticsPrefs; use: "run" }
+    IdleUnloadRow { id: idle; objectName: "diac-idle"; titleWidth: sec.titleWidth; store: DiacriticsPrefs; use: "run" }
 }

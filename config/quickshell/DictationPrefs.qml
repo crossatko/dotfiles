@@ -16,7 +16,8 @@ import "launcher/js/PillPos.js" as P
 //   mic             PipeWire / PulseAudio source name (node.name); "" = follow the system default source
 //   gpu             use the GPU (Vulkan); false = CPU
 //   gpu_device      which GPU (index of `dictation-whisper --list-devices`, GpuDevices.qml); 0 = the first. Only used with gpu
-//   idle_timeout_s  seconds without dictation before the model is unloaded; 0 = never
+//   idle_timeout_s  seconds without dictation before the model is unloaded; 0 = never, 1 = right after each dictation
+//                   ("Immediately"; the Settings steps: launcher/js/IdleSteps.js, an off-step value shows as the nearest)
 //   prompt_hints    use the replacement words as recognition hints (transcribe only, never when translating).
 //                   THE source of truth for hints: DictationWords mirrors it into dictation-words.json ("hints").
 //   pill_edge / pill_gap / pill_x / pill_screen  where the pill sits (launcher/js/PillPos.js, PillPlacement); the service ignores them
@@ -39,17 +40,15 @@ Singleton {
     readonly property var keys: ["mic", "gpu", "gpu_device", "idle_timeout_s", "prompt_hints"].concat(P.KEYS)
     readonly property var spec: P.SPEC
     readonly property var pillKeys: P.KEYS
-    // idle timeout choices (seconds; 0 = never)
-    readonly property var idleValues: [60, 300, 600, 1800, 0]
-    readonly property var idleLabels: ["1 min", "5 min", "10 min", "30 min", "Never"]
 
     property string mic: defaults.mic
     property bool gpu: defaults.gpu
     property int gpuDevice: defaults.gpu_device
-    property string pillEdge: defaults.pill_edge
-    property real pillGap: defaults.pill_gap
-    property real pillX: defaults.pill_x
-    property string pillScreen: defaults.pill_screen
+    property var pill: P.parse({})            // the pill_* keys (launcher/js/PillPos.js), replaced as a whole
+    readonly property string pillEdge: pill.pill_edge
+    readonly property real pillGap: pill.pill_gap
+    readonly property real pillX: pill.pill_x
+    readonly property string pillScreen: pill.pill_screen
     readonly property bool pillBottom: pillEdge === "bottom"
     property var extra: ({})          // unknown keys of the file, written back unchanged
     property int idleTimeoutS: defaults.idle_timeout_s
@@ -57,8 +56,7 @@ Singleton {
 
     function value(key) {
         return key === "mic" ? mic : key === "gpu" ? gpu : key === "gpu_device" ? gpuDevice : key === "idle_timeout_s" ? idleTimeoutS
-            : key === "prompt_hints" ? promptHints : key === "pill_edge" ? pillEdge : key === "pill_gap" ? pillGap
-            : key === "pill_x" ? pillX : key === "pill_screen" ? pillScreen : undefined
+            : key === "prompt_hints" ? promptHints : P.KEYS.indexOf(key) >= 0 ? pill[key] : undefined
     }
     function overridden(key) { return value(key) !== defaults[key] }
     function set(key, v) {
@@ -66,11 +64,7 @@ Singleton {
         if (key === "mic") { if (typeof v !== "string" || v.length > 200 || /[\x00-\x1f]/.test(v)) return false; mic = v }
         else if (key === "gpu") gpu = !!v
         else if (key === "gpu_device") gpuDevice = Math.min(1000, Math.max(0, Math.round(Number(v)) || 0))
-        else if (P.KEYS.indexOf(key) >= 0) {
-            const c = P.clean(key, v)
-            if (c === undefined) return false
-            if (key === "pill_edge") pillEdge = c; else if (key === "pill_gap") pillGap = c; else if (key === "pill_x") pillX = c; else pillScreen = c
-        }
+        else if (P.KEYS.indexOf(key) >= 0) { const n = P.withKey(pill, key, v); if (!n) return false; pill = n }
         else if (key === "idle_timeout_s") idleTimeoutS = Math.min(604800, Math.max(0, Math.round(Number(v)) || 0))
         else if (key === "prompt_hints") promptHints = !!v
         else return false
@@ -117,8 +111,7 @@ Singleton {
         mic = typeof d.mic === "string" && d.mic.length <= 200 && !/[\x00-\x1f]/.test(d.mic) ? d.mic : defaults.mic
         gpu = typeof d.gpu === "boolean" ? d.gpu : defaults.gpu
         gpuDevice = Number.isInteger(d.gpu_device) ? Math.min(1000, Math.max(0, d.gpu_device)) : defaults.gpu_device
-        const pp = P.parse(d, d.pill_bottom === true ? "bottom" : "bar")
-        pillEdge = pp.pill_edge; pillGap = pp.pill_gap; pillX = pp.pill_x; pillScreen = pp.pill_screen
+        pill = P.parse(d, d.pill_bottom === true ? "bottom" : "bar")
         const rest = {}
         for (const k of Object.keys(d)) if (k !== "version" && k !== "pill_bottom" && keys.indexOf(k) < 0) rest[k] = d[k]
         extra = rest
@@ -127,8 +120,7 @@ Singleton {
     }
     function serialize() {
         return JSON.stringify(Object.assign({}, extra, { version: 1, mic: mic, gpu: gpu, gpu_device: gpuDevice, idle_timeout_s: idleTimeoutS,
-                                                         prompt_hints: promptHints, pill_edge: pillEdge, pill_gap: pillGap, pill_x: pillX,
-                                                         pill_screen: pillScreen, pill_bottom: pillBottom })) + "\n"
+                                                         prompt_hints: promptHints }, pill, { pill_bottom: pillBottom })) + "\n"
     }
     property string lastText: ""
     Timer {

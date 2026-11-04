@@ -45,7 +45,7 @@ service core; the shell drives it: the three push-to-talk keys (Settings > Voice
    (`DICTATION_PREFS_FILE` overrides), re-read at every `begin`: `{"version":1,"mic":"","gpu":true,"idle_timeout_s":600,
    "prompt_hints":false,"gpu_device":0}` (plus `pause_silence_s` and `trailing_space`, no UI: see Behaviour; the `pill_*` position keys, and the old `pill_bottom`, are the shell's). `mic` = PipeWire source name (`pactl list short sources`; "" = system default; a name that
    is not listed is a `mic` error), `gpu` false = the worker runs on the CPU only (`--no-gpu`; slow, an explicit
-   choice), `idle_timeout_s` = unload after that long without a session (0 or negative = never). A missing or
+   choice), `idle_timeout_s` = unload after that long without a session (0 or negative = never; 0 < x <= 1 = right after each session, Settings "Immediately" writes 1, `prefs.unload_due`). A missing or
    malformed file or key means the default; a changed `gpu` or `gpu_device` reloads the models at the next `begin`.
    `gpu_device` = which GPU the worker uses: the index printed by `dictation-whisper --list-devices` (one JSON line per
    GPU: `index`, `name`, `type` discrete|integrated, `free_mb`, `total_mb`; Settings > Voice reads it), default 0, passed

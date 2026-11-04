@@ -12,7 +12,7 @@ Protocol: newline-delimited JSON, one request per connection except subscribe.
     {"op":"status"}                  -> {"ok":true,"state":"...","model_loaded":bool,"model":"file.gguf"}
 
 llama-server starts on the first fix (state loading), is restarted when it died or the model preference changed, and
-is stopped after idle_timeout_s without a fix. Fixes run one at a time: a second one waits up to QUEUE_WAIT seconds
+is stopped after idle_timeout_s without a fix (at most 1 s: right after the fix, prefs.unload_due). Fixes run one at a time: a second one waits up to QUEUE_WAIT seconds
 for the first, then gets `busy`. After done, failed or unsupported the state returns to idle after IDLE_RETURN s.
 The text is sent without its leading and trailing whitespace, which is put back unchanged; of the reply only one
 trailing newline the model added is dropped. User Corrections (words.py): the entries relevant to the text are added to the system
@@ -264,16 +264,20 @@ class Service:
 
     def reap_idle(self) -> None:
         while not self.stopping.wait(0.5):
-            if self.server is None or not self.fix_lock.acquire(blocking=False):
-                continue
-            try:
-                idle = self.load_prefs().idle_timeout_s
-                if self.server is not None and (not self.server.alive() or
-                                                (idle > 0 and time.monotonic() - self.last_used >= idle)):
-                    self.server.stop()
-                    self.server = None
-            finally:
-                self.fix_lock.release()
+            self.reap_once()
+
+    def reap_once(self, now: float | None = None) -> None:
+        """Stop llama-server when it died or was idle long enough (prefs.unload_due; never during a fix)."""
+        if self.server is None or not self.fix_lock.acquire(blocking=False):
+            return
+        try:
+            idle = self.load_prefs().idle_timeout_s
+            idle_for = (time.monotonic() if now is None else now) - self.last_used
+            if self.server is not None and (not self.server.alive() or prefs_mod.unload_due(idle, idle_for)):
+                self.server.stop()
+                self.server = None
+        finally:
+            self.fix_lock.release()
 
     # socket -----------------------------------------------------------------------------------------------------
 

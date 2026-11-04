@@ -27,8 +27,11 @@ RowLayout {
         Layout.preferredHeight: 1
         Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; height: 1; color: Theme.edge }
     }
-    // the detail gives way first on a narrow page (elided), the rule after it (minimum 8)
-    Label { visible: head.detail !== ""; Layout.leftMargin: Theme.gapRow; Layout.maximumWidth: Math.max(80, head.width * 0.45); elide: Text.ElideRight; text: head.detail; color: Theme.muted; font.pixelSize: Theme.fontCaption }
+    // the detail gives way first on a narrow page (elided), the rule after it (minimum 8). The cap reads the parent's width,
+    // not this row's: a cap from the row's own width changes the row's size hints inside its own arrange (Qt Quick Layouts:
+    // "recursive rearrange")
+    readonly property real availW: parent ? parent.width : width
+    Label { visible: head.detail !== ""; Layout.leftMargin: Theme.gapRow; Layout.maximumWidth: Math.max(80, head.availW * 0.45); elide: Text.ElideRight; text: head.detail; color: Theme.muted; font.pixelSize: Theme.fontCaption }
     // No slot (or gap) while the trailing items are hidden. The slot itself stays visible: binding its own
     // `visible` to `visibleChildren` latched it off for good whenever it was evaluated while the children were
     // still hidden (a hidden parent makes every child report visible = false), e.g. the Wi-Fi switch before

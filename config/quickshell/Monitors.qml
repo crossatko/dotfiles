@@ -50,6 +50,15 @@ Singleton {
     function label(s) { return s ? s.name : "" }
     function title(s) { return s ? (s.model || s.name) : "" }
     function byName(n) { return screens.find(s => s.name === n) || null }
+    function byKey(k) { return k ? screens.find(s => Appearance.monitorKey(s) === k) || null : null }   // a connected monitor by Appearance.monitorKey
+    // Hyprland's reserved area of `s` (px, layout space: its reserved_area plus the layers' exclusive zones), from the last
+    // monitor report (Hyprland.refreshMonitors() renews it): { left, top, right, bottom }, zeros before the first report
+    function reservedOf(s) {
+        const hm = s ? Hyprland.monitorFor(s) : null
+        const r = hm && hm.lastIpcObject ? hm.lastIpcObject.reserved : null
+        const n = i => r && r.length > i ? Math.max(0, Number(r[i]) || 0) : 0     // (a QVariantList: not Array.isArray)
+        return { left: n(0), top: n(1), right: n(2), bottom: n(3) }
+    }
 
     property string selectedName: ""
     readonly property var selected: byName(selectedName) || primary

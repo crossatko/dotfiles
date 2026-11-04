@@ -6,7 +6,7 @@ Item {
     id: bk
     property var screen: null
     // qmllint disable missing-property
-    readonly property string edge: screen && Popups.bars[screen.name] !== undefined ? Popups.edgeOf(screen.name) : ""
+    readonly property string edge: screen ? Popups.barEdgeOf(screen.name) : ""
     // qmllint enable missing-property
     readonly property real gap: BarConfig.barGapOf(screen)
     visible: edge !== ""

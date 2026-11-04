@@ -70,6 +70,7 @@ Singleton {
     function esc() { if (Date.now() - escAt > 400) close() }
     function closeAll() { name = ""; dismiss("") }
     function edgeOf(scr) { return bars[scr] || "bottom" }
+    function barEdgeOf(scr) { return bars[scr] !== undefined ? edgeOf(scr) : "" }   // the bar's edge, "" = no bar on that screen
     // distance from screen s's bar edge to a card that hangs off the bar (PopupHost card, DictationPill): past the bar
     // (incl. a floating bar's CURRENT gap, so it follows the compact animation; a flush bar's chip inset taken back), minus
     // what the bar's exclusive zone already moved a zone-0 window, plus popupGap; no bar = popupGap from the screen edge

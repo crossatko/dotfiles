@@ -19,7 +19,7 @@ Item {
     implicitHeight: col.implicitHeight
 
     readonly property int titleW: 120
-    readonly property bool dragging: pill.dragging     // a slider drag: the Settings page must not scroll
+    readonly property bool dragging: pill.dragging || models.dragging     // a slider drag: the Settings page must not scroll
 
     Component.onCompleted: { PttPrefs.watchers++; PttPrefs.refresh() }
     Component.onDestruction: PttPrefs.watchers--
@@ -32,7 +32,7 @@ Item {
         LanguagesSection { titleWidth: pg.titleW }
         PttKeysSection { titleWidth: pg.titleW; Layout.topMargin: 6 }
         DictationPillSection { id: pill; titleWidth: pg.titleW; Layout.topMargin: 6 }
-        SttModelsSection { titleWidth: pg.titleW; Layout.topMargin: 6 }
+        SttModelsSection { id: models; titleWidth: pg.titleW; Layout.topMargin: 6 }
         DictationPrefsSection { titleWidth: pg.titleW; Layout.topMargin: 6 }
         FillerWordsSection { titleWidth: pg.titleW; Layout.topMargin: 6 }
         ReplacementsSection { titleWidth: pg.titleW; Layout.topMargin: 6 }

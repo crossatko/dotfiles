@@ -40,18 +40,34 @@ function parse(d, legacyEdge) {
     return out
 }
 
+// a copy of the four values `pill` (parse()'s object) with `key` set to `v`, or null (not a pill key, or a bad value)
+function withKey(pill, key, v) {
+    if (KEYS.indexOf(key) < 0) return null
+    const c = clean(key, v)
+    if (c === undefined) return null
+    const out = Object.assign({}, pill)
+    out[key] = c
+    return out
+}
+
 // the geometry. p = { edge, barEdge ("top" | "bottom" | "" = no bar), gap, x, screenW, pillW, side (edge gap of the screen
 // sides), barInset (screen edge -> the bar's far edge, layout space), gapBar (one gap token past a bar), gapEdge (one from a
-// bare edge) } -> { atTop, onBar (hangs off the bar), inset (anchored edge -> card, layout space), left (screen left -> card),
-// cardW }
+// bare edge), resL / resR (the monitor's reserved left / right: a pinned-video strip, a side panel; px, default 0),
+// inUsable (the window is laid out inside the usable area: exclusive zone 0) } ->
+// { atTop, onBar (hangs off the bar), inset (anchored edge -> card, layout space), left (screen left -> card),
+//   margin (the window's left margin: from the usable area's left when inUsable, else from the screen's), cardW }
+// Horizontally the card stays inside the usable width (the screen minus the reserved sides), `side` from its edges; x 0.5 =
+// centred there.
 function place(p) {
     const atTop = p.edge === "top" || (p.edge === "bar" && p.barEdge === "top")
     const onBar = p.barEdge !== "" && p.barEdge === (atTop ? "top" : "bottom")
     const g = Math.max(0, Number(p.gap) || 0)
     // past the bar; no bar on this screen: the bar gap from the bare edge (as before); the edge away from the bar: the edge gap
     const inset = onBar ? p.barInset + g * p.gapBar : p.barEdge === "" ? g * p.gapBar : g * p.gapEdge
-    const room = Math.max(0, p.screenW - 2 * p.side)
+    const resL = Math.max(0, Number(p.resL) || 0)
+    const resR = Math.max(0, Number(p.resR) || 0)
+    const room = Math.max(0, p.screenW - resL - resR - 2 * p.side)
     const cardW = Math.min(p.pillW, room > 0 ? room : p.pillW)
-    const left = p.side + clamp(Number(p.x) || 0, 0, 1) * Math.max(0, room - cardW)
-    return { atTop: atTop, onBar: onBar, inset: inset, left: Math.round(left), cardW: cardW }
+    const left = Math.round(resL + p.side + clamp(Number(p.x) || 0, 0, 1) * Math.max(0, room - cardW))
+    return { atTop: atTop, onBar: onBar, inset: inset, left: left, margin: p.inUsable ? left - resL : left, cardW: cardW }
 }

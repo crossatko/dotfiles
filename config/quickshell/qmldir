@@ -267,6 +267,7 @@ ScreenFrame 1.0 ScreenFrame.qml
 PillPreview 1.0 PillPreview.qml
 PillBarSketch 1.0 PillBarSketch.qml
 ScreenBackdrop 1.0 ScreenBackdrop.qml
+WallpaperCut 1.0 WallpaperCut.qml
 PillPositionRows 1.0 PillPositionRows.qml
 PillSection 1.0 PillSection.qml
 DictationPillSection 1.0 DictationPillSection.qml

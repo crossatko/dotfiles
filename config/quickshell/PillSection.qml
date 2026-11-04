@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
 
 // Settings > Voice / Diacritics > Pill: one section on both pages. Head, the live preview (PillPreview: the real card at actual
 // size and in a mock of the monitor where the pill sits), the feature's own rows (children, e.g. Diacritics "Text"), then
@@ -19,10 +18,7 @@ ColumnLayout {
     readonly property bool dragging: pos.dragging
     default property alias rows: own.data
 
-    readonly property var shownScreen: {
-        const k = store ? store.pillScreen : ""
-        return (k !== "" ? Quickshell.screens.find(s => Appearance.monitorKey(s) === k) : null) || Monitors.selected
-    }
+    readonly property var shownScreen: Monitors.byKey(store ? store.pillScreen : "") || Monitors.selected
 
     Layout.fillWidth: true
     spacing: Theme.gapRow

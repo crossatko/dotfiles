@@ -64,7 +64,7 @@ PanelWindow {
     // qmllint disable missing-property
     margins.top: atTop ? place.edgeInset : 0
     margins.bottom: atTop ? 0 : place.edgeInset
-    margins.left: place.left
+    margins.left: place.margin
     // qmllint enable missing-property
     implicitWidth: place.screenW > 0 ? place.cardW : pillW
     implicitHeight: Math.ceil(card.cardH)
@@ -97,7 +97,7 @@ PanelWindow {
         function status(): string {
             return "svc=" + pill.svc + " look=" + pill.look + " open=" + pill.open + " words=" + pill.words + " text=" + pill.shownText.length
                 + " screen=" + place.screenName + " edge=" + (pill.atTop ? "top" : "bottom") + " inset=" + place.edgeInset
-                + " left=" + place.left + " window=" + pill.width + "x" + pill.height + " dots=" + card.dots.width + "x" + card.dots.height + " glass=" + Theme.glass
+                + " left=" + place.left + " margin=" + place.margin + " reserved=" + JSON.stringify(place.reserved) + " window=" + pill.width + "x" + pill.height + " dots=" + card.dots.width + "x" + card.dots.height + " glass=" + Theme.glass
         }
     }
 }

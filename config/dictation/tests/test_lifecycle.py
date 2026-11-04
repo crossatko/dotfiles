@@ -117,6 +117,18 @@ class IdleUnload(Base):
         self.assertFalse(made[0].closed)
         c.close()
 
+    def test_immediately_unloads_right_after_the_session(self):
+        for value in (1, 0.5):  # Settings "Immediately" writes 1; anything in (0, 1] means the same
+            made = []
+            self.start(lambda: made.append(good()) or made[-1], prefs_fn=lambda v=value: prefs.Prefs(idle_timeout_s=v))
+            c = Client(self.path)
+            self.dictate(c)
+            self.assertTrue(wait_for(lambda: made[0].closed), "closed without the clock moving")
+            self.dictate(c)  # the next dictation loads again and works
+            self.assertEqual(len(made), 2)
+            c.close()
+            self.tearDown()
+
     def test_zero_and_negative_timeouts_never_unload(self):
         for value in (0, -1):
             made = []
@@ -440,6 +452,13 @@ class Prefs(unittest.TestCase):
         with open(self.path, "w") as f:
             f.write(text)
         return prefs.load(self.path)
+
+    def test_unload_due_rule(self):
+        self.assertFalse(prefs.unload_due(0, 10 ** 6))
+        self.assertFalse(prefs.unload_due(-5, 10 ** 6))
+        self.assertTrue(prefs.unload_due(1, 0))
+        self.assertFalse(prefs.unload_due(15, 14.9))
+        self.assertTrue(prefs.unload_due(15, 15))
 
     def test_defaults_when_missing_or_malformed(self):
         d = prefs.Prefs()

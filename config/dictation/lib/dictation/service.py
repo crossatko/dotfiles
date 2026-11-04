@@ -39,6 +39,7 @@ import time
 
 from .engine import Config, Dictation, RecognizerError, identity_cleanup
 from .languages import parse_mode
+from .prefs import unload_due
 from .whisper import WorkerFailed
 
 
@@ -281,7 +282,7 @@ class Service:
         elif engine and not engine.active and self._state == "idle" and self._recognizer is not None:
             if self._clock() - self._prefs_read >= 2.0:
                 self._read_prefs()
-            if self._idle_timeout > 0 and self._clock() - self._last_activity >= self._idle_timeout:
+            if unload_due(self._idle_timeout, self._clock() - self._last_activity):
                 self._unload()
 
     def _begin(self, cmd: dict) -> None:

@@ -78,5 +78,57 @@ class Prefs(unittest.TestCase):
         self.assertEqual(p, prefs.Prefs())
 
 
+
+class IdleUnload(unittest.TestCase):
+    """reap_once: llama-server stops after idle_timeout_s without a fix; 0 < x <= 1 ("Immediately") = right after the fix."""
+    class FakeServer:
+        def __init__(self):
+            self.stopped = False
+        def alive(self):
+            return True
+        def stop(self):
+            self.stopped = True
+
+    def svc(self, idle):
+        s = Service("/nonexistent", load_prefs=lambda: prefs.Prefs(idle_timeout_s=idle))
+        s.server = self.FakeServer()
+        s.last_used = 100.0
+        return s
+
+    def test_rule(self):
+        self.assertFalse(prefs.unload_due(0, 10 ** 6))
+        self.assertFalse(prefs.unload_due(-1, 10 ** 6))
+        self.assertTrue(prefs.unload_due(1, 0))
+        self.assertTrue(prefs.unload_due(0.5, 0))
+        self.assertFalse(prefs.unload_due(30, 29))
+        self.assertTrue(prefs.unload_due(30, 30))
+
+    def test_immediately_stops_at_the_next_check(self):
+        s = self.svc(1)
+        server = s.server
+        s.reap_once(now=100.0)
+        self.assertTrue(server.stopped)
+        self.assertIsNone(s.server)
+
+    def test_timeout_and_never(self):
+        s = self.svc(30)
+        s.reap_once(now=129.0)
+        self.assertIsNotNone(s.server)
+        s.reap_once(now=130.0)
+        self.assertIsNone(s.server)
+        n = self.svc(0)
+        n.reap_once(now=10 ** 9)
+        self.assertIsNotNone(n.server)
+
+    def test_never_during_a_fix(self):
+        s = self.svc(1)
+        s.fix_lock.acquire()
+        try:
+            s.reap_once(now=10 ** 9)
+            self.assertIsNotNone(s.server)
+        finally:
+            s.fix_lock.release()
+
+
 if __name__ == "__main__":
     unittest.main()
