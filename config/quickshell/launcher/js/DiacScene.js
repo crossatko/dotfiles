@@ -193,7 +193,7 @@ function replay(prep, plan, t) {
 // apart, never before their word arrived. The chunk on screen stays until all its words arrived and its marks landed (+ LIVE_HOLD), then
 // the next one dissolves in; a chunk whose words arrived long ago shows its marks at once, quickly. A fixed word is applied only when it has
 // the original's letters (a mark added, nothing else); any other word stays as typed, and the done replay then plays the whole fixed text
-// as before (liveFinish returns null). liveFinish otherwise continues from the chunk on screen: the same flares are never played again.
+// (liveFinish returns null). liveFinish otherwise continues from the chunk on screen: the same flares are never played again.
 var LIVE_HOLD = 0.12;
 var BASEOF = {};
 (function () {
@@ -224,6 +224,9 @@ function liveApply(live, i, fixedWord) {
     if (o.length !== f.length) { live.skipped++; return; }
     for (k = 0; k < o.length; k++) if (o[k] !== f[k] && BASEOF[f[k]] !== o[k]) { live.skipped++; return; }
     (live.byWord[i] || []).forEach(function (ch) { ch.ch = f[ch.k]; ch.mark = F.hasMark(ch.ch); });
+    live.prep.chunks.forEach(function (c) {          // the replay plan goes by the marks of the fixed text
+        c.marks = c.chars.filter(function (k) { return k.mark; }).length;
+    });
 }
 
 // the fixed text so far (whole words) arrived at clock t: every new word is put in (or skipped)

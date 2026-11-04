@@ -269,6 +269,45 @@ test("liveFinish: carries on from the chunk on screen, no flare is played twice,
     assert.ok(before.v.length === first.v.length);
 });
 
+test("live: the chunks count the marks of the fixed text, so the replay plan covers every chunk that has some", () => {
+    const live = S.liveNew(SRC, 0);
+    assert.ok(live.prep.chunks.every(c => c.marks === 0));
+    S.liveFeed(live, FIX, 0.5);
+    live.prep.chunks.forEach(c => assert.strictEqual(c.marks, c.chars.filter(k => k.mark).length));
+    assert.ok(live.prep.chunks.filter(c => c.marks).length > 2);
+    // the live view stands on the last chunk with the others long shown: the plan holds the chunks after it, none is dropped for "no marks"
+    const t = 0.5, plan = S.liveFinish(live, FIX, t), after = live.prep.chunks.map((c, i) => c.marks && i > live.ci ? i : -1).filter(i => i >= 0);
+    assert.ok(plan.items.length > 0);
+    after.forEach(i => assert.ok(plan.items.some(it => it.i === i), "chunk " + i + " missing"));
+});
+
+test("liveFinish: nothing pending in the chunk on screen still replays the later chunks that have marks", () => {
+    const live = S.liveNew(SRC, 0);
+    S.liveFeed(live, FIX, 0.5);
+    const plan = S.liveFinish(live, FIX, 0.5 + 5);                            // the first chunk's marks have all landed
+    assert.ok(live.ci < live.prep.chunks.length);
+    const later = live.prep.chunks.map((c, i) => c.marks && i > live.ci ? i : -1).filter(i => i >= 0);
+    if (later.length) assert.ok(plan.items.length > 1 && plan.items.slice(1).every(it => later.includes(it.i)));
+});
+
+test("a fixed letter is as wide as the typed one: d -> ď and t -> ť keep the layout, the apostrophe stays in the glyph's width", () => {
+    assert.strictEqual(F.advance("ď"), F.advance("d"));
+    assert.strictEqual(F.advance("ť"), F.advance("t"));
+    const a = S.prepare("hodit dnes"), b = S.prepare("hodiť ďnes");
+    assert.deepStrictEqual(a.chunks[0].chars.map(c => c.x), b.chunks[0].chars.map(c => c.x));
+    for (const ch of ["ď", "ť"]) {
+        const g = F.blank(14, 13);
+        F.stampChar(g, ch, 3, 3, 1, 1, 0, 0);
+        const w = F.advance(ch) - 1;
+        for (let y = 0; y < g.r; y++) for (let x = 0; x < g.c; x++) if (g.v[y * g.c + x] > 0) assert.ok(x >= 3 && x < 3 + w + 1, ch + " lit at x=" + x);
+        // and nothing reaches into the next letter's columns (the gap column is the last one allowed)
+    }
+    const live = S.liveNew("hodit dnes", 0);
+    S.liveFeed(live, "hodiť ďnes", 1.0);
+    assert.deepStrictEqual(live.prep.chunks[0].chars.map(c => c.x), a.chunks[0].chars.map(c => c.x));
+    assert.strictEqual(live.prep.chunks[0].marks, 2);
+});
+
 test("liveFinish: everything already shown = nothing to replay (the live picture stays)", () => {
     const live = S.liveNew("ctrnact", 0);
     S.liveFeed(live, "čtrnáct", 1.0);
@@ -280,6 +319,9 @@ test("liveFinish: no stream at all (all words arrive with done) replays like a f
     const live = S.liveNew(SRC, 0);
     const plan = S.liveFinish(live, FIX, 0.5);
     assert.ok(plan && plan.items[0].i === 0 && plan.total <= 1.5 + 1e-9);
+    const marked = live.prep.chunks.map((c, i) => c.marks ? i : -1).filter(i => i >= 0);
+    assert.ok(marked.length > 2);
+    assert.deepStrictEqual(plan.items.map(it => it.i), marked);                // every chunk with marks, in reading order
     const g = S.replay(live.prep, plan, plan.total);
     assert.ok(markN(g) > 0);
 });
