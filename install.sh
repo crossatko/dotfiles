@@ -904,6 +904,10 @@ stage_links() {
     link "$CONFIG_DIR/$app" "$HOME/.config/$app"
   done
   link "$CONFIG_DIR/herdr-automatic-rename" "$HOME/.config/herdr-automatic-rename"
+  # Pi: only the non-secret files, one by one (auth.json, sessions, caches stay local); Pi reads ~/.pi/agent, not ~/.config
+  link "$CONFIG_DIR/pi/settings.json" "$HOME/.pi/agent/settings.json"
+  link "$CONFIG_DIR/pi/models.json" "$HOME/.pi/agent/models.json"
+  link "$CONFIG_DIR/pi/extensions/herdr-ctx.ts" "$HOME/.pi/agent/extensions/herdr-ctx.ts"
   link "$CONFIG_DIR/brave-flags.conf" "$HOME/.config/brave-flags.conf"
   link "$CONFIG_DIR/vesktop-flags.conf" "$HOME/.config/vesktop-flags.conf"
 

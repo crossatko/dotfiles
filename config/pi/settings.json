@@ -1,0 +1,12 @@
+{
+  "lastChangelogVersion": "1.5.0",
+  "defaultProvider": "openrouter",
+  "defaultModel": "xiaomi/mimo-v2.5",
+  "defaultThinkingLevel": "high",
+  "packages": [
+    "npm:pi-nvim",
+    "npm:pi-lmstudio"
+  ],
+  "hideThinkingBlock": false,
+  "theme": "dark"
+}

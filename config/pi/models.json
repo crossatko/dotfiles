@@ -1,0 +1,12 @@
+{
+  "providers": {
+    "openrouter": {
+      "compat": {
+        "openRouterRouting": {
+          "order": ["xiaomi"],
+          "allow_fallbacks": true
+        }
+      }
+    }
+  }
+}
