@@ -246,6 +246,9 @@ SttModelRow 1.0 SttModelRow.qml
 SttModelsSection 1.0 SttModelsSection.qml
 SttRoleRow 1.0 SttRoleRow.qml
 singleton DiacriticsPrefs 1.0 DiacriticsPrefs.qml
+singleton DiacriticsWords 1.0 DiacriticsWords.qml
+DiacriticsCorrectionsSection 1.0 DiacriticsCorrectionsSection.qml
+CorrectionRow 1.0 CorrectionRow.qml
 DiacriticsKeySection 1.0 DiacriticsKeySection.qml
 DiacriticsModelSection 1.0 DiacriticsModelSection.qml
 DiacriticsIgnoredSection 1.0 DiacriticsIgnoredSection.qml
