@@ -87,7 +87,7 @@ def llama_for(fake):
 
 
 def service(fake, events):
-    svc = Service("/nonexistent", load_prefs=lambda: prefs.Prefs(), server_factory=lambda m: llama_for(fake))
+    svc = Service("/nonexistent", load_prefs=lambda: prefs.Prefs(), server_factory=lambda m: llama_for(fake), load_words=lambda: ())
     orig_state, orig_part = svc.set_state, svc.set_partial
 
     def state(st, text="", fixed=""):

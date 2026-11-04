@@ -8,6 +8,7 @@ import QtQuick.Layouts
 //   DiacriticsKeySection      the key (applied to Hyprland at once)
 //   DiacriticsModelSection    the model file, idle unload
 //   DiacriticsIgnoredSection  window classes where the key does nothing
+//   DiacriticsCorrectionsSection  words the model gets wrong (DiacriticsWords, diacritics-words.json)
 //   DiacriticsPillSection     real text or a generic animation in the pill
 Item {
     id: pg
@@ -27,13 +28,14 @@ Item {
         DiacriticsKeySection { titleWidth: pg.titleW }
         DiacriticsModelSection { titleWidth: pg.titleW; Layout.topMargin: 6 }
         DiacriticsIgnoredSection { titleWidth: pg.titleW; Layout.topMargin: 6 }
+        DiacriticsCorrectionsSection { titleWidth: pg.titleW; Layout.topMargin: 6 }
         DiacriticsPillSection { titleWidth: pg.titleW; Layout.topMargin: 6 }
 
         PageReset {
             objectName_: "btn-diacritics-reset"
-            dirty: DiacriticsPrefs.changed
-            info: "Key, model, idle time, ignored windows and the pill option, saved in diacritics.json."
-            onReset: DiacriticsPrefs.resetAll()
+            dirty: DiacriticsPrefs.changed || DiacriticsWords.changed
+            info: "Key, model, idle time, ignored windows, corrections and the pill option, saved in diacritics.json and diacritics-words.json."
+            onReset: { DiacriticsPrefs.resetAll(); DiacriticsWords.resetAll() }
         }
     }
 }

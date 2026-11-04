@@ -61,6 +61,9 @@ Singleton {
                           "com.herdr.terminal", "dotfiles.scratchpad"],
         show_text: true
     })
+    // idle unload choices (seconds); any other saved number is accepted and shown as Custom
+    readonly property var idleValues: [30, 60, 300, 600, 1800, 3600]
+    readonly property var idleLabels: ["30 sec", "1 min", "5 min", "10 min", "30 min", "1 hour"]
     readonly property var keys: ["key", "model", "idle_timeout_s", "ignored_classes", "show_text"]
     readonly property int maxClasses: 100
     readonly property int maxClassLen: 80
