@@ -95,7 +95,7 @@ Item {
                 objectName: "weather-blur"
                 title: "Weather blur"; titleWidth: pg.titleW
                 store: Weather; key: "blur"
-                info: "The weather picks the window blur: rain and storms drops, snow and cold frost, heat a shimmer, fog and overcast haze, clear nights aurora (also on a partly cloudy night with strong geomagnetic activity for your latitude), otherwise solid glass (kawase without it). Your choice under Look & feel > Blur is never changed and applies again when this is off. Drops, heat shimmer and aurora cost GPU while they animate. Needs a Hyprland with the blur variants (0.57+)."
+                info: "The weather picks the window blur: rain and storms drops, snow and cold frost, heat a shimmer, fog and overcast haze, nights aurora when geomagnetic activity is strong enough for your latitude (a clear night without it stays solid glass), otherwise solid glass (kawase without it). Your choice under Look & feel > Blur is never changed and applies again when this is off. Drops, heat shimmer and aurora cost GPU while they animate. Needs a Hyprland with the blur variants (0.57+)."
             }
             PrefSlider {
                 title: "Cold at or below"; titleWidth: pg.titleW

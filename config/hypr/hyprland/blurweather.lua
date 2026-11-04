@@ -72,9 +72,8 @@ M.RULES = {
 		when = function(s) return M.KINDS.fog[s.kind] == true end },
 	{ name = "overcast", variant = "haze", opts = {},
 		when = function(s) return M.KINDS.overcast[s.kind] == true end },
-	{ name = "clear night", variant = "aurora", opts = { ["aurora:speed"] = M.SPEED.aurora },
-		when = function(s) return s.is_day == false and M.KINDS.clear[s.kind] == true end },
-	-- a night that is not rainy / foggy / overcast (those matched above) with a geomagnetic storm strong enough for the latitude
+	-- a night (clear included) that is not rainy / foggy / overcast (those matched above) with a geomagnetic storm strong enough
+	-- for the latitude; a clear night without one falls through to the default solid glass
 	{ name = "aurora night", variant = "aurora", opts = { ["aurora:speed"] = M.SPEED.aurora },
 		when = function(s) return s.is_day == false and s.aurora == true end },
 }

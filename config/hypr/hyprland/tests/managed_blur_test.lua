@@ -158,8 +158,8 @@ local function variant_name()
 end
 local function weather(kind, o)
 	o = o or {}
-	write(WF, ('{"version":1,"enabled":%s,"at":%d,"kind":"%s","tempC":%s,"isDay":%s,"aurora":false,"coldC":0,"hotC":28}')
-		:format(o.enabled or "true", o.at or os.time(), kind, o.temp or "15", o.day or "true"))
+	write(WF, ('{"version":1,"enabled":%s,"at":%d,"kind":"%s","tempC":%s,"isDay":%s,"aurora":%s,"coldC":0,"hotC":28}')
+		:format(o.enabled or "true", o.at or os.time(), kind, o.temp or "15", o.day or "true", o.aurora or "false"))
 end
 local function live_timers()
 	local c = 0
@@ -221,7 +221,7 @@ for _, case in ipairs({
 	M = boot({ getter = function(k) if k == "decoration.blur.aurora.color1" then return case[2] end end })
 	H.getter = nil -- only the capture at load sees the odd value
 	check("capture " .. case[1], M.blur_base.opts["aurora:color1"] == case[3], M.blur_base.opts["aurora:color1"])
-	weather("clear", { day = "false" })
+	weather("clear", { day = "false", aurora = "true" })
 	weather_blur_apply()
 	check("capture " .. case[1] .. ": aurora", variant_name() == "aurora")
 	weather("clear", { enabled = "false" })
@@ -239,7 +239,7 @@ end
 -- one key that makes hl.config raise cannot block the variant revert
 write(GF, '{"version":1,"blur":{"variant":"kawase"}}')
 M = boot()
-weather("clear", { day = "false" })
+weather("clear", { day = "false", aurora = "true" })
 weather_blur_apply()
 H.raise_on = "decoration.blur.aurora.color2"
 weather("clear", { enabled = "false" })
