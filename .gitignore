@@ -30,3 +30,4 @@ config/theme/theme.local.toml
 config/theme/blobs/target/
 __pycache__/
 scratchpad/
+config/opencode/service.json
