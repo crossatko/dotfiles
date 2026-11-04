@@ -41,6 +41,7 @@ class Rule(unittest.TestCase):
         ("I think", "I think"), ("I'm here", "I'm here"), ("I", "I"), ("API call", "API call"), ("GitHub", "GitHub"),
         ("iPhone", "iPhone"), ("Python3 rocks", "Python3 rocks"), ("\"Yes\"", "\"yes\""), ("Ano, jasně", "ano, jasně"),
         ("Děkuji.", "děkuji"), ("Čau", "čau"), ("Jean-Paul", "Jean-Paul"),
+        ("U.S.", "U.S."), ("e.g.", "e.g."), ("a.m.", "a.m."), ("README.md.", "README.md"), ("v1.2.", "v1.2"),
     )
 
     def test_final_text(self):
@@ -182,9 +183,22 @@ class Replacements(unittest.TestCase):
         self.assertEqual(self.run_text([{"heard": "praha", "typed": "Praha"}], "Praha"), "Praha")
         self.assertEqual(self.run_text([{"heard": "praha", "typed": "Praha"}], "Praha je hezká"), "Praha je hezká")
 
-    def test_lowercase_typed_form_of_a_capitalised_heard_word_is_copied_capital(self):
-        # the existing rule: the typed form takes the heard word's capital ("Docker" -> "Docker", never lowered)
-        self.assertEqual(self.run_text([{"heard": "docker", "typed": "docker"}], "Docker"), "Docker")
+    def test_a_capital_copied_from_whisper_goes(self):
+        # a lower-case typed form takes the heard word's capital only as whisper's sentence start: a fragment drops it
+        rep = [{"heard": "docker", "typed": "docker"}]
+        self.assertEqual(self.run_text(rep, "Docker"), "docker")
+        self.assertEqual(self.run_text(rep, "Docker."), "docker")
+        self.assertEqual(self.run_text(rep, "Docker compose"), "docker compose")
+        self.assertEqual(self.run_text(rep, "Docker is great."), "Docker is great.")  # a sentence keeps it
+        self.assertEqual(self.run_text([{"heard": "pee are", "typed": "pull request"}], "Pee are"), "pull request")
+        self.assertEqual(self.run_text([{"heard": "ok", "typed": "OK"}], "Ok."), "OK")
+
+    def test_only_whisper_punctuation_behind_a_replacement_goes(self):
+        rep = [{"heard": "et cetera", "typed": "etc."}, {"heard": "praha", "typed": "Praha"}]
+        self.assertEqual(self.run_text(rep, "Et cetera."), "etc.")
+        self.assertEqual(self.run_text(rep, "Et cetera"), "etc.")
+        self.assertEqual(self.run_text(rep, "Praha."), "Praha")
+        self.assertEqual(self.run_text(rep, "Praha?"), "Praha?")
 
     def test_word_count_is_the_typed_one(self):
         rep = [{"heard": "pull requests", "typed": "PRs"}]
@@ -205,8 +219,9 @@ class Replacements(unittest.TestCase):
 
 class Unit(unittest.TestCase):
     def test_lowercase_fragment_skips_replaced_first_word(self):
-        self.assertEqual(lowercase_fragment([(0, "Docker")], [True]), [(0, "Docker")])
-        self.assertEqual(lowercase_fragment([(0, "Docker")], [False]), [(0, "docker")])
+        self.assertEqual(lowercase_fragment([(0, "Docker.")], [(True, 6)]), [(0, "Docker")])
+        self.assertEqual(lowercase_fragment([(0, "Docker.")], [(False, 6)]), [(0, "docker")])
+        self.assertEqual(lowercase_fragment([(0, "Docker.")], [None]), [(0, "docker")])
         self.assertEqual(lowercase_fragment([]), [])
 
     def test_strip_in_brackets(self):

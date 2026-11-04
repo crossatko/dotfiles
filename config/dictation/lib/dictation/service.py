@@ -314,7 +314,7 @@ class Service:
 
     def _session_config(self, prefs) -> Config:
         """The engine's tunables for one session: the service's config, with the prefs' pause_silence_s,
-        trailing_space and lowercase_fragments (no UI)."""
+        trailing_space, lowercase_fragments and strip_single_word_punct (no UI)."""
         config = self._config or Config()
         pause = getattr(prefs, "pause_silence_s", None)
         if pause is not None:

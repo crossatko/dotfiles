@@ -124,24 +124,33 @@ def _lower_first(word: str) -> str:
 
 
 _WEAK_END = ".,;:…"  # stripped behind a lone word; "?" and "!" carry meaning and stay
+_ABBREVIATION = re.compile(r"(?:[^\W\d_]\.)+[^\W\d_]")  # U.S, e.g, a.m: their last period is part of the word
 
 
-def _strip_end(word: str) -> str:
-    """Yes. -> Yes, "Yes." -> "Yes", (Yes.) -> (Yes), Yes?! stays."""
+def _strip_end(word: str, keep: int = 0) -> str:
+    """Yes. -> Yes, "Yes." -> "Yes", (Yes.) -> (Yes), Yes?! stays, U.S. and e.g. keep their period. keep: how many
+    characters before the trailing punctuation are the user's own spelling and stay (a replacement's typed form)."""
+    if keep:
+        return word[:keep] + "".join(c for c in word[keep:] if c not in _WEAK_END)
     lead, core, trail = _split(word)
+    if trail[:1] == "." and _ABBREVIATION.fullmatch(core):
+        core, trail = core + ".", trail[1:]
     return lead + core + "".join(c for c in trail if c not in _WEAK_END)
 
 
 def lowercase_fragment(tokens: list, replaced: list | None = None, lower: bool = True, strip: bool = True) -> list:
-    """tokens: [(segment, word)]. A fragment (is_fragment) loses the capital of its first word (lower), and a lone word
-    also its trailing . , ; : … (strip). Replacement text is the user's spelling and is never touched."""
-    if not tokens or (replaced and replaced[0]) or not is_fragment([w for _, w in tokens]):
+    """tokens: [(segment, word)]; replaced: per word None, or for replacement text (own_case, own_length) (see
+    _replace). A fragment (is_fragment) loses the capital of its first word (lower), and a lone word also its trailing
+    . , ; : … (strip). The user's spelling in replacement text is never touched: its capital stays when the typed form
+    has one of its own (Praha, GitHub), and only punctuation whisper put behind it is stripped."""
+    if not tokens or not is_fragment([w for _, w in tokens]):
         return tokens
+    info = replaced[0] if replaced else None
     seg, word = tokens[0]
-    if lower:
+    if lower and not (info and info[0]):
         word = _lower_first(word)
     if strip and len(tokens) == 1:
-        word = _strip_end(word)
+        word = _strip_end(word) if not info else _strip_end(word, info[1])
     return [(seg, word)] + tokens[1:]
 
 
@@ -309,9 +318,10 @@ def replace(tokens: list, table: dict) -> tuple:
 
 
 def _replace(tokens: list, table: dict) -> tuple:
-    """replace() plus, per output word, whether it is replacement text: (tokens, replaced flags, hold)."""
+    """replace() plus, per output word, None or (own_case, own_length) for replacement text (see lowercase_fragment):
+    (tokens, replaced, hold)."""
     if not table:
-        return tokens, [False] * len(tokens), 0
+        return tokens, [None] * len(tokens), 0
     keys = [_key(_split(w)[1]) for _, w in tokens]
     out: list = []
     src: list = []  # input index each output word comes from
@@ -327,17 +337,21 @@ def _replace(tokens: list, table: dict) -> tuple:
         if match is None:
             out.append(tokens[i])
             src.append(i)
-            replaced.append(False)
+            replaced.append(None)
             i += 1
             continue
         n = len(match.heard)
         lead, _, _ = _split(tokens[i][1])
         _, _, trail = _split(tokens[i + n - 1][1])
         original = " ".join(_split(w)[1] for _, w in tokens[i : i + n])
-        words = (lead + _copy_case(original, match.typed) + trail).split()
+        cased = _copy_case(original, match.typed)
+        words = (lead + cased + trail).split()
         out += [(tokens[i][0], w) for w in words]
         src += [i] * len(words)
-        replaced += [True] * len(words)
+        # own_case: the typed form's capital is the user's (not copied from whisper's word); own_length: the word's
+        # characters up to the end of the typed form (anything after it is whisper's punctuation)
+        own_case = cased == match.typed and any(c.isupper() for c in match.typed)
+        replaced += [(own_case, len(w) - (len(trail) if k == len(words) - 1 else 0)) for k, w in enumerate(words)]
         i += n
     return out, replaced, _hold(tokens, keys, table, src)
 

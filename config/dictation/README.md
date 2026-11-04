@@ -182,10 +182,12 @@ Shell: `dictation begin cs`, `dictation end`, `dictation listen`.
   `trailing_space` false in `dictation-prefs.json` turns it off (no UI).
 - Fragments: a dictation of one word, or of at most 4 words with no sentence end (`. ? ! …`), is typed without
   whisper's capital ("docker compose up", "yes"); sentences are untouched. A lone word also loses a trailing
-  `. , ; : …` ("Yes." -> "yes"; `?` and `!` stay). Decided on the final text: the live passes type the capitalised
-  words, the final edit (the tail fix reaches 4 words, so a fragment's first word is always in reach) corrects them.
-  Only plain title-case first words change (not `I`, `I'm`, `API`, `GitHub`, words with digits), and replacement text
-  is never touched, so a name whisper capitalised ("Praha") is restored by a replacement `praha` -> `Praha`.
+  `. , ; : …` ("Yes." -> "yes"; `?` and `!` stay, and so does an abbreviation's: "U.S.", "e.g."). Decided on the final
+  text: the live passes type the capitalised words, the final edit corrects them (the tail fix reaches 4 words; when
+  the live passes typed more words than the final text has, the first one may be out of reach and keeps its capital).
+  Only plain title-case first words change (not `I`, `I'm`, `API`, `GitHub`, words with digits). A replacement keeps
+  the user's spelling: a capital of its own ("Praha", so a replacement `praha` -> `Praha` restores a name) and its own
+  punctuation (`etc.`) stay; a capital it only took over from whisper's word (`docker` typed for "Docker") goes.
   `lowercase_fragments` and `strip_single_word_punct` false in `dictation-prefs.json` turn the two parts off (no UI).
 - Every `wtype` run starts with one `Hyper_L` press and release: while the push-to-talk key (consumed by a Hyprland
   bind) is held, Hyprland drops the first key event of a new virtual keyboard (the session's first character was
