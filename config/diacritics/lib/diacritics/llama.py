@@ -146,30 +146,54 @@ class LlamaServer:
                 p.kill()
                 p.wait()
 
-    def complete(self, system: str, text: str, timeout: float = REQUEST_TIMEOUT) -> str:
-        """The model's reply for `text`, verbatim. Only a reply that ended by itself (finish_reason "stop") counts: a cut-off
-        one (length, anything else) is ServerError("truncated"), it must never be pasted."""
+    def complete(self, system: str, text: str, timeout: float = REQUEST_TIMEOUT, on_delta=None) -> str:
+        """The model's reply for `text`, verbatim, read as a stream (SSE). `on_delta(reply_so_far)` is called after every piece.
+        Only a reply that ended by itself (finish_reason "stop") counts: a cut-off one (length, anything else, a stream that
+        just ended) is ServerError("truncated"), it must never be pasted. `timeout` bounds both one silent gap and the whole
+        request. Leaving early (an error, a raising on_delta) closes the connection, which makes llama-server stop generating."""
         check_fits(system, text)
         body = json.dumps({
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": text}],
-            "temperature": 0, "top_k": 1, "max_tokens": max(512, min(CONTEXT - estimate_tokens(system) - estimate_tokens(text) - 64,
+            "temperature": 0, "top_k": 1, "stream": True,
+            "max_tokens": max(512, min(CONTEXT - estimate_tokens(system) - estimate_tokens(text) - 64,
                                        int(REPLY_FACTOR * estimate_tokens(text)) + 256)),
         }).encode()
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/v1/chat/completions", data=body,
-                                     headers={"Content-Type": "application/json"})
+                                     headers={"Content-Type": "application/json", "Accept": "text/event-stream"})
+        deadline = time.monotonic() + timeout
+        pieces: list[str] = []
+        finish = None
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
-                reply = json.load(r)
-            choice = reply["choices"][0]
-            content = choice["message"]["content"] or ""
-            if choice.get("finish_reason") != "stop":
-                raise ServerError("truncated", f"finish_reason {choice.get('finish_reason')!r}")
-            return content
+                for raw in r:
+                    if time.monotonic() > deadline:
+                        raise ServerError("timeout", "request timed out")
+                    line = raw.decode("utf-8").strip()
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    got = False
+                    for choice in json.loads(data).get("choices") or []:
+                        piece = (choice.get("delta") or {}).get("content")
+                        if piece:
+                            pieces.append(piece)
+                            got = True
+                        if choice.get("finish_reason"):
+                            finish = choice["finish_reason"]
+                    if got and on_delta is not None:
+                        on_delta("".join(pieces))
+            if finish != "stop":
+                raise ServerError("truncated", f"finish_reason {finish!r}")
+            return "".join(pieces)
+        except ServerError:
+            raise
         except (socket.timeout, TimeoutError):
             raise ServerError("timeout", "request timed out")
         except urllib.error.URLError as exc:
             if isinstance(exc.reason, (socket.timeout, TimeoutError)):
                 raise ServerError("timeout", "request timed out")
             raise ServerError("server", str(exc))
-        except (OSError, ValueError, KeyError, IndexError, TypeError) as exc:
+        except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:
             raise ServerError("server", f"bad reply: {exc}")

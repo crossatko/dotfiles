@@ -6,7 +6,8 @@ Protocol: newline-delimited JSON, one request per connection except subscribe.
     {"op":"state","state":"unsupported"|"failed"}   set a transient state (the key flow, for terminals and failures)
     {"op":"subscribe"}               stream {"event":"state","state":"idle|loading|working|done|failed|unsupported",
                                      "text":"<the text being fixed, only while working>",
-                                     "fixed":"<the fixed text, only on done>"}; the current state first
+                                     "fixed":"<while working: the part of the fixed text finished so far (whole words only,
+                                     plain text, absent until the first word); on done: the fixed text>"}; the current state first
     {"op":"status"}                  -> {"ok":true,"state":"...","model_loaded":bool,"model":"file.gguf"}
 
 llama-server starts on the first fix (state loading), is restarted when it died or the model preference changed, and
@@ -33,6 +34,7 @@ from .llama import LlamaServer, ServerError, check_fits, read_prompt
 IDLE_RETURN = 1.2
 QUEUE_WAIT = 30.0
 PUSHABLE = ("unsupported", "failed")
+PARTIAL_INTERVAL = 0.06  # s between partial `fixed` events while working
 
 
 default_socket = paths.socket_path
@@ -63,6 +65,21 @@ def keep_spacing(text: str, result: str) -> str:
     return "".join(p if p == "" or p.isspace() else next(it) for p in pieces)
 
 
+def finished_words(reply: str, html: bool = False) -> str:
+    """The plain text of the reply so far without its last, possibly unfinished word (the whole reply when it ends in
+    whitespace). HTML: an unfinished tag or character reference at the end is cut off first, then the plain text is derived."""
+    if html:
+        i = reply.rfind("<")
+        if i >= 0 and ">" not in reply[i:]:
+            reply = reply[:i]
+        j = reply.rfind("&")
+        if j > reply.rfind(">") and ";" not in reply[j:] and not reply[j:].isspace():
+            reply = reply[:j]
+        reply = htmlmode.to_plain(reply)
+    m = re.search(r"\s\S*$", reply)
+    return reply[:m.start()] if m else ""
+
+
 class Service:
     def __init__(self, path: str, load_prefs=prefs_mod.load, server_factory=LlamaServer):
         self.path = path
@@ -83,6 +100,8 @@ class Service:
         ev = {"event": "state", "state": self.state}
         if self.state == "working":
             ev["text"] = self.text
+            if self.fixed:
+                ev["fixed"] = self.fixed
         elif self.state == "done":
             ev["fixed"] = self.fixed
         return json.dumps(ev, ensure_ascii=False).encode() + b"\n"
@@ -103,6 +122,37 @@ class Service:
             t = threading.Timer(IDLE_RETURN, self.back_to_idle, (gen,))
             t.daemon = True
             t.start()
+
+    def set_partial(self, fixed: str) -> None:
+        """While working: the fixed text finished so far, sent to the subscribers (late ones get it with the state)."""
+        with self.lock:
+            if self.state != "working":
+                return
+            self.fixed = fixed
+            data = self.event()
+            for s in list(self.subs):
+                try:
+                    s.sendall(data)
+                except OSError:
+                    self.subs.remove(s)
+                    s.close()
+
+    def partial_sink(self, html: bool):
+        """The on_delta callback of a request: sends the whole words finished so far, at most every PARTIAL_INTERVAL and only
+        when at least one more word is complete."""
+        last = [0.0, 0]  # time of the last event, words in it
+
+        def sink(reply: str) -> None:
+            now = time.monotonic()
+            if now - last[0] < PARTIAL_INTERVAL:
+                return
+            part = finished_words(reply, html)
+            n = len(part.split())
+            if n <= last[1]:
+                return
+            last[0], last[1] = now, n
+            self.set_partial(part)
+        return sink
 
     def back_to_idle(self, gen: int) -> None:
         if self.gen == gen:  # nothing newer happened meanwhile
@@ -131,7 +181,7 @@ class Service:
                 check_fits(system, text.strip())  # before the model loads: too long means nothing is sent
                 self.ensure_server(self.load_prefs().model)
                 self.set_state("working", htmlmode.to_plain(text) if html else text)
-                reply = self.server.complete(system, text.strip())
+                reply = self.server.complete(system, text.strip(), on_delta=self.partial_sink(html))
                 if not reply.strip():
                     raise ServerError("empty")
                 result = restore_whitespace(text, reply)

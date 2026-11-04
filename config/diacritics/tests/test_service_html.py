@@ -30,7 +30,7 @@ class FakeServer:
     def stop(self):
         pass
 
-    def complete(self, system, text, timeout=0):
+    def complete(self, system, text, timeout=0, on_delta=None):
         FakeServer.prompts.append((system, text))
         return FakeServer.reply
 
