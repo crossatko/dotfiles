@@ -8,7 +8,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))
 
 from diacritics import prefs  # noqa: E402
-from diacritics.service import Service, restore_whitespace  # noqa: E402
+from diacritics.service import Service, keep_spacing, restore_whitespace  # noqa: E402
 
 
 class Whitespace(unittest.TestCase):
@@ -21,6 +21,13 @@ class Whitespace(unittest.TestCase):
 
     def test_inner_text_untouched(self):
         self.assertEqual(restore_whitespace("a  b\n\n😀", "á  b\n\n😀"), "á  b\n\n😀")
+
+    def test_collapsed_inner_spacing_restored(self):
+        self.assertEqual(keep_spacing("a  b.  c\n\n\nd 😀", "á b. č\nd 😀"), "á  b.  č\n\n\nd 😀")
+        self.assertEqual(keep_spacing("  a  b \n", "á b"), "  á  b \n")
+
+    def test_different_word_count_left_alone(self):
+        self.assertEqual(keep_spacing("a  b", "ab"), "ab")
 
 
 class Events(unittest.TestCase):

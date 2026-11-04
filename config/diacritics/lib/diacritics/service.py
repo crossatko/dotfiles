@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import socket
 import sys
@@ -51,6 +52,17 @@ def restore_whitespace(text: str, reply: str) -> str:
     if reply.endswith("\n"):
         reply = reply[:-1]
     return lead + reply + trail
+
+
+def keep_spacing(text: str, result: str) -> str:
+    """The model collapses double spaces and blank lines. When the result has the same words as the original, put the
+    original whitespace between them back (the spec: spaces and newlines exactly as typed). Other results stay as they are."""
+    words = result.split()
+    pieces = re.split(r"(\s+)", text)
+    if len(words) != len(text.split()):
+        return result
+    it = iter(words)
+    return "".join(p if p == "" or p.isspace() else next(it) for p in pieces)
 
 
 class Service:
@@ -123,6 +135,8 @@ class Service:
                 if not reply.strip():
                     raise ServerError("empty")
                 result = restore_whitespace(text, reply)
+                if not html:
+                    result = keep_spacing(text, result)
                 if html and not htmlmode.same_markup(text, result):
                     print("diacritics: markup changed by the model, result dropped", file=sys.stderr, flush=True)
                     self.set_state("failed")
