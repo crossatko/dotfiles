@@ -366,7 +366,7 @@ hl.window_rule({
 hl.layer_rule({ match = { namespace = "qs-.*" }, blur = true })
 hl.layer_rule({ match = { namespace = "qs-.*" }, ignore_alpha = 0.1 })
 -- Per-surface glass (Settings > Glass > Surfaces, fork builds with per-surface glass only): managed.lua adds named layer
--- rules "qs-glass-<id>" with a `glass` string for qs-bar / qs-popup / qs-launcher / qs-osd / qs-toast (M.SURFACE_LAYERS).
+-- rules "qs-glass-<id>" with a `glass` string for qs-bar / qs-popup / qs-launcher / qs-osd / qs-toast / qs-dictation (M.SURFACE_LAYERS).
 -- Bar popups animate themselves (PopupHost.qml: fade / scale / slide with Settings > Animations speed, curve, style).
 -- Hyprland's own layer fade on map / unmap would run on top of it with the HYPRLAND speed and curve; off for them.
 -- (The launcher's equivalent is switched with its "Like popups" setting in managed.lua.)

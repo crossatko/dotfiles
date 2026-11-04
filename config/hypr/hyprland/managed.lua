@@ -1000,8 +1000,8 @@ M.GLASS_MAX_BYTES = 16384
 -- the keys a profile may override, in the order they are written (GlassSurfaces.qml `keys`)
 M.SURFACE_KEYS = { "depth", "refraction", "aberration", "specular_intensity", "frost", "clarity", "darkening" }
 -- surface id -> layer namespace (whole-name regex, see rules.lua)
-M.SURFACE_LAYERS = { bar = "qs-bar", popup = "qs-popup", launcher = "qs-launcher", osd = "qs-osd", toast = "qs-toast" }
-M.SURFACE_IDS = { "bar", "popup", "launcher", "osd", "toast", "groupbar", "border" }
+M.SURFACE_LAYERS = { bar = "qs-bar", popup = "qs-popup", launcher = "qs-launcher", osd = "qs-osd", toast = "qs-toast", dictation = "qs-dictation" }
+M.SURFACE_IDS = { "bar", "popup", "launcher", "osd", "toast", "dictation", "groupbar", "border" }
 M.surface_applied = {}
 
 -- Pure: the "surfaces" object text -> {id = {key = number, enabled = bool (border only)}}, known ids / keys only,

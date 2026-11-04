@@ -143,3 +143,9 @@ bind("Escape", "Close the open bar popup", function()
 		hl.exec_cmd("qs ipc call popup esc")
 	end
 end, { non_consuming = true })
+
+-- push-to-talk keys chosen in Settings > Voice (hyprland/ptt.lua binds them from a state file; optional: an error there must not cost the binds above)
+local ptt_ok, ptt_err = pcall(require, "hyprland.ptt")
+if not ptt_ok then
+	print("ptt.lua: " .. tostring(ptt_err))
+end
