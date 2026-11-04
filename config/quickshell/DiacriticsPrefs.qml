@@ -4,27 +4,31 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import "launcher/js/PttKeys.js" as K
+import "launcher/js/PillPos.js" as P
 
 // Czech diacritics on a key (Settings > Diacritics): the key, the model, the idle unload, the ignored window classes and
-// whether the pill shows the real text. Saved in ${XDG_STATE_HOME:-~/.local/state}/quickshell/diacritics.json
+// the pill (real text or not, where it sits). Saved in ${XDG_STATE_HOME:-~/.local/state}/quickshell/diacritics.json
 // (QS_DIACRITICS_FILE overrides), this singleton is the only writer (atomic); the file is watched. The diacritics service
 // reads the same file; a missing or malformed file / field = that field's default. A missing file is written with all the
 // defaults at start. The default ignored_classes list must stay equal to DEFAULT_IGNORED_CLASSES in
 // diacritics/lib/diacritics/prefs.py (the key flow's own default; a unit test compares the two).
 //   { "version": 1, "key": "SUPER + SHIFT + D", "model": "<file>.gguf", "idle_timeout_s": 600,
-//     "ignored_classes": ["kitty", "foot"], "show_text": true }
+//     "ignored_classes": ["kitty", "foot"], "show_text": true, "pill_edge": "bar", "pill_gap": 2, "pill_x": 0.5, "pill_screen": "" }
 //   key              Hyprland bind syntax (PttKeys.js); "" = no key (cleared on purpose); missing = the default key
 //   model            a file name in modelsDir (${XDG_DATA_HOME:-~/.local/share}/diacritics/models, QS_DIACRITICS_MODELS_DIR)
 //   idle_timeout_s   seconds without a run before the model is unloaded; 0 = never
 //   ignored_classes  lower-case window classes where the key does nothing (matched case-insensitively); missing = defaults
 //   show_text        the pill shows the real words being fixed; false = a generic animation
+//   pill_edge / pill_gap / pill_x / pill_screen  where the pill sits (launcher/js/PillPos.js, PillPlacement; shell only). A file
+//                    without pill_edge takes the dictation pill's old "pill at the bottom" (DictationPrefs.pillBottom) and saves it
 // Applying the key: every change also rewrites the generated diacritics-binds.txt next to it (QS_DIACRITICS_BINDS_FILE;
 // one "<keys>|<description>" line), which hypr/hyprland/diacritics.lua binds at every config load, then runs
 // `hyprctl eval 'diacritics_apply()'` so it works at once. The command the bind runs is set in diacritics.lua only.
 // The default key is written to the binds file at start, so it works without opening Settings (shell.qml references
-// this singleton). The object is a PrefSwitch / PageReset store (value / set / unset / overridden / changed / resetAll)
+// this singleton). The object is a PrefSwitch / PrefSlider / PageReset store (value / set / unset / overridden / defaults / spec /
+// changed / resetAll)
 // and the key store of PttKeyRow (keysOf / check / setKeys / applyError / loaded / bound / registered / appid).
-//   qs ipc call diacritics get | key <keys> | model <file> | idle <s> | show <true|false> | reset | refresh
+//   qs ipc call diacritics get | key <keys> | model <file> | idle <s> | show <true|false> | pill <edge|gap|x|screen> <value> | reset | refresh
 Singleton {
     id: root
 
@@ -51,7 +55,7 @@ Singleton {
 
     // SUPER + SHIFT + D: Super+D is the launcher, so the Shift variant is the nearest free key that is easy to remember
     // (no bind of the config uses it; the Settings key row checks the live binds before it applies another key)
-    readonly property var defaults: ({
+    readonly property var defaults: Object.assign({
         key: "SUPER + SHIFT + D",
         model: "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf",
         idle_timeout_s: 600,
@@ -60,11 +64,13 @@ Singleton {
                           "gnome-terminal-server", "org.gnome.ptyxis", "com.gexperts.tilix", "tilix",
                           "com.herdr.terminal", "dotfiles.scratchpad"],
         show_text: true
-    })
+    }, P.DEFAULTS)
+    readonly property var spec: P.SPEC
+    readonly property var pillKeys: P.KEYS
     // idle unload choices (seconds); any other saved number is accepted and shown as Custom
     readonly property var idleValues: [30, 60, 300, 600, 1800, 3600]
     readonly property var idleLabels: ["30 sec", "1 min", "5 min", "10 min", "30 min", "1 hour"]
-    readonly property var keys: ["key", "model", "idle_timeout_s", "ignored_classes", "show_text"]
+    readonly property var keys: ["key", "model", "idle_timeout_s", "ignored_classes", "show_text"].concat(P.KEYS)
     readonly property int maxClasses: 100
     readonly property int maxClassLen: 80
 
@@ -73,15 +79,28 @@ Singleton {
     property int idleTimeoutS: defaults.idle_timeout_s
     property var ignoredClasses: defaults.ignored_classes.slice()
     property bool showText: defaults.show_text
+    property string pillEdge: defaults.pill_edge
+    property real pillGap: defaults.pill_gap
+    property real pillX: defaults.pill_x
+    property string pillScreen: defaults.pill_screen
     property var extra: ({})          // unknown keys of the file, written back unchanged
+    property bool legacyEdge: false   // the file had no pill_edge: parse() took the dictation pill's edge, commit() saves it
 
     // ---- PrefSwitch / PageReset store ----
-    function value(k) { return k === "show_text" ? showText : k === "idle_timeout_s" ? idleTimeoutS : k === "model" ? model : k === "key" ? key : ignoredClasses }
+    function value(k) {
+        return k === "show_text" ? showText : k === "idle_timeout_s" ? idleTimeoutS : k === "model" ? model : k === "key" ? key
+            : k === "pill_edge" ? pillEdge : k === "pill_gap" ? pillGap : k === "pill_x" ? pillX : k === "pill_screen" ? pillScreen : ignoredClasses
+    }
     function overridden(k) { return JSON.stringify(value(k)) !== JSON.stringify(defaults[k]) }
     function set(k, v) {
         if (k === "show_text") showText = !!v
         else if (k === "idle_timeout_s") idleTimeoutS = Math.min(604800, Math.max(0, Math.round(Number(v)) || 0))
         else if (k === "model") { if (!validModel(v)) return false; model = v }
+        else if (P.KEYS.indexOf(k) >= 0) {
+            const c = P.clean(k, v)
+            if (c === undefined) return false
+            if (k === "pill_edge") pillEdge = c; else if (k === "pill_gap") pillGap = c; else if (k === "pill_x") pillX = c; else pillScreen = c
+        }
         else return false
         commit()
         return true
@@ -167,6 +186,10 @@ Singleton {
         model = validModel(d.model) ? d.model : defaults.model
         idleTimeoutS = Number.isInteger(d.idle_timeout_s) && d.idle_timeout_s >= 0 && d.idle_timeout_s <= 604800 ? d.idle_timeout_s : defaults.idle_timeout_s
         showText = typeof d.show_text === "boolean" ? d.show_text : defaults.show_text
+        // a file from before pill_edge: the pills shared Voice's "pill at the bottom"; taken over once (written at the next load)
+        legacyEdge = o !== null && typeof o === "object" && !Array.isArray(o) && P.clean("pill_edge", o.pill_edge) === undefined
+        const pp = P.parse(d, DictationPrefs.pillBottom ? "bottom" : "bar")
+        pillEdge = pp.pill_edge; pillGap = pp.pill_gap; pillX = pp.pill_x; pillScreen = pp.pill_screen
         if (Array.isArray(d.ignored_classes)) {
             const l = []
             for (const c of d.ignored_classes) {
@@ -181,7 +204,8 @@ Singleton {
     }
     function serialize() {
         return JSON.stringify(Object.assign({}, extra, { version: 1, key: key, model: model, idle_timeout_s: idleTimeoutS,
-                                                         ignored_classes: ignoredClasses, show_text: showText })) + "\n"
+                                                         ignored_classes: ignoredClasses, show_text: showText, pill_edge: pillEdge,
+                                                         pill_gap: pillGap, pill_x: pillX, pill_screen: pillScreen })) + "\n"
     }
     // the generated file hypr/hyprland/diacritics.lua reads
     function bindsText() {
@@ -227,7 +251,10 @@ Singleton {
         watchChanges: true
         atomicWrites: true
         onFileChanged: reload()
-        onLoaded: if (!saver.running && !writer.running && text() !== root.lastText) { root.lastText = text(); root.parse(text()); root.syncBinds() }
+        onLoaded: if (!saver.running && !writer.running && text() !== root.lastText) {
+            root.lastText = text(); root.parse(text()); root.syncBinds()
+            if (root.legacyEdge) root.commit()
+        }
         onLoadFailed: if (!saver.running && !writer.running) { root.parse(""); root.syncBinds(); root.commit() }
         onSaveFailed: root.applyError = "Could not write " + path
     }
@@ -277,6 +304,11 @@ Singleton {
         function model(file: string): string { return root.set("model", file) ? "ok" : "bad" }
         function idle(s: string): string { return root.set("idle_timeout_s", Number(s)) ? "ok" : "bad" }
         function show(v: string): string { return root.set("show_text", v === "true") ? "ok" : "bad" }
+        function pill(what: string, v: string): string {
+            const k = "pill_" + what
+            if (P.KEYS.indexOf(k) < 0) return "unknown key"
+            return root.set(k, k === "pill_gap" || k === "pill_x" ? Number(v) : v) ? "ok" : "bad"
+        }
         function reset(): string { root.resetAll(); return "ok" }
         function refresh(): void { root.refreshModels(); PttPrefs.refresh() }
     }

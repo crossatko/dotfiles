@@ -464,6 +464,8 @@ class Prefs(unittest.TestCase):
         self.assertEqual(prefs.Prefs().gpu_device, 0)
         self.assertEqual(self.write('{"version": 1}').gpu_device, 0)
         self.assertEqual(self.write('{"gpu_device": 1, "pill_bottom": true}').gpu_device, 1)
+        shell = '{"gpu_device": 1, "pill_edge": "top", "pill_gap": 3.5, "pill_x": 0, "pill_screen": "Some monitor"}'
+        self.assertEqual(self.write(shell), self.write('{"gpu_device": 1}'), "the pill keys change nothing here")
         self.assertEqual(self.write('{"gpu_device": 1.0}').gpu_device, 1)
         self.assertEqual(self.write('{"gpu_device": -3}').gpu_device, 0, "clamped")
         for bad in ('"1"', "true", "null", "1.5", "[1]", "NaN", "Infinity"):

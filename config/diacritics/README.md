@@ -56,7 +56,9 @@ prefs (`../quickshell/DiacriticsPrefs.qml`).
   is the model's reply with at most one trailing newline dropped. `keep_spacing`: when the reply has the same words as
   the input, the input's whitespace between them (the model collapses double spaces and blank lines) is put back.
 - Prefs `~/.local/state/quickshell/diacritics.json` (written by Settings, read at every request): `model` (file name in
-  the models dir, default `gemma-4-12B-it-qat-UD-Q4_K_XL.gguf`), `idle_timeout_s` (default 600), `ignored_classes`.
+  the models dir, default `gemma-4-12B-it-qat-UD-Q4_K_XL.gguf`), `idle_timeout_s` (default 600), `ignored_classes`. The
+  shell's own keys there (`key`, `show_text`, `pill_edge` / `pill_gap` / `pill_x` / `pill_screen` = where the pill sits) are
+  ignored here.
 
 ## Corrections (words file)
 

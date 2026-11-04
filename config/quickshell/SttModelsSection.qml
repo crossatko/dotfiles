@@ -6,8 +6,9 @@ import QtQuick.Layouts
 // and translation (shown first), then every catalog model (SttModelRow) with its size, VRAM, translation and Czech
 // marks, Download / Cancel / Resume / Delete, and the Live / Final buttons that assign the roles. A role a model cannot
 // take is refused with the reason in red (the final pass translates: a model that cannot translate is refused). With no
-// model installed it says to download one; nothing downloads by itself. All state is SttModels (roles in its prefs
-// file, `changed` / `resetAll()` for the page's PageReset). Drop it into a page: `SttModelsSection { titleWidth: ... }`.
+// model installed it says to download one; nothing downloads by itself. After the roles: how long the models stay loaded
+// (IdleUnloadRow over DictationPrefs, as the Diacritics page's Model section). All state is SttModels (roles in its prefs
+// file, `changed` / `resetAll()` for the page's PageReset) and DictationPrefs (the idle time). Drop it into a page: `SttModelsSection { titleWidth: ... }`.
 ColumnLayout {
     id: sec
     property int titleWidth: 120
@@ -39,6 +40,7 @@ ColumnLayout {
         title: "Final pass"; titleWidth: sec.titleWidth; role: "final"
         info: "The corrected text after you release the key, and Czech to English translation. Only models that can translate."
     }
+    IdleUnloadRow { objectName: "dict-idle"; titleWidth: sec.titleWidth; store: DictationPrefs; use: "dictation"; extra: "Never keeps it loaded." }
     Label {
         objectName: "role-notice"
         visible: SttModels.notice !== ""

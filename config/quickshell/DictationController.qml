@@ -4,7 +4,7 @@ import Quickshell.Io
 
 // Push-to-talk dictation: the keys (PttShortcuts; PttPrefs.entries: Auto, and per selected language its own key and its
 // "to English" key) drive the service (DictationClient) and the pill shows it.
-// Hold a key: `begin <code>|translate:<code>|auto|translate:auto <selected codes>` and the pill opens on the focused monitor (mode
+// Hold a key: `begin <code>|translate:<code>|auto|translate:auto <selected codes>` and the pill opens (on its Settings monitor, else the focused one; mode
 // <code>, <code>-en, auto or auto-en, listening; Auto shows the language the service detected once it has); release: `end`, the pill stays until the final text is typed (or nothing was said, or
 // typing stopped) and then fades. One session at a time: another key pressed meanwhile is ignored.
 // Pill state: listening while quiet, speaking (translate: translating) while the mic level is above `loud` (held
