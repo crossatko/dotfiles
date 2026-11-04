@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""diacritics: fix Czech diacritics with a local model (llama.cpp llama-server, started on demand).
+
+    diacritics serve                 run the service (the user unit runs this)
+    diacritics fix                   read stdin, print the text with diacritics fixed (starts the service if needed)
+    diacritics run                   the key flow: fix the selection or field of the focused window
+    diacritics status | listen       print the service status | every state event as a JSON line
+
+Model and idle timeout come from DIACRITICS_PREFS_FILE (default ${XDG_STATE_HOME:-~/.local/state}/quickshell/diacritics.json,
+written by Settings), read at every request. Configuration (environment): DIACRITICS_SOCK (default
+$XDG_RUNTIME_DIR/diacritics.sock), DIACRITICS_BIN_DIR, DIACRITICS_MODEL_DIR, DIACRITICS_PROMPT.
+"""
+import argparse
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+
+from diacritics import client  # noqa: E402
+from diacritics.service import Service, default_socket  # noqa: E402
+
+
+def cmd_fix(args):
+    text = sys.stdin.buffer.read().decode("utf-8")
+    reply = client.fix(text, args.socket)
+    if not reply.get("ok"):
+        sys.exit(f"diacritics: {reply.get('error')}")
+    sys.stdout.buffer.write(reply["text"].encode("utf-8"))
+    sys.stdout.buffer.flush()
+
+
+def cmd_listen(args):
+    with client.connect(args.socket) as s:
+        s.sendall(b'{"op":"subscribe"}\n')
+        with s.makefile("rb") as f:
+            for line in f:
+                print(line.decode().rstrip(), flush=True)
+
+
+def main():
+    p = argparse.ArgumentParser(prog="diacritics", description=__doc__.split("\n")[0])
+    p.add_argument("--socket", default=default_socket())
+    sub = p.add_subparsers(dest="cmd", required=True)
+    for name in ("serve", "fix", "run", "status", "listen"):
+        sub.add_parser(name)
+    args, rest = p.parse_known_args()
+    if args.cmd == "serve":
+        Service(args.socket).serve()
+    elif args.cmd == "fix":
+        cmd_fix(args)
+    elif args.cmd == "run":
+        from diacritics import flow  # written by the key-flow module
+        sys.argv = [sys.argv[0], *rest]
+        flow.main()
+    elif args.cmd == "listen":
+        cmd_listen(args)
+    else:
+        print(json.dumps(client.request({"op": "status"}, args.socket), ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except OSError as exc:
+        sys.exit(f"diacritics: service not reachable ({exc.strerror})")
+    except KeyboardInterrupt:
+        pass
