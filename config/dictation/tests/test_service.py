@@ -94,8 +94,8 @@ class ServiceTest(unittest.TestCase):
         c.send("end")
         seen = c.until(lambda e: e.get("event") == "state" and e["state"] == "idle")
         final = [e for e in seen if e["event"] == "final"]
-        self.assertEqual(final[0]["text"], "Hello there my friend.")
-        self.assertEqual(self.rec.screen(), "Hello there my friend.")
+        self.assertEqual(final[0]["text"], "Hello there my friend. ")
+        self.assertEqual(self.rec.screen(), "Hello there my friend. ", "one space after the session's text")
         c.send("status")
         st = c.until(lambda e: e.get("event") == "status")[-1]
         self.assertEqual(st["state"], "idle")
@@ -152,7 +152,7 @@ class ServiceTest(unittest.TestCase):
         c.until(lambda e: e.get("event") == "edit")
         c.send("end")
         c.until(lambda e: e.get("event") == "final")
-        self.assertEqual(self.rec.screen(), "a b c.")
+        self.assertEqual(self.rec.screen(), "a b c. ")
         c.close()
 
     def test_a_changed_model_choice_reloads_on_the_next_begin(self):
@@ -220,7 +220,7 @@ class ServiceTest(unittest.TestCase):
         c.until(lambda e: e.get("event") == "edit")
         c.send("end")
         c.until(lambda e: e.get("event") == "final")
-        self.assertEqual((len(made), self.rec.screen()), (2, "a b c."))
+        self.assertEqual((len(made), self.rec.screen()), (2, "a b c. "))
         c.close()
 
     def test_a_failed_final_pass_reports_the_error_before_idle(self):
@@ -311,7 +311,7 @@ class ServiceTest(unittest.TestCase):
         c.until(lambda e: e.get("event") == "edit")
         c.send("end")
         c.until(lambda e: e.get("event") == "final")
-        self.assertEqual((len(made), self.rec.screen()), (3, "a b c."))
+        self.assertEqual((len(made), self.rec.screen()), (3, "a b c. "))
         c.close()
 
     def test_the_retry_timeout_defaults_to_30_s(self):

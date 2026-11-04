@@ -26,6 +26,7 @@ to load again first, so a model downloaded later works without restarting the se
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import os
 import queue
@@ -287,7 +288,7 @@ class Service:
         if engine is not None and engine.active:  # the running session is not disturbed
             self._reply(cmd, self.status())
             return
-        self._read_prefs()
+        prefs = self._read_prefs()
         self._restarted = False
         # the microphone first: what is said while the models load is buffered, not lost
         intake = _Intake()
@@ -306,9 +307,22 @@ class Service:
             self._stop_capture()
             self.emit({"event": "error", "message": self._error or "models not loaded", "code": self._code or "error"})
             return
+        engine.config = self._session_config(prefs)
         engine.begin(mode)
         self._started = time.monotonic()
         intake.attach(engine.feed)
+
+    def _session_config(self, prefs) -> Config:
+        """The engine's tunables for one session: the service's config, with the prefs' pause_silence_s and
+        trailing_space (no UI)."""
+        config = self._config or Config()
+        pause = getattr(prefs, "pause_silence_s", None)
+        if pause is not None:
+            config = dataclasses.replace(config, pause_silence=pause)
+        space = getattr(prefs, "trailing_space", None)
+        if isinstance(space, bool):
+            config = dataclasses.replace(config, trailing_space=space)
+        return config
 
     def _stop_capture(self) -> None:
         capture, self._capture, self._intake, self._owner = self._capture, None, None, None

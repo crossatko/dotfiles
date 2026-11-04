@@ -77,8 +77,9 @@ class WtypeInjector:
             raise ValueError("negative backspace")
         if any(c in "\n\r\t" or unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") for c in text):
             raise InjectRefused("refusing to type a newline, tab or control character")
-        if text and text != text.rstrip():
-            raise InjectRefused("refusing to type trailing whitespace")
+        if text and (text.endswith("  ") or text.rstrip(" ") != text.rstrip() or text.strip() == ""
+                     and len(text) > 1):
+            raise InjectRefused("refusing to type trailing whitespace other than one space")
         if not backspace and not text:
             return [self.cmd]
         argv = [self.cmd]

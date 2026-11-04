@@ -9,8 +9,8 @@ Interface (everything else is internal):
     d.cancel()
 
 Events passed to emit (dicts): state, level, pass, preview, edit, aborted, final. Edit operations go to the injector
-as apply(backspace, text); text never contains a newline, tab or control character and the field never ends with
-a space the engine typed.
+as apply(backspace, text); text never contains a newline, tab or control character. A session that typed something
+ends with one space after the final text (`Config.trailing_space`), so the next dictation starts a new word.
 
 Streaming (transcribe modes): the live model re-recognises a sliding window of recent audio. A word is typed once two
 consecutive passes agree on it (compared without case, diacritics and edge punctuation) and it is not the last word
@@ -31,6 +31,8 @@ import threading
 import unicodedata
 from dataclasses import dataclass
 from typing import Callable, NamedTuple, Protocol
+
+from .level import LevelMeter
 
 SAMPLE_RATE = 16000
 _BPS = 4  # bytes per float32 sample
@@ -74,11 +76,24 @@ MODES = {
 
 LIVE, FINAL = "live", "final"
 
+# Streaming defaults (README, Behaviour; measured on recorded speech with the real models, see Config).
+MIN_PASS_AUDIO = 1.5
+PASS_EVERY = 0.5
+PAUSE_SILENCE = 1.0
+TRAILING_SPACE = True
+NOISE_SPREAD_DB = 3.0  # room noise frames stay this close to the tracked floor
+QUIET_ROOM_DB = 12.0  # a noise floor this far under the speech gate: every frame at the gate counts as speech
+
 
 @dataclass
 class Config:
-    min_pass_audio: float = 3.0  # shorter prefixes come out as garbage on the live model
-    pass_every: float = 0.5  # seconds of new audio between live passes
+    # Timing of the live passes and of the end-of-speech flush: the tunables of the streaming behaviour, all here.
+    min_pass_audio: float = MIN_PASS_AUDIO  # seconds from the first speech to the first live pass
+    pass_every: float = PASS_EVERY  # seconds of new audio between live passes
+    pause_silence: float = PAUSE_SILENCE  # this much silence after speech types the words still waiting (0 = never)
+    close_after: float = 0.5  # silence after which a pass that has not heard the speech end runs at once
+    heard_pad: float = 0.3  # a pass whose audio reaches this far past the last voiced frame heard the speech end
+    trailing_space: bool = TRAILING_SPACE  # one space after the final text of a session that typed something
     max_window: float = 15.0  # slide the window once it is longer (longer windows decode more text per pass)
     tail_words: int = 4  # corrections never reach further back than this many typed words
     level_frame: int = 512  # samples per published level (32 ms)
@@ -107,6 +122,7 @@ identity_cleanup = NoCleanup()
 
 # --- text helpers -----------------------------------------------------------------------------------------------
 
+_PAUSE_PUNCT = ".,!?;:…"  # left off the last word a pause types, added when the speech goes on (or by the final pass)
 _ANNOTATION = re.compile(r"\[[^\]]*\]|^\s*\([^)]*\)\s*$")  # [BLANK_AUDIO], a whole-segment "(music)"
 
 
@@ -166,16 +182,24 @@ def _plan(committed: list, hyp: list, tail: int, exact: bool) -> tuple:
     return keep, resume, mapping
 
 
-def reconcile_live(committed: list, prev: list, cur: list, tail: int, hold: int = 0) -> list:
+def reconcile_live(committed: list, prev: list, cur: list, tail: int, hold: int = 0, last: bool = False) -> list:
     """What the window's typed words become after a pass: the words after the typed text that this pass and the
     previous one agree on (never the newest pass's last word, nor its last `hold` words), with a tail correction only
-    when both passes agree on it and on at least one replacement word."""
+    when both passes agree on it and on at least one replacement word.
+
+    last: the speech has ended (a pause after a pass that heard its end): when the two passes agree on every new
+    word but the newest pass's last one, that last word is taken too (hold is then 0: the phrase cannot grow)."""
     keep, resume, _ = _plan(committed, cur, tail, exact=False)
     keep_prev, resume_prev, _ = _plan(committed, prev, tail, exact=False)
     if keep != keep_prev:
         return committed
-    new, new_prev = cur[resume : len(cur) - max(1, hold)], prev[resume_prev:]
-    agreed = new[: _lcp(new_prev, new)]
+    if last:
+        new, new_prev = cur[resume:], prev[resume_prev:]
+        n = _lcp(new_prev, new)
+        agreed = new if n >= len(new) - 1 else new[:n]
+    else:
+        new, new_prev = cur[resume : len(cur) - max(1, hold)], prev[resume_prev:]
+        agreed = new[: _lcp(new_prev, new)]
     if keep < len(committed) and not agreed:
         return committed
     return committed[:keep] + agreed
@@ -219,6 +243,14 @@ class _Session:
         self.carry = b""  # bytes of an incomplete sample
         self.levels: list[float] = []  # RMS per level frame, for the speech gate
         self.level_acc = array.array("f")
+        self.meter = LevelMeter()  # noise-floor-aware level for the pill and the voiced flag
+        self.first_loud: int | None = None  # first frame at the speech gate
+        self.last_voiced: int | None = None  # last frame well above the noise floor (end-of-speech detector)
+        self.pending_flush: tuple | None = None  # (typed, target, last_voiced, bare): what a pause would type
+        self.bare: int | None = None  # index (in typed words) of the word a pause typed without its punctuation
+        self.closed_for: int | None = None  # last_voiced the closing pass already ran for
+        self.floor_at_voiced: float | None = None  # the noise floor (dB) when the last voiced frame came
+        self.flushed_for: int | None = None  # last_voiced a pause already typed the waiting words for
         self.window_start = 0  # in samples
         self.last_pass_end = None  # samples recognised by the previous live pass
         self.prev: list | None = None  # previous pass words (window-relative)
@@ -291,30 +323,60 @@ class Dictation:
                 rms = math.sqrt(sum(v * v for v in acc) / frame)
                 levels.append(rms)
                 del acc[:]
+        gate_db = 20 * math.log10(self.config.speech_rms)
         for rms in levels:
+            value, voiced = s.meter.push(rms)
+            loud = rms >= self.config.speech_rms
+            index = len(s.levels)
             s.levels.append(rms)
-            value = 0.0 if rms <= 1e-6 else min(1.0, max(0.0, (20 * math.log10(rms) + 60) / 60))
+            if loud and s.first_loud is None:
+                s.first_loud = index
+            # speech for the end-of-speech detector: at the absolute gate, and well above the noise floor where the
+            # room is noisy (a quiet room's floor lies far under the gate: soft speech still counts there)
+            if loud and (voiced or s.meter.floor is not None and s.meter.floor <= gate_db - QUIET_ROOM_DB):
+                s.last_voiced, s.floor_at_voiced = index, s.meter.floor
             self.emit({"event": "level", "value": round(value, 3)})
 
     def step(self) -> bool:
-        """Run one live pass if it is due. Returns whether a pass ran."""
+        """Run one live pass if it is due (or type what a pause made final). Returns whether a pass ran."""
         s = self._s
         if s is None or s.aborted:
             return False
         cfg = self.config
+        frame = cfg.level_frame
         with self._lock:
             total = len(s.pcm) // _BPS
-        if total < cfg.min_pass_audio * SAMPLE_RATE:
+        if s.first_loud is None:
+            return False
+        last_voiced = s.last_voiced  # read once: the capture thread moves it
+        closing = self._closing_due(s, last_voiced)
+        if not closing and total - s.first_loud * frame < cfg.min_pass_audio * SAMPLE_RATE:
             return False
         previous = s.last_pass_end
-        if previous is not None and total - previous < cfg.pass_every * SAMPLE_RATE:
+        if not closing and previous is not None and total - previous < cfg.pass_every * SAMPLE_RATE:
+            self._flush_if_paused(s)
             return False
+        if previous is None and s.prev is None:
+            # the first pass: the window starts shortly before the speech (leading silence invites hallucinations)
+            s.window_start = max(s.window_start, self._speech_start(s))
         s.last_pass_end = total
+        if closing:
+            s.closed_for = last_voiced
         # nothing new was said (a pause with the key held): the same audio would only invite hallucinations
-        frame = cfg.level_frame
-        if not self._has_speech(s, s.window_start if previous is None else -(-previous // frame) * frame, total):
+        start = s.window_start if previous is None or closing else -(-previous // frame) * frame
+        if not self._has_speech(s, start, total):
+            self._flush_if_paused(s)
             return False
         end = self._speech_end(s, total)
+        voiced_end = None if last_voiced is None else (last_voiced + 1) * frame
+        if (cfg.pause_silence and not s.mode.translate and voiced_end is not None
+                and total - voiced_end >= cfg.close_after * SAMPLE_RATE):
+            # in a pause the window ends shortly after the voiced speech even where the room noise is above the
+            # absolute gate: passes in the pause hear the same audio (no words invented in the noise)
+            end = min(end, voiced_end + int(cfg.silence_pad * SAMPLE_RATE))
+            if end <= s.window_start + frame:
+                self._flush_if_paused(s)
+                return False  # the window slid past the speech: nothing left to recognise
         with self._lock:
             audio = bytes(s.pcm[s.window_start * _BPS : end * _BPS])
         slot = FINAL if s.mode.translate else LIVE
@@ -338,9 +400,23 @@ class Dictation:
             return True
 
         words = s.typed.split()
+        s.pending_flush = None
         if s.prev is not None:
-            target = reconcile_live(words[s.frozen :], s.prev, cur, cfg.tail_words, hold)
+            committed = words[s.frozen :]
+            target = reconcile_live(committed, s.prev, cur, cfg.tail_words, hold)
+            target = self._repunctuate(s, committed, target, cur)
             self._type(s, _join(words[: s.frozen] + target))
+            if (voiced_end is not None and end - voiced_end >= cfg.heard_pad * SAMPLE_RATE
+                    and self._quiet_after(s, voiced_end, end)):
+                # this pass heard the end of the speech: if a pause follows, its last words are final (the phrase
+                # cannot grow, so the cleanup's hold no longer applies)
+                words = s.typed.split()
+                flush = reconcile_live(words[s.frozen :], s.prev, cur, cfg.tail_words, 0, last=True)
+                if len(flush) > len(words) - s.frozen and flush[: len(words) - s.frozen] == words[s.frozen :]:
+                    # its punctuation waits for what follows: a period typed in a thinking pause would stay mid-sentence
+                    bare = flush[-1].rstrip(_PAUSE_PUNCT) or flush[-1]
+                    s.pending_flush = (s.typed, _join(words[: s.frozen] + flush[:-1] + [bare]), last_voiced,
+                                       s.frozen + len(flush) - 1 if bare != flush[-1] else None)
         s.prev = cur
         words = s.typed.split()
         self.emit({"event": "preview", "text": _join(words[: s.frozen] + cur), "typed": s.typed})
@@ -384,8 +460,10 @@ class Dictation:
             final = [w for _, ws in self._segment_words(s, result.segments)[0] for w in ws]
             if s.mode.translate:
                 self.emit({"event": "preview", "text": _join(final)})
-            target = reconcile_final(s.typed.split(), final, self.config.tail_words)
-            self._type(s, _join(target))
+            target = _join(reconcile_final(s.typed.split(), final, self.config.tail_words))
+            if target and self.config.trailing_space:
+                target += " "  # after the corrected text, in the same edit (and the same focus guard)
+            self._type(s, target)
             if self._s is not s:
                 return s.typed
             event = {"event": "final", "text": s.typed, "ms": round(result.ms)}
@@ -423,6 +501,69 @@ class Dictation:
         with self._lock:
             self._s = None
         self.emit({"event": "state", "state": "idle"})
+
+    def _quiet_after(self, s: _Session, start: int, end: int) -> bool:
+        """The audio after the voiced speech is really quiet: under the speech gate, or (a room noisier than the
+        gate) within NOISE_SPREAD_DB of the noise floor as it was during the speech (the floor would follow a soft
+        sound that goes on). Soft speech that goes on there must not arm the flush."""
+        floor = s.floor_at_voiced
+        frame = self.config.level_frame
+        for rms in s.levels[start // frame : -(-end // frame)]:
+            if rms >= self.config.speech_rms and (floor is None or 20 * math.log10(rms) > floor + NOISE_SPREAD_DB):
+                return False
+        return True
+
+    def _closing_due(self, s: _Session, last_voiced) -> bool:
+        """The speech stopped (`close_after` of silence after the last voiced frame) and no pass has heard its end
+        yet: run one now instead of at the next scheduled time (there is none in a pause), so a pause can type it."""
+        cfg = self.config
+        if s.mode.translate or not cfg.pause_silence or last_voiced is None or s.closed_for == last_voiced:
+            return False
+        if s.pending_flush is not None and s.pending_flush[2] == last_voiced:
+            return False  # the latest pass already heard it
+        silent = (len(s.levels) - last_voiced - 1) * cfg.level_frame
+        return silent >= min(cfg.close_after, cfg.pause_silence) * SAMPLE_RATE
+
+    def _flush_if_paused(self, s: _Session) -> None:
+        """End of speech: `pause_silence` without a voiced frame after a pass that heard the speech end types the
+        words that pass left waiting (its last word, a phrase start the cleanup held back). Not while the speech goes
+        on (a new voiced frame), not after another edit, never in translate mode (pending_flush stays None)."""
+        cfg, pending = self.config, s.pending_flush
+        if pending is None or not cfg.pause_silence:
+            return
+        typed, target, last_voiced, bare = pending
+        if s.last_voiced != last_voiced or s.typed != typed or s.flushed_for == last_voiced:
+            return  # speech again, another edit, or this pause already typed its words (later passes in a noisy
+            # pause wait for the usual two-pass rule: whisper may invent a word in the noise)
+        if (len(s.levels) - last_voiced - 1) * cfg.level_frame < cfg.pause_silence * SAMPLE_RATE:
+            return
+        s.pending_flush, s.closed_for, s.flushed_for = None, last_voiced, last_voiced
+        self._type(s, target)
+        if s.typed == target:
+            s.bare = bare
+
+    def _repunctuate(self, s: _Session, committed: list, target: list, cur: list) -> list:
+        """A word a pause typed without its punctuation (s.bare) gets it when the speech goes on: in the edit that
+        types the next words, only as an addition (never a backspace), and only the spelling both passes agree on."""
+        if s.bare is None:
+            return target
+        i = s.bare - s.frozen
+        if i < 0 or i >= len(committed) or i >= len(target) or target[i] != committed[i]:
+            s.bare = None  # slid out of the window or corrected: nothing to add
+            return target
+        if len(target) == i + 1:
+            return target  # nothing after it yet: wait
+        s.bare = None
+        spelled = set()
+        for hyp in (cur, s.prev):
+            _, _, mapping = _plan(committed, hyp, len(committed), exact=False)
+            spelled.add(hyp[mapping[i]] if i in mapping else None)
+        if len(spelled) == 1:
+            word = spelled.pop()
+            if word and word != committed[i] and word.startswith(committed[i]) \
+                    and not word[len(committed[i]):].strip(_PAUSE_PUNCT):
+                target = target[:i] + [word] + target[i + 1 :]
+        return target
 
     def _has_speech(self, s: _Session, start: int, end: int) -> bool:
         frame = self.config.level_frame

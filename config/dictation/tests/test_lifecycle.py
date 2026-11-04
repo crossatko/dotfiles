@@ -13,7 +13,7 @@ import unittest
 from helpers import Recorder, Scripted, tone
 
 from dictation import audio, prefs, whisper
-from dictation.engine import RecognizerError
+from dictation.engine import Config, RecognizerError
 from dictation.service import Service
 from test_service import Client, FakeCapture
 
@@ -101,7 +101,7 @@ class IdleUnload(Base):
         st = self.status(c)
         self.assertEqual((st["loaded"], st["state"]), (False, "idle"))
         self.dictate(c)  # the first dictation after an unload works
-        self.assertEqual((len(made), self.rec.screen()), (2, "a b c.a b c."))
+        self.assertEqual((len(made), self.rec.screen()), (2, "a b c. a b c. "))
         c.close()
 
     def test_a_session_resets_the_idle_timer(self):
@@ -195,7 +195,7 @@ class BufferedLoad(Base):
         c.send("end")  # key released before the load finished
         release.set()
         c.until(lambda e: e.get("event") == "final")
-        self.assertEqual(self.rec.screen(), "a b c.")
+        self.assertEqual(self.rec.screen(), "a b c. ")
         c.close()
 
     def test_cancel_during_the_load_types_nothing(self):
@@ -331,7 +331,7 @@ class Failures(Base):
         c.send("end")
         seen = c.until(lambda e: e.get("event") == "final")
         self.assertNotIn("error", [e["event"] for e in seen])
-        self.assertEqual(self.rec.screen(), "a b c.")
+        self.assertEqual(self.rec.screen(), "a b c. ")
         c.close()
         other.close()
 
@@ -405,6 +405,29 @@ class Failures(Base):
         c.close()
 
 
+class PauseFromPrefs(Base):
+    def test_begin_applies_the_prefs_pause_silence_and_the_default_without_it(self):
+        made, pause = [], [1.5]
+        self.start(lambda: made.append(good()) or made[-1], prefs_fn=lambda: prefs.Prefs(pause_silence_s=pause[0]))
+        c = Client(self.path)
+        self.dictate(c)
+        self.assertEqual(self.svc.engine.config.pause_silence, 1.5)
+        pause[0] = None
+        self.dictate(c)
+        self.assertEqual(self.svc.engine.config.pause_silence, Config().pause_silence)
+        c.close()
+
+    def test_the_prefs_switch_turns_the_trailing_space_off(self):
+        space = [False]
+        self.start(lambda: good(), prefs_fn=lambda: prefs.Prefs(trailing_space=space[0]))
+        c = Client(self.path)
+        self.dictate(c)
+        space[0] = True
+        self.dictate(c)
+        self.assertEqual(self.rec.screen(), "a b c.a b c. ")
+        c.close()
+
+
 class Prefs(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -436,6 +459,20 @@ class Prefs(unittest.TestCase):
         self.assertEqual((p.mic, p.gpu, p.idle_timeout_s), ("m", False, 600.0))
         self.assertEqual(self.write('{"idle_timeout_s": 0}').idle_timeout_s, 0.0)
         self.assertEqual(self.write('{"idle_timeout_s": -1}').idle_timeout_s, -1.0)
+
+    def test_pause_silence_without_ui(self):
+        self.assertIsNone(self.write('{"version": 1}').pause_silence_s, "missing: the engine default")
+        self.assertEqual(self.write('{"pause_silence_s": 1.5}').pause_silence_s, 1.5)
+        self.assertEqual(self.write('{"pause_silence_s": 0}').pause_silence_s, 0.0, "0 = only on release")
+        self.assertEqual(self.write('{"pause_silence_s": 0.05}').pause_silence_s, 0.3, "clamped")
+        self.assertEqual(self.write('{"pause_silence_s": 99}').pause_silence_s, 10.0)
+        for bad in ('"1"', "true", "null", "[1]"):
+            self.assertIsNone(self.write('{"pause_silence_s": %s}' % bad).pause_silence_s, bad)
+
+    def test_trailing_space_without_ui(self):
+        self.assertTrue(self.write('{"version": 1}').trailing_space)
+        self.assertFalse(self.write('{"trailing_space": false}').trailing_space)
+        self.assertTrue(self.write('{"trailing_space": "no"}').trailing_space, "a wrong type is the default")
 
     def test_the_file_follows_the_environment(self):
         old = {k: os.environ.pop(k, None) for k in ("DICTATION_PREFS_FILE", "XDG_STATE_HOME")}

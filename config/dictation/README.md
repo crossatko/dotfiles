@@ -15,6 +15,7 @@ service core; the shell drives it: the three push-to-talk keys (Settings > Voice
 | `lib/dictation/service.py` | unix socket control interface, controller thread |
 | `lib/dictation/whisper.py` | recognizer client for the worker; model and worker paths |
 | `lib/dictation/audio.py` | `pw-record` capture (PipeWire default source), `FileCapture` stand-in |
+| `lib/dictation/level.py` | noise-floor-aware level (the `level` events) and the voiced flag of the end-of-speech detector |
 | `lib/dictation/inject.py` | `wtype` adapter, Hyprland focused-window probe |
 | `worker/dictation-whisper.c`, `worker/build.sh` | small C program that keeps both models loaded and answers requests on stdin/stdout |
 | `tests/` | unit tests (the seam: audio in, edit operations out, recorder injector) and an opt-in real-model test |
@@ -41,7 +42,7 @@ service core; the shell drives it: the three push-to-talk keys (Settings > Voice
    `WAYLAND_DISPLAY` is missing. Logs: `journalctl --user -u dictation`.
 5. Voice preferences, written by Settings > Voice to `${XDG_STATE_HOME:-~/.local/state}/quickshell/dictation-prefs.json`
    (`DICTATION_PREFS_FILE` overrides), re-read at every `begin`: `{"version":1,"mic":"","gpu":true,"idle_timeout_s":600,
-   "prompt_hints":false}`. `mic` = PipeWire source name (`pactl list short sources`; "" = system default; a name that
+   "prompt_hints":false}` (plus `pause_silence_s` and `trailing_space`, no UI: see Behaviour). `mic` = PipeWire source name (`pactl list short sources`; "" = system default; a name that
    is not listed is a `mic` error), `gpu` false = the worker runs on the CPU only (`--no-gpu`; slow, an explicit
    choice), `idle_timeout_s` = unload after that long without a session (0 or negative = never). A missing or
    malformed file or key means the default; a changed `gpu` reloads the models at the next `begin`.
@@ -75,11 +76,11 @@ Events (one JSON object per line):
 |---|---|
 | `status` | `state` (`loading`, `idle`, `listening`, `finishing`, `error`), `mode`, `error`, `code`, `loaded` (the models are in memory) |
 | `state` | `state`, `mode` |
-| `level` | `value` 0..1 (RMS dBFS mapped from -60..0), one per 32 ms of audio |
+| `level` | `value` 0..1 (meaning changed: was RMS dBFS mapped from -60..0), one per 32 ms of audio: 0 = at the session's noise floor (silence, hiss, hum), speech ~0.6-1.0, independent of the mic gain (`level.py`) |
 | `preview` | `text` (whole current hypothesis; in translate mode the English preview), `typed` |
 | `edit` | `backspace`, `text`: an operation already applied to the focused field |
 | `pass` | `slot` (`live`/`final`), `ms`, `audio` seconds |
-| `final` | `text` typed this session, `ms`; `retried: true` only when the final pass needed a retry |
+| `final` | `text` typed this session (with its trailing space), `ms`; `retried: true` only when the final pass needed a retry |
 | `retry` | `what` (`final`), `message`, `code`: informational, the final pass failed and is being run again (see Behaviour) |
 | `aborted` | `reason` (`focus`: the focused window changed, typing stopped for the session; `inject`) |
 | `error` | `message`, `code` |
@@ -132,19 +133,46 @@ Shell: `dictation begin cs`, `dictation end`, `dictation listen`.
   killed, nothing typed). Focus change still suppresses typing.
 
 - Language is pinned per session by the mode (no auto-detect). `translate` = Czech speech, English text.
-- Live passes (turbo, greedy) every 0.5 s of new audio once 3 s are recorded, over a window of at most 15 s that
-  slides at segment boundaries behind the typed text (never after the window's last segment, whose end time whisper
-  stretches over speech it has not transcribed yet, and never inside a segment). Trailing silence is trimmed to
-  0.5 s before every pass, and a pause with the key held runs no passes.
+- Live passes (turbo, greedy) every 0.5 s of new audio (`PASS_EVERY`) once 1.5 s of speech are recorded
+  (`MIN_PASS_AUDIO`, counted from the first frame at the speech gate, not from the key press), over a window of at
+  most 15 s that starts 0.5 s before the speech and slides at segment boundaries behind the typed text (never after
+  the window's last segment, whose end time whisper stretches over speech it has not transcribed yet, and never
+  inside a segment). Trailing silence is trimmed to 0.5 s before every pass, and a pause with the key held runs no
+  passes (where the room noise stays under the speech gate; above it passes go on, over the same trimmed audio). The tunables are `Config` / the constants at the top of `engine.py`, chosen on replays of recorded speech
+  (first text ~2.1 s after the speech starts instead of ~3.0 s; shorter first windows or 0.3 s passes typed more
+  words that were erased again).
 - A word is typed when two consecutive passes agree on it (compared without case, diacritics and edge punctuation)
   and it is not the newest pass's last word. A correction replaces at most the last 4 typed words, and only when two
   passes agree on it.
+- End of speech (`PAUSE_SILENCE`, 1.0 s; `pause_silence_s` in `dictation-prefs.json` overrides it, 0 = off, no UI):
+  after that much silence the words still waiting are typed without another pass or the release: the newest pass's
+  last word, and a phrase start the cleanup held back (the phrase cannot grow in a pause; if the speech goes on and
+  completes the phrase, the usual two-pass tail correction replaces it). Conditions: a pass heard the end of the
+  speech (its audio reaches 0.3 s past the last voiced frame; when none did, a closing pass runs 0.5 s into the
+  silence, not at the next scheduled time), the pass before it agrees on every new word but the last, it lines up
+  with the typed text, no edit happened since, and no voiced frame since. Silence is relative: a frame is voiced at
+  the speech gate and 8 dB above the session's tracked noise floor (in a quiet room, floor 12 dB or more under the
+  gate, every frame at the gate), so hiss, hum or a noisy room still count as a pause, while breathing loud enough to
+  be voiced only delays it; the audio after the speech must also stay under the gate or within 3 dB of the floor
+  measured during the speech (soft speech going on in a noisy room never arms it). The last word goes without its punctuation
+  (`.,!?;:…`): when the speech goes on, the edit that types the next words adds the punctuation both passes agree on
+  (never a backspace; a period typed in a thinking pause would otherwise stay mid-sentence), and on release the final
+  pass adds it. One flush per pause; passes in a pause hear the speech plus 0.5 s only, also where the room noise is
+  above the absolute gate (no words invented in the noise). Never in translate mode; one short utterance heard by a
+  single pass waits for the release; the final pass fixes the tail on release as before. Measured on recorded speech
+  with inserted thinking pauses: the word before a pause appears ~1.0 s after it starts instead of with the next
+  words (~2 s) or on release; 1.5 s (`pause_silence_s`) gave the same text and corrections, only later.
 - Release: the final model (large-v3, beam 5) recognises the whole session; it may fix the last 4 words exactly
   (diacritics, punctuation), then types the rest. It never only erases (a truncated decode keeps the typed text).
 - Translate: nothing is typed while speaking; the preview streams from the final model; the English text is typed
   once on release.
 - Typing stops for the rest of the session when the focused Hyprland window changes. Text goes to `wtype` on stdin;
-  newlines, tabs, control characters and trailing whitespace are refused, so Enter is never sent.
+  newlines, tabs, control characters and trailing whitespace other than one space are refused, so Enter is never
+  sent.
+- Trailing space: a session that typed something ends with one space after its final text (in the final edit,
+  after the tail fix; translate: after the English text), so the next dictation starts a new word. Never after an
+  empty session, a cancel, a focus abort or a failed final pass (only after a successful retry).
+  `trailing_space` false in `dictation-prefs.json` turns it off (no UI).
 - Every `wtype` run starts with one `Hyper_L` press and release: while the push-to-talk key (consumed by a Hyprland
   bind) is held, Hyprland drops the first key event of a new virtual keyboard (the session's first character was
   lost, in kitty and ghostty). A `VoidSymbol` lead is not usable: ghostty then falls back to the physical key, which
@@ -155,6 +183,12 @@ Shell: `dictation begin cs`, `dictation end`, `dictation listen`.
   keypad codes typed escape sequences.
 - Silence (no 32 ms frame above RMS 0.005 in the window) is never sent to the recognizer (whisper hallucinates on
   silence).
+- Levels (`level.py`): noise floor = a running minimum of the lightly smoothed frame level that follows drops at
+  once and rises 1.5 dB/s, 0.3 dB/s while voiced (fluent speech never lifts it; digital zeros never move it); up to 6 dB above it is silence, exactly 0; above that the
+  level is scaled against a slowly decaying running peak (at least 14 dB of range), eased with a smoothstep and
+  smoothed (fast attack, ~0.1 s release). Measured on recorded speech with white, pink and hum noise added: silence
+  ~0 at 30, 20 and 10 dB SNR (the old dB mapping showed 0.06, 0.21 and 0.37 there), speech median 0.90 clean, about
+  0.75 at 20 dB SNR, low at 10 dB SNR. The pill draws level 0 as a gently waving ribbon (`DotSwoosh.idleAmp`).
 - Cleanup (`cleanup.py`, `Dictation(cleanup=Cleanup())` in `serve` and `replay`; tests use `NoCleanup`) runs on every
   pass before the stability check, so a removed or replaced word is never typed and erased. Rules per text language
   (translate = English). Word lists: `${XDG_STATE_HOME:-~/.local/state}/quickshell/dictation-words.json` (Settings >

@@ -116,7 +116,7 @@ class Retry(Base):
         self.assertEqual(len(final), 1)
         self.assertTrue(final[0]["retried"])
         self.assertEqual(self.events(seen, "error"), [])
-        self.assertEqual(self.rec.screen(), "alpha beta gamma delta epsilon zeta eta.")
+        self.assertEqual(self.rec.screen(), "alpha beta gamma delta epsilon zeta eta. ")  # the space after a success
         # the retry ran over the whole audio: as long as the failed attempt's
         failed = [c for c in self.made[0].calls if c[0] == "final"][0]
         retried = [c for c in self.made[1].calls if c[0] == "final"][0]
@@ -129,7 +129,7 @@ class Retry(Base):
         self.speak("translate")
         self.assertEqual(self.rec.ops, [])
         seen = self.finish()
-        self.assertEqual(self.rec.ops, [(0, "alpha beta gamma delta epsilon zeta eta.")])
+        self.assertEqual(self.rec.ops, [(0, "alpha beta gamma delta epsilon zeta eta. ")])
         self.assertTrue(self.events(seen, "final")[0]["retried"])
 
     def test_normal_final_has_no_retry_marker(self):
@@ -158,7 +158,7 @@ class Retry(Base):
         self.speak("en")
         seen = self.finish()
         self.assertEqual(len(self.made), 3)
-        self.assertEqual(self.rec.screen(), "alpha beta gamma delta epsilon zeta eta.")
+        self.assertEqual(self.rec.screen(), "alpha beta gamma delta epsilon zeta eta. ")  # the space after a success
 
     def test_translate_total_failure_types_nothing(self):
         self.start(["die"])
@@ -315,7 +315,7 @@ class EngineSeam(unittest.TestCase):
         d.recognizer = Flaky(threading.Event(), "ok", final="one two three four five six.")
         d.end(retry=True)
         self.assertFalse(d.active)
-        self.assertEqual(rec.screen(), "one two three four five six.")
+        self.assertEqual(rec.screen(), "one two three four five six. ")
         self.assertAlmostEqual(r.calls[0][3], 4.0, places=1)
 
     def test_without_keep_the_session_closes_as_before(self):

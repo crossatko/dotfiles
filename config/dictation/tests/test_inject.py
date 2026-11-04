@@ -74,8 +74,8 @@ class Wtype(unittest.TestCase):
         self.inj.apply(0, "")
         self.assertEqual(self.run.calls, [])
 
-    def test_never_enter_tab_control_or_trailing_space(self):
-        for bad in ("a\n", "a\rb", "a\tb", "a\x1bb", "a b", "word "):
+    def test_never_enter_tab_control_or_more_than_one_trailing_space(self):
+        for bad in ("a\n", "a\rb", "a\tb", "a\x1bb", "a b", "word  ", "word\u00a0", "  "):
             with self.assertRaises(InjectRefused, msg=repr(bad)):
                 self.inj.apply(0, bad)
         self.assertEqual(self.run.calls, [])

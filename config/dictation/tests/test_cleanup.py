@@ -224,7 +224,7 @@ class Prompted(Scripted):
 
 def session(recognizer, cleanup, mode, passes):
     rec, events = Recorder(), []
-    d = Dictation(recognizer, rec, emit=events.append, cleanup=cleanup, config=Config())
+    d = Dictation(recognizer, rec, emit=events.append, cleanup=cleanup, config=Config(trailing_space=False))
     d.begin(mode)
     d.feed(tone(3.0))
     d.step()
@@ -293,7 +293,7 @@ class Engine(Words):
         c = self.cleanup([("century", "sentry", "en"), ("komit", "commit", "cs")], hints=True)
         r = TranslateScripted(["Um, check century"], final="Um, check century and komit.")
         rec, events = Recorder(), []
-        d = Dictation(r, rec, emit=events.append, cleanup=c, config=Config())
+        d = Dictation(r, rec, emit=events.append, cleanup=c, config=Config(trailing_space=False))
         d.begin("translate")
         d.feed(tone(3.0))
         d.step()

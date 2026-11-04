@@ -14,7 +14,8 @@ def make(recognizer, *, focus=None, cleanup=None, config=None):
     kwargs = {"focus": focus} if focus else {}
     if cleanup:
         kwargs["cleanup"] = cleanup
-    d = Dictation(recognizer, rec, emit=events.append, config=config or Config(), **kwargs)
+    # trailing_space off: these tests are about the text; the space after it has its own tests (TrailingSpace)
+    d = Dictation(recognizer, rec, emit=events.append, config=config or Config(trailing_space=False), **kwargs)
     return d, rec, events
 
 
@@ -57,11 +58,11 @@ class Stability(unittest.TestCase):
         speak(d, 2)
         self.assertEqual(rec.ops, [(0, "Spusť Docker")])
 
-    def test_no_pass_before_three_seconds_of_audio(self):
+    def test_no_pass_before_min_pass_audio_of_speech(self):
         r = Scripted(["garbage"], final="Ahoj.")
         d, rec, _ = make(r)
         d.begin("cs")
-        d.feed(tone(2.5))
+        d.feed(tone(Config().min_pass_audio - 0.1))
         d.step()
         self.assertEqual(r.calls, [])
         d.end()
@@ -155,6 +156,64 @@ class TailCorrections(unittest.TestCase):
         self.assertTrue(all(bs <= len("Ahoj tak jak se") for bs, _ in rec.ops))
 
 
+class TrailingSpace(unittest.TestCase):
+    """The default: one space after a session's final text, so the next dictation starts a new word."""
+
+    def session(self, r, mode="en", passes=2, focus=None):
+        d, rec, events = make(r, config=Config(), focus=focus)
+        d.begin(mode)
+        speak(d, passes)
+        return d, rec, events
+
+    def test_two_sessions_are_separated_by_one_space(self):
+        rec = Recorder()
+        for live, final in ((["First sentence", "First sentence here"], "First sentence here."),
+                            (["Second one", "Second one too"], "Second one too.")):
+            d = Dictation(Scripted(live, final=final), rec)
+            d.begin("en")
+            speak(d, 2)
+            d.end()
+        self.assertEqual(rec.screen(), "First sentence here. Second one too. ")
+
+    def test_the_space_goes_with_the_tail_correction_in_one_edit(self):
+        d, rec, events = self.session(Scripted(["Spust docker compose", "Spust docker compose up"],
+                                               final="Spusť docker compose up."), mode="cs")
+        d.end()
+        self.assertEqual(rec.ops, [(0, "Spust docker compose"), (16, "ť docker compose up. ")])
+        self.assertEqual([e["text"] for e in events if e["event"] == "final"], ["Spusť docker compose up. "])
+
+    def test_translate_gets_the_space_after_the_english_text(self):
+        r = TranslateScripted(["I made"], final="I made a commit.")
+        d, rec, _ = self.session(r, mode="translate", passes=1)
+        r.ending = True
+        d.end()
+        self.assertEqual(rec.ops, [(0, "I made a commit. ")])
+
+    def test_no_lone_space_after_an_empty_session_a_cancel_or_a_focus_abort(self):
+        d, rec, _ = make(Scripted([""], final=""), config=Config())
+        d.begin("en")
+        d.feed(silence(2.0))
+        d.end()
+        d.begin("en")
+        speak(d, 2)  # the recognizer hears nothing
+        d.end()
+        self.assertEqual(rec.ops, [])
+        d, rec, _ = self.session(Scripted(["a b c", "a b c d"], final="a b c d."))
+        d.cancel()
+        self.assertEqual(rec.screen(), "a b c")
+        windows = iter(["0xa", "0xa", "0xb"])
+        d, rec, _ = self.session(Scripted(["a b c", "a b c d"], final="a b c d."), focus=lambda: next(windows, "0xb"))
+        d.end()
+        self.assertEqual(rec.screen(), "a b c", "focus changed before the final edit: no text, no space")
+
+    def test_the_switch_turns_it_off(self):
+        d, rec, _ = make(Scripted(["a b c", "a b c d"], final="a b c d."), config=Config(trailing_space=False))
+        d.begin("en")
+        speak(d, 2)
+        d.end()
+        self.assertEqual(rec.screen(), "a b c d.")
+
+
 class Translate(unittest.TestCase):
     def test_translate_types_nothing_until_release_then_the_whole_english_text(self):
         r = TranslateScripted(["I made", "I made a commit", "I made a commit and"],
@@ -198,18 +257,17 @@ class Focus(unittest.TestCase):
 
 
 class NeverSends(unittest.TestCase):
-    def test_no_enter_no_tab_and_no_trailing_space(self):
+    def test_no_enter_no_tab_and_one_trailing_space_at_most(self):
         r = Scripted([" hello\nworld \r\n", "hello\nworld\tagain  \n", "hello world again and \n"],
                      final=" hello world\nagain and more.\n ")
-        d, rec, _ = make(r)
+        d, rec, _ = make(r, config=Config())
         d.begin("en")
         speak(d, 3)
         d.end()
         self.assertTrue(rec.ops)
         for _, text in rec.ops:
             self.assertNotRegex(text, r"[\n\r\t]")
-        self.assertEqual(rec.screen(), "hello world again and more.")
-        self.assertFalse(rec.screen().endswith(" "))
+        self.assertEqual(rec.screen(), "hello world again and more. ", "whitespace from whisper never doubles the space")
 
     def test_whole_segment_annotations_are_not_typed(self):
         r = Scripted(["[BLANK_AUDIO]", "[BLANK_AUDIO]"], final="[BLANK_AUDIO]")
@@ -282,12 +340,13 @@ class Lifecycle(unittest.TestCase):
     def test_levels_are_published_between_zero_and_one(self):
         d, _, events = make(Scripted([""]))
         d.begin("cs")
-        d.feed(tone(0.5, 0.3) + silence(0.5))
+        d.feed(tone(0.5, 0.001) + tone(0.5, 0.3) + tone(1.0, 0.001))  # room noise, speech, room noise
         levels = [e["value"] for e in events if e["event"] == "level"]
-        self.assertGreater(len(levels), 20)
+        self.assertGreater(len(levels), 50)
         self.assertTrue(all(0.0 <= v <= 1.0 for v in levels))
-        self.assertGreater(levels[0], 0.5)
-        self.assertEqual(levels[-1], 0.0)
+        self.assertEqual(levels[:15], [0.0] * 15, "the noise floor is silence")
+        self.assertGreater(max(levels[16:31]), 0.9)
+        self.assertEqual(levels[-10:], [0.0] * 10)
 
     def test_sessions_are_independent(self):
         r = Scripted(["a b c", "a b c d"], final="a b c d.")
@@ -313,7 +372,7 @@ class LongSessions(unittest.TestCase):
                 t += 0.4
                 words.append((round(t, 2), f"w{s}x{w}" + ("." if w == 4 else "")))
         tl = Timeline(words)
-        d, rec, _ = make(tl, config=Config(max_window=10.0))
+        d, rec, _ = make(tl, config=Config(max_window=10.0, pause_silence=0, trailing_space=False))  # position-coded audio, not speech
         d.begin("en")
         d.feed(counting(0, 3.0))
         d.step()
