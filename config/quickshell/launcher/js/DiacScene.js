@@ -13,6 +13,8 @@
 //   end states  the working picture lets go (0.2 s), then the icon draws in dot by dot: done = check + sparks, failed = cross that
 //            shakes, unsupported = no-sign
 // Timings are seconds; the grid is COLS x ROWS with the 7-row base band on rows 3..9 (the card's centre line).
+//   live     while the model works the service streams the fixed words; they are put into the chunk on screen and their marks flare in as they
+//            arrive (liveNew / liveFeed / liveScene); on done the replay carries on from there (liveFinish) instead of starting over
 // Tests: node --test launcher/js/tests/diacscene.test.js
 
 var COLS = 78, ROWS = 13;
@@ -27,19 +29,19 @@ function tokens(s) { return s.split(/\s+/).filter(function (w) { return w !== ""
 // text -> { chunks: [{ chars: [{ ch, x, w, mark }], width, marks, dur }], starts, total }; x relative to the chunk's left edge.
 // Characters the font lacks are skipped; very long input is cut (the pill only needs a taste of it).
 function prepare(text) {
-    function lay(w) {
+    function lay(w, wi) {
         var cs = [], x = 0;
         for (var i = 0; i < w.length; i++) {
             var ch = w.charAt(i), adv = F.advance(ch);
             if (!adv) continue;
-            cs.push({ ch: ch, x: x, w: adv - 1, mark: F.hasMark(ch) });
+            cs.push({ ch: ch, x: x, w: adv - 1, mark: F.hasMark(ch), wi: wi, k: cs.length });
             x += adv;
         }
         return { cs: cs, width: x - 1 };
     }
     function piece(cs, x) {
         var last = cs[cs.length - 1];
-        return { cs: cs.map(function (k) { return { ch: k.ch, x: k.x - x, w: k.w, mark: k.mark }; }), width: last.x - x + last.w };
+        return { cs: cs.map(function (k) { return { ch: k.ch, x: k.x - x, w: k.w, mark: k.mark, wi: k.wi, k: k.k }; }), width: last.x - x + last.w };
     }
     var words = tokens(String(text || "").slice(0, 20000)).map(lay).filter(function (w) { return w.cs.length; });
     var pieces = [];                       // words wider than the row are split
@@ -58,7 +60,7 @@ function prepare(text) {
         var chars = [], x = 0;
         cur2.forEach(function (w, wi) {
             if (wi) x += SPACE;
-            w.cs.forEach(function (c) { chars.push({ ch: c.ch, x: x + c.x, w: c.w, mark: c.mark }); });
+            w.cs.forEach(function (c) { chars.push({ ch: c.ch, x: x + c.x, w: c.w, mark: c.mark, wi: c.wi, k: c.k }); });
             x += w.width + 1;
         });
         var marks = chars.filter(function (c) { return c.mark; }).length;
@@ -108,12 +110,12 @@ function flareMark(g, x, y, w, age) {
     }
 }
 
-// one chunk at time q: letters dissolved in by `alpha`, mark n landing at markStart + n * markGap
-function drawChunk(g, c, y, q, alpha, markStart, markGap) {
+// one chunk at time q: letters dissolved in by `alpha`, mark n landing at markStart + n * markGap (or at lands[n] when given)
+function drawChunk(g, c, y, q, alpha, markStart, markGap, lands) {
     var x0 = Math.floor((COLS - c.width) / 2), n = 0;
     for (var k = 0; k < c.chars.length; k++) {
         var ch = c.chars[k], x = x0 + ch.x;
-        var age = ch.mark ? q - (markStart + n * markGap) : -1;
+        var age = ch.mark ? q - (lands ? lands[n] : markStart + n * markGap) : -1;
         if (ch.mark) n++;
         F.stampChar(g, ch.ch, x, y, alpha, age >= 0 ? alpha : 0, 0, 0);
         if (age >= 0 && age < 0.5) flareMark(g, x, y, ch.w, age);
@@ -138,21 +140,34 @@ function words(prep, t) {
 // then only the first chunks that fit are shown. The last chunk stays R_TAIL s so its flare can settle before the check.
 var REPLAY_MAX = 1.5, R_IN = 0.04, R_GAP = 0.04, R_HOLD = 0.10, R_BARE = 0.05, R_OUT = 0.03, R_TAIL = 0.20, R_MINSCALE = 0.6;
 
-// prep -> { items: [{ i: chunk index, start, dur, s: speed scale }], total }; no marks anywhere = no items (nothing to replay)
-function replayPlan(prep, max) {
+// prep -> { items: [{ i: chunk index, start, dur, s: speed scale }], total }; no marks anywhere = no items (nothing to replay).
+// `cont` (the live view carries on into the replay, see liveFinish): { i, dur, q0, lands } = the chunk already on screen, first in the plan,
+// continuing at q0 with its own mark times; only the chunks after it are replayed, in what is left of the budget.
+function replayPlan(prep, max, cont) {
     var chunks = (prep && prep.chunks) || [], budget = (max || REPLAY_MAX) - R_TAIL, items = [], i;
     function nat(i) { return chunks[i].marks ? R_IN + chunks[i].marks * R_GAP + R_HOLD : R_BARE; }
     function sum(list) { return list.reduce(function (a, k) { return a + nat(k); }, 0); }
-    var list = [];
-    for (i = 0; i < chunks.length; i++) list.push(i);
-    if (!list.some(function (k) { return chunks[k].marks; })) return { items: items, total: 0 };
+    var list = [], t = 0;
+    for (i = cont ? cont.i + 1 : 0; i < chunks.length; i++) list.push(i);
+    if (cont) {
+        items.push({ i: cont.i, start: 0, dur: cont.dur, s: 1, cont: cont });
+        t = cont.dur;
+        budget = Math.max(budget - cont.dur, 0.2);
+        list = list.filter(function (k) { return chunks[k].marks; });
+    }
+    if (!list.some(function (k) { return chunks[k].marks; })) {
+        if (!items.length) return { items: items, total: 0 };
+        items[0].dur += R_TAIL;
+        return { items: items, total: t + R_TAIL };
+    }
     if (sum(list) > budget) list = list.filter(function (k) { return chunks[k].marks; });
-    var s = Math.max(R_MINSCALE, Math.min(1, budget / sum(list))), t = 0;
+    var sc = Math.max(R_MINSCALE, Math.min(1, budget / sum(list))), used = 0;
     for (i = 0; i < list.length; i++) {
-        var d = nat(list[i]) * s;
-        if (items.length && t + d > budget) break;
-        items.push({ i: list[i], start: t, dur: d, s: s });
+        var d = nat(list[i]) * sc;
+        if (used + d > budget && used) break;
+        items.push({ i: list[i], start: t, dur: d, s: sc });
         t += d;
+        used += d;
     }
     items[items.length - 1].dur += R_TAIL;
     return { items: items, total: t + R_TAIL };
@@ -165,10 +180,109 @@ function replay(prep, plan, t) {
     var k = 0;
     while (k < items.length - 1 && items[k + 1].start <= t) k++;
     var it = items[k], c = prep.chunks[it.i], q = Math.max(0, Math.min(t, plan.total) - it.start), last = k === items.length - 1;
-    var alpha = F.clamp01(q / (R_IN * it.s));
+    var cq = it.cont ? it.cont.q0 + q : q;                      // a continued chunk is already on screen: its own clock
+    var alpha = it.cont ? F.clamp01(cq / SWAP) : F.clamp01(q / (R_IN * it.s));
     if (!last) alpha = Math.min(alpha, 1 - F.clamp01((q - (it.dur - R_OUT * it.s)) / (R_OUT * it.s)));
-    drawChunk(g, c, BASE_Y, q, alpha, R_IN * it.s, R_GAP * it.s);
+    drawChunk(g, c, BASE_Y, cq, alpha, R_IN * it.s, R_GAP * it.s, it.cont ? it.cont.lands : null);
     return g;
+}
+
+// ---- live: the marks flare while the model works ----
+// The service streams the fixed text (whole words, `fixed` of the working events). The pill shows the ORIGINAL text's chunks (the layout
+// never moves) and, as each fixed word arrives, puts that word's letters and marks in; the marks flare one by one in reading order, MARK_GAP
+// apart, never before their word arrived. The chunk on screen stays until all its words arrived and its marks landed (+ LIVE_HOLD), then
+// the next one dissolves in; a chunk whose words arrived long ago shows its marks at once, quickly. A fixed word is applied only when it has
+// the original's letters (a mark added, nothing else); any other word stays as typed, and the done replay then plays the whole fixed text
+// as before (liveFinish returns null). liveFinish otherwise continues from the chunk on screen: the same flares are never played again.
+var LIVE_HOLD = 0.12;
+var BASEOF = {};
+(function () {
+    var a = "ÁÉÍÓÚÝČĚŇŘŠŽĎŤŮáéíóúýčěňřšžďťů", b = "AEIOUYCENRSZDTUaeiouycenrszdtu";
+    for (var i = 0; i < a.length; i++) BASEOF[a.charAt(i)] = b.charAt(i);
+})();
+
+function laid(word) {
+    var o = [];
+    for (var i = 0; i < word.length; i++) if (F.advance(word.charAt(i))) o.push(word.charAt(i));
+    return o;
+}
+
+// text -> live state, or null when there is nothing to show; t0 = the clock (s) when the first chunk comes on screen
+function liveNew(text, t0) {
+    var prep = prepare(text);
+    if (!prep.chunks.length) return null;
+    var byWord = {};
+    prep.chunks.forEach(function (c) {
+        c.chars.forEach(function (ch) { (byWord[ch.wi] = byWord[ch.wi] || []).push(ch); });
+    });
+    return { prep: prep, toks: tokens(String(text || "").slice(0, 20000)), byWord: byWord, arr: [], n: 0, skipped: 0, extra: false, ci: 0, entry: t0 || 0 };
+}
+
+function liveApply(live, i, fixedWord) {
+    var o = laid(live.toks[i]), f = laid(fixedWord), k;
+    if (!o.length) return;
+    if (o.length !== f.length) { live.skipped++; return; }
+    for (k = 0; k < o.length; k++) if (o[k] !== f[k] && BASEOF[f[k]] !== o[k]) { live.skipped++; return; }
+    (live.byWord[i] || []).forEach(function (ch) { ch.ch = f[ch.k]; ch.mark = F.hasMark(ch.ch); });
+}
+
+// the fixed text so far (whole words) arrived at clock t: every new word is put in (or skipped)
+function liveFeed(live, fixedText, t) {
+    var fw = tokens(String(fixedText || "").slice(0, 20000)), i;
+    for (i = live.n; i < fw.length; i++) {
+        if (i >= live.toks.length) { live.extra = true; continue; }
+        live.arr[i] = t;
+        liveApply(live, i, fw[i]);
+    }
+    live.n = Math.max(live.n, Math.min(fw.length, live.toks.length));
+}
+
+// the chunk's mark landing times relative to its entry E, whether all its words arrived, and when the last mark has landed
+function liveChunk(live, c, E) {
+    var lands = [], prev = MARK_START - MARK_GAP, ready = true, lastArr = 0, k;
+    for (k = 0; k < c.chars.length; k++) {
+        var ch = c.chars[k], a = live.arr[ch.wi];
+        if (a === undefined) { ready = false; continue; }
+        lastArr = Math.max(lastArr, a - E);
+        if (ch.mark) { prev = Math.max(MARK_START, a - E, prev + MARK_GAP); lands.push(prev); }
+    }
+    return { lands: lands, ready: ready, last: Math.max(lands.length ? prev : MARK_START, lastArr) };
+}
+
+// move on to the next chunk(s) while the one on screen is complete at clock t
+function liveStep(live, t) {
+    var n = live.prep.chunks.length;
+    while (live.ci < n - 1) {
+        var info = liveChunk(live, live.prep.chunks[live.ci], live.entry), end = live.entry + info.last + LIVE_HOLD;
+        if (!info.ready || t < end) break;
+        live.ci++;
+        live.entry = end;
+    }
+}
+
+function liveScene(live, t) {
+    var g = F.blank(COLS, ROWS);
+    liveStep(live, t);
+    var c = live.prep.chunks[live.ci], q = t - live.entry, info = liveChunk(live, c, live.entry);
+    var alpha = F.clamp01(q / SWAP);
+    if (info.ready && live.ci < live.prep.chunks.length - 1) alpha = Math.min(alpha, 1 - F.clamp01((q - (info.last + LIVE_HOLD - SWAP)) / SWAP));
+    drawChunk(g, c, BASE_Y, q, alpha, 0, 0, info.lands);
+    return g;
+}
+
+// the model is done at clock t with the full fixed text: a replay plan (replayPlan / replay with live.prep) that carries on from the
+// chunk on screen, or null when the live picture cannot be trusted (a word was skipped, the word counts differ): replay the fixed text then
+function liveFinish(live, fixedText, t) {
+    liveFeed(live, fixedText, t);
+    if (live.skipped || live.extra || live.n < live.toks.length) return null;
+    liveStep(live, t);
+    var c = live.prep.chunks[live.ci], q0 = t - live.entry, info = liveChunk(live, c, live.entry);
+    var pending = info.lands.some(function (l) { return l > q0 - FLARE; });
+    if (!pending) {
+        var rest = replayPlan(live.prep, REPLAY_MAX, { i: live.ci, dur: 0.001, q0: q0, lands: info.lands });
+        return rest.items.length > 1 ? rest : { items: [], total: 0 };       // nothing left to show: the live picture just stays
+    }
+    return replayPlan(live.prep, REPLAY_MAX, { i: live.ci, dur: Math.max(0.05, info.last + R_HOLD - q0), q0: q0, lands: info.lands });
 }
 
 // ---- neutral: pseudo-words filling the row (no real text) ----
@@ -214,8 +328,10 @@ function neutral(t, dim) {
 }
 
 // ---- the end states over the fading working picture. state: working | done | failed | unsupported; sT = seconds since the state began ----
-function scene(kind, state, t, sT, prep, plan) {
-    var v = kind === "neutral" ? neutral(t, false) : kind === "loading" ? neutral(t, true) : kind === "replay" ? replay(prep, plan, t) : words(prep, t);
+// `live` (words only): the live state (liveNew) whose picture replaces the looping one; t is then the live clock
+function scene(kind, state, t, sT, prep, plan, live) {
+    var v = kind === "neutral" ? neutral(t, false) : kind === "loading" ? neutral(t, true) : kind === "replay" ? replay(prep, plan, t)
+          : live ? liveScene(live, t) : words(prep, t);
     if (state === "working" || state === "loading" || state === "replay") return v;
     var g = F.blank(COLS, ROWS), fade = 1 - F.clamp01(sT / 0.2), i;
     if (fade > 0) for (i = 0; i < g.v.length; i++) { g.v[i] = v.v[i] * fade; g.m[i] = v.m[i]; g.fv[i] = v.fv[i] * fade; g.fs[i] = v.fs[i]; g.lf[i] = v.lf[i]; }

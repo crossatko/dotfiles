@@ -162,3 +162,140 @@ test("i, í, l, 1, I are five distinct shapes; i is a dot over a plain stem (no 
     assert.strictEqual(glyphRows("í")[0].replace(/\./g, "").length, 1);      // acute: one dot per row (a diagonal pair)
     assert.strictEqual(glyphRows("l").length, 7);
 });
+
+// ---- live ----
+const markN = g => g.m.filter(m => m > 0.5).length;
+const SRC = "Dobry den, posilam vam upravenou nabidku na zitrek ve ctrnact hodin. Prosim o potvrzeni terminu schuzky";
+const FIX = "Dobrý den, posílám vám upravenou nabídku na zítřek ve čtrnáct hodin. Prosím o potvrzení termínu schůzky";
+
+test("live: a word without its fixed form shows no mark; the mark lands (flare) when the word arrives, not before", () => {
+    const live = S.liveNew("Dobry den", 0);
+    assert.strictEqual(markN(S.liveScene(live, 0.5)), 0);
+    S.liveFeed(live, "Dobrý", 1.0);
+    assert.strictEqual(markN(S.liveScene(live, 0.99)), 0);                      // before the word arrived
+    assert.ok(markN(S.liveScene(live, 1.001)) > 0);                             // at once when it arrives
+    assert.ok(S.liveScene(live, 1.001).fv.some(v => v > 0.7));                  // flaring
+    assert.strictEqual(Math.max(...S.liveScene(live, 1.4).fv), 0);              // settled
+});
+
+test("live: marks of one word land one by one, 0.04 s apart, in reading order (left to right)", () => {
+    const live = S.liveNew("ctrnact ruzi", 0);
+    S.liveFeed(live, "čtrnáct růži", 2.0);
+    const at = d => S.liveScene(live, 2.0 + d), total = markN(at(0.5));
+    const counts = [-0.01, 0.001, 0.045, 0.085, 0.5].map(d => markN(at(d)));
+    assert.strictEqual(counts[0], 0);
+    for (let i = 1; i < counts.length; i++) assert.ok(counts[i] > counts[i - 1], counts.join());   // each step adds a mark
+    assert.strictEqual(counts[4], total);
+    // the first mark on screen is the leftmost one
+    const cols = g => { const o = []; for (let i = 0; i < g.m.length; i++) if (g.m[i] > 0.5) o.push(i % g.c); return o; };
+    assert.ok(Math.max(...cols(at(0.001))) < Math.min(...cols(at(0.5)).slice(-3)) + 1);
+});
+
+test("live: an arrival burst keeps the one-by-one spacing across words", () => {
+    const live = S.liveNew("ctrnact ruzi", 0);
+    S.liveFeed(live, "čtrnáct růži", 1.0);
+    const lands = S.liveChunk(live, live.prep.chunks[0], 0).lands;
+    assert.strictEqual(lands.length, 4);
+    assert.ok(lands[0] >= 1.0 - 1e-9);                                          // never before the word arrived
+    for (let i = 1; i < lands.length; i++) assert.ok(Math.abs(lands[i] - lands[i - 1] - 0.04) < 1e-9, lands.join());
+});
+
+test("live: words arriving one after the other land when they arrive", () => {
+    const live = S.liveNew("ctrnact ruzi", 0);
+    S.liveFeed(live, "čtrnáct", 1.0);
+    S.liveFeed(live, "čtrnáct růži", 2.0);
+    const lands = S.liveChunk(live, live.prep.chunks[0], 0).lands;
+    assert.ok(Math.abs(lands[0] - 1.0) < 1e-9 && Math.abs(lands[1] - 1.04) < 1e-9 && Math.abs(lands[2] - 2.0) < 1e-9 && Math.abs(lands[3] - 2.04) < 1e-9, lands.join());
+});
+
+test("live: the chunk on screen waits for its words, then the next chunk comes", () => {
+    const live = S.liveNew(SRC, 0), nChunks = live.prep.chunks.length;
+    assert.ok(nChunks > 2);
+    S.liveStep(live, 50);
+    assert.strictEqual(live.ci, 0);                                           // nothing arrived: never moves on
+    const w0 = new Set(live.prep.chunks[0].chars.map(c => c.wi));
+    S.liveFeed(live, FIX.split(" ").slice(0, Math.max(...w0) + 1).join(" "), 1.0);
+    S.liveStep(live, 1.05);
+    assert.strictEqual(live.ci, 0);                                           // marks still landing / hold
+    S.liveStep(live, 3.0);
+    assert.strictEqual(live.ci, 1);
+    assert.ok(live.entry > 1.0 && live.entry < 1.6);                          // entered when chunk 0 was complete, not "now"
+});
+
+test("live: a chunk that comes on screen after its words arrived shows its marks quickly", () => {
+    const live = S.liveNew(SRC, 0);
+    S.liveFeed(live, FIX, 0.5);
+    S.liveStep(live, 0.55);
+    const ci = live.ci, e = live.entry;
+    // however far it got, the chunk's own marks land at MARK_START + n * 0.04 after its entry
+    const c = live.prep.chunks[ci], n = c.chars.filter(ch => ch.mark).length;
+    if (n >= 2) assert.ok(markN(S.liveScene(live, e + 0.08 + 0.001)) < markN(S.liveScene(live, e + 0.08 + 0.001 + n * 0.04 + 0.3)));
+    S.liveStep(live, 60);
+    assert.strictEqual(live.ci, live.prep.chunks.length - 1);                 // all arrived: it walks to the last chunk
+});
+
+test("live: a word that differs from the typed one other than by marks is left as typed", () => {
+    const live = S.liveNew("Dobry den teto", 0);
+    S.liveFeed(live, "Dobrý den těto xx", 1.0);                              // 'těto' has a mark where 'teto' ... ok; 'xx' is extra
+    assert.strictEqual(live.skipped, 0);
+    assert.ok(live.extra);
+    const l2 = S.liveNew("Dobry den", 0);
+    S.liveFeed(l2, "Dobrá dne", 1.0);                                          // different letters / length
+    assert.ok(l2.skipped >= 1);
+    assert.strictEqual(S.liveFinish(l2, "Dobrá dne", 2.0), null);
+});
+
+test("liveFinish: null when the word counts differ", () => {
+    const live = S.liveNew("Dobry den teto", 0);
+    S.liveFeed(live, "Dobrý den", 1.0);
+    assert.strictEqual(S.liveFinish(live, "Dobrý den", 2.0), null);            // a word missing
+});
+
+test("liveFinish: carries on from the chunk on screen, no flare is played twice, total at most 1.5 s", () => {
+    const live = S.liveNew(SRC, 0), words = FIX.split(" ");
+    S.liveFeed(live, words.slice(0, 5).join(" "), 1.0);
+    const t = 1.6;
+    S.liveScene(live, t);                                                      // steps
+    const plan = S.liveFinish(live, FIX, t);
+    assert.ok(plan && plan.items.length >= 1 && plan.total <= 1.5 + 1e-9);
+    assert.ok(plan.items.every(it => it.i >= live.ci), "nothing before the chunk on screen is replayed");
+    assert.ok(plan.items[0].cont && plan.items[0].i === live.ci);
+    // the first replay frame is the live frame (same chunk, same dots lit)
+    const before = S.liveScene(live, t), first = S.replay(live.prep, plan, 0.05);
+    assert.strictEqual(lit(first) > 0, true);
+    for (let i = 1; i < plan.items.length; i++) assert.ok(plan.items[i].i > plan.items[i - 1].i);
+    // chunks already shown are not in the plan
+    if (live.ci > 0) assert.ok(!plan.items.some(it => it.i < live.ci));
+    assert.ok(before.v.length === first.v.length);
+});
+
+test("liveFinish: everything already shown = nothing to replay (the live picture stays)", () => {
+    const live = S.liveNew("ctrnact", 0);
+    S.liveFeed(live, "čtrnáct", 1.0);
+    const plan = S.liveFinish(live, "čtrnáct", 5.0);
+    assert.strictEqual(plan.items.length, 0);
+});
+
+test("liveFinish: no stream at all (all words arrive with done) replays like a fresh replay, from the first chunk", () => {
+    const live = S.liveNew(SRC, 0);
+    const plan = S.liveFinish(live, FIX, 0.5);
+    assert.ok(plan && plan.items[0].i === 0 && plan.total <= 1.5 + 1e-9);
+    const g = S.replay(live.prep, plan, plan.total);
+    assert.ok(markN(g) > 0);
+});
+
+test("replayPlan with a continued chunk: it comes first, the rest follows in reading order within the budget", () => {
+    const p = S.prepare(FIX.repeat(1)), cont = { i: 0, dur: 0.2, q0: 0.1, lands: [0.1, 0.14] };
+    const pl = S.replayPlan(p, 1.5, cont);
+    assert.strictEqual(pl.items[0].i, 0);
+    assert.ok(pl.items[0].cont === cont);
+    assert.ok(pl.total <= 1.5 + 1e-9);
+});
+
+test("scene: with a live state the live picture is shown (and fades in the end states)", () => {
+    const live = S.liveNew("ctrnact", 0);
+    S.liveFeed(live, "čtrnáct", 0.0);
+    const g = S.scene("words", "working", 0.5, 0, null, null, live);
+    assert.ok(markN(g) > 0);
+    assert.ok(lit(S.scene("words", "failed", 0.5, 0.05, null, null, live)) > 0);
+});
