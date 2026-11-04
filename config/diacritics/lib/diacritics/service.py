@@ -191,9 +191,9 @@ class Service:
                     print("diacritics: markup changed by the model, result dropped", file=sys.stderr, flush=True)
                     self.set_state("failed")
                     return {"ok": False, "error": "markup"}
-            except (ServerError, OSError) as exc:
+            except Exception as exc:    # whatever goes wrong, the state must end in failed
                 if not isinstance(exc, ServerError):
-                    exc = ServerError("server", str(exc))
+                    exc = ServerError("server", f"{type(exc).__name__}: {exc}")
                 print(f"diacritics: {exc.code}: {exc}", file=sys.stderr, flush=True)
                 if exc.code != "empty" and self.server is not None and not self.server.alive():
                     self.server = None
@@ -202,6 +202,8 @@ class Service:
             self.set_state("done", fixed=htmlmode.to_plain(result) if html else result)
             return {"ok": True, "text": result}
         finally:
+            if self.state in ("loading", "working"):    # left by something that is not an Exception: never stay stuck
+                self.set_state("failed")
             self.last_used = time.monotonic()
             self.fix_lock.release()
 
@@ -238,7 +240,7 @@ class Service:
             if op == "fix" and isinstance(req.get("text"), str):
                 reply = self.fix(req["text"], "html" if req.get("format") == "html" else "text")
             elif op == "state" and req.get("state") in PUSHABLE:
-                if self.state not in ("loading", "working"):
+                if self.state not in ("loading", "working") or not self.fix_lock.locked():   # (a state stuck without a fix is replaced)
                     self.set_state(req["state"])
                 reply = {"ok": True}
             elif op == "status":
