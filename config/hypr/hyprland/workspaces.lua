@@ -18,7 +18,7 @@ local workspaces = {
 	{ id = "1", key = "a", monitor = monitor1.output },
 	{ id = "2", key = "s", monitor = monitor1.output },
 	{ id = "3", key = "d", monitor = monitor1.output, app = apps.browser, default = true },
-	{ id = "4", key = "f", monitor = monitor1.output, app = apps.terminal },
+	{ id = "4", key = "f", monitor = monitor1.output, app = apps.herdr },
 
 	{ id = "5", key = "q", monitor = monitor2.output },
 	{ id = "6", key = "w", monitor = monitor2.output },
