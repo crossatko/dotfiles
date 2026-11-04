@@ -180,7 +180,7 @@ PanelWindow {
             const t = Date.now() / 1000
             const talking = pill.state === "speaking" || pill.state === "translating"
             const env = (.5 + .5 * Math.sin(t * 2.6)) * (.55 + .45 * Math.sin(t * .8 + 1)) * (.7 + .3 * Math.sin(t * 7.3) * Math.sin(t * 4.1))
-            pill.level = talking ? Math.min(1, .1 + env * .95) : .05 + .03 * Math.sin(t * 1.5)
+            pill.level = talking ? Math.min(1, .1 + env * .95) : 0   // the service sends a true 0 at its noise floor
         }
     }
 

@@ -6,6 +6,8 @@ import QtQuick
 // dotted line in `errorColor`, no labels. Colour runs `colorLeft` -> `colorRight` along the ribbon.
 // Input: `level` 0..1 (smoothed here, rises fast, falls slower), or `levels` (up to 16 recent
 // values 0..1, oldest first, spread across the ribbon: louder parts swell where they land) when the source has them.
+// Level 0 (silence: the service sends a true 0 at the noise floor) still waves gently at `idleAmp` of the full swing;
+// the swing grows linearly with the level up to 1.
 // Cost: one fragment shader over the item; per frame only `time` and the smoothed level change (FrameAnimation,
 // stopped while `running` is false or the item is hidden). Reduced motion (Motion.reduced): the ribbon stops
 // flowing, its thickness still follows the level.
@@ -24,6 +26,8 @@ Item {
     // the grid: a dot every `pitch` px, `dotFrac` of the cell (3 px / 0.8)
     property real pitch: 3
     property real dotFrac: 0.8
+    // swing of the ribbon at level 0, as a fraction of the full swing (level 1): alive, but clearly flat
+    property real idleAmp: 0.2
 
     property real time: 0
     property real shownLevel: 0
@@ -107,6 +111,7 @@ Item {
         readonly property real labRW: sw.labR.w
         readonly property real labAlpha: sw.labelAlpha
         readonly property real strand2Alpha: 0.6
+        readonly property real idleAmp: sw.idleAmp
         fragmentShader: Qt.resolvedUrl("shaders/dotswoosh.frag.qsb")
     }
 }

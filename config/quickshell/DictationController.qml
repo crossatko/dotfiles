@@ -20,7 +20,7 @@ Scope {
         "ptt-en": { service: "en", pill: "en" },
         "ptt-cs-en": { service: "translate", pill: "cs-en" }
     })
-    property real loud: 0.3                  // level (0..1 = -60..0 dBFS) counted as speech; the service's gate is ~0.23
+    property real loud: 0.3                  // level counted as speech (the service's level: 0 = at the noise floor, speech ~0.6-1)
     property int quietMs: 350
     property int finalLingerMs: 900          // the finished text stays readable this long
     property int errorLingerMs: 2500

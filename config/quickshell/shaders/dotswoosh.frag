@@ -7,7 +7,7 @@
 // centre, anti-aliased by its pixel coverage (fwidth), so it stays crisp at any output scale.
 // Ribbon: per column u in 0..1 between the labels, envelope sin(pi u)^0.7,
 // strand k = 0 (alpha 1) and k = 1 (alpha strand2Alpha, drawn over it); centre line = two sines that flow with
-// `time`, amplitude and thickness follow the level (the `hist` samples across u when histN > 0, else `level`);
+// `time`, amplitude (idleAmp at level 0, 1 at level 1) and thickness follow the level (the `hist` samples across u when histN > 0, else `level`);
 // a cell is lit when pow(coverage, 1.1) exceeds its Bayer threshold. Colour = colA -> colB over the middle of the ribbon.
 // Labels: up to 16 columns each, 5 rows; column c = bits 5*(c%4).. of component c/4 of labL / labR (bit 0 = top row).
 // Build: /usr/lib/qt6/bin/qsb --qt6 -o dotswoosh.frag.qsb dotswoosh.frag
@@ -36,6 +36,7 @@ layout(std140, binding = 0) uniform buf {
     float labRW;
     float labAlpha;
     float strand2Alpha;
+    float idleAmp;      // swing at level 0 (fraction of the swing at level 1)
 };
 
 const float bayer[16] = float[](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
@@ -91,7 +92,7 @@ vec4 cellColor(vec2 g, float cols, float rows) {
     vec4 outc = vec4(0.0);
     for (int k = 0; k < 2; k++) {
         float kf = float(k);
-        float amp = (0.4 + 0.6 * l) * (k == 1 ? 0.8 : 1.0);
+        float amp = (idleAmp + (1.0 - idleAmp) * l) * (k == 1 ? 0.8 : 1.0);
         float cy = rows / 2.0
                  + sin(u * 6.2831853 * (1.2 + kf * 0.5) + time * (2.0 + kf * 1.2) + kf * 1.7) * amp * rows * 0.34 * env
                  + sin(u * 3.14159265 * 5.0 + time * 3.1) * amp * rows * 0.06 * env;
