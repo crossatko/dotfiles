@@ -95,23 +95,12 @@ PanelWindow {
     readonly property int pillW: 336          // fixed card width, shrinks only on a narrow screen
     readonly property int waveH: 40           // the swoosh row
     readonly property int sidePad: Theme.pad + Theme.controlGap   // 18, as the OSD pill
-    // qmllint disable missing-property
-    readonly property string screenName: screen ? screen.name : ""
-    readonly property int screenW: screen ? screen.width : pillW
-    // qmllint enable missing-property
-    // the pill's distance from its edge is edgeGapFactor times the shell's gap tokens (popupGapOf from the bar, edgeGapOf from
-    // a bare screen edge), never less than the docked bar's tokens, so it follows the gap / edge gap / floating settings
-    readonly property real edgeGapFactor: 2
-    readonly property bool barAtTop: screenName !== "" && Popups.edgeOf(screenName) === "top"
-    // the edge the pill hangs from: the bar's, or the bottom edge when Settings > Voice says so
-    readonly property bool atTop: barAtTop && !DictationPrefs.pillBottom
-    // qmllint disable missing-property
-    readonly property real barInset: Popups.cardInsetOf(screen) - BarConfig.popupGapOf(screen)       // screen edge -> the bar's far edge (0 without a bar)
-    readonly property real gapFromBar: edgeGapFactor * Math.max(BarConfig.popupGapOf(screen), BarConfig.popupGapDocked)
-    readonly property real gapFromEdge: edgeGapFactor * Math.max(BarConfig.edgeGapOf(screen), BarConfig.edgeGapDocked)
-    // qmllint enable missing-property
-    // distance of the card's anchored edge from the screen edge: past the bar, or (bottom override, bar at the top) from the bare edge
-    readonly property real edgeInset: barAtTop && !atTop ? gapFromEdge : barInset + gapFromBar
+    PillPlacement { id: place; screen: pill.screen }   // where the card hangs (shared with DiacPill)
+    readonly property string screenName: place.screenName
+    readonly property int screenW: place.screenW > 0 ? place.screenW : pillW
+    readonly property bool barAtTop: place.barAtTop
+    readonly property bool atTop: place.atTop
+    readonly property real edgeInset: place.edgeInset
     readonly property bool flip: mirrored && !atTop
     readonly property real baseH: 2 * Theme.pad + waveH
     readonly property real capH: tail.implicitHeight        // one line, caption or error
@@ -131,7 +120,7 @@ PanelWindow {
     margins.top: atTop ? edgeInset : 0
     margins.bottom: atTop ? 0 : edgeInset
     // qmllint enable missing-property
-    implicitWidth: Math.min(pillW, screenW - 2 * BarConfig.edgeGapOf(screen))
+    implicitWidth: Math.min(pillW, place.screenW > 0 ? place.maxWidth : pillW)
     implicitHeight: Math.ceil(fullH)          // room for the grown card: the surface never resizes while it animates
     color: "transparent"
     BarZone { id: zone; screen: pill.screen }

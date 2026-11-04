@@ -245,3 +245,14 @@ singleton SttModels 1.0 SttModels.qml
 SttModelRow 1.0 SttModelRow.qml
 SttModelsSection 1.0 SttModelsSection.qml
 SttRoleRow 1.0 SttRoleRow.qml
+singleton DiacriticsPrefs 1.0 DiacriticsPrefs.qml
+DiacriticsKeySection 1.0 DiacriticsKeySection.qml
+DiacriticsModelSection 1.0 DiacriticsModelSection.qml
+DiacriticsIgnoredSection 1.0 DiacriticsIgnoredSection.qml
+DiacriticsPillSection 1.0 DiacriticsPillSection.qml
+DotGridCanvas 1.0 DotGridCanvas.qml
+DiacDots 1.0 DiacDots.qml
+singleton DiacClient 1.0 DiacClient.qml
+singleton DiacPillPrefs 1.0 DiacPillPrefs.qml
+DiacPill 1.0 DiacPill.qml
+PillPlacement 1.0 PillPlacement.qml

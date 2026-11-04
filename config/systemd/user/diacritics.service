@@ -1,0 +1,15 @@
+[Unit]
+Description=Local Czech diacritics service (llama.cpp llama-server on demand)
+# Docs: config/diacritics/README.md in the dotfiles. No [Install] section: the shell and the CLI start it on the first
+# use (systemctl --user start diacritics.service). llama-server starts on the first fix and is stopped when idle.
+
+[Service]
+Type=simple
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin
+ExecStart=%h/.local/bin/diacritics serve
+# SIGTERM stops llama-server too; this is only the upper bound before systemd kills the whole group.
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes

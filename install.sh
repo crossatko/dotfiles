@@ -967,6 +967,12 @@ stage_links() {
   # press (systemctl --user start dictation.service). The whisper.cpp worker and the models are per machine (README).
   link "$CONFIG_DIR/dictation/bin/dictation" "$HOME/.local/bin/dictation"
   link "$CONFIG_DIR/systemd/user/dictation.service" "$HOME/.config/systemd/user/dictation.service"
+  # Diacritics (config/diacritics): the CLI/service launcher, its user unit (started on demand, not enabled) and the system
+  # prompt the service reads. llama-server and the models are per machine (README).
+  link "$CONFIG_DIR/diacritics/bin/diacritics" "$HOME/.local/bin/diacritics"
+  link "$CONFIG_DIR/systemd/user/diacritics.service" "$HOME/.config/systemd/user/diacritics.service"
+  link "$CONFIG_DIR/diacritics/prompt.txt" "$HOME/.local/share/diacritics/prompt.txt"
+  link "$CONFIG_DIR/diacritics/prompt-html.txt" "$HOME/.local/share/diacritics/prompt-html.txt"
   # Launcher shim: applies the wallpaper theme to Brave's profile just before it starts
   link "$CONFIG_DIR/theme/bin/brave" "$HOME/.local/bin/brave"
   link "$CONFIG_DIR/launcher/jellyfin/bin/jellyfin-qs" "$HOME/.local/bin/jellyfin-qs"
