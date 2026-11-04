@@ -10,6 +10,7 @@ ShellRoot {
     readonly property var bars: BarConfig.bars
     Binding { target: Popups; property: "bars"; value: root.bars }
     readonly property var weatherBlur: WeatherBlur   // Weather blur (Settings > Weather): writes the state the compositor reads
+    readonly property var pttShortcuts: PttShortcuts   // push-to-talk global shortcuts (Settings > Voice): registered from the start
     readonly property var tvCast: TvCast     // Send to TV: its `tvcast` IPC target exists from the start (idle until used)
 
     // the desktop wallpaper (theme.py wallpaper_backend "quickshell"; Wallpaper.qml): background layer, first so it maps early
@@ -33,6 +34,7 @@ ShellRoot {
     Launcher { id: launcher }
     Toasts { bars: root.bars }
     Osd { id: osd; bars: root.bars }
+    DictationController {}   // push-to-talk dictation: keys -> service (DictationClient) -> pill (IPC dictation, dictation-pill)
     BtNotifier {}
     Lock { id: lockService }
     // opt-in glass clock on the desktop (Settings > Desktop clock): stays in the lock's desktop snapshot and fades out on

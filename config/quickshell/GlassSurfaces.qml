@@ -25,6 +25,7 @@ Singleton {
         { id: "launcher", label: "Launcher",         detail: "the launcher card (qs-launcher)" },
         { id: "osd",      label: "OSD",              detail: "volume / brightness pill (qs-osd)" },
         { id: "toast",    label: "Notifications",    detail: "notification toasts (qs-toast)" },
+        { id: "dictation", label: "Dictation pill",  detail: "the push-to-talk pill (qs-dictation)" },
         { id: "groupbar", label: "Group bar",        detail: "the window group pills", option: "groupbar" },
         { id: "border",   label: "Window borders",   detail: "glass ring under window borders", option: "border" }
     ]

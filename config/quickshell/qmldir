@@ -215,3 +215,28 @@ SettingsWeather 1.0 SettingsWeather.qml
 MediaActions 1.0 MediaActions.qml
 VDivider 1.0 VDivider.qml
 BarZone 1.0 BarZone.qml
+DotSwoosh 1.0 DotSwoosh.qml
+TailLine 1.0 TailLine.qml
+DictationPill 1.0 DictationPill.qml
+DictationController 1.0 DictationController.qml
+singleton DictationClient 1.0 DictationClient.qml
+singleton DictationStatus 1.0 DictationStatus.qml
+singleton DictationPrefs 1.0 DictationPrefs.qml
+singleton DictationWords 1.0 DictationWords.qml
+DictationPrefsSection 1.0 DictationPrefsSection.qml
+FillerWordsSection 1.0 FillerWordsSection.qml
+ReplacementsSection 1.0 ReplacementsSection.qml
+ReplacementRow 1.0 ReplacementRow.qml
+WordChip 1.0 WordChip.qml
+WordListEditor 1.0 WordListEditor.qml
+singleton PttPrefs 1.0 PttPrefs.qml
+singleton PttShortcuts 1.0 PttShortcuts.qml
+KeyCaptureField 1.0 KeyCaptureField.qml
+PttKeyRow 1.0 PttKeyRow.qml
+PttKeysSection 1.0 PttKeysSection.qml
+SettingsVoice 1.0 SettingsVoice.qml
+VoiceLastError 1.0 VoiceLastError.qml
+singleton SttModels 1.0 SttModels.qml
+SttModelRow 1.0 SttModelRow.qml
+SttModelsSection 1.0 SttModelsSection.qml
+SttRoleRow 1.0 SttRoleRow.qml

@@ -1,0 +1,338 @@
+#!/usr/bin/env python3
+"""Speech model catalog + downloader for the dictation settings (whisper.cpp ggml files).
+
+  stt-models list              catalog merged with what is on disk, one JSON object
+  stt-models download NAME     download + verify, one JSON event per line on stdout (see below)
+  stt-models verify NAME       sha256 of the installed file against the catalog (one JSON line)
+  stt-models delete NAME       remove the installed file and any partial download
+  stt-models discard NAME      remove only the partial download
+  stt-models dir               print the models directory
+
+Models live in ${XDG_DATA_HOME:-~/.local/share}/dictation/models/ggml-<name>.bin, never in the repo. The catalog is
+stt-models.json next to this script (official Hugging Face URLs, size, sha256). A download goes to ggml-<name>.bin.part,
+resumes with a Range request, is checked against the catalog size and sha256 and only then renamed (atomic). There is
+no way to skip the check: a catalog entry without a sha256 is refused.
+
+Download events (stdout, one JSON object per line, flushed):
+  {"event":"start","name","total","from"}                      from = bytes already on disk (resume)
+  {"event":"progress","name","pct","bytes","total","bps","eta"}  about 4 per second; bps = recent speed, eta seconds or null
+  {"event":"retry","name","attempt","message"}                 a network error, resuming after a short pause
+  {"event":"verifying","name","pct"}
+  {"event":"done","name","path"}                               exit 0
+  {"event":"error","name","code","message","resumable"}        exit 1; code = network|http|space|checksum|size|busy|catalog|io
+  {"event":"cancelled","name","bytes"}                         SIGTERM / SIGINT: the .part stays (resume), exit 130
+A checksum or size mismatch deletes the .part (resumable false): the bytes are bad, a retry starts over.
+
+Test hooks: QS_STT_MODELS_DIR (models dir), QS_STT_CATALOG (catalog file), QS_STT_FREE_BYTES (pretend this much space is
+free), QS_STT_ALLOW_HTTP=1 (accept http:// URLs, for a local test server), QS_STT_RETRIES (default 3), QS_STT_RETRY_WAIT
+(seconds, default 2).
+"""
+import fcntl
+import http.client
+import hashlib
+import json
+import os
+import shutil
+import signal
+import sys
+import time
+import urllib.error
+import urllib.request
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+MARGIN = 64 * 1024 * 1024        # free space kept beyond the download
+CHUNK = 1024 * 1024
+TIMEOUT = 30                     # seconds without data before the connection counts as dead
+
+
+def models_dir():
+    d = os.environ.get("QS_STT_MODELS_DIR")
+    if d:
+        return d
+    xdg = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return os.path.join(xdg, "dictation", "models")
+
+
+def load_catalog():
+    with open(os.environ.get("QS_STT_CATALOG") or os.path.join(HERE, "stt-models.json")) as f:
+        return json.load(f)
+
+
+def find(cat, name):
+    for m in cat["models"]:
+        if m["name"] == name:
+            return m
+    return None
+
+
+def emit(**kw):
+    sys.stdout.write(json.dumps(kw) + "\n")
+    sys.stdout.flush()
+
+
+def path_of(m):
+    return os.path.join(models_dir(), m["file"])
+
+
+def state_of(m):
+    p = path_of(m)
+    st = {"installed": False, "damaged": False, "diskBytes": 0, "partialBytes": 0}
+    try:
+        n = os.path.getsize(p)
+        st["diskBytes"] = n
+        if n == m["size"]:
+            st["installed"] = True
+        else:
+            st["damaged"] = True
+    except OSError:
+        pass
+    try:
+        st["partialBytes"] = os.path.getsize(p + ".part")
+    except OSError:
+        pass
+    return st
+
+
+def sha256_file(path, progress=None):
+    h = hashlib.sha256()
+    total = os.path.getsize(path) or 1
+    done = 0
+    last = 0.0
+    with open(path, "rb") as f:
+        while True:
+            b = f.read(CHUNK)
+            if not b:
+                break
+            h.update(b)
+            done += len(b)
+            now = time.monotonic()
+            if progress and now - last >= 0.25:
+                last = now
+                progress(100.0 * done / total)
+    return h.hexdigest()
+
+
+def free_bytes(d):
+    env = os.environ.get("QS_STT_FREE_BYTES")
+    if env is not None:
+        return int(env)
+    return shutil.disk_usage(d).free
+
+
+class Cancelled(Exception):
+    pass
+
+
+class Fail(Exception):
+    def __init__(self, code, message, resumable=True):
+        super().__init__(message)
+        self.code, self.message, self.resumable = code, message, resumable
+
+
+def _on_term(signum, frame):
+    raise Cancelled()
+
+
+def fetch(m, part, total):
+    """One connection: append to `part` until it has `total` bytes. Raises Fail('network'|'http'|'size'|'io')."""
+    have = os.path.getsize(part) if os.path.exists(part) else 0
+    req = urllib.request.Request(m["url"], headers={"Accept-Encoding": "identity", "User-Agent": "stt-models/1"})
+    if have:
+        req.add_header("Range", "bytes=%d-" % have)
+    try:
+        resp = urllib.request.urlopen(req, timeout=TIMEOUT)
+    except urllib.error.HTTPError as e:
+        if e.code == 416 and have:
+            if have >= total:
+                return                        # already complete; the caller verifies
+            os.unlink(part)                   # range makes no sense for this file: start over
+            raise Fail("network", "server refused the resume, starting over")
+        raise Fail("http", "HTTP %d from the model server" % e.code, resumable=e.code >= 500)
+    except (urllib.error.URLError, OSError, http.client.HTTPException) as e:
+        why = getattr(e, "reason", e)
+        why = getattr(why, "strerror", None) or why
+        raise Fail("network", "cannot reach the model server (%s)" % why)
+    with resp:
+        code = resp.status
+        if have and code == 200:
+            have = 0                          # server ignored Range: the whole file comes again
+        elif have and code != 206:
+            raise Fail("http", "unexpected HTTP %d" % code, resumable=False)
+        clen = resp.headers.get("Content-Length")
+        if clen is not None and have + int(clen) != total:
+            os.unlink(part) if os.path.exists(part) else None
+            raise Fail("size", "the server's file is %d bytes, the catalog says %d" % (have + int(clen), total), resumable=False)
+        start = have
+        t0 = last = time.monotonic()
+        last_bytes = have
+        bps = 0.0
+        try:
+            with open(part, "r+b" if have else "wb") as out:
+                out.seek(have)
+                out.truncate()
+                while True:
+                    try:
+                        b = resp.read(CHUNK)
+                    except (OSError, http.client.HTTPException) as e:
+                        raise Fail("network", "connection lost (%s)" % e)
+                    if not b:
+                        break
+                    out.write(b)
+                    have += len(b)
+                    now = time.monotonic()
+                    if now - last >= 0.25:
+                        inst = (have - last_bytes) / (now - last)
+                        bps = inst if bps == 0 else 0.7 * bps + 0.3 * inst
+                        last, last_bytes = now, have
+                        emit(event="progress", name=m["name"], pct=round(100.0 * have / total, 2), bytes=have, total=total,
+                             bps=int(bps), eta=int((total - have) / bps) if bps > 0 else None)
+                out.flush()
+                os.fsync(out.fileno())
+        except OSError as e:
+            raise Fail("space" if e.errno == 28 else "io", "cannot write the download (%s)" % e.strerror)
+
+
+def download(cat, name):
+    m = find(cat, name)
+    if m is None:
+        return emit(event="error", name=name, code="catalog", message="unknown model", resumable=False) or 1
+    sha = (m.get("sha256") or "").lower()
+    url = m.get("url") or ""
+    if len(sha) != 64 or not m.get("size"):
+        return emit(event="error", name=name, code="catalog", message="catalog entry has no checksum or size", resumable=False) or 1
+    if not (url.startswith("https://") or (url.startswith("http://") and os.environ.get("QS_STT_ALLOW_HTTP") == "1")):
+        return emit(event="error", name=name, code="catalog", message="model URL must be https", resumable=False) or 1
+    d = models_dir()
+    total = int(m["size"])
+    final = path_of(m)
+    part = final + ".part"
+    try:
+        os.makedirs(d, exist_ok=True)
+        lock = open(os.path.join(d, ".%s.lock" % m["file"]), "w")
+    except OSError as e:
+        return emit(event="error", name=name, code="io", message="cannot create %s (%s)" % (d, e.strerror), resumable=False) or 1
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return emit(event="error", name=name, code="busy", message="this model is already being downloaded", resumable=True) or 1
+    signal.signal(signal.SIGTERM, _on_term)
+    signal.signal(signal.SIGINT, _on_term)
+    try:
+        if state_of(m)["installed"]:
+            emit(event="done", name=name, path=final)
+            return 0
+        have = os.path.getsize(part) if os.path.exists(part) else 0
+        if have > total:
+            os.unlink(part)
+            have = 0
+        need = total - have + MARGIN
+        free = free_bytes(d)
+        if free < need:
+            raise Fail("space", "needs %.1f GB free, only %.1f GB available" % (need / 1e9, free / 1e9))
+        emit(event="start", name=name, total=total, **{"from": have})
+        retries = int(os.environ.get("QS_STT_RETRIES", "3"))
+        wait = float(os.environ.get("QS_STT_RETRY_WAIT", "2"))
+        attempt = 0
+        while True:
+            try:
+                fetch(m, part, total)
+                got_n = os.path.getsize(part)
+                if got_n < total:
+                    raise Fail("network", "connection closed early (%d of %d bytes)" % (got_n, total))
+                break
+            except Fail as f:
+                if f.code != "network" or attempt >= retries:
+                    raise
+                attempt += 1
+                emit(event="retry", name=name, attempt=attempt, message=f.message)
+                time.sleep(wait)
+        if os.path.getsize(part) != total:
+            os.unlink(part)
+            raise Fail("size", "got more than the catalog's %d bytes" % total, resumable=False)
+        emit(event="verifying", name=name, pct=0)
+        got = sha256_file(part, lambda p: emit(event="verifying", name=name, pct=round(p, 1)))
+        if got != sha:
+            os.unlink(part)
+            raise Fail("checksum", "checksum mismatch: the download is corrupt and was deleted", resumable=False)
+        os.replace(part, final)
+        dfd = os.open(d, os.O_RDONLY)
+        try:
+            os.fsync(dfd)
+        finally:
+            os.close(dfd)
+        emit(event="done", name=name, path=final)
+        return 0
+    except Cancelled:
+        emit(event="cancelled", name=name, bytes=os.path.getsize(part) if os.path.exists(part) else 0)
+        return 130
+    except Fail as f:
+        emit(event="error", name=name, code=f.code, message=f.message, resumable=f.resumable)
+        return 1
+    finally:
+        lock.close()
+
+
+def cmd_list(cat):
+    out = []
+    for m in cat["models"]:
+        e = {k: v for k, v in m.items() if k != "url"}
+        e.update(state_of(m))
+        out.append(e)
+    print(json.dumps({"dir": models_dir(), "models": out}))
+    return 0
+
+
+def cmd_verify(cat, name):
+    m = find(cat, name)
+    if m is None or not state_of(m)["installed"]:
+        emit(event="error", name=name, code="catalog", message="not installed", resumable=False)
+        return 1
+    ok = sha256_file(path_of(m)) == m["sha256"].lower()
+    emit(event="verify", name=name, ok=ok)
+    return 0 if ok else 1
+
+
+def cmd_delete(cat, name, partial_only=False):
+    m = find(cat, name)
+    if m is None:
+        emit(event="error", name=name, code="catalog", message="unknown model", resumable=False)
+        return 1
+    for p in ([path_of(m) + ".part"] if partial_only else [path_of(m), path_of(m) + ".part"]):
+        try:
+            os.unlink(p)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            emit(event="error", name=name, code="io", message="cannot delete (%s)" % e.strerror, resumable=False)
+            return 1
+    emit(event="deleted", name=name)
+    return 0
+
+
+def main(argv):
+    if len(argv) < 1 or argv[0] not in ("list", "download", "verify", "delete", "discard", "dir"):
+        sys.stderr.write(__doc__)
+        return 2
+    cmd = argv[0]
+    if cmd == "dir":
+        print(models_dir())
+        return 0
+    try:
+        cat = load_catalog()
+    except (OSError, ValueError) as e:
+        emit(event="error", name="", code="catalog", message="cannot read the catalog (%s)" % e, resumable=False)
+        return 1
+    if cmd == "list":
+        return cmd_list(cat)
+    if len(argv) < 2:
+        sys.stderr.write(__doc__)
+        return 2
+    if cmd == "download":
+        return download(cat, argv[1])
+    if cmd == "verify":
+        return cmd_verify(cat, argv[1])
+    return cmd_delete(cat, argv[1], partial_only=cmd == "discard")
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
