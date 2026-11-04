@@ -6,6 +6,10 @@ Order (the contract is scratchpad/diacritics-tickets/interface.md, "Key flow"):
  2. save the clipboard, put a unique sentinel on it;
  3. Ctrl+C to that window (Hyprland send_shortcut aimed at the address); a clipboard that still holds the sentinel
     means there was no selection, so Ctrl+A, Ctrl+C;
+ 3b. HTML mode: when the copy also offers text/html with real markup (htmlmode.has_real_markup), the HTML fragment
+    goes to the service as {"op":"fix","text":html,"format":"html"} and the result is pasted as text/html plus a
+    text/plain fallback in ONE selection (clipboard.write_html -> wlsel.py); plain text and HTML source typed in a
+    plain field stay in the plain mode (the prompt keeps the tags);
  4. `fix` through the service socket; any failure leaves the text untouched;
  5. focus unchanged? then the result goes on the clipboard and Ctrl+V to the same window; the saved clipboard comes
     back after PASTE_SETTLE_S, in every outcome (try/finally).
@@ -13,7 +17,7 @@ Order (the contract is scratchpad/diacritics-tickets/interface.md, "Key flow"):
 Exit status of main(): 0 done / nothing to do, 1 failed, 2 unsupported window, 3 another run is in progress.
 
 Caveats: after the select-all path a failed or unchanged run leaves the field fully selected (the text is untouched);
-only one clipboard type comes back (see clipboard.py); keys are layout-independent keycodes (hypr.KEYCODES).
+the clipboard comes back with all saved types (clipboard.py); keys are layout-independent keycodes (hypr.KEYCODES).
 Test overrides: DIACRITICS_PREFS (prefs file), DIACRITICS_SOCK (socket), DIACRITICS_NO_FALLBACK=1.
 """
 from __future__ import annotations
@@ -27,7 +31,7 @@ import sys
 import time
 import uuid
 
-from . import clipboard, hypr
+from . import clipboard, htmlmode, hypr
 
 # timings, seconds
 COPY_WAIT_S = 0.6          # wait for the clipboard to change after Ctrl+C when something is selected
@@ -144,10 +148,13 @@ def tell_state(state: str, start: bool = False) -> None:
         log(f"could not tell the service state {state}")
 
 
-def fix_text(text: str):
-    """The fixed text, or None on any failure."""
+def fix_text(text: str, fmt: str | None = None):
+    """The fixed text, or None on any failure. fmt="html": the text is an HTML fragment, tags stay."""
+    req = {"op": "fix", "text": text}
+    if fmt:
+        req["format"] = fmt
     try:
-        resp = request({"op": "fix", "text": text}, FIX_TIMEOUT_S)
+        resp = request(req, FIX_TIMEOUT_S)
     except (OSError, ValueError) as e:
         log(f"fix request failed: {e}")
         return None
@@ -192,7 +199,7 @@ class Abort(Exception):
 
 
 def _grab_text(addr: str, sentinel: str) -> str:
-    """The selection, or the whole field; "" when there is nothing."""
+    """The selection, or the whole field (plain text); "" when there is nothing."""
     if not clipboard.write_text(sentinel) or clipboard.read_text() != sentinel:
         raise Abort("could not set the sentinel on the clipboard")
     if not send_key("c", addr):
@@ -211,21 +218,43 @@ def _grab_text(addr: str, sentinel: str) -> str:
     return wait_for_change(sentinel, SELECT_ALL_COPY_WAIT_S) or ""
 
 
+def _copied_html():
+    """The HTML fragment of the copy when it holds real markup, else None."""
+    if "text/html" not in clipboard.list_types():
+        return None
+    data = clipboard.read("text/html")
+    html = htmlmode.strip_wrapper(data.decode("utf-8", "replace")) if data else ""
+    if html and htmlmode.has_real_markup(html):
+        return html
+    return None
+
+
 def _run(addr: str, state: dict) -> int:
     sentinel = "diacritics-sentinel-" + uuid.uuid4().hex
     text = _grab_text(addr, sentinel)
     if not text.strip():
         log("nothing to fix")
         return EXIT_OK
-    result = fix_text(text)
+    html = _copied_html()
+    if html is not None:
+        log("html mode")
+        result = fix_text(html, "html")
+        original = html
+    else:
+        result = fix_text(text)
+        original = text
     if result is None:
         raise Abort("fix failed")
     if hypr.focused_address() != addr:
         raise Abort("focus changed during the fix")
-    if result == text:
+    if result == original:
         log("unchanged, not pasting")
         return EXIT_OK
-    if not clipboard.write_text(result):
+    if html is not None:
+        ok = clipboard.write_html(htmlmode.wrap(result), htmlmode.to_plain(result))
+    else:
+        ok = clipboard.write_text(result)
+    if not ok:
         raise Abort("could not put the result on the clipboard")
     time.sleep(KEY_GAP_S)
     if hypr.focused_address() != addr:
