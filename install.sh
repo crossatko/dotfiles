@@ -967,6 +967,17 @@ stage_links() {
   # press (systemctl --user start dictation.service). The whisper.cpp worker and the models are per machine (README).
   link "$CONFIG_DIR/dictation/bin/dictation" "$HOME/.local/bin/dictation"
   link "$CONFIG_DIR/systemd/user/dictation.service" "$HOME/.config/systemd/user/dictation.service"
+  # The service runs the repo files in place, so a running one keeps the old code. Restart it when a file is newer than
+  # its start (an idle service only: a push-to-talk session in progress is left alone).
+  restart_stale_user_service() {
+    local unit="$1" dir="$2" since
+    systemctl --user is-active "$unit" >/dev/null 2>&1 || return 0
+    since=$(systemctl --user show "$unit" -p ActiveEnterTimestamp --value)
+    [ -n "$(find -L "$dir" -type f -not -path '*/__pycache__/*' -newermt "$since" -print -quit 2>/dev/null)" ] || return 0
+    if [ "$DRY" = 1 ]; then echo "    [dry-run] systemctl --user restart $unit"; else
+      systemctl --user restart "$unit" && echo "    ok      $unit restarted (code changed)"; fi
+  }
+  restart_stale_user_service dictation.service "$CONFIG_DIR/dictation"
   # Diacritics (config/diacritics): the CLI/service launcher, its user unit (started on demand, not enabled) and the system
   # prompt the service reads. llama-server and the models are per machine (README).
   link "$CONFIG_DIR/diacritics/bin/diacritics" "$HOME/.local/bin/diacritics"
