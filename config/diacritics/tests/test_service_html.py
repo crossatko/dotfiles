@@ -36,7 +36,7 @@ class FakeServer:
 
 
 def service():
-    svc = Service("/nonexistent", load_prefs=lambda: prefs.Prefs(), server_factory=FakeServer)
+    svc = Service("/nonexistent", load_prefs=lambda: prefs.Prefs(), server_factory=FakeServer, load_words=lambda: ())
     svc.events = []
     orig = svc.set_state
 

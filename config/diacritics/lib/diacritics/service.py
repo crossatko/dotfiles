@@ -15,7 +15,8 @@ llama-server starts on the first fix (state loading), is restarted when it died 
 is stopped after idle_timeout_s without a fix. Fixes run one at a time: a second one waits up to QUEUE_WAIT seconds
 for the first, then gets `busy`. After done, failed or unsupported the state returns to idle after IDLE_RETURN s.
 The text is sent without its leading and trailing whitespace, which is put back unchanged; of the reply only one
-trailing newline the model added is dropped.
+trailing newline the model added is dropped. User Corrections (words.py): the entries relevant to the text are added to the system
+prompt, the `always` ones are also applied to the reply.
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ import sys
 import threading
 import time
 
-from . import htmlmode, paths
+from . import htmlmode, paths, words
 from . import prefs as prefs_mod
 from .llama import LlamaServer, ServerError, check_fits, read_prompt
 
@@ -125,8 +126,9 @@ class Subscriber:
 
 
 class Service:
-    def __init__(self, path: str, load_prefs=prefs_mod.load, server_factory=LlamaServer):
+    def __init__(self, path: str, load_prefs=prefs_mod.load, server_factory=LlamaServer, load_words=words.load):
         self.path = path
+        self.load_words = load_words
         self.load_prefs = load_prefs
         self.server_factory = server_factory
         self.server = None
@@ -227,7 +229,9 @@ class Service:
             return {"ok": False, "error": "busy"}
         try:
             try:
-                system = read_prompt(fmt)
+                entries = self.load_words()
+                known = words.relevant(entries, htmlmode.to_plain(text) if html else text)
+                system = read_prompt(fmt) + words.prompt_block(known, html)
                 check_fits(system, text.strip())  # before the model loads: too long means nothing is sent
                 self.ensure_server(self.load_prefs().model)
                 self.set_state("working", htmlmode.to_plain(text) if html else text)
@@ -237,6 +241,7 @@ class Service:
                 result = restore_whitespace(text, reply)
                 if not html:
                     result = keep_spacing(text, result)
+                result = words.apply_always(result, known, html)
                 if html and not htmlmode.same_markup(text, result):
                     print("diacritics: markup changed by the model, result dropped", file=sys.stderr, flush=True)
                     self.set_state("failed")

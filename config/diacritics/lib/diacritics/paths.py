@@ -2,6 +2,7 @@
 
     DIACRITICS_SOCK         the service socket (default $XDG_RUNTIME_DIR/diacritics.sock)
     DIACRITICS_PREFS_FILE   the Settings file (default ${XDG_STATE_HOME:-~/.local/state}/quickshell/diacritics.json)
+    DIACRITICS_WORDS_FILE   the Corrections file (default ${XDG_STATE_HOME:-~/.local/state}/quickshell/diacritics-words.json)
 
 The Quickshell side has its own names (QS_DIACRITICS_SOCKET, QS_DIACRITICS_FILE); a test of both sides sets both.
 """
@@ -24,3 +25,7 @@ def socket_path() -> str:
 
 def prefs_file() -> str:
     return os.environ.get("DIACRITICS_PREFS_FILE") or os.path.join(state_home(), "quickshell", "diacritics.json")
+
+
+def words_file() -> str:
+    return os.environ.get("DIACRITICS_WORDS_FILE") or os.path.join(state_home(), "quickshell", "diacritics-words.json")
