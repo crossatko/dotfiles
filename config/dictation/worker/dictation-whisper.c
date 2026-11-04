@@ -10,7 +10,8 @@
 // JSON line per GPU {"index":N,"name":"...","type":"discrete"|"integrated","free_mb":N,"total_mb":N} and exits 0
 // (no GPU backend = no lines); a worker that predates it answers {"error":"unknown argument"} and exits 2.
 //
-// Startup: every model is loaded, then one JSON line is printed: {"ready":true,"slots":["live","final"],"load_ms":N}
+// Startup: every model is loaded, then one JSON line is printed: {"ready":true,"slots":["live","final"],"detect":true,"load_ms":N}
+// ("detect":true announces the "detect" request below; a worker without it has no language detection)
 // (or {"error":"..."} and exit 2). Without --no-gpu a missing or unusable GPU backend (Vulkan init failed) is an error
 // {"error":"...","code":"gpu"} and exit 4: whisper.cpp would otherwise fall back to the CPU without a word, which is
 // minutes per pass instead of a fraction of a second. Memory goes back to the system when the process exits (the
@@ -190,7 +191,7 @@ int main(int argc, char **argv) {
         if (i) putchar(',');
         json_str(stdout, slots[i].name);
     }
-    printf("],\"load_ms\":%.0f}\n", now_ms() - t_load);
+    printf("],\"detect\":true,\"load_ms\":%.0f}\n", now_ms() - t_load);
     fflush(stdout);
 
     char line[256];

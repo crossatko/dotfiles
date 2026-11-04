@@ -673,14 +673,15 @@ class Dictation:
         if detect is not None:
             try:
                 probs = detect(audio, slot=slot) or {}
-            except ValueError:  # a worker that predates detection refuses the request
+            except ValueError:  # the worker refused this request (unknown slot, detection failed): no detection
                 probs = {}
         pool = s.allowed or tuple(probs)
         best = max((c for c in pool if c in probs), key=lambda c: probs[c], default=None)
         s.language = best or (s.allowed[0] if s.allowed else "en")
         s.text_language = s.language
         s.prompt = self.cleanup.begin(s.language, False)
-        self.emit({"event": "language", "language": s.language, "detected": best is not None})
+        if self._s is s:  # not when the session was cancelled meanwhile
+            self.emit({"event": "language", "language": s.language, "detected": best is not None})
 
     def _segment_words(self, s: _Session, segments, final: bool = False) -> tuple:
         """([(segment, words)], hold) after the cleanup stage, which sees the whole pass (phrases may span

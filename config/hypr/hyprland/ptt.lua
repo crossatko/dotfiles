@@ -13,7 +13,7 @@
 -- Required with pcall from binds.lua: an error here must not cost the other binds.
 local M = {}
 
-M.MAX_BYTES = 4096
+M.MAX_BYTES = 16384 -- as PttPrefs.parse reads ptt.json
 -- the only global shortcuts a line may bind (PttPrefs.qml entries, PttShortcuts.qml): quickshell:ptt-auto and
 -- quickshell:ptt-<code> / quickshell:ptt-<code>-en for a language code of two or three lowercase letters (the selected
 -- languages change, so the set is a pattern, not a list; English has no -en key). A hand-edited or crafted file cannot
@@ -82,7 +82,8 @@ function M.read()
 	end
 	local text = f:read(M.MAX_BYTES) or ""
 	f:close()
-	return text
+	-- a last line without its newline may be cut off (the file is longer than the cap, or was caught mid-write): drop it
+	return (text:match("^(.*\n)") or "")
 end
 
 -- handles of the binds made by the last apply (this Lua state only: a reload starts empty and binds from the file)

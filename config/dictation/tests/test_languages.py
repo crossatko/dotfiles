@@ -106,8 +106,10 @@ class Blind(Scripted):
 
 
 class RefusingDetect(Scripted):
+    """What WhisperRecognizer.detect does on a worker that did not announce detection: nothing sent, {}."""
+
     def detect(self, audio, *, slot):
-        raise ValueError("worker refused the request: unknown language")
+        return {}
 
 
 class Auto(unittest.TestCase):
@@ -167,6 +169,21 @@ class Auto(unittest.TestCase):
         self.assertEqual(r.detected, ["final"])
         self.assertEqual({c[1] for c in r.calls}, {"de"})
         self.assertEqual(rec.screen(), "Hallo liebe Leute heute.")
+
+    def test_a_cancelled_session_announces_no_language(self):
+        events = []
+
+        class Cancelling(Detecting):
+            def detect(self, audio, *, slot):
+                d.cancel()  # the key released and cancelled while the detection ran
+                return super().detect(audio, slot=slot)
+
+        r = Cancelling([{"de": 0.8}], ["a b c"], final="a b c.")
+        d = Dictation(r, Recorder(), emit=events.append, config=Config(trailing_space=False))
+        d.begin("auto")
+        d.feed(tone(3.0))
+        d.step()
+        self.assertEqual([e for e in events if e["event"] == "language"], [])
 
     def test_unknown_language_codes_in_the_selection_are_ignored(self):
         r = Detecting([{"de": 0.8, "ja": 0.1}], ["a b c"], final="a b c.")

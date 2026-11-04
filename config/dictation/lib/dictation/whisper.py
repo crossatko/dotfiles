@@ -142,6 +142,7 @@ class WhisperRecognizer:
                 failure, message = GpuFailed, "this worker cannot choose a GPU: rebuild it with config/dictation/worker/build.sh"
             raise failure(message)
         self.load_ms = ready.get("load_ms")
+        self.can_detect = ready.get("detect") is True  # a worker built before language detection does not announce it
 
     @property
     def pid(self) -> int:
@@ -174,9 +175,12 @@ class WhisperRecognizer:
         return Recognition(segments, float(reply["ms"]))
 
     def detect(self, audio: bytes, *, slot: str) -> dict:
-        """{language code: probability} for the audio (the worker's whisper_lang_auto_detect on the slot's model)."""
+        """{language code: probability} for the audio (the worker's whisper_lang_auto_detect on the slot's model).
+        {} without sending anything when the worker did not announce detection (an older build)."""
         if slot not in (LIVE, FINAL):
             raise ValueError(slot)
+        if not self.can_detect:
+            return {}
         with self._lock:
             self._seq += 1
             rid = str(self._seq)

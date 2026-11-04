@@ -109,6 +109,48 @@ class FakeWorker(unittest.TestCase):
         with self.assertRaises(whisper.WorkerFailed):
             r.transcribe(b"\0" * 6400, slot="final", language="cs", translate=False)
 
+    def detect_worker(self, ready, reply):
+        """A worker that logs each request header to $LOG and answers with `reply` (a JSON template with ID)."""
+        log = os.path.join(self.tmp.name, "requests.log")
+        body = (f"echo '{ready}'\n"
+                "while read -r id slot lang tr beam n rest; do\n"
+                f"  echo \"$id $slot $lang $tr $beam $n\" >> {log}\n"
+                "  head -c $((n * 4)) >/dev/null\n"
+                f"  echo '{reply}' | sed \"s/ID/$id/\"\n"
+                "done")
+        return self.worker(body), log
+
+    def test_detect_sends_a_detect_request_and_returns_the_probabilities(self):
+        w, log = self.detect_worker('{"ready":true,"detect":true}', '{"id":"ID","ms":5,"probs":{"cs":0.75,"en":0.25}}')
+        r = whisper.WhisperRecognizer({"live": self.model}, worker=w)
+        self.assertTrue(r.can_detect)
+        self.assertEqual(r.detect(b"\0" * 3200, slot="live"), {"cs": 0.75, "en": 0.25})
+        with open(log) as f:
+            self.assertEqual(f.read().split(), ["1", "live", "detect", "0", "0", "800"])
+        with self.assertRaises(ValueError):
+            r.detect(b"\0" * 4, slot="bogus")
+        r.close()
+
+    def test_detect_is_not_sent_to_a_worker_that_did_not_announce_it(self):
+        w, log = self.detect_worker('{"ready":true}', '{"id":"ID","ms":5,"probs":{"cs":1}}')
+        r = whisper.WhisperRecognizer({"live": self.model}, worker=w)
+        self.assertFalse(r.can_detect)
+        self.assertEqual(r.detect(b"\0" * 3200, slot="live"), {})
+        self.assertFalse(os.path.exists(log), "no request reached the worker")
+        r.close()
+
+    def test_detect_error_reply_is_a_value_error_and_a_reply_without_probs_is_empty(self):
+        w, _ = self.detect_worker('{"ready":true,"detect":true}', '{"id":"ID","error":"language detection failed"}')
+        r = whisper.WhisperRecognizer({"live": self.model}, worker=w)
+        with self.assertRaises(ValueError) as cm:
+            r.detect(b"\0" * 3200, slot="live")
+        self.assertIn("language detection failed", str(cm.exception))
+        r.close()
+        w, _ = self.detect_worker('{"ready":true,"detect":true}', '{"id":"ID","ms":5}')
+        r = whisper.WhisperRecognizer({"live": self.model}, worker=w)
+        self.assertEqual(r.detect(b"\0" * 3200, slot="live"), {})
+        r.close()
+
 
 if __name__ == "__main__":
     unittest.main()

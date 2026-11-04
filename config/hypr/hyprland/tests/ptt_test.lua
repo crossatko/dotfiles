@@ -75,6 +75,21 @@ write("BAD|quickshell:ptt-cs\nF8|quickshell:ptt-en\nF6|quickshell:ptt-cs-en\n")
 eq(ptt_apply(), 2, "a bad key is skipped, the lines after it still bind")
 eq(live(), "F6=quickshell:ptt-cs-en,F8=quickshell:ptt-en,SUPER + D=launcher", "after bad key")
 
+-- a last line without its newline may be cut off: never bound
+write("F1|quickshell:ptt-cs|Push-to-talk: Czech\nF2|quickshell:ptt-en|Push-to-talk: Engl")
+eq(ptt_apply(), 1, "a final line without a newline is dropped")
+eq(live(), "F1=quickshell:ptt-cs,SUPER + D=launcher", "unterminated line not bound")
+-- the cap reads as much as PttPrefs.parse (16 KB); a line cut by it is dropped
+local filler = "# " .. string.rep("x", 100) .. "\n"
+local pad = string.rep(filler, math.floor((ptt.MAX_BYTES - 200) / #filler))
+write(pad .. "F3|quickshell:ptt-cs|ok\n" .. string.rep("# y\n", 120) .. "F4|quickshell:ptt-en|late\n")
+eq(ptt.MAX_BYTES, 16384, "cap")
+eq(ptt_apply(), 1, "a bind before the cap is kept, the cut line is not bound")
+eq(live(), "F3=quickshell:ptt-cs,SUPER + D=launcher", "cut line")
+write(pad .. string.rep("# y\n", 60) .. "F5|quickshell:ptt-cs|cut here" .. string.rep("z", 400))
+ptt_apply()
+eq(live(), "SUPER + D=launcher", "line cut mid-way is dropped")
+
 os.remove(TMP)
 eq(ptt_apply(), 0, "no file = no keys")
 eq(live(), "SUPER + D=launcher", "no file")
