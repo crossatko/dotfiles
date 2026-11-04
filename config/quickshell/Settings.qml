@@ -36,7 +36,8 @@ FloatingWindow {
         { id: "deskclock", title: "Desktop clock", icon: Icons.clock, source: "SettingsDeskClock.qml" },
         { id: "tv", title: "TV", icon: Icons.tv, source: "SettingsTv.qml" },
         { id: "weather", title: "Weather", icon: Icons.weatherPartlyDay, source: "SettingsWeather.qml" },
-        { id: "voice", title: "Voice", icon: Icons.mic, source: "SettingsVoice.qml" }
+        { id: "voice", title: "Voice", icon: Icons.mic, source: "SettingsVoice.qml" },
+        { id: "diacritics", title: "Diacritics", icon: Icons.keyboard, source: "SettingsDiacritics.qml" }
     ]
     // page ids of earlier versions (scripts, muscle memory) -> where that setting lives now
     readonly property var oldPages: ({ appearance: "look", animations: "look", glass: "look" })
