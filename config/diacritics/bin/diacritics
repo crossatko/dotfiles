@@ -18,7 +18,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
 
 from diacritics import client  # noqa: E402
-from diacritics.service import Service, default_socket  # noqa: E402
+from diacritics.paths import socket_path  # noqa: E402
+from diacritics.service import Service  # noqa: E402
 
 
 def cmd_fix(args):
@@ -40,7 +41,7 @@ def cmd_listen(args):
 
 def main():
     p = argparse.ArgumentParser(prog="diacritics", description=__doc__.split("\n")[0])
-    p.add_argument("--socket", default=default_socket())
+    p.add_argument("--socket", default=socket_path())
     sub = p.add_subparsers(dest="cmd", required=True)
     for name in ("serve", "fix", "run", "status", "listen"):
         sub.add_parser(name)
@@ -50,9 +51,8 @@ def main():
     elif args.cmd == "fix":
         cmd_fix(args)
     elif args.cmd == "run":
-        from diacritics import flow  # written by the key-flow module
-        sys.argv = [sys.argv[0], *rest]
-        flow.main()
+        from diacritics import flow
+        sys.exit(flow.main(rest))
     elif args.cmd == "listen":
         cmd_listen(args)
     else:

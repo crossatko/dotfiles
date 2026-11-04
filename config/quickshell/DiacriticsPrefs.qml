@@ -8,7 +8,9 @@ import "launcher/js/PttKeys.js" as K
 // Czech diacritics on a key (Settings > Diacritics): the key, the model, the idle unload, the ignored window classes and
 // whether the pill shows the real text. Saved in ${XDG_STATE_HOME:-~/.local/state}/quickshell/diacritics.json
 // (QS_DIACRITICS_FILE overrides), this singleton is the only writer (atomic); the file is watched. The diacritics service
-// reads the same file; a missing or malformed file / field = that field's default.
+// reads the same file; a missing or malformed file / field = that field's default. A missing file is written with all the
+// defaults at start. The default ignored_classes list must stay equal to DEFAULT_IGNORED_CLASSES in
+// diacritics/lib/diacritics/prefs.py (the key flow's own default; a unit test compares the two).
 //   { "version": 1, "key": "SUPER + SHIFT + D", "model": "<file>.gguf", "idle_timeout_s": 600,
 //     "ignored_classes": ["kitty", "foot"], "show_text": true }
 //   key              Hyprland bind syntax (PttKeys.js); "" = no key (cleared on purpose); missing = the default key
@@ -55,7 +57,8 @@ Singleton {
         idle_timeout_s: 600,
         ignored_classes: ["kitty", "foot", "footclient", "alacritty", "ghostty", "com.mitchellh.ghostty", "org.wezfurlong.wezterm",
                           "wezterm", "konsole", "org.kde.konsole", "xterm", "uxterm", "urxvt", "st", "terminator",
-                          "gnome-terminal-server", "org.gnome.ptyxis", "com.gexperts.tilix", "tilix"],
+                          "gnome-terminal-server", "org.gnome.ptyxis", "com.gexperts.tilix", "tilix",
+                          "com.herdr.terminal", "dotfiles.scratchpad"],
         show_text: true
     })
     readonly property var keys: ["key", "model", "idle_timeout_s", "ignored_classes", "show_text"]
@@ -222,7 +225,7 @@ Singleton {
         atomicWrites: true
         onFileChanged: reload()
         onLoaded: if (!saver.running && !writer.running && text() !== root.lastText) { root.lastText = text(); root.parse(text()); root.syncBinds() }
-        onLoadFailed: if (!saver.running && !writer.running) { root.parse(""); root.syncBinds() }
+        onLoadFailed: if (!saver.running && !writer.running) { root.parse(""); root.syncBinds(); root.commit() }
         onSaveFailed: root.applyError = "Could not write " + path
     }
     FileView {

@@ -1,6 +1,6 @@
 """`diacritics run`: one key press fixes the selected text, or the whole input field when nothing is selected.
 
-Order (the contract is scratchpad/diacritics-tickets/interface.md, "Key flow"):
+Order:
  1. focused window address + class (hyprctl); an ignored class (terminals) -> the service shows "unsupported", NO key
     is sent, the clipboard is not touched;
  2. save the clipboard, put a unique sentinel on it;
@@ -18,20 +18,19 @@ Exit status of main(): 0 done / nothing to do, 1 failed, 2 unsupported window, 3
 
 Caveats: after the select-all path a failed or unchanged run leaves the field fully selected (the text is untouched);
 the clipboard comes back with all saved types (clipboard.py); keys are layout-independent keycodes (hypr.KEYCODES).
-Test overrides: DIACRITICS_PREFS (prefs file), DIACRITICS_SOCK (socket), DIACRITICS_NO_FALLBACK=1.
+Test overrides: DIACRITICS_PREFS_FILE, DIACRITICS_SOCK (paths.py), DIACRITICS_NO_FALLBACK=1.
 """
 from __future__ import annotations
 
 import fcntl
-import json
 import os
-import socket
-import subprocess
 import sys
 import time
 import uuid
 
-from . import clipboard, htmlmode, hypr
+from . import clipboard, client, htmlmode, hypr, paths, prefs
+from .llama import REQUEST_TIMEOUT, START_TIMEOUT
+from .service import QUEUE_WAIT
 
 # timings, seconds
 COPY_WAIT_S = 0.6          # wait for the clipboard to change after Ctrl+C when something is selected
@@ -39,13 +38,10 @@ SELECT_ALL_COPY_WAIT_S = 1.5  # same after Ctrl+A, Ctrl+C (a big field takes lon
 POLL_S = 0.03
 KEY_GAP_S = 0.06           # between Ctrl+A and Ctrl+C, and before Ctrl+V after setting the clipboard
 PASTE_SETTLE_S = 0.5       # after Ctrl+V, before the saved clipboard comes back (the app reads it asynchronously)
-SERVICE_START_WAIT_S = 6.0
-SERVICE_CONNECT_TIMEOUT_S = 1.0
-FIX_TIMEOUT_S = 120.0      # the service has its own, shorter timeout; this only stops a hung connection
+# The flow waits longer than the service can take at worst (queue + cold model load + request), so the service always
+# answers first and no "done" can arrive after the flow gave up and left the field alone.
+FIX_TIMEOUT_S = QUEUE_WAIT + START_TIMEOUT + REQUEST_TIMEOUT + 15.0
 STATE_TIMEOUT_S = 1.5
-
-DEFAULT_IGNORED = ["kitty", "foot", "Alacritty", "ghostty", "org.wezfurlong.wezterm", "konsole", "xterm"]
-SERVICE_UNIT = "diacritics.service"
 
 EXIT_OK, EXIT_FAILED, EXIT_UNSUPPORTED, EXIT_BUSY = 0, 1, 2, 3
 
@@ -55,7 +51,7 @@ def log(msg: str) -> None:
     line = time.strftime("%Y-%m-%d %H:%M:%S ") + msg
     print(line, file=sys.stderr)
     try:
-        path = os.path.join(_state_home(), "quickshell", "diacritics-flow.log")
+        path = os.path.join(paths.state_home(), "quickshell", "diacritics-flow.log")
         if os.path.exists(path) and os.path.getsize(path) > 100_000:
             os.replace(path, path + ".1")
         with open(path, "a") as f:
@@ -64,86 +60,16 @@ def log(msg: str) -> None:
         pass
 
 
-def _state_home() -> str:
-    return os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
-
-
-def prefs_path() -> str:
-    return os.environ.get("DIACRITICS_PREFS") or os.path.join(_state_home(), "quickshell", "diacritics.json")
-
-
 def ignored_classes() -> set:
-    """Lower-cased ignored classes from the prefs file; defaults when missing or malformed."""
-    classes = DEFAULT_IGNORED
-    try:
-        with open(prefs_path()) as f:
-            got = json.load(f).get("ignored_classes")
-        if isinstance(got, list) and all(isinstance(c, str) for c in got):
-            classes = got
-    except (OSError, ValueError, AttributeError):
-        pass
-    return {c.strip().lower() for c in classes if c.strip()}
+    """Lower-cased ignored window classes: the Settings file, else the default list (prefs.DEFAULT_IGNORED_CLASSES)."""
+    return set(prefs.load().ignored_classes)
 
 
 # --- service -------------------------------------------------------------------------------------------------------
 
-def socket_path() -> str:
-    return os.environ.get("DIACRITICS_SOCK") or os.path.join(
-        os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "diacritics.sock")
-
-
-def _connect():
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(SERVICE_CONNECT_TIMEOUT_S)
-    try:
-        s.connect(socket_path())
-    except OSError:
-        s.close()
-        raise
-    return s
-
-
-def _connect_starting(start: bool):
-    try:
-        return _connect()
-    except OSError:
-        if not start:
-            raise
-    log("service socket missing, starting " + SERVICE_UNIT)
-    try:
-        subprocess.run(["systemctl", "--user", "start", SERVICE_UNIT], capture_output=True, timeout=10)
-    except (OSError, subprocess.SubprocessError):
-        pass
-    deadline = time.monotonic() + SERVICE_START_WAIT_S
-    while True:
-        try:
-            return _connect()
-        except OSError:
-            if time.monotonic() >= deadline:
-                raise
-            time.sleep(0.1)
-
-
-def request(obj: dict, timeout: float, start: bool = True) -> dict:
-    """One JSON line out, one back. Raises OSError/ValueError on any trouble."""
-    s = _connect_starting(start)
-    try:
-        s.settimeout(timeout)
-        s.sendall(json.dumps(obj).encode() + b"\n")
-        buf = b""
-        while b"\n" not in buf:
-            chunk = s.recv(65536)
-            if not chunk:
-                break
-            buf += chunk
-        return json.loads(buf.split(b"\n", 1)[0])
-    finally:
-        s.close()
-
-
 def tell_state(state: str, start: bool = False) -> None:
     try:
-        request({"op": "state", "state": state}, STATE_TIMEOUT_S, start)
+        client.request({"op": "state", "state": state}, timeout=STATE_TIMEOUT_S, start=start)
     except (OSError, ValueError):
         log(f"could not tell the service state {state}")
 
@@ -154,7 +80,7 @@ def fix_text(text: str, fmt: str | None = None):
     if fmt:
         req["format"] = fmt
     try:
-        resp = request(req, FIX_TIMEOUT_S)
+        resp = client.request(req, timeout=FIX_TIMEOUT_S)
     except (OSError, ValueError) as e:
         log(f"fix request failed: {e}")
         return None
@@ -169,7 +95,12 @@ def fix_text(text: str, fmt: str | None = None):
 def send_key(key: str, addr: str) -> bool:
     """Ctrl+<key> to the window `addr`. send_shortcut first; only if that fails, and the window is still the focused
     one, the synthetic wtype fallback (logged, switchable off: hypr.fallback_enabled)."""
-    if hypr.send_shortcut(key, addr):
+    result = hypr.dispatch_shortcut(key, addr)
+    if result == hypr.OK:
+        return True
+    if result == hypr.UNKNOWN:
+        # a timeout or an unfamiliar answer: the key may have gone out, so it is never sent a second time
+        log(f"send_shortcut for ctrl+{key}: unknown answer, assuming it ran, no fallback")
         return True
     log(f"send_shortcut failed for ctrl+{key}")
     if not hypr.fallback_enabled():
@@ -276,7 +207,7 @@ def run() -> int:
         log(f"ignored window class {cls!r}, no keys sent")
         tell_state("unsupported", start=True)
         return EXIT_UNSUPPORTED
-    saved = clipboard.save()
+    saved = clipboard.save(log=log)
     state = {"pasted": False}
     try:
         return _run(addr, state)
@@ -291,12 +222,14 @@ def run() -> int:
     finally:
         if state["pasted"]:
             time.sleep(PASTE_SETTLE_S)
-        if not clipboard.restore(saved):
+        if saved is None:
+            log("clipboard was unreadable at the start, left as it is")
+        elif not clipboard.restore(saved):
             log("could not restore the clipboard")
 
 
 def main(argv=None) -> int:
-    lock_path = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "diacritics-flow.lock")
+    lock_path = os.path.join(paths.runtime_dir(), "diacritics-flow.lock")
     try:
         lock = open(lock_path, "w")
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -307,7 +240,7 @@ def main(argv=None) -> int:
         lock = None  # no lock file possible: run anyway
     try:
         return run()
-    finally:
+    finally:  # the lock goes with the file; the clipboard helper (own session, no inherited fds) never holds it
         if lock:
             lock.close()
 
