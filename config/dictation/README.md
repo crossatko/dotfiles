@@ -180,6 +180,13 @@ Shell: `dictation begin cs`, `dictation end`, `dictation listen`.
   after the tail fix; translate: after the English text), so the next dictation starts a new word. Never after an
   empty session, a cancel, a focus abort or a failed final pass (only after a successful retry).
   `trailing_space` false in `dictation-prefs.json` turns it off (no UI).
+- Fragments: a dictation of one word, or of at most 4 words with no sentence end (`. ? ! …`), is typed without
+  whisper's capital ("docker compose up", "yes"); sentences are untouched. A lone word also loses a trailing
+  `. , ; : …` ("Yes." -> "yes"; `?` and `!` stay). Decided on the final text: the live passes type the capitalised
+  words, the final edit (the tail fix reaches 4 words, so a fragment's first word is always in reach) corrects them.
+  Only plain title-case first words change (not `I`, `I'm`, `API`, `GitHub`, words with digits), and replacement text
+  is never touched, so a name whisper capitalised ("Praha") is restored by a replacement `praha` -> `Praha`.
+  `lowercase_fragments` and `strip_single_word_punct` false in `dictation-prefs.json` turn the two parts off (no UI).
 - Every `wtype` run starts with one `Hyper_L` press and release: while the push-to-talk key (consumed by a Hyprland
   bind) is held, Hyprland drops the first key event of a new virtual keyboard (the session's first character was
   lost, in kitty and ghostty). A `VoidSymbol` lead is not usable: ghostty then falls back to the physical key, which

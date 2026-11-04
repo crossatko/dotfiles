@@ -313,8 +313,8 @@ class Service:
         intake.attach(engine.feed)
 
     def _session_config(self, prefs) -> Config:
-        """The engine's tunables for one session: the service's config, with the prefs' pause_silence_s and
-        trailing_space (no UI)."""
+        """The engine's tunables for one session: the service's config, with the prefs' pause_silence_s,
+        trailing_space and lowercase_fragments (no UI)."""
         config = self._config or Config()
         pause = getattr(prefs, "pause_silence_s", None)
         if pause is not None:
@@ -322,6 +322,12 @@ class Service:
         space = getattr(prefs, "trailing_space", None)
         if isinstance(space, bool):
             config = dataclasses.replace(config, trailing_space=space)
+        lower = getattr(prefs, "lowercase_fragments", None)
+        if isinstance(lower, bool):
+            config = dataclasses.replace(config, lowercase_fragments=lower)
+        strip = getattr(prefs, "strip_single_word_punct", None)
+        if isinstance(strip, bool):
+            config = dataclasses.replace(config, strip_single_word_punct=strip)
         return config
 
     def _stop_capture(self) -> None:

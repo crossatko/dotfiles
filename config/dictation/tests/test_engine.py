@@ -67,7 +67,7 @@ class Stability(unittest.TestCase):
         self.assertEqual(r.calls, [])
         d.end()
         self.assertEqual([c[0] for c in r.calls], ["final"])
-        self.assertEqual(rec.ops, [(0, "Ahoj.")])
+        self.assertEqual(rec.ops, [(0, "ahoj")])  # a lone word: lower-case, no period
 
     def test_pinned_language_and_models(self):
         r = Scripted(["Hello world", "Hello world again"], final="Hello world again.")

@@ -291,7 +291,7 @@ class PauseGuards(unittest.TestCase):
         pause(d, 1.5)
         self.assertEqual(rec.ops, [])
         d.end()
-        self.assertEqual(rec.screen(), "Yes.")
+        self.assertEqual(rec.screen(), "yes")  # a lone word: lower-case, no period
 
 
 class FirstPass(unittest.TestCase):

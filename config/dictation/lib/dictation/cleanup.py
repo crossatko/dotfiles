@@ -97,6 +97,63 @@ def _capitalize(word: str) -> str:
     return lead + core[0].upper() + core[1:] + trail
 
 
+MAX_FRAGMENT_WORDS = 4  # a dictation of at most this many words without a sentence end is a fragment; the engine's
+                        # tail fix reaches back exactly this far (Config.tail_words), so the first word stays editable
+_CLOSERS = ")]}\"'”’“‘»"
+
+
+def is_fragment(words: list) -> bool:
+    """A single word (even "Yes." / "Ano.": whisper puts a period behind a lone word), or up to MAX_FRAGMENT_WORDS
+    words with no sentence end anywhere ("Docker compose up"). Longer texts and texts with a period, question mark,
+    exclamation mark or ellipsis (after the first word) are sentences."""
+    if not words or len(words) > MAX_FRAGMENT_WORDS:
+        return False
+    if len(words) == 1:
+        return True
+    return not any(w.rstrip(_CLOSERS)[-1:] in _SENTENCE_END for w in words)
+
+
+def _lower_first(word: str) -> str:
+    """Lower-case the first letter of a plain title-case word (Docker, Yes, Ano.). Everything else stays: the pronoun
+    I and its contractions, ALL CAPS, mixed case (GitHub, iPhone), words with digits."""
+    lead, core, trail = _split(word)
+    if (not core or not core[0].isupper() or core == "I" or core[:2] in ("I'", "I\u2019")
+            or any(c.isupper() or c.isdigit() for c in core[1:])):
+        return word
+    return lead + core[0].lower() + core[1:] + trail
+
+
+_WEAK_END = ".,;:…"  # stripped behind a lone word; "?" and "!" carry meaning and stay
+
+
+def _strip_end(word: str) -> str:
+    """Yes. -> Yes, "Yes." -> "Yes", (Yes.) -> (Yes), Yes?! stays."""
+    lead, core, trail = _split(word)
+    return lead + core + "".join(c for c in trail if c not in _WEAK_END)
+
+
+def lowercase_fragment(tokens: list, replaced: list | None = None, lower: bool = True, strip: bool = True) -> list:
+    """tokens: [(segment, word)]. A fragment (is_fragment) loses the capital of its first word (lower), and a lone word
+    also its trailing . , ; : … (strip). Replacement text is the user's spelling and is never touched."""
+    if not tokens or (replaced and replaced[0]) or not is_fragment([w for _, w in tokens]):
+        return tokens
+    seg, word = tokens[0]
+    if lower:
+        word = _lower_first(word)
+    if strip and len(tokens) == 1:
+        word = _strip_end(word)
+    return [(seg, word)] + tokens[1:]
+
+
+def lowercase_segments(segments: list, lower: bool = True, strip: bool = True) -> list:
+    """lowercase_fragment over per-segment word lists (for cleanups without an apply_final)."""
+    tokens = lowercase_fragment([(i, w) for i, ws in enumerate(segments) for w in ws], None, lower, strip)
+    out: list = [[] for _ in segments]
+    for i, w in tokens:
+        out[i].append(w)
+    return out
+
+
 # --- rules ----------------------------------------------------------------------------------------------------------
 
 
@@ -247,11 +304,18 @@ def _joinable(tokens: list, i: int, n: int) -> bool:
 def replace(tokens: list, table: dict) -> tuple:
     """Longest phrase first, left to right, never re-matching replaced text. Returns (tokens, hold): hold = how many
     trailing output words are the start of a longer phrase that the next words may still complete."""
+    out, _, hold = _replace(tokens, table)
+    return out, hold
+
+
+def _replace(tokens: list, table: dict) -> tuple:
+    """replace() plus, per output word, whether it is replacement text: (tokens, replaced flags, hold)."""
     if not table:
-        return tokens, 0
+        return tokens, [False] * len(tokens), 0
     keys = [_key(_split(w)[1]) for _, w in tokens]
     out: list = []
     src: list = []  # input index each output word comes from
+    replaced: list = []
     i = 0
     while i < len(tokens):
         match = None
@@ -263,6 +327,7 @@ def replace(tokens: list, table: dict) -> tuple:
         if match is None:
             out.append(tokens[i])
             src.append(i)
+            replaced.append(False)
             i += 1
             continue
         n = len(match.heard)
@@ -272,8 +337,9 @@ def replace(tokens: list, table: dict) -> tuple:
         words = (lead + _copy_case(original, match.typed) + trail).split()
         out += [(tokens[i][0], w) for w in words]
         src += [i] * len(words)
+        replaced += [True] * len(words)
         i += n
-    return out, _hold(tokens, keys, table, src)
+    return out, replaced, _hold(tokens, keys, table, src)
 
 
 def _hold(tokens: list, keys: list, table: dict, src: list) -> int:
@@ -332,7 +398,7 @@ class Cleanup:
                 terms.append(r.typed)
         return ", ".join(terms) + "." if terms else ""
 
-    def apply(self, segments: list, language: str) -> tuple:
+    def apply(self, segments: list, language: str, fragments: tuple | None = None) -> tuple:
         """segments: [[word, ...], ...] (one list per recognised segment, phrases may span them). Returns the cleaned
         lists (same count, possibly empty) and the number of trailing words a live pass must not type yet."""
         if self._lang_cache[0] is not self.rules or self._lang_cache[1] != language:
@@ -340,8 +406,16 @@ class Cleanup:
         fillers, table = self._lang_cache[2]
         tokens = [(i, w) for i, ws in enumerate(segments) for w in ws]
         tokens = remove_fillers(tokens, fillers)
-        tokens, hold = replace(tokens, table)
+        tokens, replaced, hold = _replace(tokens, table)
+        if fragments:
+            tokens = lowercase_fragment(tokens, replaced, *fragments)
         out: list = [[] for _ in segments]
         for i, w in tokens:
             out[i].append(w)
         return out, hold
+
+    def apply_final(self, segments: list, language: str, lower: bool = True, strip: bool = True) -> tuple:
+        """apply() for the whole session's text (the final pass): a fragment also loses its first capital. The style
+        step runs after the fillers (a dropped "Um" must not count as a word) and after the replacements (the word
+        count is the typed one), but never touches replacement text."""
+        return self.apply(segments, language, fragments=(lower, strip))

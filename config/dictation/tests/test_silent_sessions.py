@@ -13,6 +13,7 @@ import wave
 
 from helpers import Recorder, Scripted, TranslateScripted
 
+from dictation.cleanup import is_fragment
 from dictation.engine import SAMPLE_RATE, Config, Dictation
 
 CHUNK = int(0.1 * SAMPLE_RATE)
@@ -175,7 +176,7 @@ class ShortRealSpeechStillTyped(unittest.TestCase):
 
     def test_a_half_second_word_is_typed_in_every_mode(self):
         for mode in MODES:
-            for text, typed in (("Ano.", "Ano. "), ("Yes", "Yes ")):
+            for text, typed in (("Ano.", "ano "), ("Yes", "yes ")):
                 r = recognizer_for(mode, text)
                 d, rec, events = run(r, self.utterance(0.5), mode)
                 with self.subTest(mode=mode, text=text):
@@ -198,17 +199,17 @@ class ShortRealSpeechStillTyped(unittest.TestCase):
         for rms in (0.012, 0.02):
             r = Scripted(["Ano."], final="Ano.")
             d, rec, events = run(r, self.utterance(0.8, rms, noise=0.0004), "cs")
-            self.assertEqual(rec.screen(), "Ano. ", rms)
+            self.assertEqual(rec.screen(), "ano ", rms)
 
     def test_speech_in_a_noisy_room(self):
         r = Scripted(["Ano."], final="Ano.")
         d, rec, events = run(r, self.utterance(0.8, 0.08, noise=0.01), "cs")
-        self.assertEqual(rec.screen(), "Ano. ")
+        self.assertEqual(rec.screen(), "ano ")
 
     def test_speech_that_starts_at_the_key_press(self):
         r = Scripted(["Ano."], final="Ano.")
         d, rec, events = run(r, mix(speech(0.6, 0.05), white(0.6, 0.0005)), "cs")
-        self.assertEqual(rec.screen(), "Ano. ")
+        self.assertEqual(rec.screen(), "ano ")
 
     def test_an_even_word_from_the_key_press_on_is_typed(self):
         # shallow dips (a vowel-nasal word like "Ano"): the floor starts on the word itself and only the room noise
@@ -218,7 +219,7 @@ class ShortRealSpeechStillTyped(unittest.TestCase):
                     for i in range(int(0.4 * SAMPLE_RATE))]
             r = Scripted(["Ano."], final="Ano.")
             d, rec, events = run(r, mix(overlay(word, white(0.4, room)), white(0.4, room, 4)), "cs")
-            self.assertEqual(rec.screen(), "Ano. ", room)
+            self.assertEqual(rec.screen(), "ano ", room)
 
     def test_a_longer_session_types_live_and_final_as_before(self):
         r = Scripted(["a b c", "a b c d"], final="a b c d.")
@@ -240,7 +241,7 @@ class FinalTextWithoutLetters(unittest.TestCase):
     def test_digits_count_as_text(self):
         r = Scripted(["42"], final="42.")
         d, rec, events = run(r, mix(white(0.5, 0.0005), speech(1.0, 0.05), white(0.5, 0.0005)), "en")
-        self.assertEqual(rec.screen(), "42. ")
+        self.assertEqual(rec.screen(), "42 ")  # a lone word loses its period
 
     def test_a_punctuation_only_final_keeps_what_the_live_passes_typed(self):
         r = Scripted(["a b c", "a b c d"], final=".")
@@ -259,7 +260,10 @@ class HallucinationList(unittest.TestCase):
             self.assertEqual(rec.ops, [], text)
             r = Scripted([text], final=text)
             _, rec, _ = run(r, loud, "cs")
-            self.assertEqual(rec.screen(), text + " ", text)
+            expected = text[0].lower() + text[1:] if is_fragment(text.split()) else text  # fragments start lower-case
+            if len(text.split()) == 1:
+                expected = expected.rstrip(".")  # a lone word has no period
+            self.assertEqual(rec.screen(), expected + " ", text)
 
     def test_a_phrase_inside_a_real_sentence_is_never_dropped(self):
         quiet = mix(white(0.5, 0.0005), overlay(speech(0.3, 0.05), white(0.3, 0.0005)), white(0.5, 0.0005))
@@ -301,7 +305,7 @@ class RecordedClip(unittest.TestCase):
             r = Scripted(["Ano."], final="Ano.")
             d, rec, _ = run(r, mix(room(0.5), [x * gain for x in part], room(0.6)), "cs")
             with self.subTest(name):
-                self.assertEqual(rec.screen(), "Ano. ")
+                self.assertEqual(rec.screen(), "ano ")
 
 
 if __name__ == "__main__":

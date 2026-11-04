@@ -33,6 +33,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Callable, NamedTuple, Protocol
 
+from .cleanup import lowercase_segments
 from .level import LevelMeter
 
 SAMPLE_RATE = 16000
@@ -97,6 +98,8 @@ class Config:
     heard_pad: float = 0.3  # a pass whose audio reaches this far past the last voiced frame heard the speech end
     trailing_space: bool = TRAILING_SPACE  # one space after the final text of a session that typed something
     max_window: float = 15.0  # slide the window once it is longer (longer windows decode more text per pass)
+    lowercase_fragments: bool = True  # the final text of a fragment (one word, or <= 4 without a sentence end) starts lower-case
+    strip_single_word_punct: bool = True  # a lone word loses its trailing . , ; : … (? and ! stay)
     tail_words: int = 4  # corrections never reach further back than this many typed words
     level_frame: int = 512  # samples per published level (32 ms)
     speech_rms: float = 0.005  # a window with no frame this loud is silence and is never recognised
@@ -504,7 +507,7 @@ class Dictation:
             if self._s is not s:
                 return s.typed  # cancelled meanwhile
             self.emit({"event": "pass", "slot": FINAL, "ms": round(result.ms), "audio": round((end - start) / SAMPLE_RATE, 2)})
-            final = [w for _, ws in self._segment_words(s, result.segments)[0] for w in ws]
+            final = [w for _, ws in self._segment_words(s, result.segments, final=True)[0] for w in ws]
             if s.mode.translate:
                 self.emit({"event": "preview", "text": _join(final)})
             target = _join(reconcile_final(s.typed.split(), final, self.config.tail_words))
@@ -660,13 +663,25 @@ class Dictation:
         return self.recognizer.transcribe(audio, slot=slot, language=s.mode.language, translate=s.mode.translate,
                                           **extra)
 
-    def _segment_words(self, s: _Session, segments) -> tuple:
+    def _segment_words(self, s: _Session, segments, final: bool = False) -> tuple:
         """([(segment, words)], hold) after the cleanup stage, which sees the whole pass (phrases may span
-        segments)."""
+        segments). The final pass also lower-cases a fragment's first word (Config.lowercase_fragments) and strips a
+        lone word's trailing . , ; : … (strip_single_word_punct); live passes cannot know yet whether the dictation
+        will be one, the final edit fixes the already typed text (a
+        fragment has at most tail_words words, so its first word is always inside the correctable tail)."""
         raw = [_sanitize(_ANNOTATION.sub(" ", unicodedata.normalize("NFC", seg.text))).split() for seg in segments]
         if self._junk(s, raw):
             raw = [[] for _ in raw]
-        cleaned, hold = self.cleanup.apply(raw, s.text_language)
+        style = (self.config.lowercase_fragments, self.config.strip_single_word_punct)
+        if final and any(style):
+            apply_final = getattr(self.cleanup, "apply_final", None)
+            if apply_final:  # the cleanup knows which words are replacement text and leaves them alone
+                cleaned, hold = apply_final(raw, s.text_language, *style)
+            else:
+                cleaned, hold = self.cleanup.apply(raw, s.text_language)
+                cleaned = lowercase_segments(cleaned, *style)
+        else:
+            cleaned, hold = self.cleanup.apply(raw, s.text_language)
         return [(seg, _sanitize(" ".join(ws)).split()) for seg, ws in zip(segments, cleaned)], hold
 
     def _junk(self, s: _Session, raw: list) -> bool:
