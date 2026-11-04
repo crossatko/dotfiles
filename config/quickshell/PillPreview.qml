@@ -5,7 +5,7 @@ import QtQuick
 // (DictationPillCard / DiacPillCard with demo state, re-parented here; bind `openMotion: <preview>.motion`, `fromTop: <preview>.atTop`,
 // `width: <preview>.cardW`). Two views of the same monitor (`screen`; ScreenBackdrop: its wallpaper still and a sketch of its bar):
 //   the mock    the whole screen scaled down (ScreenFrame at the monitor's own size), the card (a live ShaderEffectSource of it)
-//               where PillPlacement puts the real pill
+//               where PillPlacement puts the real pill; Hyprland's reserved side strips (pinned video) veiled
 //   the crop    a 1:1 window onto the screen around the card (clamped to the screen), the card itself at actual size
 // Under the card in both: ScreenBackdrop's `frost`, a sketch of the compositor's glass (the Settings window cannot show it there).
 // Both read the real geometry (PillPlacement over the same prefs), so the preview cannot drift from the real pill.
@@ -38,6 +38,7 @@ Item {
     implicitHeight: mock.implicitHeight + Theme.gapRow + strip.height
 
     PillPlacement { id: place; screen: pv.screen; prefs: pv.store; pillW: pv.card ? pv.card.pillW : 0 }   // qmllint disable missing-property
+    Component.onCompleted: place.refresh()
     OpenMotion { id: om; open: true; t: 1 }      // always fully open: the card's own idle look
 
     Column {
@@ -55,6 +56,7 @@ Item {
                 anchors.fill: parent
                 screen: pv.screen
                 decodeWidth: Math.round(mock.width * pv.mockDecode)
+                reserved: place.reserved
                 frost: pv.cardItem ? Qt.rect(place.left, pv.cardY, pv.cardW, pv.cardH) : Qt.rect(0, 0, 0, 0)
             }
             ShaderEffectSource {
@@ -88,9 +90,15 @@ Item {
                 y: -Math.round(strip.viewY)
                 width: pv.sw
                 height: pv.sh
+                // only the part in view (its own decode: the still is never loaded at the full screen size)
                 ScreenBackdrop {
-                    anchors.fill: parent
+                    x: Math.round(strip.viewX)
+                    y: Math.round(strip.viewY)
+                    width: strip.width
+                    height: strip.height
+                    view: Qt.rect(x, y, width, height)
                     screen: pv.screen
+                    reserved: place.reserved
                     frost: pv.cardItem ? Qt.rect(slot.x, slot.y + pv.cardItem.y, pv.cardW, pv.cardH) : Qt.rect(0, 0, 0, 0)
                 }
                 Item {

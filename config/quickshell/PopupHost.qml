@@ -13,7 +13,7 @@ PanelWindow {
     required property var modelData
     screen: modelData
     readonly property bool active: Popups.name !== "" && Popups.name !== "notif" && Popups.screen === modelData.name
-    readonly property bool hasBar: Popups.bars[modelData.name] !== undefined
+    readonly property bool hasBar: Popups.barEdgeOf(modelData.name) !== ""
 
     // Motion (tokens: Theme.popup*; speed / curve / style from Settings -> Animations, Motion.qml). Everything is driven by two things:
     //  - `t` (0..1): open/close progress of the whole card (fade + a small scale/slide from the bar side). Ease-out

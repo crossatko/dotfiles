@@ -87,7 +87,7 @@ PanelWindow {
     // qmllint disable missing-property
     margins.top: atTop ? edgeInset : 0
     margins.bottom: atTop ? 0 : edgeInset
-    margins.left: place.left
+    margins.left: place.margin
     // qmllint enable missing-property
     implicitWidth: place.screenW > 0 ? place.cardW : pillW
     implicitHeight: Math.ceil(card.fullH)     // room for the grown card: the surface never resizes while it animates
@@ -140,7 +140,7 @@ PanelWindow {
         function status(): string {
             return "state=" + pill.state + " look=" + pill.look + " mode=" + pill.mode + " screen=" + pill.screenName
                 + " edge=" + (pill.atTop ? "top" : "bottom") + " inset=" + pill.edgeInset + " window=" + pill.width + "x" + pill.height
-                + " left=" + place.left + " card=" + card.width + "x" + Math.round(card.height) + " swoosh=" + card.swoosh.width + "x" + card.swoosh.height
+                + " left=" + place.left + " margin=" + place.margin + " reserved=" + JSON.stringify(place.reserved) + " card=" + card.width + "x" + Math.round(card.height) + " swoosh=" + card.swoosh.width + "x" + card.swoosh.height
                 + " caption=" + card.tail.width + " overflow=" + card.tail.overflows + " glass=" + Theme.glass
         }
     }

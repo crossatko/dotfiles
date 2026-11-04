@@ -79,28 +79,25 @@ Singleton {
     property int idleTimeoutS: defaults.idle_timeout_s
     property var ignoredClasses: defaults.ignored_classes.slice()
     property bool showText: defaults.show_text
-    property string pillEdge: defaults.pill_edge
-    property real pillGap: defaults.pill_gap
-    property real pillX: defaults.pill_x
-    property string pillScreen: defaults.pill_screen
+    property var pill: P.parse({})            // the pill_* keys (launcher/js/PillPos.js), replaced as a whole
+    readonly property string pillEdge: pill.pill_edge
+    readonly property real pillGap: pill.pill_gap
+    readonly property real pillX: pill.pill_x
+    readonly property string pillScreen: pill.pill_screen
     property var extra: ({})          // unknown keys of the file, written back unchanged
     property bool legacyEdge: false   // the file had no pill_edge: parse() took the dictation pill's edge, commit() saves it
 
     // ---- PrefSwitch / PageReset store ----
     function value(k) {
         return k === "show_text" ? showText : k === "idle_timeout_s" ? idleTimeoutS : k === "model" ? model : k === "key" ? key
-            : k === "pill_edge" ? pillEdge : k === "pill_gap" ? pillGap : k === "pill_x" ? pillX : k === "pill_screen" ? pillScreen : ignoredClasses
+            : P.KEYS.indexOf(k) >= 0 ? pill[k] : ignoredClasses
     }
     function overridden(k) { return JSON.stringify(value(k)) !== JSON.stringify(defaults[k]) }
     function set(k, v) {
         if (k === "show_text") showText = !!v
         else if (k === "idle_timeout_s") idleTimeoutS = Math.min(604800, Math.max(0, Math.round(Number(v)) || 0))
         else if (k === "model") { if (!validModel(v)) return false; model = v }
-        else if (P.KEYS.indexOf(k) >= 0) {
-            const c = P.clean(k, v)
-            if (c === undefined) return false
-            if (k === "pill_edge") pillEdge = c; else if (k === "pill_gap") pillGap = c; else if (k === "pill_x") pillX = c; else pillScreen = c
-        }
+        else if (P.KEYS.indexOf(k) >= 0) { const n = P.withKey(pill, k, v); if (!n) return false; pill = n }
         else return false
         commit()
         return true
@@ -188,8 +185,7 @@ Singleton {
         showText = typeof d.show_text === "boolean" ? d.show_text : defaults.show_text
         // a file from before pill_edge: the pills shared Voice's "pill at the bottom"; taken over once (written at the next load)
         legacyEdge = o !== null && typeof o === "object" && !Array.isArray(o) && P.clean("pill_edge", o.pill_edge) === undefined
-        const pp = P.parse(d, DictationPrefs.pillBottom ? "bottom" : "bar")
-        pillEdge = pp.pill_edge; pillGap = pp.pill_gap; pillX = pp.pill_x; pillScreen = pp.pill_screen
+        pill = P.parse(d, DictationPrefs.pillBottom ? "bottom" : "bar")
         if (Array.isArray(d.ignored_classes)) {
             const l = []
             for (const c of d.ignored_classes) {
@@ -204,8 +200,7 @@ Singleton {
     }
     function serialize() {
         return JSON.stringify(Object.assign({}, extra, { version: 1, key: key, model: model, idle_timeout_s: idleTimeoutS,
-                                                         ignored_classes: ignoredClasses, show_text: showText, pill_edge: pillEdge,
-                                                         pill_gap: pillGap, pill_x: pillX, pill_screen: pillScreen })) + "\n"
+                                                         ignored_classes: ignoredClasses, show_text: showText }, pill)) + "\n"
     }
     // the generated file hypr/hyprland/diacritics.lua reads
     function bindsText() {
