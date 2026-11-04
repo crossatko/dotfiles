@@ -16,7 +16,7 @@ Singleton {
     id: root
 
     readonly property string dir: Quickshell.env("HOME") + "/.local/state/quickshell"
-    readonly property var fallback: ({ "DP-5": "bottom", "DP-3": "bottom", "Virtual-1": "bottom", "HDMI-A-1": "top" })
+    readonly property var fallback: ({ "DP-2": "bottom", "Virtual-1": "bottom", "HDMI-A-1": "top" })
 
     property var data: ({})                    // key -> { enabled, edge }, plus the reserved "_links"
     readonly property string linksKey: "_links"

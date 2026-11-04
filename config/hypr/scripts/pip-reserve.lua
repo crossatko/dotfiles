@@ -56,7 +56,7 @@ end
 -- Where is the bar on this monitor? Mirrors config/quickshell/BarConfig.qml: ~/.local/state/quickshell/bars.json
 -- (keyed "<monitor model>|<serial>", the serial is usually empty there) with the pre-settings layout as the
 -- fallback. Returns "top", "bottom" or "none". Lua has no JSON parser; the file is tiny and flat.
-local FALLBACK = { ["DP-5"] = "bottom", ["DP-3"] = "bottom", ["Virtual-1"] = "bottom", ["HDMI-A-1"] = "top" }
+local FALLBACK = { ["DP-2"] = "bottom", ["Virtual-1"] = "bottom", ["HDMI-A-1"] = "top" }
 
 local function bar_edge(mon)
 	local text = read_state(os.getenv("HOME") .. "/.local/state/quickshell/bars.json")

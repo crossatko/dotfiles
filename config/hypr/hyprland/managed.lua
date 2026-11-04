@@ -1545,7 +1545,7 @@ end
 -- monitor and tiled windows start right at the bar's reserved edge. The other three sides keep gaps_out. Done with
 -- workspace rules on the monitor's selector, replaced in place (hl.workspace_rule with the same workspace string replaces
 -- the rule) at every layout_apply(); Quickshell calls that after bars.json / appearance.json writes.
-local BAR_FALLBACK = { ["DP-5"] = "bottom", ["DP-3"] = "bottom", ["Virtual-1"] = "bottom", ["HDMI-A-1"] = "top" }
+local BAR_FALLBACK = { ["DP-2"] = "bottom", ["Virtual-1"] = "bottom", ["HDMI-A-1"] = "top" }
 
 -- HL.Monitor -> the bar's edge ("top" | "bottom" | "none") and whether transparentFlush is on for it. Mirrors
 -- Quickshell BarConfig (monitors are matched by model and serial inside the description; the file is tiny and flat).
