@@ -39,6 +39,18 @@ DEBUG_LOG="$STATE_DIR/poll-debug.log"
 
 mkdir -p "$STATE_DIR"
 
+# Cap the debug log: it is appended to every poll (and by other TV scripts),
+# so once it passes ~5 MB keep only the newest lines. Truncating in place
+# (not mv) keeps the inode, so appenders holding it open stay valid.
+trim_debug_log() {
+	local size
+	size=$(stat -c %s "$DEBUG_LOG" 2>/dev/null || echo 0)
+	if [ "$size" -gt 5242880 ]; then
+		tail -n 20000 "$DEBUG_LOG" >"$DEBUG_LOG.tmp" && cat "$DEBUG_LOG.tmp" >"$DEBUG_LOG"
+		rm -f "$DEBUG_LOG.tmp"
+	fi
+}
+
 # Single-instance guard: autostart.lua's hl.on("hyprland.start", ...) fires
 # this on every Hyprland startup, and it's also been restarted manually
 # many times across debugging sessions -- confirmed live that duplicates
@@ -84,6 +96,7 @@ was_hdmi2=""
 last_synced_signature=""
 
 while true; do
+	trim_debug_log
 	sig="$(current_instance_signature)"
 	export HYPRLAND_INSTANCE_SIGNATURE="$sig"
 	# A compositor swap can happen with no accompanying reachability or
