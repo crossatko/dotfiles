@@ -3,7 +3,9 @@
 Protocol: newline-delimited, both directions. Every connected client receives every event as one JSON object per
 line. Commands are either JSON ({"cmd": "begin", "mode": "cs"}) or plain words ("begin cs"):
 
-    begin cs|en|translate    start a session (opens the mic); ignored while one is running
+    begin <code>|translate:<code>|translate|auto [<codes>]
+                             start a session (opens the mic); ignored while one is running. auto detects the
+                             language once and pins it, among <codes> (comma separated; JSON "languages": [..]) when given
     end                      key released: final pass, flush the rest, close the mic
     cancel                   drop the session without typing anything more
     status                   reply (to this client only) with a status event
@@ -35,7 +37,8 @@ import socket
 import threading
 import time
 
-from .engine import MODES, Config, Dictation, RecognizerError, identity_cleanup
+from .engine import Config, Dictation, RecognizerError, identity_cleanup
+from .languages import parse_mode
 from .whisper import WorkerFailed
 
 
@@ -65,6 +68,8 @@ def parse_command(line: str) -> dict | None:
     cmd = {"cmd": parts[0]}
     if len(parts) > 1:
         cmd["mode"] = parts[1]
+    if len(parts) > 2:
+        cmd["languages"] = parts[2]
     return cmd
 
 
@@ -281,7 +286,7 @@ class Service:
 
     def _begin(self, cmd: dict) -> None:
         mode = cmd.get("mode")
-        if not isinstance(mode, str) or mode not in MODES:  # JSON may carry any type here (a list is unhashable)
+        if parse_mode(mode) is None:  # JSON may carry any type here (a list is unhashable)
             self._reply(cmd, {"event": "error", "message": f"unknown mode {mode!r}", "code": "mode"})
             return
         engine = self.engine
@@ -308,7 +313,7 @@ class Service:
             self.emit({"event": "error", "message": self._error or "models not loaded", "code": self._code or "error"})
             return
         engine.config = self._session_config(prefs)
-        engine.begin(mode)
+        engine.begin(mode, cmd.get("languages") or ())
         self._started = time.monotonic()
         intake.attach(engine.feed)
 

@@ -3,7 +3,7 @@
 
     dictation serve [--no-gpu] [--live NAME] [--final NAME]   run the service (the user unit runs this);
                     [--dry-run] [--audio-file [MODE=]FILE]    --dry-run types nothing, --audio-file replaces the mic
-    dictation begin cs|en|translate                           start a session (key pressed)
+    dictation begin <code>|translate:<code>|translate|auto [<codes>]                  start a session (key pressed)
     dictation end                                             final pass and flush (key released)
     dictation cancel | status                                 drop the session | print the service status
     dictation listen                                          print every event as a JSON line
@@ -38,7 +38,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath
 
 from dictation import prefs, whisper  # noqa: E402
 from dictation.cleanup import Cleanup  # noqa: E402
-from dictation.engine import MODES, SAMPLE_RATE, Config, Dictation  # noqa: E402
+from dictation.engine import SAMPLE_RATE, Config, Dictation  # noqa: E402
+from dictation.languages import parse_mode  # noqa: E402
 from dictation.service import default_socket  # noqa: E402
 
 
@@ -67,12 +68,19 @@ def recognizer(args):
                                      verbose=args.verbose, timeout=timeout)
 
 
+def mode_arg(text):
+    """argparse type: a language code, translate:<code>, translate or auto."""
+    if parse_mode(text) is None:
+        raise argparse.ArgumentTypeError(f"{text!r}: want a whisper language code, translate:<code>, translate or auto")
+    return text
+
+
 def audio_files(specs):
     """--audio-file [MODE=]PATH (repeatable) -> {mode or None: path}; a path without a mode is for every mode."""
     files = {}
     for spec in specs or []:
         mode, sep, path = spec.partition("=")
-        if sep and mode in MODES:
+        if sep and parse_mode(mode):
             files[mode] = path
         else:
             files[None] = spec
@@ -214,7 +222,7 @@ def cmd_replay(args):
             "final_ms": final[0] if final else None,
             "release_to_done_ms": round((time.monotonic() - released) * 1000),
             "text": text, "ops": ops.ops,
-            "previews": previews[-3:] if args.mode == "translate" else None,
+            "previews": previews[-3:] if args.mode.startswith("translate") else None,
         }, ensure_ascii=False, indent=None if args.compact else 1))
     finally:
         rec_engine.close()
@@ -237,14 +245,15 @@ def main():
             sp.add_argument("--dry-run", action="store_true", help="never type; edit events are still published")
             sp.add_argument("--audio-file", action="append", metavar="[MODE=]FILE",
                             help="play this recording instead of the microphone (in every session, or only for MODE: "
-                                 "cs, en, translate; repeatable); for tests without a mic")
+                                 "a language code, translate:<code>, translate; repeatable); for tests without a mic")
         else:
             sp.add_argument("file")
-            sp.add_argument("--mode", choices=list(MODES), required=True)
+            sp.add_argument("--mode", type=mode_arg, required=True)
             sp.add_argument("--realtime", action="store_true", help="feed at speaking speed, passes back to back")
             sp.add_argument("--compact", action="store_true")
     b = sub.add_parser("begin")
-    b.add_argument("mode", choices=list(MODES))
+    b.add_argument("mode", type=mode_arg)
+    b.add_argument("languages", nargs="?", default="", help="auto only: comma separated language codes to choose among")
     for name in ("end", "cancel", "status", "listen"):
         sub.add_parser(name)
     args = p.parse_args()
@@ -256,7 +265,7 @@ def main():
         cmd_listen(args)
     elif args.cmd == "begin":
         # detached: the session outlives this short-lived connection (the shell's own begin is cancelled when it drops)
-        send(args.socket, json.dumps({"cmd": "begin", "mode": args.mode, "detached": True}))
+        send(args.socket, json.dumps({"cmd": "begin", "mode": args.mode, "languages": args.languages, "detached": True}))
     else:
         send(args.socket, args.cmd, wait_reply=args.cmd == "status")
 

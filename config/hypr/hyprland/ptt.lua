@@ -1,9 +1,9 @@
 -- Push-to-talk keys (Settings > Voice, Quickshell PttPrefs.qml). Quickshell registers the global shortcuts
--- (quickshell:ptt-cs, quickshell:ptt-en, quickshell:ptt-cs-en; PttShortcuts.qml) and writes the keys the user chose to a
+-- (quickshell:ptt-auto, and per selected language quickshell:ptt-<code> and quickshell:ptt-<code>-en; PttShortcuts.qml) and writes the keys the user chose to a
 -- generated state file OUTSIDE the repo, one bind per line, '#' lines are comments:
 --   <keys>|<appid:name>|<description>[|<flags>]   e.g.  SUPER + F9|quickshell:ptt-cs|Push-to-talk: Czech
 --                                                       mouse:276|quickshell:ptt-en|Push-to-talk: English|non_consuming
--- appid:name must be one of M.IDS (other lines are ignored); keys may be a mouse button (mouse:<evdev code>); flags:
+-- appid:name must pass M.allowed (other lines are ignored); keys may be a mouse button (mouse:<evdev code>); flags:
 -- "non_consuming" = the key / click also reaches the window (a mouse side button keeps working as back / forward).
 -- ${XDG_STATE_HOME:-~/.local/state}/quickshell/ptt-binds.txt (QS_PTT_BINDS_FILE overrides; Hyprland must have the same
 -- environment as the shell for that, tests only). No file / no line = no key
@@ -14,9 +14,20 @@
 local M = {}
 
 M.MAX_BYTES = 4096
--- the only global shortcuts a line may bind (PttPrefs.qml entries, PttShortcuts.qml): a hand-edited or crafted file
--- cannot bind another app's shortcut
-M.IDS = { ["quickshell:ptt-cs"] = true, ["quickshell:ptt-en"] = true, ["quickshell:ptt-cs-en"] = true }
+-- the only global shortcuts a line may bind (PttPrefs.qml entries, PttShortcuts.qml): quickshell:ptt-auto and
+-- quickshell:ptt-<code> / quickshell:ptt-<code>-en for a language code of two or three lowercase letters (the selected
+-- languages change, so the set is a pattern, not a list; English has no -en key). A hand-edited or crafted file cannot
+-- bind another app's shortcut
+function M.allowed(id)
+	if id == "quickshell:ptt-auto" then
+		return true
+	end
+	local code, tr = id:match("^quickshell:ptt%-(%l%l%l?)(%-?e?n?)$")
+	if code == nil then
+		return false
+	end
+	return tr == "" or (tr == "-en" and code ~= "en")
+end
 
 function M.path()
 	local p = os.getenv("QS_PTT_BINDS_FILE")
@@ -46,7 +57,7 @@ function M.parse(text)
 			end
 			local keys, id, desc, flags = f[1], f[2] or "", f[3] or "", f[4] or ""
 			local norm = keys:upper():gsub("%s", "")
-			if keys:match("^[%w_ +:]+$") and keys:match("%w") and M.IDS[id] and not seen_id[id] and not seen_keys[norm] then
+			if keys:match("^[%w_ +:]+$") and keys:match("%w") and M.allowed(id) and not seen_id[id] and not seen_keys[norm] then
 				seen_id[id], seen_keys[norm] = true, true
 				local nc = false
 				for flag in flags:gmatch("[^%s,]+") do

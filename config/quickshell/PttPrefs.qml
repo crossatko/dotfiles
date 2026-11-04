@@ -4,13 +4,18 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import "launcher/js/PttKeys.js" as K
+import "launcher/js/DictLangs.js" as D
 
-// Push-to-talk keys (Settings > Voice): the three hold-to-talk keys (Czech, English, Czech to English), each a keyboard
-// combo or a mouse button in Hyprland's bind syntax (launcher/js/PttKeys.js). No default keys: all unset until the user
-// picks them. Saved in ${XDG_STATE_HOME:-~/.local/state}/quickshell/ptt.json (QS_PTT_FILE overrides), this singleton
+// Push-to-talk keys (Settings > Voice): the hold-to-talk keys, each a keyboard combo or a mouse button in Hyprland's
+// bind syntax (launcher/js/PttKeys.js): "ptt-auto" (always there: dictate in the detected language), and per selected
+// language "ptt-<code>" (dictate in it) and, but for English, "ptt-<code>-en" (speak it, type English)
+// (launcher/js/DictLangs.js). The selected languages are Settings > Voice > Languages, Czech and English until changed.
+// No default keys: all unset until the user picks them. Saved in ${XDG_STATE_HOME:-~/.local/state}/quickshell/ptt.json (QS_PTT_FILE overrides), this singleton
 // is the only writer:
-//   { "version": 1, "keys": { "ptt-cs": "SUPER + F9", "ptt-en": "mouse:276" }, "through": { "ptt-en": false } }
+//   { "version": 1, "keys": { "ptt-cs": "SUPER + F9", "ptt-en": "mouse:276" }, "through": { "ptt-en": false },
+//     "languages": ["cs", "en", "ja"] }
 //   keys      name -> key string; a missing name = no key
+//   languages the selected language codes; missing = Czech and English (a file from before languages were selectable)
 //   through   name -> the key / click also reaches the focused window (bind option non_consuming); default: on for a
 //             mouse button (side buttons keep working as back / forward), off for a key (it would type)
 // Applying: every change also rewrites the generated ptt-binds.txt next to it (QS_PTT_BINDS_FILE; one
@@ -21,16 +26,13 @@ import "launcher/js/PttKeys.js" as K
 // modifiers + key / button; a `global` dispatcher = another app's global shortcut) and the other two keys; our own binds
 // are told apart by their description. `hyprctl globalshortcuts -j` says whether ours are registered.
 // The object doubles as a PrefSwitch store for the click-through switches (key "through:<name>").
-//   qs ipc call ptt get | set <name> <keys> | unset <name> | reset | refresh
+//   qs ipc call ptt get | set <name> <keys> | unset <name> | reset | refresh | languages | addlang <code> | rmlang <code>
 Singleton {
     id: root
 
     readonly property string appid: "quickshell"
-    readonly property var entries: [
-        { name: "ptt-cs", label: "Czech", desc: "Push-to-talk: Czech" },
-        { name: "ptt-en", label: "English", desc: "Push-to-talk: English" },
-        { name: "ptt-cs-en", label: "Czech → English", desc: "Push-to-talk: Czech to English" }
-    ]
+    // [{ name, lang, translate, label, desc, service, pill }]: Auto, then each selected language's keys (DictLangs.entriesFor)
+    readonly property var entries: D.entriesFor(languages)
     readonly property var names: entries.map(e => e.name)
     function entry(name) { return entries.find(e => e.name === name) || null }
 
@@ -45,11 +47,27 @@ Singleton {
     readonly property string dir: filePath.substring(0, filePath.lastIndexOf("/")) || "/"
 
     // ---- saved state ----
-    property var data: ({ keys: {}, through: {} })
+    property var data: ({ keys: {}, through: {}, languages: null })
+    // the selected languages (codes, in the order added); data.languages null = the default Czech + English
+    readonly property var languages: languagesOf(data)
+    function languagesOf(d) { return d.languages === null || d.languages === undefined ? D.DEFAULTS.slice() : d.languages }
+    function hasLanguage(code) { return languages.indexOf(code) >= 0 }
+    function setLanguages(list) {
+        const l = D.normalize(list)
+        const d = copy()
+        d.languages = JSON.stringify(l) === JSON.stringify(D.DEFAULTS) ? null : l
+        const keep = D.entriesFor(l).map(e => e.name)
+        for (const n of Object.keys(d.keys)) if (keep.indexOf(n) < 0) delete d.keys[n]      // a removed language loses its keys
+        for (const n of Object.keys(d.through)) if (keep.indexOf(n) < 0) delete d.through[n]
+        commit(d)
+    }
+    function addLanguage(code) { if (D.isCode(code) && !hasLanguage(code)) setLanguages(languages.concat([code])) }
+    function removeLanguage(code) { if (hasLanguage(code)) setLanguages(languages.filter(c => c !== code)) }
+
     function keysOf(name) { return data.keys[name] || "" }
     function throughOf(name) { const t = data.through[name]; return t !== undefined ? t : K.isMouse(keysOf(name)) }
     readonly property bool anySet: entries.some(e => keysOf(e.name) !== "")
-    readonly property bool changed: Object.keys(data.keys).length > 0 || Object.keys(data.through).length > 0
+    readonly property bool changed: Object.keys(data.keys).length > 0 || Object.keys(data.through).length > 0 || data.languages !== null
 
     // PrefSwitch store ("through:<name>")
     function value(key) { return throughOf(key.replace(/^through:/, "")) }
@@ -87,27 +105,32 @@ Singleton {
         else d.through[name] = on
         commit(d)
     }
-    function resetAll() { commit({ keys: {}, through: {} }) }
-    function copy() { return { keys: Object.assign({}, data.keys), through: Object.assign({}, data.through) } }
+    function resetAll() { commit({ keys: {}, through: {}, languages: null }) }
+    function copy() { return { keys: Object.assign({}, data.keys), through: Object.assign({}, data.through), languages: data.languages } }
 
     // ---- files ----
     function parse(text) {
-        const out = { keys: {}, through: {} }
-        if (typeof text !== "string" || text.length > 8192) return out
+        const out = { keys: {}, through: {}, languages: null }
+        if (typeof text !== "string" || text.length > 16384) return out
         let o
         try { o = JSON.parse(text) } catch (e) { return out }
         if (!o || typeof o !== "object") return out
-        for (const n of names) {
+        if (Array.isArray(o.languages)) {
+            const l = D.normalize(o.languages)
+            out.languages = JSON.stringify(l) === JSON.stringify(D.DEFAULTS) ? null : l
+        }
+        for (const n of D.entriesFor(languagesOf(out)).map(e => e.name)) {
             if (o.keys && typeof o.keys[n] === "string") { const p = K.parse(o.keys[n]); if (p.keys !== "") out.keys[n] = p.keys }
             if (o.through && typeof o.through[n] === "boolean") out.through[n] = o.through[n]
         }
         return out
     }
-    function serialize(d) { return JSON.stringify({ version: 1, keys: d.keys, through: d.through }) + "\n" }
+    function serialize(d) { return JSON.stringify(Object.assign({ version: 1, keys: d.keys, through: d.through },
+                                            Array.isArray(d.languages) ? { languages: d.languages } : {})) + "\n" }
     // the generated file hypr/hyprland/ptt.lua reads
     function bindsText(d) {
         let t = "# generated by Quickshell (PttPrefs.qml) from ptt.json, read by hypr/hyprland/ptt.lua: do not edit\n"
-        for (const e of entries) {
+        for (const e of D.entriesFor(languagesOf(d))) {
             const k = d.keys[e.name]
             if (!k) continue
             const through = d.through[e.name] !== undefined ? d.through[e.name] : K.isMouse(k)
@@ -241,6 +264,9 @@ Singleton {
         }
         function unset(name: string): string { return root.setKeys(name, "") ? "ok" : "bad name" }
         function reset(): string { root.resetAll(); return "ok" }
+        function languages(): string { return root.languages.join(",") }
+        function addlang(code: string): string { if (!D.isCode(code)) return "unknown language"; root.addLanguage(code); return "ok" }
+        function rmlang(code: string): string { root.removeLanguage(code); return "ok" }
         function refresh(): void { root.refresh() }
     }
 }

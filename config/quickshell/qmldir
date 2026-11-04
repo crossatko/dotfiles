@@ -235,6 +235,9 @@ singleton PttPrefs 1.0 PttPrefs.qml
 singleton PttShortcuts 1.0 PttShortcuts.qml
 KeyCaptureField 1.0 KeyCaptureField.qml
 PttKeyRow 1.0 PttKeyRow.qml
+LanguageOption 1.0 LanguageOption.qml
+LanguagePicker 1.0 LanguagePicker.qml
+LanguagesSection 1.0 LanguagesSection.qml
 PttKeysSection 1.0 PttKeysSection.qml
 SettingsVoice 1.0 SettingsVoice.qml
 VoiceLastError 1.0 VoiceLastError.qml

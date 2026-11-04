@@ -4,8 +4,9 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 
-// The three push-to-talk global shortcuts (appid "quickshell", names from PttPrefs.entries: ptt-cs, ptt-en, ptt-cs-en),
-// registered with Hyprland from the start (shell.qml references this singleton). Hyprland sends press AND release for
+// The push-to-talk global shortcuts (appid "quickshell", names from PttPrefs.entries: ptt-auto and, per selected
+// language, ptt-<code> and ptt-<code>-en), registered with Hyprland from the start (shell.qml references this
+// singleton); a language added or removed in Settings > Voice adds or drops its shortcuts. Hyprland sends press AND release for
 // a `global` bind, keyboard keys and mouse buttons alike; the keys themselves are PttPrefs' (hypr/hyprland/ptt.lua binds
 // them). This only reports: pressed(name) / released(name) and `held` (name -> true while down); DictationController
 // connects to the signals.

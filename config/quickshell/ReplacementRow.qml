@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 
 // One replacement of the dictation word list (DictationWords.replacements): what you say -> what is typed, and the
-// language it applies to (Any / Czech / English). An existing row (`index` >= 0, `entry` = { heard, typed, lang })
+// language it applies to (Any / the selected languages). An existing row (`index` >= 0, `entry` = { heard, typed, lang })
 // saves when you press Enter, pick a language or leave the row; a row the list refuses (empty or whitespace-only side,
 // both sides the same, already replaced for that language, too long) keeps what was typed in red with the reason under
 // it, Esc puts the saved text back. The row with `index` -1 is the empty one that adds a new replacement (Enter or the
@@ -69,9 +69,9 @@ ColumnLayout {
             Connections { target: typedBox.input; function onTextChanged() { if (rr.problem !== "" && typedBox.text !== rr.entry.typed) rr.problem = "" } }
         }
         Segmented {
-            objectNames: ["repl-lang-any-" + rr.index, "repl-lang-cs-" + rr.index, "repl-lang-en-" + rr.index]
-            values: DictationWords.replLangs
-            labels: DictationWords.replLabels
+            objectNames: values.map(v => "repl-lang-" + v + "-" + rr.index)
+            values: DictationWords.replLangsFor(rr.lang)
+            labels: DictationWords.replLabelsFor(rr.lang)
             current: rr.lang
             outerRadius: Theme.radiusPage; inset: 9
             segHeight: 26

@@ -10,8 +10,8 @@ Interface (the engine's `cleanup=` seam):
                                          # trailing words may still turn into a longer phrase (live passes hold them)
 
 Word file (written by Settings > Voice), every part optional:
-    {"version": 1, "fillers": {"cs": [...], "en": [...]}, "hints": false,
-     "replacements": [{"heard": "pull requests", "typed": "PRs", "lang": "any" | "cs" | "en"}]}
+    {"version": 1, "fillers": {"cs": [...], "ja": [...]}, "hints": false,
+     "replacements": [{"heard": "pull requests", "typed": "PRs", "lang": "any" | <a whisper language code>}]}
 The hint switch itself lives in the voice prefs (prefs_file(), "prompt_hints", written by the same page); the
 words file's "hints" is its mirror and counts only when the prefs have no "prompt_hints".
 A language missing from "fillers" keeps the built-in list; a present list (even empty) replaces it. A missing,
@@ -25,8 +25,9 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
+from .languages import is_language
+
 DEFAULTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "default-words.json")
-LANGUAGES = ("cs", "en")
 MAX_HINT_TERMS = 12  # keep the prompt short: a long prompt drags the decode towards it
 MAX_HINT_CHARS = 160
 
@@ -170,7 +171,7 @@ def lowercase_segments(segments: list, lower: bool = True, strip: bool = True) -
 class Replacement:
     heard: tuple  # keys of the heard words
     typed: str
-    lang: str  # "any", "cs" or "en"
+    lang: str  # "any" or a whisper language code
 
 
 @dataclass
@@ -206,9 +207,8 @@ def _fillers(data) -> dict:
     raw = data.get("fillers") if isinstance(data, dict) else None
     if not isinstance(raw, dict):
         return out
-    for lang in LANGUAGES:
-        entries = raw.get(lang)
-        if isinstance(entries, list):
+    for lang, entries in raw.items():
+        if is_language(lang) and isinstance(entries, list):
             keys = set()
             for e in entries:
                 if isinstance(e, str):
@@ -228,7 +228,7 @@ def _replacements(data) -> list:
         if not isinstance(e, dict):
             continue
         heard, typed, lang = e.get("heard"), e.get("typed"), e.get("lang", "any")
-        if not isinstance(heard, str) or not isinstance(typed, str) or lang not in ("any",) + LANGUAGES:
+        if not isinstance(heard, str) or not isinstance(typed, str) or (lang != "any" and not is_language(lang)):
             continue
         parts = [_split(w) for w in heard.split()]
         if any(set(lead + trail) - _SOFT for lead, _, trail in parts):

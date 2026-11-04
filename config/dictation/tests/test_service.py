@@ -117,6 +117,51 @@ class ServiceTest(unittest.TestCase):
         c.until(lambda e: e.get("event") == "state" and e["state"] == "idle")
         c.close()
 
+    def test_any_whisper_language_and_translate_with_a_language_begin(self):
+        calls = []
+
+        class Recording(Scripted):
+            def transcribe(self, audio, *, slot, language, translate):
+                calls.append((language, translate))
+                return super().transcribe(audio, slot=slot, language=language, translate=translate)
+
+        self.start(lambda: Recording(["a b c", "a b c d"], final="a b c d."))
+        c = Client(self.path)
+        c.until(lambda e: e.get("event") == "status" and e["state"] == "idle")
+        for line, mode, want in (("begin ja", "ja", ("ja", False)),
+                                 ('{"cmd": "begin", "mode": "translate:de"}', "translate:de", ("de", True))):
+            del calls[:]
+            c.send(line)
+            c.until(lambda e: e.get("event") == "state" and e["state"] == "listening" and e["mode"] == mode)
+            c.until(lambda e: e.get("event") == "preview")
+            c.send("end")
+            c.until(lambda e: e.get("event") == "state" and e["state"] == "idle")
+            self.assertEqual(set(calls), {want}, (line, calls))
+        for bad in ("begin translate:xx", "begin translate:en", "begin cs-en", '{"cmd": "begin", "mode": ["cs"]}'):
+            c.send(bad)
+            self.assertEqual(c.until(lambda e: e.get("event") == "error")[-1]["code"], "mode", bad)
+        c.close()
+
+    def test_auto_detects_within_the_given_languages(self):
+        class Auto(Scripted):
+            def detect(self, audio, *, slot):
+                return {"ja": 0.6, "de": 0.3, "cs": 0.1}
+
+        r = Auto(["a b c", "a b c d"], final="a b c d.")
+        self.start(lambda: r)
+        c = Client(self.path)
+        c.until(lambda e: e.get("event") == "status" and e["state"] == "idle")
+        for line, want in (("begin auto de,cs", "de"), ('{"cmd": "begin", "mode": "auto", "languages": ["cs"]}', "cs"),
+                           ("begin auto", "ja")):
+            del r.calls[:]
+            c.send(line)
+            seen = c.until(lambda e: e.get("event") == "preview")
+            self.assertIn({"event": "language", "language": want, "detected": True}, seen, line)
+            c.send("end")
+            c.until(lambda e: e.get("event") == "state" and e["state"] == "idle")
+            self.assertEqual({x[1] for x in r.calls}, {want}, line)
+        c.close()
+
     def test_a_missing_model_is_reported_on_begin(self):
         from dictation.whisper import ModelMissing
 
@@ -334,6 +379,8 @@ class ServiceTest(unittest.TestCase):
 class Parse(unittest.TestCase):
     def test_words_and_json(self):
         self.assertEqual(parse_command("begin translate"), {"cmd": "begin", "mode": "translate"})
+        self.assertEqual(parse_command("begin auto cs,en"), {"cmd": "begin", "mode": "auto", "languages": "cs,en"})
+        self.assertEqual(parse_command("begin translate:ja"), {"cmd": "begin", "mode": "translate:ja"})
         self.assertEqual(parse_command('{"cmd":"end"}'), {"cmd": "end"})
         self.assertEqual(parse_command("{oops"), {"cmd": "invalid"})
         self.assertIsNone(parse_command("  "))

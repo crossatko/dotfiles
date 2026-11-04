@@ -2,24 +2,20 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Push-to-talk dictation: the three keys (PttShortcuts) drive the service (DictationClient) and the pill shows it.
-// Hold Czech / English / Czech -> English: `begin cs|en|translate` and the pill opens on the focused monitor (mode
-// cs / en / cs-en, listening); release: `end`, the pill stays until the final text is typed (or nothing was said, or
+// Push-to-talk dictation: the keys (PttShortcuts; PttPrefs.entries: Auto, and per selected language its own key and its
+// "to English" key) drive the service (DictationClient) and the pill shows it.
+// Hold a key: `begin <code>|translate:<code>|auto <selected codes>` and the pill opens on the focused monitor (mode
+// <code>, <code>-en or auto, listening; Auto shows the language the service detected once it has); release: `end`, the pill stays until the final text is typed (or nothing was said, or
 // typing stopped) and then fades. One session at a time: another key pressed meanwhile is ignored.
 // Pill state: listening while quiet, speaking (translate: translating) while the mic level is above `loud` (held
 // `quietMs` after the last loud frame); the caption is the service's preview (transcribe: the text being typed, the
 // pill shows its end; translate: the English preview, nothing is typed until release). Errors (service `error`
 // events, a service that cannot be started, no speech model) turn the pill into its generic error line; the detail goes
 // to DictationStatus through the pill (errorText / errorCode).
-//   qs ipc call dictation press cs|en|cs-en | release | cancel | status   (the keys' code path, for tests)
+//   qs ipc call dictation press <code>|<code>-en|auto | release | cancel | status   (the keys' code path, for tests)
 Scope {
     id: ctl
 
-    readonly property var modes: ({
-        "ptt-cs": { service: "cs", pill: "cs" },
-        "ptt-en": { service: "en", pill: "en" },
-        "ptt-cs-en": { service: "translate", pill: "cs-en" }
-    })
     property real loud: 0.3                  // level counted as speech (the service's level: 0 = at the noise floor, speech ~0.6-1)
     property int quietMs: 350
     property int finalLingerMs: 900          // the finished text stays readable this long
@@ -30,7 +26,7 @@ Scope {
     property bool session: false             // a session was asked for and has not finished yet
     property bool waiting: false             // released, waiting for the final text
     property bool finishing: false           // ... and the service started its final pass
-    readonly property bool translating: pill.mode === "cs-en"
+    readonly property bool translating: /^[a-z]+-en$/.test(pill.mode)
 
     DictationPill { id: pill }
 
@@ -41,7 +37,7 @@ Scope {
     }
 
     function press(name) {
-        const m = modes[name]
+        const m = PttPrefs.entry(name)
         if (!m || key !== "" || session) return
         closeTimer.stop()
         key = name
@@ -53,7 +49,8 @@ Scope {
         pill.state = "listening"
         if (pill.state === "error") return    // no usable speech model: the pill said so (SttModels), nothing to record
         session = true
-        DictationClient.begin(m.service)
+        // Auto picks among the selected languages (none selected = any)
+        DictationClient.begin(m.service === "auto" && PttPrefs.languages.length ? "auto " + PttPrefs.languages.join(",") : m.service)
     }
     function release() {
         key = ""
@@ -112,6 +109,7 @@ Scope {
 
     Connections {
         target: DictationClient
+        function onLanguageDetected(code) { if (ctl.session && pill.mode === "auto" && code !== "") pill.mode = code }
         function onLevelEvent(value) {
             if (!ctl.session || pill.state === "error" || pill.state === "hidden") return
             pill.level = value
@@ -142,9 +140,9 @@ Scope {
     IpcHandler {
         target: "dictation"
         function press(mode: string): string {
-            const name = Object.keys(ctl.modes).find(k => ctl.modes[k].pill === mode)
-            if (!name) return "unknown mode (cs, en, cs-en)"
-            ctl.press(name)
+            const e = PttPrefs.entries.find(x => x.pill === mode)
+            if (!e) return "unknown mode (auto, or a selected language: " + PttPrefs.entries.map(x => x.pill).join(", ") + ")"
+            ctl.press(e.name)
             return "ok"
         }
         function release(): void { if (ctl.key !== "") ctl.release() }

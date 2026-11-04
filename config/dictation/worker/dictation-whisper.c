@@ -16,8 +16,10 @@
 // minutes per pass instead of a fraction of a second. Memory goes back to the system when the process exits (the
 // service unloads by stopping the worker).
 // Request (stdin): one text line "ID SLOT LANG TRANSLATE BEAM NSAMPLES\n" followed by NSAMPLES little-endian float32
-// samples, 16 kHz mono. LANG is a whisper language code (never "auto": the caller always pins it). TRANSLATE is 0/1,
-// BEAM is 0 for greedy decoding or the beam size. An optional seventh field PROMPTBYTES (0..1024) means that many
+// samples, 16 kHz mono. LANG is a whisper language code (never "auto": the caller pins it, after a "detect" request in auto mode). TRANSLATE is 0/1,
+// BEAM is 0 for greedy decoding or the beam size.
+// LANG "detect" instead runs language detection on the audio (TRANSLATE and BEAM ignored) and replies
+// {"id":ID,"ms":N,"probs":{"<code>":P,...}} for every language. An optional seventh field PROMPTBYTES (0..1024) means that many
 // UTF-8 bytes follow the samples: the initial prompt (the cleanup stage's vocabulary hints, off by default).
 // Reply (stdout): one JSON line {"id":ID,"ms":N,"segments":[{"t0":MS,"t1":MS,"text":"..."}]} or {"id":ID,"error":"..."}.
 // No shortened audio context is used on purpose (it made results worse in the benchmark); a prompt only when sent.
@@ -230,6 +232,34 @@ int main(int argc, char **argv) {
             json_str(stdout, id);
             printf(",\"ms\":0,\"segments\":[]}\n");
             fflush(stdout);
+            continue;
+        }
+
+        if (!strcmp(lang, "detect")) {
+            // language detection on the first 30 s of the audio: {"id":ID,"ms":N,"probs":{"cs":0.93,...}}
+            double td = now_ms();
+            int n_lang = whisper_lang_max_id() + 1;
+            float *probs = calloc((size_t)n_lang, sizeof(float));
+            if (!probs) {
+                reply_error(id, "out of memory");
+                return 3;
+            }
+            if (whisper_pcm_to_mel(ctx, pcm, (int)n, threads) != 0 || whisper_lang_auto_detect(ctx, 0, threads, probs) < 0) {
+                free(probs);
+                reply_error(id, "language detection failed");
+                continue;
+            }
+            printf("{\"id\":");
+            json_str(stdout, id);
+            printf(",\"ms\":%.0f,\"probs\":{", now_ms() - td);
+            for (int i = 0; i < n_lang; i++) {
+                if (i) putchar(',');
+                json_str(stdout, whisper_lang_str(i));
+                printf(":%.5f", probs[i]);
+            }
+            printf("}}\n");
+            fflush(stdout);
+            free(probs);
             continue;
         }
 

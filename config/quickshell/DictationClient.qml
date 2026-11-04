@@ -13,7 +13,7 @@ import Quickshell.Io
 // serve`, for development without the unit), then it retries the socket every 250 ms for `startTimeout`. A start that
 // fails or times out drops the queue and reports `failed(<detail>, "service-down")`.
 //   state     the service's: "" (not connected) | loading | idle | listening | finishing | error
-//   mode      cs | en | translate while a session runs
+//   mode      a language code | translate[:<code>] | auto while a session runs
 //   level     the last mic level 0..1 (levelEvent(v) fires for every one, also a repeated value)
 //   preview   the session's text so far (translate: the English preview); cleared when a session starts
 //   serviceError / serviceCode   why the service is not ready (state error: a missing model, a broken worker)
@@ -47,8 +47,9 @@ Singleton {
     signal lost()
     signal finished(string text)
     signal aborted(string reason, string message)
+    signal languageDetected(string code)     // auto mode: the language the session is pinned to (once, on its first pass)
 
-    function begin(mode) { send("begin " + mode) }
+    function begin(mode) { send("begin " + mode) }   // "ja", "translate:ja", "auto" or "auto cs,en" (detect among those)
     function end() { send("end") }
     function cancel() { if (sock.connected) send("cancel"); else queue = [] }   // not connected: drop what waits, start nothing
 
@@ -165,6 +166,9 @@ Singleton {
             break
         case "preview":
             preview = String(e.text || "")
+            break
+        case "language":
+            languageDetected(String(e.language || ""))
             break
         case "final":
             finished(String(e.text || ""))

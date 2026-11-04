@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 
 // Settings > Voice > Replacements: words the recognizer gets wrong, typed the way you want (heard -> typed, phrases
-// allowed, whole words, case-insensitive; Any / Czech / English picks the language it applies to). One ReplacementRow
+// allowed, whole words, case-insensitive; Any / a selected language picks the language it applies to). One ReplacementRow
 // per entry, the empty row at the end adds one. All state is DictationWords (dictation-words.json).
 ColumnLayout {
     id: sec

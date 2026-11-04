@@ -18,7 +18,8 @@ import Quickshell.Wayland
 // API (set by DictationController; nothing here talks to the service):
 //   state        "hidden" | "listening" | "speaking" | "translating" | "error"   (hidden = fade out; shown = fade in on the
 //                focused monitor, `screen` is set then)
-//   mode         "cs" | "en" | "cs-en" (source[-target]; "translating" without a target shows "en")
+//   mode         a language code, "auto" (until the service has detected the language), or "cs-en" (source[-target]; "translating"
+//                without a target shows "en"); shown as dot letters (any code of two or three letters, A-Z glyphs only)
 //   level        0..1 mic level (smoothed here), or `levels`: up to 16 recent values, oldest first
 //   captionText  the text so far (the end is shown)
 //   errorText / errorCode  the error detail (and an optional short code): recorded in DictationStatus when the state
@@ -72,7 +73,16 @@ PanelWindow {
     readonly property var langs: String(mode).toLowerCase().split("-")
     readonly property string srcLang: langs[0] || ""
     readonly property string dstLang: langs[1] || (look === "translating" ? "en" : "")
-    function langColor(code) { return code === "en" ? Theme.accent2 : code === "cs" ? Theme.accent : Theme.fg }
+    // Czech and English keep their colours, Auto and every other language one of the palette's, by its code
+    readonly property var langPalette: [Theme.blue, Theme.green, Theme.orange, Theme.cyan, Theme.yellow, Theme.fg]
+    function langColor(code) {
+        if (code === "en") return Theme.accent2
+        if (code === "cs") return Theme.accent
+        if (code === "auto" || code === "") return Theme.fg
+        let h = 0
+        for (const c of String(code)) h = (h * 31 + c.charCodeAt(0)) % 997
+        return langPalette[h % langPalette.length]
+    }
     readonly property bool hasText: isError || shownCaption !== ""
 
     // ---- geometry (Theme tokens; the two sizes below are this card's own content caps) ----

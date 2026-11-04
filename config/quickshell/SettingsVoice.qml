@@ -4,7 +4,8 @@ import QtQuick.Layouts
 
 // Settings -> Voice (speech to text). One self-contained section component per topic, stacked; adding a topic = one
 // line here (its component takes `titleWidth`) plus its store in the PageReset below.
-//   PttKeysSection   the three push-to-talk keys (PttPrefs: ptt.json, applied to Hyprland at once)
+//   LanguagesSection the languages you dictate in (PttPrefs: ptt.json), each with its own keys below
+//   PttKeysSection   the push-to-talk keys: Auto and per language (PttPrefs: ptt.json, applied to Hyprland at once)
 //   VoiceLastError   the last dictation error (dictation-last-error.json, read-only apart from Clear)
 //   DictationPrefsSection  microphone, GPU, idle unload, recognition hints (DictationPrefs: dictation-prefs.json)
 //   FillerWordsSection     filler sounds per language (DictationWords: dictation-words.json)
@@ -25,7 +26,8 @@ Item {
         width: parent.width
         spacing: Theme.pad
 
-        PttKeysSection { titleWidth: pg.titleW }
+        LanguagesSection { titleWidth: pg.titleW }
+        PttKeysSection { titleWidth: pg.titleW; Layout.topMargin: 6 }
         VoiceLastError { titleWidth: pg.titleW; Layout.topMargin: 6 }
 
         DictationPrefsSection { titleWidth: pg.titleW; Layout.topMargin: 6 }
@@ -37,7 +39,7 @@ Item {
         PageReset {
             objectName_: "btn-voice-reset"
             dirty: PttPrefs.changed || SttModels.changed || DictationPrefs.changed || DictationWords.changed
-            info: "Keys saved in ptt.json, models in stt-models.json, dictation settings in dictation-prefs.json, word lists in dictation-words.json."
+            info: "Keys and languages saved in ptt.json, models in stt-models.json, dictation settings in dictation-prefs.json, word lists in dictation-words.json."
             onReset: { PttPrefs.resetAll(); SttModels.resetAll(); DictationPrefs.resetAll(); DictationWords.resetAll() }
         }
     }

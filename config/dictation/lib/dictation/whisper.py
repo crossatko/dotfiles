@@ -173,6 +173,28 @@ class WhisperRecognizer:
         segments = [Segment(s["t0"] / 1000, s["t1"] / 1000, s["text"]) for s in reply["segments"]]
         return Recognition(segments, float(reply["ms"]))
 
+    def detect(self, audio: bytes, *, slot: str) -> dict:
+        """{language code: probability} for the audio (the worker's whisper_lang_auto_detect on the slot's model)."""
+        if slot not in (LIVE, FINAL):
+            raise ValueError(slot)
+        with self._lock:
+            self._seq += 1
+            rid = str(self._seq)
+            header = (" ".join(map(str, [rid, slot, "detect", 0, 0, len(audio) // 4])) + "\n").encode()
+            try:
+                self._proc.stdin.write(header)
+                self._proc.stdin.write(audio[: len(audio) // 4 * 4])
+                self._proc.stdin.flush()
+            except (OSError, ValueError) as exc:
+                raise WorkerFailed(f"worker exited: {exc}") from exc
+            reply = self._read(self.timeout + len(audio) / 4 / 16000)
+        if "error" in reply and reply.get("id") == rid:
+            raise ValueError(f"worker refused the request: {reply['error']}")
+        if reply.get("id") != rid:
+            raise WorkerFailed(f"worker reply out of step: {reply}")
+        probs = reply.get("probs")
+        return {str(k): float(v) for k, v in probs.items()} if isinstance(probs, dict) else {}
+
     def _read(self, timeout: float) -> dict:
         """One reply line; a worker that hangs (a stuck GPU decode) is killed after `timeout` seconds."""
         fd = self._proc.stdout.fileno()

@@ -360,7 +360,7 @@ class Lifecycle(unittest.TestCase):
     def test_unknown_mode_is_rejected(self):
         d, _, _ = make(Scripted([]))
         with self.assertRaises(ValueError):
-            d.begin("auto")
+            d.begin("klingon")
 
 
 class LongSessions(unittest.TestCase):

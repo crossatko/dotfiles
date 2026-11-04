@@ -2,7 +2,7 @@
 
 Interface (everything else is internal):
     d = Dictation(recognizer, injector, focus=..., emit=..., cleanup=..., config=Config())
-    d.begin("cs" | "en" | "translate")   # pinned language per session, never auto-detect
+    d.begin("<language code>" | "translate:<language code>" | "translate")   # pinned language per session, never auto-detect
     d.feed(pcm)                          # float32 little-endian, 16 kHz mono; thread-safe, publishes levels
     d.step()                             # runs one live pass when enough new audio arrived
     d.end()                              # final pass over the whole session, flushes the rest
@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from typing import Callable, NamedTuple, Protocol
 
 from .cleanup import lowercase_segments
+from .languages import AUTO, Mode, clean_languages, parse_mode
 from .level import LevelMeter
 
 SAMPLE_RATE = 16000
@@ -60,22 +61,15 @@ class Recognizer(Protocol):
     def transcribe(self, audio: bytes, *, slot: str, language: str, translate: bool) -> Recognition: ...
 
 
+class Detector(Protocol):
+    """Optional on a recognizer: detect(audio, slot=...) -> {language code: probability} (auto mode)."""
+
+    def detect(self, audio: bytes, *, slot: str) -> dict: ...
+
+
 class Injector(Protocol):
     def apply(self, backspace: int, text: str) -> None: ...
 
-
-@dataclass(frozen=True)
-class Mode:
-    name: str
-    language: str
-    translate: bool
-
-
-MODES = {
-    "cs": Mode("cs", "cs", False),
-    "en": Mode("en", "en", False),
-    "translate": Mode("translate", "cs", True),
-}
 
 LIVE, FINAL = "live", "final"
 
@@ -304,7 +298,9 @@ class _Session:
         self.frozen = 0  # typed words that lie before the window
         self.frozen_preview: list = []  # translate mode: preview words that lie before the window
         self.aborted = False
-        self.text_language = "en" if mode.translate else mode.language  # the cleanup's rules
+        self.language = None if mode.language == AUTO else mode.language  # auto: None until detected, then pinned
+        self.allowed: tuple = ()  # auto: the languages the detection may pick (empty = any)
+        self.text_language = "en" if mode.translate else (mode.language if self.language else "")  # the cleanup's rules
         self.prompt = ""  # the cleanup's vocabulary hints for the recognizer
 
 
@@ -338,12 +334,14 @@ class Dictation:
         s = self._s  # read once: the controller thread may end the session meanwhile (status() runs on the loop)
         return s.mode.name if s else None
 
-    def begin(self, mode: str) -> None:
-        if mode not in MODES:
-            raise ValueError(f"unknown mode {mode!r}, want one of {', '.join(MODES)}")
+    def begin(self, mode: str, languages=()) -> None:
+        parsed = parse_mode(mode)
+        if parsed is None:
+            raise ValueError(f"unknown mode {mode!r}, want a language code, translate:<code> or translate")
         if self._s is not None:
             raise RuntimeError("a session is already running")
-        s = _Session(MODES[mode], self.focus())
+        s = _Session(parsed, self.focus())
+        s.allowed = clean_languages(languages)
         s.prompt = self.cleanup.begin(s.text_language, s.mode.translate)
         with self._lock:
             self._s = s
@@ -659,9 +657,30 @@ class Dictation:
         return max(0, first * frame - pad)
 
     def _transcribe(self, s: _Session, audio: bytes, slot: str):
+        if s.language is None:
+            self._detect(s, audio, slot)
         extra = {"prompt": s.prompt} if s.prompt else {}  # recognizers without hint support never see the keyword
-        return self.recognizer.transcribe(audio, slot=slot, language=s.mode.language, translate=s.mode.translate,
-                                          **extra)
+        return self.recognizer.transcribe(audio, slot=slot, language=s.language, translate=s.mode.translate, **extra)
+
+    def _detect(self, s: _Session, audio: bytes, slot: str) -> None:
+        """Auto mode: the language of the session, decided once on the first pass that has speech (the first live
+        pass, or the final pass of a session too short for one) and pinned for the rest of it, so it cannot flip
+        between passes and the text typed so far never changes language. With a language selection the most probable
+        selected language wins (a language outside it is never picked); a recognizer or worker that cannot detect
+        gets the first selected language, else English."""
+        probs = {}
+        detect = getattr(self.recognizer, "detect", None)
+        if detect is not None:
+            try:
+                probs = detect(audio, slot=slot) or {}
+            except ValueError:  # a worker that predates detection refuses the request
+                probs = {}
+        pool = s.allowed or tuple(probs)
+        best = max((c for c in pool if c in probs), key=lambda c: probs[c], default=None)
+        s.language = best or (s.allowed[0] if s.allowed else "en")
+        s.text_language = s.language
+        s.prompt = self.cleanup.begin(s.language, False)
+        self.emit({"event": "language", "language": s.language, "detected": best is not None})
 
     def _segment_words(self, s: _Session, segments, final: bool = False) -> tuple:
         """([(segment, words)], hold) after the cleanup stage, which sees the whole pass (phrases may span
