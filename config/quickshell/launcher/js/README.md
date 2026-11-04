@@ -17,6 +17,7 @@ Import in QML: `import "launcher/js/Ranker.js" as Ranker` (Ranker imports Frecen
 - `TvPc.resolve(o, now)`, `settle(t, answer)`, `command(t, env)` -> Play on PC: the TV card -> the PC player's argv (see the file header)
 - `TvSession.start(o)`, `view(s, states, now)`, `control(s, states, what, now)` -> `{calls, expect, ends}`, `caps`, `judge(s, states, now, offMs, awayMs)`
   -> the TV session after a send (see the file header)
+- `DiacFont.js` (dot font, marks, icons) + `DiacScene.js` (`prepare(text)`, `words`, `neutral`, `scene(kind, phase, t, sT, prep)`) -> the diacritics pill's dot grids (see the file headers; DiacDots / DotGridCanvas draw them)
 - usage: `{[id]: {count, times:[ms], terms:{[q]:n}, pinned?, hidden?}}` (plain JSON, never mutated)
 
 ## Scoring
