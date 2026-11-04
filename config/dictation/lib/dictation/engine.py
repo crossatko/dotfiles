@@ -286,6 +286,8 @@ class _Session:
         self.meter = LevelMeter()  # noise-floor-aware level for the pill and the voiced flag
         self.first_loud: int | None = None  # first frame at the speech gate
         self.voiced_frames = 0  # frames that counted as speech (see Config.min_voiced)
+        self.floors: list = []  # the noise floor (dB, None before the first) after each level frame, for _has_voice
+        self.recount = (0, 0)  # (frames, voiced) of the last look back with the later floor (see _has_voice)
         self.last_voiced: int | None = None  # last frame well above the noise floor (end-of-speech detector)
         self.pending_flush: tuple | None = None  # (typed, target, last_voiced, bare): what a pause would type
         self.bare: int | None = None  # index (in typed words) of the word a pause typed without its punctuation
@@ -370,6 +372,7 @@ class Dictation:
             loud = rms >= self.config.speech_rms
             index = len(s.levels)
             s.levels.append(rms)
+            s.floors.append(s.meter.floor)
             if loud and s.first_loud is None:
                 s.first_loud = index
             # speech for the end-of-speech detector: at the absolute gate, and well above the noise floor where the
@@ -614,7 +617,32 @@ class Dictation:
         return any(rms >= self.config.speech_rms for rms in s.levels[start // frame : -(-end // frame)])
 
     def _has_voice(self, s: _Session, seconds: float) -> bool:
-        return s.voiced_frames * self.config.level_frame >= seconds * SAMPLE_RATE
+        need = seconds * SAMPLE_RATE / self.config.level_frame
+        if s.voiced_frames >= need:
+            return True
+        return self._voiced_by_later_floor(s) >= need
+
+    def _voiced_by_later_floor(self, s: _Session) -> int:
+        """Voiced frames judged against the lowest floor at or after each frame. Speech from the key press on (no room
+        noise first) sets the floor at the speech itself, so at the time nothing was 8 dB above it; the pause after
+        the word shows the room. Only a lower floor counts back: one that rises later (a fan turned on) never
+        lowers the evidence the frames already gave."""
+        n = min(len(s.levels), len(s.floors))  # the capture thread appends to both
+        if n == s.recount[0]:
+            return s.recount[1]
+        gate_db, voice = 20 * math.log10(self.config.speech_rms), s.meter.voice
+        floor, count = None, 0
+        for i in range(n - 1, -1, -1):
+            f = s.floors[i]
+            if f is not None and (floor is None or f < floor):
+                floor = f
+            rms = s.levels[i]
+            if floor is None or rms < self.config.speech_rms:
+                continue
+            if 20 * math.log10(rms) - floor >= voice or floor <= gate_db - QUIET_ROOM_DB:
+                count += 1
+        s.recount = (n, count)
+        return count
 
     def _speech_end(self, s: _Session, total: int) -> int:
         """Sample after the last loud frame plus a short pad: trailing silence is where whisper hallucinates."""

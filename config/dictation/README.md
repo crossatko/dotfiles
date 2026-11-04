@@ -184,7 +184,8 @@ Shell: `dictation begin cs`, `dictation end`, `dictation listen`.
   keypad codes typed escape sequences.
 - Silence (no 32 ms frame above RMS 0.005 in the window) is never sent to the recognizer (whisper hallucinates on
   silence). Nor is a session without clear speech: fewer than `min_voiced` (0.25 s) of voiced frames (at the speech
-  gate and 8 dB above the noise floor: breath, a key click or tap, room noise) runs no live and no final pass, types
+  gate and 8 dB above the noise floor, the lowest one at or after the frame, so a word from the key press on is
+  judged by the room noise after it: breath, a key click or tap, room noise) runs no live and no final pass, types
   nothing (no trailing space either) and ends with a normal `final` event with empty text. Whisper returns junk on such
   audio every time (measured: `.`, `Thank you.`, `Titulky vytvořil JohnyX.` on 3 s of silence or noise, 30 of 30
   tries). A pass whose text has no letter or digit (`.`, `...`, `♪`) is empty, and with less than `junk_voiced`

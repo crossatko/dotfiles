@@ -210,6 +210,16 @@ class ShortRealSpeechStillTyped(unittest.TestCase):
         d, rec, events = run(r, mix(speech(0.6, 0.05), white(0.6, 0.0005)), "cs")
         self.assertEqual(rec.screen(), "Ano. ")
 
+    def test_an_even_word_from_the_key_press_on_is_typed(self):
+        # shallow dips (a vowel-nasal word like "Ano"): the floor starts on the word itself and only the room noise
+        # after it shows the word was 8 dB over it
+        for room in (0.0005, 0.003):
+            word = [0.07 * (0.7 + 0.3 * math.sin(math.pi * i / 2400) ** 2) * math.sin(2 * math.pi * 150 * i / SAMPLE_RATE)
+                    for i in range(int(0.4 * SAMPLE_RATE))]
+            r = Scripted(["Ano."], final="Ano.")
+            d, rec, events = run(r, mix(overlay(word, white(0.4, room)), white(0.4, room, 4)), "cs")
+            self.assertEqual(rec.screen(), "Ano. ", room)
+
     def test_a_longer_session_types_live_and_final_as_before(self):
         r = Scripted(["a b c", "a b c d"], final="a b c d.")
         d, rec, events = run(r, mix(white(0.5, 0.0005), speech(4.0, 0.05), white(0.5, 0.0005)), "en")
