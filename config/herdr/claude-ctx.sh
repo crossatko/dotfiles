@@ -5,7 +5,7 @@
 [ -n "${HERDR_PANE_ID:-}" ] || { cat >/dev/null; exit 0; }
 pct=$(jq -r '.context_window.used_percentage // empty' 2>/dev/null) || exit 0
 [ -n "$pct" ] || exit 0
-val="$(printf '%.0f' "$pct")%"
+val="✻ $(printf '%.0f' "$pct")%"
 
 state=${XDG_RUNTIME_DIR:-/tmp}/herdr-claude-ctx
 mkdir -p "$state" 2>/dev/null
