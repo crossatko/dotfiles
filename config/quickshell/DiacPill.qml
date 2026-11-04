@@ -43,7 +43,7 @@ PanelWindow {
     onLiveTextChanged: if (svc === "working" || svc === "loading") shownText = liveText
 
     // while working the service streams the fixed words finished so far: DiacDots puts them in and flares their marks as they come
-    readonly property string livePartial: svc === "working" ? DiacClient.fixed : ""
+    readonly property string livePartial: svc === "working" ? DiacClient.partial : ""
 
     readonly property bool words: DiacPillPrefs.showText && shownText !== ""
 
