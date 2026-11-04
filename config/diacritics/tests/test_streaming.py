@@ -258,6 +258,47 @@ class Partials(unittest.TestCase):
         svc.set_partial("zzz")                                  # ignored outside working
         self.assertEqual(json.loads(svc.event())["fixed"], "á b č")
 
+    def subscribe(self, svc):
+        a, b = socket.socketpair()
+        a.sendall(b'{"op":"subscribe"}\n')
+        threading.Thread(target=svc.handle, args=(b,), daemon=True).start()
+        a.settimeout(3)
+        return a, a.makefile("rb")
+
+    def test_text_only_in_the_first_working_event_and_for_late_subscribers(self):
+        svc = Service("/nonexistent", load_prefs=lambda: prefs.Prefs())
+        early, ef = self.subscribe(svc)
+        self.assertEqual(json.loads(ef.readline())["state"], "idle")
+        svc.set_state("working", "a b c d")
+        svc.set_partial("á b")
+        svc.set_partial("á b č")
+        evs = [json.loads(ef.readline()) for _ in range(3)]
+        self.assertEqual(evs[0], {"event": "state", "state": "working", "text": "a b c d"})
+        self.assertEqual(evs[1], {"event": "state", "state": "working", "fixed": "á b"})
+        self.assertEqual(evs[2], {"event": "state", "state": "working", "fixed": "á b č"})
+        late, lf = self.subscribe(svc)
+        self.assertEqual(json.loads(lf.readline()),
+                         {"event": "state", "state": "working", "text": "a b c d", "fixed": "á b č"})
+        svc.set_state("done", fixed="á b č d")
+        self.assertEqual(json.loads(ef.readline()), {"event": "state", "state": "done", "fixed": "á b č d"})
+        early.close()
+        late.close()
+
+    def test_a_stalled_subscriber_does_not_block_the_fix(self):
+        svc = Service("/nonexistent", load_prefs=lambda: prefs.Prefs())
+        stuck, _ = self.subscribe(svc)                          # never reads
+        time.sleep(0.1)
+        svc.set_state("working", "x " * 10)
+        t0 = time.monotonic()
+        for i in range(3000):
+            svc.set_partial("y" * 2000 + f" {i}")
+        self.assertLess(time.monotonic() - t0, 1.0)
+        svc.set_state("done", fixed="z")                        # the other subscribers still get everything
+        ok, of = self.subscribe(svc)
+        self.assertEqual(json.loads(of.readline())["state"], "done")
+        stuck.close()
+        ok.close()
+
     def test_first_working_event_has_no_fixed(self):
         svc = Service("/nonexistent", load_prefs=lambda: prefs.Prefs())
         svc.set_state("working", "a b")
