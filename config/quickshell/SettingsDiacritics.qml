@@ -16,7 +16,7 @@ Item {
     implicitHeight: col.implicitHeight
 
     readonly property int titleW: 120
-    readonly property bool dragging: pill.dragging     // a slider drag: the Settings page must not scroll
+    readonly property bool dragging: pill.dragging || modelSec.dragging     // a slider drag: the Settings page must not scroll
 
     // the conflict check and the key's status read the Hyprland binds PttPrefs keeps fresh while a page watches them
     Component.onCompleted: { PttPrefs.watchers++; PttPrefs.refresh(); DiacriticsPrefs.refreshModels() }
@@ -29,7 +29,7 @@ Item {
 
         DiacriticsKeySection { titleWidth: pg.titleW }
         DiacriticsPillSection { id: pill; titleWidth: pg.titleW; Layout.topMargin: 6 }
-        DiacriticsModelSection { titleWidth: pg.titleW; Layout.topMargin: 6 }
+        DiacriticsModelSection { id: modelSec; titleWidth: pg.titleW; Layout.topMargin: 6 }
         DiacriticsIgnoredSection { titleWidth: pg.titleW; Layout.topMargin: 6 }
         DiacriticsCorrectionsSection { titleWidth: pg.titleW; Layout.topMargin: 6 }
 

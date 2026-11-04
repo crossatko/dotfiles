@@ -16,7 +16,8 @@ import "launcher/js/PillPos.js" as P
 //     "ignored_classes": ["kitty", "foot"], "show_text": true, "pill_edge": "bar", "pill_gap": 2, "pill_x": 0.5, "pill_screen": "" }
 //   key              Hyprland bind syntax (PttKeys.js); "" = no key (cleared on purpose); missing = the default key
 //   model            a file name in modelsDir (${XDG_DATA_HOME:-~/.local/share}/diacritics/models, QS_DIACRITICS_MODELS_DIR)
-//   idle_timeout_s   seconds without a run before the model is unloaded; 0 = never
+//   idle_timeout_s   seconds without a run before the model is unloaded; 0 = never, 1 = right after each run ("Immediately";
+//                    the Settings steps: launcher/js/IdleSteps.js, an off-step value shows as the nearest)
 //   ignored_classes  lower-case window classes where the key does nothing (matched case-insensitively); missing = defaults
 //   show_text        the pill shows the real words being fixed; false = a generic animation
 //   pill_edge / pill_gap / pill_x / pill_screen  where the pill sits (launcher/js/PillPos.js, PillPlacement; shell only). A file
@@ -67,9 +68,6 @@ Singleton {
     }, P.DEFAULTS)
     readonly property var spec: P.SPEC
     readonly property var pillKeys: P.KEYS
-    // idle unload choices (seconds); any other saved number is accepted and shown as Custom
-    readonly property var idleValues: [30, 60, 300, 600, 1800, 3600]
-    readonly property var idleLabels: ["30 sec", "1 min", "5 min", "10 min", "30 min", "1 hour"]
     readonly property var keys: ["key", "model", "idle_timeout_s", "ignored_classes", "show_text"].concat(P.KEYS)
     readonly property int maxClasses: 100
     readonly property int maxClassLen: 80

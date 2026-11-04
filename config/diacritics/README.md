@@ -45,7 +45,7 @@ prefs (`../quickshell/DiacriticsPrefs.qml`).
   finished reply (`finish_reason` must be `stop`, whitespace restored at the end), and the final text is the same as
   without streaming. The pill uses the partial words to flare the marks while the model works.
 - `llama-server` starts on the first fix (state loading), is restarted when it died or the model preference changed,
-  and is stopped after `idle_timeout_s` without a fix (0 or negative = never). Flags: `-ngl 99 -c 8192 --no-webui
+  and is stopped after `idle_timeout_s` without a fix (0 or negative = never; 0 < x <= 1 = right after each fix, Settings "Immediately" writes 1, `prefs.unload_due`). Flags: `-ngl 99 -c 8192 --no-webui
   --jinja --reasoning off -fa on`; request: temperature 0, top_k 1.
 - Fixes run one at a time; a second waits up to 30 s, then gets `busy`. Errors: `server` (no binary, model, crash,
   bad reply), `timeout` (startup 180 s, request 90 s), `empty`, `busy`, `toolong`, `truncated`.

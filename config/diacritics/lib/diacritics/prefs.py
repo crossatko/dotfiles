@@ -3,7 +3,8 @@
     {"key": "...", "model": "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf", "idle_timeout_s": 600, "ignored_classes": [...],
      "show_text": true, "cmd": "diacritics run"}
 
-The service uses model and idle_timeout_s (0 or negative = never unload), the key flow ignored_classes. A missing file, unreadable JSON or a value
+The service uses model and idle_timeout_s (0 or negative = never unload; 0 < x <= UNLOAD_AT_ONCE = right after each fix,
+Settings "Immediately"), the key flow ignored_classes. A missing file, unreadable JSON or a value
 of the wrong type leaves that key at its default; nothing here raises.
 """
 from __future__ import annotations
@@ -15,6 +16,17 @@ from dataclasses import dataclass
 from . import paths
 
 DEFAULT_MODEL = "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf"
+
+# idle_timeout_s at or below this (and above 0) = unload as soon as a fix is over (Settings "Immediately" writes 1: a reader
+# without this rule unloads one second after the fix, the same in practice)
+UNLOAD_AT_ONCE = 1.0
+
+
+def unload_due(idle_timeout_s: float, idle_for: float) -> bool:
+    """True when the model should go now: idle_for = seconds since the last fix ended."""
+    if idle_timeout_s <= 0:
+        return False
+    return idle_timeout_s <= UNLOAD_AT_ONCE or idle_for >= idle_timeout_s
 
 # Window classes where the key does nothing (terminals: Ctrl+C there is SIGINT). THE Python-side default, used when the
 # file is missing or has no list. It must equal `defaults.ignored_classes` in config/quickshell/DiacriticsPrefs.qml (the

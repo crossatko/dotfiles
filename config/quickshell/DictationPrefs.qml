@@ -16,7 +16,8 @@ import "launcher/js/PillPos.js" as P
 //   mic             PipeWire / PulseAudio source name (node.name); "" = follow the system default source
 //   gpu             use the GPU (Vulkan); false = CPU
 //   gpu_device      which GPU (index of `dictation-whisper --list-devices`, GpuDevices.qml); 0 = the first. Only used with gpu
-//   idle_timeout_s  seconds without dictation before the model is unloaded; 0 = never
+//   idle_timeout_s  seconds without dictation before the model is unloaded; 0 = never, 1 = right after each dictation
+//                   ("Immediately"; the Settings steps: launcher/js/IdleSteps.js, an off-step value shows as the nearest)
 //   prompt_hints    use the replacement words as recognition hints (transcribe only, never when translating).
 //                   THE source of truth for hints: DictationWords mirrors it into dictation-words.json ("hints").
 //   pill_edge / pill_gap / pill_x / pill_screen  where the pill sits (launcher/js/PillPos.js, PillPlacement); the service ignores them
@@ -39,9 +40,6 @@ Singleton {
     readonly property var keys: ["mic", "gpu", "gpu_device", "idle_timeout_s", "prompt_hints"].concat(P.KEYS)
     readonly property var spec: P.SPEC
     readonly property var pillKeys: P.KEYS
-    // idle timeout choices (seconds; 0 = never)
-    readonly property var idleValues: [60, 300, 600, 1800, 0]
-    readonly property var idleLabels: ["1 min", "5 min", "10 min", "30 min", "Never"]
 
     property string mic: defaults.mic
     property bool gpu: defaults.gpu

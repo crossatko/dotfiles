@@ -12,6 +12,7 @@ import QtQuick.Layouts
 ColumnLayout {
     id: sec
     property int titleWidth: 120
+    readonly property bool dragging: idle.dragging      // the idle slider: the page must not scroll
 
     Layout.fillWidth: true
     spacing: Theme.gapRow
@@ -40,7 +41,7 @@ ColumnLayout {
         title: "Final pass"; titleWidth: sec.titleWidth; role: "final"
         info: "The corrected text after you release the key, and Czech to English translation. Only models that can translate."
     }
-    IdleUnloadRow { objectName: "dict-idle"; titleWidth: sec.titleWidth; store: DictationPrefs; use: "dictation"; extra: "Never keeps it loaded." }
+    IdleUnloadRow { id: idle; objectName: "dict-idle"; titleWidth: sec.titleWidth; store: DictationPrefs; use: "dictation" }
     Label {
         objectName: "role-notice"
         visible: SttModels.notice !== ""

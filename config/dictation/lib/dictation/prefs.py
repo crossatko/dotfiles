@@ -6,7 +6,8 @@
 
 mic          PipeWire source name to record from, "" = the system default source
 gpu          false = the whisper worker runs on the CPU only (slow); true = GPU or an error, never a silent fallback
-idle_timeout_s  seconds without a session before both models are unloaded; 0 or negative = never
+idle_timeout_s  seconds without a session before both models are unloaded; 0 or negative = never; 0 < x <= UNLOAD_AT_ONCE
+             = right after each session (Settings "Immediately" writes 1; an older reader unloads 1 s later, the same in practice)
 gpu_device   which GPU the worker uses when gpu is true: the index of `dictation-whisper --list-devices` (0 = the first,
              the default; a negative number is 0, anything that is not a whole number is 0); an index that does not
              exist is a `gpu-failed` error
@@ -29,6 +30,17 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+
+
+# idle_timeout_s at or below this (and above 0) = unload as soon as a session is over (see idle_timeout_s above)
+UNLOAD_AT_ONCE = 1.0
+
+
+def unload_due(idle_timeout_s: float, idle_for: float) -> bool:
+    """True when the models should go now: idle_for = seconds since the last session ended."""
+    if idle_timeout_s <= 0:
+        return False
+    return idle_timeout_s <= UNLOAD_AT_ONCE or idle_for >= idle_timeout_s
 
 
 @dataclass(frozen=True)
