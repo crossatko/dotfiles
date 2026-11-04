@@ -13,6 +13,7 @@ Diacritics) are Quickshell code and talk to the service over its socket and the 
 | `lib/diacritics/service.py` | unix socket service: ops `fix`, `state`, `subscribe`, `status`; state machine; idle reaper; whitespace handling (`restore_whitespace`, `keep_spacing`) |
 | `lib/diacritics/llama.py` | `llama-server` child (free port, health wait, stop), the streamed chat completions request, input size limit, `finish_reason` check |
 | `lib/diacritics/htmlmode.py` | HTML fragments: strip the clipboard wrapper, detect real markup, same-tags check, plain text of a fragment |
+| `lib/diacritics/words.py` | user Corrections: reads the words file, relevance matching, prompt hints, the `always` replacement of the reply |
 | `lib/diacritics/client.py` | socket client (timeouts); starts `diacritics.service` when nothing listens |
 | `lib/diacritics/paths.py` | runtime/state locations and the environment names of the Python side |
 | `lib/diacritics/prefs.py` | reads the Settings file (model, idle timeout, ignored window classes and their default list) |
@@ -57,6 +58,31 @@ prefs (`../quickshell/DiacriticsPrefs.qml`).
 - Prefs `~/.local/state/quickshell/diacritics.json` (written by Settings, read at every request): `model` (file name in
   the models dir, default `gemma-4-12B-it-qat-UD-Q4_K_XL.gguf`), `idle_timeout_s` (default 600), `ignored_classes`.
 
+## Corrections (words file)
+
+Settings writes `~/.local/state/quickshell/diacritics-words.json` (`${XDG_STATE_HOME}` honoured, override `DIACRITICS_WORDS_FILE`),
+the service reads it at every request (cached by mtime, size and inode):
+`{"entries":[{"typed":"uzdraveni","correct":"uzdravení","always":false}]}`. `typed` is what the user types (no marks), `correct`
+the wanted form; each is a word or a short phrase. A missing or malformed file, or a bad entry, means no entries, never an error.
+
+- Valid entry: both fields non-empty after trimming, at most 80 characters, no control characters (newline, tab), `typed` holds a
+  letter or digit; anything else is dropped (not truncated: a cut `correct` would be wrong). Only the first 500 entries are read.
+- Relevant: `typed` occurs in the input as whole words, ignoring case and diacritics on both sides (`uzdraveni` matches
+  `Uzdraveni` and `UZDRAVENÍ`, not `uzdravenimi`); a phrase matches with any whitespace between its words, punctuation inside
+  `typed` must match. In HTML the plain text of the fragment is searched.
+- Prompt: the relevant entries (file order, at most 30) are appended to the system prompt as a block `Known spellings of this
+  user. ...` with one line `typed -> correct` each (plain and HTML prompt alike; the tags stay the model's business as before).
+  With no relevant entry the prompt is byte-identical to the plain `prompt.txt` / `prompt-html.txt`; irrelevant entries never reach it.
+- `always`: after the model (and the spacing restore), every relevant `always` entry is applied to the reply: whole words, case and
+  diacritics ignored, both for the `typed` form and for the `correct` form in another case or with wrong marks, replaced by
+  `correct`. Capital carry-over: the replaced word ALL CAPS gives ALL CAPS, Capitalized gives a capital first letter, else `correct`
+  as stored; a `correct` with a capital after its first letter (iOS) is never changed. Whitespace and everything else stay byte
+  for byte; applying twice changes nothing. The leftmost, then longest match wins. The streamed partial events are not changed; the
+  final text and the done `fixed` contain the replacement (the word count may differ from the input).
+- HTML: only text between tags is replaced, one run at a time: never a tag, attribute, comment, `<script>`/`<style>` or character
+  reference; a phrase does not span a tag or entity, a word next to a letter reference (`&eacute;`) is not whole.
+- Corrections text is never logged.
+
 ## Key flow (`diacritics run`)
 
 1. The focused window (`hyprctl`). A class in `ignored_classes` (terminals, matched case-insensitively) shows "unsupported"
@@ -90,7 +116,7 @@ prefs (`../quickshell/DiacriticsPrefs.qml`).
    service sets `LD_LIBRARY_PATH` to that directory).
 2. GGUF models in `~/.local/share/diacritics/models/` (Gemma 4 E2B, E4B, 12B), never in the repo.
 3. Dependencies: `wl-clipboard` (`wl-copy`, `wl-paste`) and `wtype` (the fallback only) for the key flow.
-4. Environment overrides (tests): `DIACRITICS_SOCK`, `DIACRITICS_PREFS_FILE` (the only names of the Python side, see
+4. Environment overrides (tests): `DIACRITICS_SOCK`, `DIACRITICS_PREFS_FILE`, `DIACRITICS_WORDS_FILE` (the only names of the Python side, see
    `paths.py`), `DIACRITICS_BIN_DIR`, `DIACRITICS_MODEL_DIR`, `DIACRITICS_PROMPT`, `DIACRITICS_PROMPT_HTML`. With
    `DIACRITICS_SOCK` set the CLI never starts the user unit. The Quickshell side reads `QS_DIACRITICS_SOCKET` and
    `QS_DIACRITICS_FILE`; a test of both sides sets both.
