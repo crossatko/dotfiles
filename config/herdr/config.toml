@@ -15,6 +15,8 @@ edit_scrollback = "prefix+shift+e"
 open_notification_target = "prefix+shift+o"
 next_workspace = ["prefix+j", "alt+j"]
 previous_workspace = ["prefix+k", "alt+k"]
+next_agent = "alt+shift+j"
+previous_agent = "alt+shift+k"
 # pane up/down move to the arrow keys (j/k now switch workspaces)
 focus_pane_down = ["prefix+down", "ctrl+alt+j"]
 focus_pane_up = ["prefix+up", "ctrl+alt+k"]
@@ -45,6 +47,19 @@ description = "open file from agent output"
 
 [ui]
 prompt_new_tab_name = false
+tab_bar_position = "bottom"
+
+[ui.sidebar.agents]
+rows = [
+  ["state_icon", { token = "machine", rules = [{ equals = "local", ignore_case = true, hide = true }] }, "workspace", "tab"],
+  ["agent"],
+]
+
+[ui.sidebar.agents.rows_by_agent]
+claude = [
+  ["state_icon", { token = "terminal_title_stripped", fg = "#bbb9d5", bold = false, dim = false }],
+  [{ token = "machine", bold = false, dim = true, rules = [{ equals = "local", ignore_case = true, hide = true }] }, { token = "workspace", bold = false, dim = true }, { token = "$ctx", fg = "#676575", bold = false, dim = true }],
+]
 
 # >>> theme (generated, do not edit) >>>
 [theme]
