@@ -11,6 +11,7 @@ Root-owned files that live outside `$HOME`. Copy each to the listed path (as roo
 | `systemd/system/mullvad-tailscale.service` | `/etc/systemd/system/` | Loads `coexist.nft` (machines running both Mullvad and Tailscale). |
 | `pam.d/quickshell-lock` | `/etc/pam.d/` | Password check of the Quickshell lock screen (`config/quickshell/Lock.qml`): `pam_unix` + `pam_faillock` (10 failures = 2 min lockout). Without it `bin/lock-now` falls back to hyprlock. |
 | `systemd/logind.conf.d/inhibit-delay.conf` | `/etc/systemd/logind.conf.d/` | Raises `InhibitDelayMaxSec` so the TV-standby sleep inhibitor (`gamescope-sleep-signal-listener.sh`) has time to finish (TV/gamescope machine). |
+| `keyd/default.conf` | `/etc/keyd/` | Logitech PRO X 2 side buttons: tap = back / forward, hold (250 ms) = F16 / F17 (needs `keyd`; reload with `sudo keyd reload`). |
 | `systemd/system/getty@tty1.service.d/autologin.conf` | `/etc/systemd/system/getty@tty1.service.d/` | tty1 autologin; `session-supervisor.sh` runs from the login shell. Set the username to your own. |
 
 After udev changes: `sudo udevadm control --reload-rules && sudo udevadm trigger`. After systemd changes: `sudo systemctl daemon-reload`.

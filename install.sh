@@ -1147,7 +1147,7 @@ enable_unit() {
 
 stage_system() {
   log "Stage system (sudo)"
-  local udev_changed=0 units_changed=0 f dest tmp
+  local udev_changed=0 units_changed=0 keyd_changed=0 f dest tmp
 
   for f in 50-vial 61-corne-nojoystick 62-corne-via; do
     sudo_install "$SYS_DIR/udev/rules.d/$f.rules" "/etc/udev/rules.d/$f.rules" && udev_changed=1
@@ -1160,6 +1160,13 @@ stage_system() {
   tmp="$(mktmp)/autologin.conf"
   sed "s|--autologin [^ ]*|--autologin $USER|" "$SYS_DIR/systemd/system/getty@tty1.service.d/autologin.conf" >"$tmp"
   sudo_install "$tmp" "/etc/systemd/system/getty@tty1.service.d/autologin.conf" && units_changed=1
+
+  # mouse side buttons: tap = back / forward, hold = F16 / F17 (keyd, system/etc/keyd/default.conf)
+  if command -v keyd >/dev/null 2>&1; then
+    sudo_install "$SYS_DIR/keyd/default.conf" /etc/keyd/default.conf && keyd_changed=1
+  else
+    echo "    (keyd not installed: skipping mouse button config)"
+  fi
 
   local mt=0
   if command -v mullvad >/dev/null 2>&1 && command -v tailscale >/dev/null 2>&1; then
@@ -1191,6 +1198,10 @@ stage_system() {
     enable_unit "$u"
   done
   [ "$mt" = 1 ] && enable_unit mullvad-tailscale
+  if command -v keyd >/dev/null 2>&1; then
+    enable_unit keyd
+    if [ "$keyd_changed" = 1 ] && [ "$DRY" != 1 ]; then sudo keyd reload; fi
+  fi
   if systemctl list-unit-files mullvad-daemon.service 2>/dev/null | grep -q '^mullvad-daemon.service'; then
     enable_unit mullvad-daemon
   fi
