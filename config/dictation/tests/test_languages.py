@@ -141,6 +141,16 @@ class Auto(unittest.TestCase):
         self.run_session(r, ("cs", "de"), passes=2)
         self.assertEqual({c[1] for c in r.calls}, {"de"}, "the most probable among the selected languages")
 
+    def test_the_detection_is_logged_with_the_top_probabilities(self):
+        import contextlib, io
+        r = Detecting([{"en": 0.5, "ja": 0.3, "cs": 0.1, "de": 0.05, "fr": 0.05}], ["a b c"], final="a b c.")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.run_session(r, ("cs", "en", "ja"), passes=2)
+        line = err.getvalue().strip()
+        self.assertEqual(line.count("\n"), 0, "one line per session")
+        self.assertIn("language en (detected), allowed cs,en,ja, top en 0.50, ja 0.30, cs 0.10, de 0.05", line)
+
     def test_no_selection_means_any_language(self):
         r = Detecting([{"ja": 0.7, "de": 0.2}], ["a b c"], final="a b c.")
         self.run_session(r, (), passes=2)

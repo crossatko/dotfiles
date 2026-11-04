@@ -28,6 +28,7 @@ import json
 import math
 import os
 import re
+import sys
 import threading
 import unicodedata
 from dataclasses import dataclass
@@ -681,6 +682,11 @@ class Dictation:
         if not s.mode.translate:  # translating: the cleanup works on the English text, as from the start
             s.text_language = s.language
             s.prompt = self.cleanup.begin(s.language, False)
+        top = dict(sorted(probs.items(), key=lambda kv: -kv[1])[:4])
+        # one journal line per session: what the detector heard (a wrong pick shows as the true language low in it)
+        print(f"dictation: language {s.language} ({'detected' if best else 'fallback'}), allowed "
+              f"{','.join(s.allowed) or 'any'}, top {', '.join(f'{c} {p:.2f}' for c, p in top.items()) or 'none'}, "
+              f"audio {len(audio) / 4 / SAMPLE_RATE:.1f}s, slot {slot}", file=sys.stderr, flush=True)
         if self._s is s:  # not when the session was cancelled meanwhile
             self.emit({"event": "language", "language": s.language, "detected": best is not None})
 
