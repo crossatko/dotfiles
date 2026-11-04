@@ -10,6 +10,7 @@ ShellRoot {
     readonly property var bars: BarConfig.bars
     Binding { target: Popups; property: "bars"; value: root.bars }
     readonly property var weatherBlur: WeatherBlur   // Weather blur (Settings > Weather): writes the state the compositor reads
+    readonly property var diacriticsPrefs: DiacriticsPrefs   // the diacritics key (Settings > Diacritics): written to Hyprland from the start
     readonly property var pttShortcuts: PttShortcuts   // push-to-talk global shortcuts (Settings > Voice): registered from the start
     readonly property var tvCast: TvCast     // Send to TV: its `tvcast` IPC target exists from the start (idle until used)
 

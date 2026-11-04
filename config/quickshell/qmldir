@@ -245,3 +245,8 @@ singleton SttModels 1.0 SttModels.qml
 SttModelRow 1.0 SttModelRow.qml
 SttModelsSection 1.0 SttModelsSection.qml
 SttRoleRow 1.0 SttRoleRow.qml
+singleton DiacriticsPrefs 1.0 DiacriticsPrefs.qml
+DiacriticsKeySection 1.0 DiacriticsKeySection.qml
+DiacriticsModelSection 1.0 DiacriticsModelSection.qml
+DiacriticsIgnoredSection 1.0 DiacriticsIgnoredSection.qml
+DiacriticsPillSection 1.0 DiacriticsPillSection.qml

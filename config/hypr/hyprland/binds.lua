@@ -149,3 +149,9 @@ local ptt_ok, ptt_err = pcall(require, "hyprland.ptt")
 if not ptt_ok then
 	print("ptt.lua: " .. tostring(ptt_err))
 end
+
+-- the "fix Czech diacritics" key chosen in Settings > Diacritics (hyprland/diacritics.lua binds it from a state file; optional too)
+local diacritics_ok, diacritics_err = pcall(require, "hyprland.diacritics")
+if not diacritics_ok then
+	print("diacritics.lua: " .. tostring(diacritics_err))
+end

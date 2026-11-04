@@ -2,13 +2,16 @@ import QtQuick
 import QtQuick.Layouts
 import "launcher/js/PttKeys.js" as K
 
-// One push-to-talk key of Settings > Voice (PttPrefs entry `entry`): the key field (type or press a key / mouse
+// One key row of Settings (a PttPrefs entry `entry`; another key store with the same interface via `store`, e.g.
+// DiacriticsPrefs: keysOf / check / setKeys / applyError / loaded / bound / registered / appid; `held` for a hold key).
+// The row: the key field (type or press a key / mouse
 // button), Apply, Clear and the key's status. A changed key is checked before it is applied: not a key / the same as
 // another push-to-talk key (red, Apply refused), used by another bind or another app's global shortcut (orange,
 // "Apply anyway"). Applied keys show Active (or Held while pressed), or why they do not work.
 SettingRow {
     id: row
     required property var entry
+    property var store: PttPrefs
     property real fieldW: 170
     property real ctrlH: 26
     property real ctrlInset: 9
@@ -16,12 +19,12 @@ SettingRow {
 
     title: entry.label
     titleWrap: true                    // "Haitian Creole → English" wraps in the title column
-    readonly property string saved: PttPrefs.keysOf(entry.name)
-    readonly property var check: PttPrefs.check(entry.name, field.text)
+    readonly property string saved: row.store.keysOf(entry.name)
+    readonly property var check: row.store.check(entry.name, field.text)
     readonly property bool pending: field.text.trim() !== "" && check.keys !== saved
     readonly property bool blocked: check.error !== "" || check.duplicate !== ""
-    readonly property var savedConflicts: saved !== "" ? PttPrefs.check(entry.name, saved).conflicts : []
-    readonly property bool held: PttShortcuts.isHeld(entry.name)
+    readonly property var savedConflicts: saved !== "" ? row.store.check(entry.name, saved).conflicts : []
+    property bool held: PttShortcuts.isHeld(entry.name)
 
     // [text, colour, glyph, tooltip]
     readonly property var status: {
@@ -35,14 +38,14 @@ SettingRow {
         }
         if (saved === "") return ["Not set", Theme.muted, "", ""]
         if (held) return ["Held", Theme.accent, Icons.mic, ""]
-        if (PttPrefs.applyError !== "") return ["Not applied", Theme.red, Icons.error, PttPrefs.applyError]
-        if (PttPrefs.loaded && !PttPrefs.bound(entry.name)) return ["Not bound", Theme.red, Icons.error, "Hyprland has no bind for this key (config not loaded?)."]
-        if (PttPrefs.loaded && !PttPrefs.registered(entry.name)) return ["Not registered", Theme.orange, Icons.warning, "The shell's global shortcut " + PttPrefs.appid + ":" + entry.name + " is not registered."]
+        if (row.store.applyError !== "") return ["Not applied", Theme.red, Icons.error, row.store.applyError]
+        if (row.store.loaded && !row.store.bound(entry.name)) return ["Not bound", Theme.red, Icons.error, "Hyprland has no bind for this key (config not loaded?)."]
+        if (row.store.loaded && !row.store.registered(entry.name)) return ["Not registered", Theme.orange, Icons.warning, "The shell's global shortcut " + row.store.appid + ":" + entry.name + " is not registered."]
         if (savedConflicts.length) return ["Active, also: " + list(savedConflicts), Theme.orange, Icons.warning, "Used by: " + list(savedConflicts)]
         return [K.isMouse(saved) ? "Active · " + K.label(saved) : "Active", Theme.fgDim, Icons.check, ""]
     }
 
-    function apply() { if (pending && !blocked && PttPrefs.setKeys(entry.name, field.text)) field.text = PttPrefs.keysOf(entry.name) }
+    function apply() { if (pending && !blocked && row.store.setKeys(entry.name, field.text)) field.text = row.store.keysOf(entry.name) }
     function sync() { field.text = saved }
     Component.onCompleted: sync()
     onSavedChanged: sync()
@@ -73,7 +76,7 @@ SettingRow {
         implicitHeight: row.ctrlH
         minWidth: row.ctrlH
         enabledLook: row.saved !== "" || field.text !== ""
-        onClicked: { field.text = ""; PttPrefs.setKeys(row.entry.name, "") }
+        onClicked: { field.text = ""; row.store.setKeys(row.entry.name, "") }
     }
     Icon {
         visible: row.status[2] !== ""
