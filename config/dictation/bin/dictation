@@ -13,7 +13,7 @@
 Models: --live / --final, else the shell's choice in DICTATION_MODELS_FILE (default
 ${XDG_STATE_HOME:-~/.local/state}/quickshell/stt-models.json, written by Settings > Voice), else large-v3-turbo /
 large-v3. A chosen model that is not installed is an error (code no-model), never replaced by another one.
-Voice preferences (mic, gpu, idle_timeout_s) come from DICTATION_PREFS_FILE (default
+Voice preferences (mic, gpu, gpu_device, idle_timeout_s) come from DICTATION_PREFS_FILE (default
 ${XDG_STATE_HOME:-~/.local/state}/quickshell/dictation-prefs.json, written by Settings > Voice), read at every begin.
 The models load on the first begin and are unloaded after idle_timeout_s without a session.
 
@@ -51,12 +51,20 @@ def use_gpu(args):
     return not args.no_gpu and prefs.load().gpu
 
 
+def gpu_device():
+    """Which GPU (Settings > Voice: prefs gpu_device, an index of `dictation-whisper --list-devices`); read at every begin."""
+    return prefs.load().gpu_device
+
+
 def recognizer(args):
     models = whisper.model_paths(chosen(args))
     gpu = use_gpu(args)
-    # a live pass that takes 20 s on the GPU is a hung worker; on the CPU passes are much slower
-    return whisper.WhisperRecognizer(models, gpu=gpu, final_beam=args.final_beam, verbose=args.verbose,
-                                     timeout=20.0 if gpu else 90.0)
+    device = gpu_device()
+    # a live pass that takes 20 s on the GPU is a hung worker; on the CPU passes are much slower, and so are the
+    # slower GPUs one can pick for testing (an integrated one needs 6-10 s a pass)
+    timeout = 90.0 if not gpu else 60.0 if device else 20.0
+    return whisper.WhisperRecognizer(models, gpu=gpu, gpu_device=device, final_beam=args.final_beam,
+                                     verbose=args.verbose, timeout=timeout)
 
 
 def audio_files(specs):
@@ -97,7 +105,7 @@ def cmd_serve(args):
 
     svc = Service(args.socket, lambda: recognizer(args), DryRun() if args.dry_run else WtypeInjector(),
                   hyprland_focus, capture, cleanup=Cleanup(), config=Config(max_window=args.max_window),
-                  models_key=lambda: (tuple(sorted(chosen(args).items())), use_gpu(args)), prefs=prefs.load)
+                  models_key=lambda: (tuple(sorted(chosen(args).items())), use_gpu(args), gpu_device()), prefs=prefs.load)
     asyncio.run(svc.serve())
 
 

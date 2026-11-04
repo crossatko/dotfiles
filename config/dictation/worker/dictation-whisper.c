@@ -2,7 +2,13 @@
 //
 // Started by the dictation service (config/dictation/lib/dictation/whisper.py), never by hand except for debugging.
 //
-//   dictation-whisper --model live=PATH --model final=PATH [--no-gpu] [--threads N] [--verbose]
+//   dictation-whisper --model live=PATH --model final=PATH [--no-gpu] [--gpu-device N] [--threads N] [--verbose]
+//   dictation-whisper --list-devices
+//
+// --gpu-device N picks the N-th GPU (0 = the first, the default; the order --list-devices prints). An index that does
+// not exist is the same GPU error as a failed Vulkan init (never another device or the CPU). --list-devices prints one
+// JSON line per GPU {"index":N,"name":"...","type":"discrete"|"integrated","free_mb":N,"total_mb":N} and exits 0
+// (no GPU backend = no lines); a worker that predates it answers {"error":"unknown argument"} and exits 2.
 //
 // Startup: every model is loaded, then one JSON line is printed: {"ready":true,"slots":["live","final"],"load_ms":N}
 // (or {"error":"..."} and exit 2). Without --no-gpu a missing or unusable GPU backend (Vulkan init failed) is an error
@@ -64,6 +70,35 @@ static void json_str(FILE *out, const char *s) {
     fputc('"', out);
 }
 
+// GPUs in the order whisper.cpp's gpu_device indexes them: devices of type GPU or IGPU, counted in backend order.
+static int gpu_count(void) {
+    int n = 0;
+    for (size_t i = 0; i < ggml_backend_dev_count(); i++) {
+        enum ggml_backend_dev_type t = ggml_backend_dev_type(ggml_backend_dev_get(i));
+        if (t == GGML_BACKEND_DEVICE_TYPE_GPU || t == GGML_BACKEND_DEVICE_TYPE_IGPU) n++;
+    }
+    return n;
+}
+
+static int list_devices(void) {
+    whisper_log_set(log_cb, NULL);
+    ggml_backend_load_all();
+    int index = 0;
+    for (size_t i = 0; i < ggml_backend_dev_count(); i++) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+        enum ggml_backend_dev_type t = ggml_backend_dev_type(dev);
+        if (t != GGML_BACKEND_DEVICE_TYPE_GPU && t != GGML_BACKEND_DEVICE_TYPE_IGPU) continue;
+        size_t free_b = 0, total_b = 0;
+        ggml_backend_dev_memory(dev, &free_b, &total_b);
+        printf("{\"index\":%d,\"name\":", index++);
+        json_str(stdout, ggml_backend_dev_description(dev));
+        printf(",\"type\":\"%s\",\"free_mb\":%zu,\"total_mb\":%zu}\n",
+               t == GGML_BACKEND_DEVICE_TYPE_IGPU ? "integrated" : "discrete", free_b >> 20, total_b >> 20);
+    }
+    fflush(stdout);
+    return 0;
+}
+
 static void reply_error(const char *id, const char *msg) {
     printf("{\"id\":");
     json_str(stdout, id);
@@ -76,7 +111,7 @@ static void reply_error(const char *id, const char *msg) {
 int main(int argc, char **argv) {
     struct slot slots[MAX_SLOTS];
     const char *paths[MAX_SLOTS];
-    int n_slots = 0, use_gpu = 1, threads = 4;
+    int n_slots = 0, use_gpu = 1, threads = 4, gpu_device = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--model") && i + 1 < argc) {
@@ -91,6 +126,16 @@ int main(int argc, char **argv) {
             paths[n_slots++] = eq + 1;
         } else if (!strcmp(argv[i], "--no-gpu")) {
             use_gpu = 0;
+        } else if (!strcmp(argv[i], "--list-devices")) {
+            return list_devices();
+        } else if (!strcmp(argv[i], "--gpu-device") && i + 1 < argc) {
+            char *end = NULL;
+            long d = strtol(argv[++i], &end, 10);
+            if (!*argv[i] || *end || d < 0 || d > 1000) {
+                printf("{\"error\":\"bad --gpu-device argument, want an index 0 or more\",\"code\":\"gpu\"}\n");
+                return 4;
+            }
+            gpu_device = (int)d;
         } else if (!strcmp(argv[i], "--threads") && i + 1 < argc) {
             threads = atoi(argv[++i]);
             if (threads < 1) threads = 1;
@@ -109,13 +154,17 @@ int main(int argc, char **argv) {
     whisper_log_set(log_cb, NULL);
     if (use_gpu) {
         ggml_backend_load_all();
-        int gpus = 0;
-        for (size_t i = 0; i < ggml_backend_dev_count(); i++) {
-            enum ggml_backend_dev_type t = ggml_backend_dev_type(ggml_backend_dev_get(i));
-            if (t == GGML_BACKEND_DEVICE_TYPE_GPU || t == GGML_BACKEND_DEVICE_TYPE_IGPU) gpus++;
-        }
+        int gpus = gpu_count();
         if (!gpus) {
             printf("{\"error\":\"no GPU backend available (Vulkan initialisation failed)\",\"code\":\"gpu\"}\n");
+            return 4;
+        }
+        if (gpu_device >= gpus) {
+            char msg[200];
+            snprintf(msg, sizeof msg, "GPU device %d does not exist (%d found)", gpu_device, gpus);
+            printf("{\"error\":");
+            json_str(stdout, msg);
+            printf(",\"code\":\"gpu\"}\n");
             return 4;
         }
     }
@@ -123,6 +172,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < n_slots; i++) {
         struct whisper_context_params cp = whisper_context_default_params();
         cp.use_gpu = use_gpu;
+        cp.gpu_device = gpu_device;
         slots[i].ctx = whisper_init_from_file_with_params(paths[i], cp);
         if (!slots[i].ctx) {
             printf("{\"error\":");

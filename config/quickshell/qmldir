@@ -222,6 +222,8 @@ DictationController 1.0 DictationController.qml
 singleton DictationClient 1.0 DictationClient.qml
 singleton DictationStatus 1.0 DictationStatus.qml
 singleton DictationPrefs 1.0 DictationPrefs.qml
+singleton GpuDevices 1.0 GpuDevices.qml
+GpuDeviceRow 1.0 GpuDeviceRow.qml
 singleton DictationWords 1.0 DictationWords.qml
 DictationPrefsSection 1.0 DictationPrefsSection.qml
 FillerWordsSection 1.0 FillerWordsSection.qml

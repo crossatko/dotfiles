@@ -1,11 +1,15 @@
 """Voice preferences from the shell (Settings > Voice writes them): the service re-reads the file at every `begin`.
 
     {"version": 1, "mic": "", "gpu": true, "idle_timeout_s": 600, "prompt_hints": false, "pause_silence_s": 1.0,
-     "trailing_space": true}
+     "trailing_space": true, "gpu_device": 0, "pill_bottom": false}
 
 mic          PipeWire source name to record from, "" = the system default source
 gpu          false = the whisper worker runs on the CPU only (slow); true = GPU or an error, never a silent fallback
 idle_timeout_s  seconds without a session before both models are unloaded; 0 or negative = never
+gpu_device   which GPU the worker uses when gpu is true: the index of `dictation-whisper --list-devices` (0 = the first,
+             the default; a negative number is 0, anything that is not a whole number is 0); an index that does not
+             exist is a `gpu-failed` error
+pill_bottom  read by the shell only (the pill sits at the bottom edge even with a top bar), ignored here
 prompt_hints read by the cleanup module, not here
 pause_silence_s  seconds of silence after speech that type the words still waiting (the last word); 0 = only on
              release; no UI, the engine default (engine.PAUSE_SILENCE) when missing; clamped to 0.3..10
@@ -29,6 +33,7 @@ class Prefs:
     prompt_hints: bool = False
     pause_silence_s: float | None = None  # None = the engine's default
     trailing_space: bool = True
+    gpu_device: int = 0
 
 
 def prefs_file() -> str:
@@ -61,6 +66,12 @@ def load(path: str | None = None) -> Prefs:
     else:
         pause = 0.0
     space = saved.get("trailing_space", d.trailing_space)
+    device = saved.get("gpu_device", d.gpu_device)
+    if isinstance(device, float) and device == device and abs(device) != float("inf") and device == int(device):
+        device = int(device)  # 1.0 from a JSON writer that does not distinguish integers
+    if isinstance(device, bool) or not isinstance(device, int):
+        device = d.gpu_device
+    device = min(1000, max(0, device))  # negative = the first GPU
     return Prefs(mic.strip(), gpu if isinstance(gpu, bool) else d.gpu, float(idle),
                  hints if isinstance(hints, bool) else d.prompt_hints, pause,
-                 space if isinstance(space, bool) else d.trailing_space)
+                 space if isinstance(space, bool) else d.trailing_space, device)

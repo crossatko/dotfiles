@@ -102,7 +102,7 @@ def worker_path() -> str:
 class WhisperRecognizer:
     """transcribe(audio, slot=..., language=..., translate=...) for slots "live" (greedy) and "final" (beam search)."""
 
-    def __init__(self, models: dict, *, worker: str | None = None, gpu: bool = True, threads: int = 4,
+    def __init__(self, models: dict, *, worker: str | None = None, gpu: bool = True, gpu_device: int = 0, threads: int = 4,
                  final_beam: int = 5, verbose: bool = False, timeout: float = 60.0, load_timeout: float = 120.0):
         # timeout: seconds per request, plus one per second of audio
         for slot, path in models.items():
@@ -117,6 +117,8 @@ class WhisperRecognizer:
         argv += ["--threads", str(threads)]
         if not gpu:
             argv.append("--no-gpu")
+        elif gpu_device:
+            argv += ["--gpu-device", str(int(gpu_device))]  # 0 is the worker's default (an old worker never sees the flag)
         if verbose:
             argv.append("--verbose")
         self.final_beam = final_beam
@@ -135,7 +137,10 @@ class WhisperRecognizer:
         if not ready.get("ready"):
             self.close()
             failure = GpuFailed if ready.get("code") == "gpu" else WorkerFailed
-            raise failure(ready.get("error", "worker did not start"))
+            message = ready.get("error", "worker did not start")
+            if gpu_device and gpu and message == "unknown argument":  # a worker built before --gpu-device
+                failure, message = GpuFailed, "this worker cannot choose a GPU: rebuild it with config/dictation/worker/build.sh"
+            raise failure(message)
         self.load_ms = ready.get("load_ms")
 
     @property

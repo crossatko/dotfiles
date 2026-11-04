@@ -460,6 +460,16 @@ class Prefs(unittest.TestCase):
         self.assertEqual(self.write('{"idle_timeout_s": 0}').idle_timeout_s, 0.0)
         self.assertEqual(self.write('{"idle_timeout_s": -1}').idle_timeout_s, -1.0)
 
+    def test_gpu_device_and_the_shell_only_pill_key(self):
+        self.assertEqual(prefs.Prefs().gpu_device, 0)
+        self.assertEqual(self.write('{"version": 1}').gpu_device, 0)
+        self.assertEqual(self.write('{"gpu_device": 1, "pill_bottom": true}').gpu_device, 1)
+        self.assertEqual(self.write('{"gpu_device": 1.0}').gpu_device, 1)
+        self.assertEqual(self.write('{"gpu_device": -3}').gpu_device, 0, "clamped")
+        for bad in ('"1"', "true", "null", "1.5", "[1]", "NaN", "Infinity"):
+            self.assertEqual(self.write('{"gpu_device": %s}' % bad).gpu_device, 0, bad)
+        self.assertEqual(self.write('{"gpu_device": 1, "mic": "m"}').mic, "m")
+
     def test_pause_silence_without_ui(self):
         self.assertIsNone(self.write('{"version": 1}').pause_silence_s, "missing: the engine default")
         self.assertEqual(self.write('{"pause_silence_s": 1.5}').pause_silence_s, 1.5)
@@ -564,6 +574,35 @@ class WorkerProcess(unittest.TestCase):
         whisper.WhisperRecognizer({"live": self.model}, worker=w).close()
         with open(out) as f:
             self.assertNotIn("--no-gpu", f.read())
+
+    def test_gpu_device_flag_is_passed_only_for_a_non_default_device(self):
+        out = os.path.join(self.tmp.name, "argv")
+        w = self.worker(f'echo "$@" > {out}; echo \'{{"ready":true,"load_ms":1}}\'; cat >/dev/null')
+        for kwargs, flag in (({}, None), ({"gpu_device": 0}, None), ({"gpu_device": 1}, "--gpu-device 1"),
+                             ({"gpu_device": 1, "gpu": False}, None)):
+            whisper.WhisperRecognizer({"live": self.model}, worker=w, **kwargs).close()
+            with open(out) as f:
+                argv = f.read()
+            if flag:
+                self.assertIn(flag, argv)
+            else:
+                self.assertNotIn("--gpu-device", argv)
+
+    def test_a_missing_gpu_device_is_gpu_failed(self):
+        w = self.worker('echo \'{"error":"GPU device 7 does not exist (2 found)","code":"gpu"}\'; exit 4')
+        with self.assertRaises(whisper.GpuFailed) as cm:
+            whisper.WhisperRecognizer({"live": self.model}, worker=w, gpu_device=7)
+        self.assertEqual(cm.exception.code, "gpu-failed")
+        self.assertIn("7", str(cm.exception))
+
+    def test_a_worker_without_gpu_device_support_is_gpu_failed_with_a_hint(self):
+        w = self.worker('echo \'{"error":"unknown argument"}\'; exit 2')
+        with self.assertRaises(whisper.GpuFailed) as cm:
+            whisper.WhisperRecognizer({"live": self.model}, worker=w, gpu_device=1)
+        self.assertIn("build.sh", str(cm.exception))
+        with self.assertRaises(whisper.WorkerFailed) as cm:  # the default device sends no flag: other errors stay as they are
+            whisper.WhisperRecognizer({"live": self.model}, worker=w)
+        self.assertNotIsInstance(cm.exception, whisper.GpuFailed)
 
     def test_close_stops_the_worker_process(self):
         w = self.worker('echo \'{"ready":true,"load_ms":1}\'; cat >/dev/null')

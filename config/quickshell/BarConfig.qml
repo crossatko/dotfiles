@@ -58,8 +58,10 @@ Singleton {
     }
     function barGapOf(s) { return floating(s) ? Theme.gapOut : 0 }                              // floating bar: distance from the edges
     function radiusOf(s) { return floating(s) ? Theme.radius : 0 }
-    function popupGapOf(s) { return floating(s) ? Math.max(4, Theme.gapOut) : 8 }                // popup card <-> bar
-    function edgeGapOf(s) { return floating(s) ? Theme.gapOut : 12 }                             // popups / toasts <-> screen edge
+    readonly property int popupGapDocked: 8                                                       // popup card <-> a docked bar
+    readonly property int edgeGapDocked: 12                                                       // popups / toasts <-> screen edge, docked bar
+    function popupGapOf(s) { return floating(s) ? Math.max(4, Theme.gapOut) : popupGapDocked }    // popup card <-> bar
+    function edgeGapOf(s) { return floating(s) ? Theme.gapOut : edgeGapDocked }                   // popups / toasts <-> screen edge
     // per bar: no glass / fill / border / blur behind the bar while it is flush with the screen edge (docked, or compacted
     // by a fullscreen window). Absent = false, so old files and other readers behave as before.
     function transparentFlush(s) { return entry(s).transparentFlush === true }

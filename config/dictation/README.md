@@ -43,10 +43,16 @@ service core; the shell drives it: the three push-to-talk keys (Settings > Voice
    `WAYLAND_DISPLAY` is missing. Logs: `journalctl --user -u dictation`.
 5. Voice preferences, written by Settings > Voice to `${XDG_STATE_HOME:-~/.local/state}/quickshell/dictation-prefs.json`
    (`DICTATION_PREFS_FILE` overrides), re-read at every `begin`: `{"version":1,"mic":"","gpu":true,"idle_timeout_s":600,
-   "prompt_hints":false}` (plus `pause_silence_s` and `trailing_space`, no UI: see Behaviour). `mic` = PipeWire source name (`pactl list short sources`; "" = system default; a name that
+   "prompt_hints":false,"gpu_device":0}` (plus `pause_silence_s` and `trailing_space`, no UI: see Behaviour; `pill_bottom` is the shell's). `mic` = PipeWire source name (`pactl list short sources`; "" = system default; a name that
    is not listed is a `mic` error), `gpu` false = the worker runs on the CPU only (`--no-gpu`; slow, an explicit
    choice), `idle_timeout_s` = unload after that long without a session (0 or negative = never). A missing or
-   malformed file or key means the default; a changed `gpu` reloads the models at the next `begin`.
+   malformed file or key means the default; a changed `gpu` or `gpu_device` reloads the models at the next `begin`.
+   `gpu_device` = which GPU the worker uses: the index printed by `dictation-whisper --list-devices` (one JSON line per
+   GPU: `index`, `name`, `type` discrete|integrated, `free_mb`, `total_mb`; Settings > Voice reads it), default 0, passed
+   as `--gpu-device N` (not at all for 0). An index that does not exist is a `gpu-failed` error, never another device
+   or the CPU. A non-discrete GPU is for testing (several seconds per pass). The worker must be rebuilt
+   (`worker/build.sh`) to know `--gpu-device` / `--list-devices`; an old worker with `gpu_device` > 0 is `gpu-failed`
+   with a hint to rebuild, and the Settings page then shows "worker not built or too old".
 
 Environment overrides: `DICTATION_MODEL_DIR`, `DICTATION_MODELS_FILE`, `DICTATION_PREFS_FILE`, `DICTATION_WORKER`, `DICTATION_WORDS_FILE`,
 `DICTATION_PREFS_FILE`, `DICTATION_SOCKET` (default `$XDG_RUNTIME_DIR/dictation.sock`). `serve` options: `--live NAME`, `--final NAME`, `--final-beam N`,
