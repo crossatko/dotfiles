@@ -87,3 +87,67 @@ test("scene: end states fade the picture, then draw their icon", () => {
     }
     assert.strictEqual(lit(S.scene("words", "unsupported", 5, 0.1, null)), 0);
 });
+
+test("marks float one empty row above the letter (acute, caron), the ring sits on it; every Czech letter has its mark", () => {
+    const rowsOf = ch => { const g = F.blank(12, 13); F.stampChar(g, ch, 3, 3, 1, 1, 0, 0); return rows(g).map(r => r.slice(3, 10)); };
+    for (const ch of "áéíóúýěčňřšžÁÉÍÓÚÝĚČŇŘŠŽ") {
+        const r = rowsOf(ch), first = r.findIndex(x => x.includes("#")), mark = r.findIndex((x, i) => i > first && !x.includes("#"));
+        assert.ok(mark > first, ch + " has a gap row under its mark");      // mark rows, an empty row, then the letter
+    }
+    for (const ch of "ůŮ") { const r = rowsOf(ch), f = r.findIndex(x => x.includes("#")); assert.ok(r.slice(f, f + 5).every(x => x.includes("#")), ch + " ring sits on the letter (no empty row)"); }
+    for (const ch of "ďť") assert.ok(F.hasMark(ch));
+    assert.notDeepStrictEqual(glyphRows("í"), glyphRows("1"));
+    assert.strictEqual(glyphRows("í").length, 5 + 2);                      // acute (2 rows) + stem (5 rows)
+});
+
+test("replayPlan: a short text plays every chunk at natural speed, marks 0.04 s apart, last chunk lingers", () => {
+    const p = S.prepare("Dobrý den, posílám vám nabídku");
+    const pl = S.replayPlan(p);
+    assert.strictEqual(pl.items.length, p.chunks.length);
+    assert.ok(pl.total <= 1.5 + 1e-9);
+    assert.strictEqual(pl.items[0].s, 1);
+    const c0 = p.chunks[0];
+    assert.ok(Math.abs(pl.items[0].dur - (0.04 + c0.marks * 0.04 + 0.10)) < 1e-9);
+    assert.ok(pl.items[pl.items.length - 1].dur > 0.2);
+    for (let i = 1; i < pl.items.length; i++) assert.ok(Math.abs(pl.items[i].start - (pl.items[i - 1].start + pl.items[i - 1].dur)) < 1e-9);
+});
+
+test("replayPlan: long text fits 1.5 s (unmarked chunks dropped, then faster, then only the first chunks)", () => {
+    const some = "Dobrý den, posílám vám upravenou nabídku na zítřek ve čtrnáct hodin. ", plain = "Prosim o potvrzeni terminu a dalsich veci. ";
+    const mixed = S.replayPlan(S.prepare((some + plain).repeat(3)));
+    assert.ok(mixed.total <= 1.5 + 1e-9);
+    const huge = S.prepare((some + plain).repeat(60)), pl = S.replayPlan(huge);
+    assert.ok(pl.total <= 1.5 + 1e-9 && pl.items.length >= 1 && pl.items.length < huge.chunks.length);
+    assert.ok(pl.items.every(it => huge.chunks[it.i].marks > 0), "only chunks with marks");
+    assert.ok(pl.items.every(it => it.s >= 0.6 - 1e-9));
+    for (let i = 1; i < pl.items.length; i++) assert.ok(pl.items[i].i > pl.items[i - 1].i, "reading order");
+});
+
+test("replayPlan: unmarked chunks flash by when the text is short; no marks anywhere = nothing to replay", () => {
+    const p = S.prepare("Prosim o potvrzeni terminu na zitrek ve ctrnact hodin, dekuji ěš");
+    const pl = S.replayPlan(p);
+    assert.ok(pl.items.some(it => p.chunks[it.i].marks === 0) || p.chunks.every(c => c.marks > 0));
+    assert.strictEqual(S.replayPlan(S.prepare("Prosim o potvrzeni")).items.length, 0);
+    assert.strictEqual(S.replayPlan(S.prepare("")).items.length, 0);
+});
+
+test("replay: marks land in reading order with a flare, last frame is held, then scene fades it for the check", () => {
+    const p = S.prepare("ěščř"), pl = S.replayPlan(p), at = t => S.replay(p, pl, t);
+    const marks = g => g.m.filter(m => m > 0.5).length;
+    assert.strictEqual(marks(at(0.03)), 0);
+    const n1 = marks(at(0.045)), n4 = marks(at(0.04 + 3 * 0.04 + 0.03));
+    assert.ok(n1 > 0 && n4 > n1);
+    assert.ok(at(0.045).fv.some(v => v > 0.7));                  // strong flare at the moment the mark lands
+    assert.strictEqual(Math.max(...at(0.04 + 0.04 + 0.04 + 0.04 + 0.3).fv), 0);   // flare gone after 0.25 s
+    assert.deepStrictEqual(at(pl.total).v, at(pl.total + 5).v);  // held on the last frame
+    const d = S.scene("replay", "done", pl.total, 0.1, p, pl);
+    assert.ok(lit(d) > 0 && lit(d) <= lit(at(pl.total)) + 40);
+    assert.ok(S.scene("replay", "done", pl.total, 0.6, p, pl).v.some(v => v > 0));   // the check is drawing
+});
+
+test("flareLife: 1 at once, 0 after 0.25 s", () => {
+    assert.strictEqual(S.flareLife(0), 1);
+    assert.ok(S.flareLife(0.12) > 0.2 && S.flareLife(0.12) < 0.5);
+    assert.strictEqual(S.flareLife(0.25), 0);
+    assert.strictEqual(S.flareLife(-1), 0);
+});

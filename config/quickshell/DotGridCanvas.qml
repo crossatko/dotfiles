@@ -3,7 +3,7 @@ import QtQuick
 // Round-dot renderer for a dot-matrix grid (DiacFont.js layout: { c, r, v, m, fv, fs, lf }): ONLY lit dots are drawn, the pitch is
 // width / columns, a dot is 0.8 of the pitch. The item's height is rows x pitch. Set `grid` to a new object for every frame to draw.
 // Layers, back to front: dark halos under the lit dots (legible on a bright backdrop), then, with `flare`, the accent flare
-// (a soft additive glow, then the dot in `flareColor`), then the dots in `color` (`markColor` where m = 1), a dot pulsing toward the
+// (a radial halo about twice the mark, then the dot in `flareColor`; a mark with a live flare is drawn oversize), then the dots in `color` (`markColor` where m = 1), a dot pulsing toward the
 // flare colour by its lf.
 Item {
     id: dg
@@ -37,7 +37,7 @@ Item {
             if (!g) return
             const p = dg.pitch, rad = p * 0.8 / 2, W = g.c, H = g.r, n = W * H
             const a = rgb(dg.color), b = rgb(dg.markColor), fc = rgb(dg.flareColor)
-            const lfc = mixc(fc, [255, 255, 255], 0.45)
+            const lfc = mixc(fc, [255, 255, 255], 0.3)
             const dot = (x, y, r) => { ctx.beginPath(); ctx.arc(x * p + p / 2, y * p + p / 2, r, 0, 6.2832); ctx.fill() }
             for (let i = 0; i < n; i++) {             // 1: halos under the letters
                 const v = g.v[i]
@@ -46,20 +46,23 @@ Item {
                 dot(i % W, (i / W) | 0, rad * 1.7)
             }
             if (dg.flare) {
-                ctx.globalCompositeOperation = "lighter"
-                for (let i = 0; i < n; i++) {         // 2a: the flare's glow (soft, additive)
+                for (let i = 0; i < n; i++) {         // 2a: the flare's glow: a bright accent halo about twice the mark's size
                     const v = g.fv[i]
-                    if (v <= 0.15 || g.fs[i] >= 0.05) continue
-                    const x = i % W, y = (i / W) | 0
-                    ctx.fillStyle = css(fc, 0.12 * v); dot(x, y, rad * 3.6)
-                    ctx.fillStyle = css(fc, 0.18 * v); dot(x, y, rad * 2.2)
+                    if (v <= 0.04 || g.fs[i] >= 0.05) continue
+                    const x = i % W * p + p / 2, y = ((i / W) | 0) * p + p / 2, R = rad * 9
+                    const gr = ctx.createRadialGradient(x, y, 0, x, y, R)
+                    gr.addColorStop(0, css(lfc, Math.min(1, 1.2 * v)))
+                    gr.addColorStop(0.3, css(fc, 0.7 * v))
+                    gr.addColorStop(0.65, css(fc, 0.25 * v))
+                    gr.addColorStop(1, css(fc, 0))
+                    ctx.fillStyle = gr
+                    ctx.beginPath(); ctx.arc(x, y, R, 0, 6.2832); ctx.fill()
                 }
-                ctx.globalCompositeOperation = "source-over"
-                for (let i = 0; i < n; i++) {         // 2b: the flare dots
+                for (let i = 0; i < n; i++) {         // 2b: the flare dots under the mark
                     const v = g.fv[i]
                     if (v <= 0.03) continue
-                    ctx.fillStyle = css(fc, Math.min(1, 0.2 + v))
-                    dot(i % W, (i / W) | 0, rad * (0.8 + 0.3 * v))
+                    ctx.fillStyle = css(fc, Math.min(1, 0.3 + v))
+                    dot(i % W, (i / W) | 0, rad * (1 + 0.9 * v))
                 }
             }
             for (let i = 0; i < n; i++) {             // 3: letters and marks
@@ -67,9 +70,10 @@ Item {
                 if (v <= 0.03) continue
                 let col = mixc(a, b, g.m[i])
                 const lf = g.lf[i]
-                if (lf > 0.02 && dg.flare) col = mixc(col, lfc, Math.min(1, lf) * 0.95)
+                if (lf > 0.02 && dg.flare) col = mixc(col, lfc, Math.min(1, lf))
                 ctx.fillStyle = css(col, Math.min(1, 0.25 + v))
-                dot(i % W, (i / W) | 0, rad * (1 + 0.3 * lf))
+                // a new mark starts oversize (by its flare) and settles; the letter under it pulses once (lf)
+                dot(i % W, (i / W) | 0, rad * (1 + 0.45 * lf + (g.m[i] > 0.5 && dg.flare ? 0.7 * g.fv[i] : 0)))
             }
         }
     }
