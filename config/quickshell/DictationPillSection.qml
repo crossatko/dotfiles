@@ -6,7 +6,6 @@ import QtQuick
 PillSection {
     id: sec
     store: DictationPrefs
-    fullH: demoCard.fullH
 
     readonly property var words: ("Dobrý den, tohle je ukázka diktování. Mluvím tak dlouho, aby text přetekl přes první řádek, "
         + "pak přes druhý a nakonec i přes třetí, a nejstarší slova se z pilulky vytratí nahoru. Až pustíš klávesu, "

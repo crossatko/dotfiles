@@ -8,12 +8,13 @@ import QtQuick
 // Under the card: ScreenBackdrop's `frost`, a sketch of the compositor's glass (the Settings window cannot show it there).
 // It reads the real geometry (PillPlacement over the same prefs), so the preview cannot drift from the real pill.
 //   store   DictationPrefs or DiacriticsPrefs (the pill_* keys)        screen  the monitor drawn (PillSection: the saved one, else
-//   fullH   the card's tallest height (the crop's room; default its height)    the one picked in Settings)
+//   the one picked in Settings)
+// The strip is as tall as the card now shows (at most maxCardH), never the pill's real maximum: the Settings page stays small.
 Item {
     id: pv
     property var store: null
     property var screen: Monitors.selected
-    property real fullH: cardItem ? cardItem.height : 0
+    readonly property real maxCardH: 280     // hard cap (px) on the card height the strip makes room for
     property Item card: null
     onCardChanged: if (card) card.parent = slot
     readonly property OpenMotion motion: om
@@ -28,6 +29,7 @@ Item {
     // qmllint enable missing-property
     // the card's distance from its screen edge (physical px): its anchored edge plus what the bar's exclusive zone adds
     readonly property real cardH: cardItem ? cardItem.height : 0
+    readonly property real roomH: Math.min(Math.ceil(cardH), maxCardH)     // the slot: the card's current height, capped
     readonly property real dist: place.edgeInset + place.zoneShift
     readonly property real stripPad: Theme.pad + Theme.gapRow     // at least this much screen around the actual-size card
 
@@ -45,10 +47,10 @@ Item {
             id: strip
             objectName: "pill-preview-actual"
             width: parent.width
-            height: Math.min(pv.sh, Math.ceil(pv.fullH) + 2 * pv.stripPad)
+            height: Math.min(pv.sh, pv.roomH + 2 * pv.stripPad)
             virtualW: width
             virtualH: height
-            // the slot = the room the real window has (the card grows away from its edge inside it); its top-left on the screen
+            // the slot = the room for the card as it shows now (it hangs from its edge, as in the real window); its top-left on the screen
             readonly property real slotY: pv.atTop ? pv.dist : pv.sh - pv.dist - slot.height
             // the part of the screen shown: centred on the slot, kept inside the screen
             readonly property real viewX: Math.max(0, Math.min(pv.sw - width, place.left + (pv.cardItem ? pv.cardItem.x + pv.cardItem.width / 2 : pv.cardW / 2) - width / 2))
@@ -74,7 +76,7 @@ Item {
                     x: place.left
                     y: Math.round(strip.slotY)
                     width: pv.cardW
-                    height: Math.ceil(pv.fullH)
+                    height: pv.roomH
                 }
             }
         }

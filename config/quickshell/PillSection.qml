@@ -4,14 +4,13 @@ import QtQuick.Layouts
 // Settings > Voice / Diacritics > Pill: one section on both pages. Head, the live preview (PillPreview: the real card at actual
 // size on a crop of the monitor where the pill sits), the feature's own rows (children, e.g. Diacritics "Text"), then
 // where it sits (PillPositionRows). `card` = the feature's real pill card with demo state (bind `openMotion: <section>.motion`,
-// `fromTop: <section>.atTop`, `width: <section>.cardW`); `fullH` = its tallest height. The preview draws the saved monitor
+// `fromTop: <section>.atTop`, `width: <section>.cardW`). The preview draws the saved monitor
 // (pill_screen) when it is connected, else the one picked in Settings (Monitors.selected).
 ColumnLayout {
     id: sec
     property var store: null
     property real titleWidth: 120
     property alias card: preview.card
-    property alias fullH: preview.fullH
     readonly property real maxH: preview.placement.maxH       // the tallest a card may get on the drawn monitor
     readonly property OpenMotion motion: preview.motion
     readonly property bool atTop: preview.atTop
