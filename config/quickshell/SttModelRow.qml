@@ -5,7 +5,7 @@ import QtQuick.Layouts
 // One speech model in Settings (SttModelsSection): name with plain-text capability marks (translation, Czech quality,
 // the role it is recommended for), a line with the size on disk and the VRAM, the catalog's note, and its state:
 // not installed (Download), downloading (a progress bar with percent, speed and time left, Cancel), installed
-// (Live / Final buttons that assign the role, Delete), failed or interrupted (the reason in red, Resume keeps the bytes
+// (Delete; the role is chosen in SttModeGroup), failed or interrupted (the reason in red, Resume keeps the bytes
 // already loaded). Everything comes from SttModels; `m` is one entry of SttModels.models.
 ListRow {
     id: row
@@ -28,28 +28,6 @@ ListRow {
         sub: SttModels.sizeText(row.m.size) + " on disk  ·  ~" + row.m.vramGb + " GB VRAM"
     }
 
-    // installed: roles
-    Btn {
-        visible: row.m.installed
-        objectName: "btn-role-live-" + row.m.name
-        text: "Live"
-        active: SttModels.live === row.m.name
-        outerRadius: Theme.radiusItem; inset: Theme.gapRow
-        implicitHeight: 26
-        tip: "Use for the live passes while the key is held"
-        onClicked: SttModels.setRole("live", row.m.name)
-    }
-    Btn {
-        visible: row.m.installed
-        objectName: "btn-role-final-" + row.m.name
-        text: "Final"
-        active: SttModels.final_ === row.m.name
-        enabledLook: row.m.translate          // still clickable: SttModels explains why it is refused
-        outerRadius: Theme.radiusItem; inset: Theme.gapRow
-        implicitHeight: 26
-        tip: "Use for the final pass and translation"
-        onClicked: SttModels.setRole("final", row.m.name)
-    }
     Btn {
         visible: row.m.installed && !row.mine
         objectName: "btn-delete-" + row.m.name
@@ -65,7 +43,7 @@ ListRow {
 
     // not installed / interrupted: download, resume
     Btn {
-        visible: !row.m.installed && !row.mine
+        visible: !row.m.installed && !row.mine && !row.m.local
         objectName: "btn-download-" + row.m.name
         glyph: row.failure || row.partial ? Icons.retry : Icons.download
         text: row.failure ? "Retry" : row.partial ? "Resume" : "Download"
@@ -100,8 +78,14 @@ ListRow {
             spacing: Theme.pad
             Label {
                 visible: row.m.recommended !== ""
-                text: row.m.recommended === "live" ? "recommended for live" : "recommended for final + translate"
+                text: row.m.recommended === "live" ? "recommended for live" : row.m.recommended === "live-en" ? "recommended for live English"
+                    : "recommended for final + translate"
                 color: Theme.fg; font.pixelSize: Theme.fontCaption
+            }
+            Label {
+                visible: row.m.english
+                text: "English only"
+                color: Theme.yellow; font.pixelSize: Theme.fontCaption
             }
             Label {
                 text: row.m.translate ? "translates" : "cannot translate"
@@ -151,9 +135,17 @@ ListRow {
             wrapMode: Text.WordWrap
         },
         Label {
+            visible: row.m.local && !row.m.installed
+            objectName: "model-local-" + row.m.name
+            Layout.fillWidth: true
+            text: "Not downloadable. Copy your file to " + (SttModels.pathOf(row.m.name) || row.m.file) + " to use it."
+            color: Theme.yellow; font.pixelSize: Theme.fontCaption
+            wrapMode: Text.WordWrap
+        },
+        Label {
             visible: row.m.damaged && !row.m.installed
             Layout.fillWidth: true
-            text: "The file on disk is incomplete or the wrong size. Download replaces it."
+            text: row.m.local ? "The file on disk has the wrong size for this model. Copy the right file over it." : "The file on disk is incomplete or the wrong size. Download replaces it."
             color: Theme.yellow; font.pixelSize: Theme.fontCaption
             wrapMode: Text.WordWrap
         }

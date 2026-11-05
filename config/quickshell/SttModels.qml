@@ -12,18 +12,23 @@ import Quickshell.Io
 //
 // Roles, saved in ${XDG_STATE_HOME:-~/.local/state}/quickshell/stt-models.json (this singleton is the only writer; a
 // missing key = the default; watched, so a hand edit shows here too). The dictation service reads the same file
-// (config/dictation, whisper.chosen_models: same defaults and name check) at every key press and reloads on a change:
-// a chosen model that is not installed is its `no-model` error, never another model.
-//   { "version": 1, "live": "large-v3-turbo", "final": "large-v3" }
-//   live   the model of the live (streaming) passes while a key is held; any model, speed matters
-//   final  the model of the pass after release AND of translation; only a model that can translate
-// The object doubles as the prefs store of the Settings controls (value / set / unset / overridden / defaults / keys /
-// changed / resetAll).
+// (config/dictation, whisper.chosen_models: same defaults and name check) at every key press and reloads when the pair
+// of the session's mode differs from the loaded one: a chosen model that is not installed is its `no-model` error,
+// never another model. The choice is per mode (en = English, cs = Czech and every other language, translate = speak
+// Czech, type English); only explicit choices are saved, so a default can follow what is installed:
+//   { "version": 2, "en": { "live": "futo-small-en", "final": "large-v3" }, "cs": { ... }, "translate": { ... } }
+//   live   the fast model: the live (streaming) passes while a key is held
+//   final  the full model: the pass after release (and translation: only a model that can translate)
+// Defaults: en live = futo-small-en when installed, else large-v3-turbo; everything else large-v3-turbo / large-v3.
+// An English-only model (catalog "english") is refused for cs and translate. A version 1 file ({live, final}) is read
+// for every mode and rewritten as version 2 at the next change.
+// The object doubles as the prefs store of the Settings controls: keys are "<mode>.<role>" (value / set / unset /
+// overridden / keys / changed / resetAll).
 //
-// For the pill: `noneInstalled`, `missingMessage` ("Download a speech model in settings"), `statusMessage` (what to show
-// instead of recording, "" = ready), `pathOf(name)`, `liveModel` / `finalModel`. Call `refresh()` once when you need
+// For the pill: `noneInstalled`, `missingMessage` ("Download a speech model in settings"), `statusFor(modeKey)` (what to
+// show instead of recording, "" = ready), `modeKeyOf(pillMode)`, `pathOf(name)`. Call `refresh()` once when you need
 // fresh install state (the section does when it opens); `loaded` is false until the first answer.
-//   qs ipc call sttmodels get | list | download <name> | cancel | remove <name> | role <live|final> <name>
+//   qs ipc call sttmodels get | list | download <name> | cancel | remove <name> | role <en|cs|translate> <live|final> <name>
 Singleton {
     id: sm
 
@@ -37,22 +42,33 @@ Singleton {
     readonly property string missingMessage: "Download a speech model in settings"
 
     // ---- roles (prefs store interface) ----
-    readonly property var defaults: ({ live: "large-v3-turbo", final: "large-v3" })
-    readonly property var keys: ["live", "final"]
-    property string live: defaults.live
-    property string final_: defaults.final        // `final` is reserved in QML
-    readonly property string liveModel: live
-    readonly property string finalModel: final_
-    function value(key) { return key === "live" ? live : key === "final" ? final_ : undefined }
-    function overridden(key) { return value(key) !== defaults[key] }
-    function unset(key) { applyRole(key, defaults[key]) }
+    readonly property string englishFast: "futo-small-en"
+    readonly property var modes: [
+        { key: "en", label: "English" },
+        { key: "cs", label: "Czech", info: "Czech and every other language, and auto." },
+        { key: "translate", label: "Czech to English", info: "Speak Czech, type English (translate)." }
+    ]
+    readonly property var roles: ["live", "final"]
+    readonly property var keys: modes.flatMap(m => roles.map(r => m.key + "." + r))
+    property var choice: ({})                     // explicit choices only: { en: { live: NAME, final: NAME }, ... }
+    function defaultOf(mode, role) {
+        if (role === "final") return "large-v3"
+        return mode === "en" && isInstalled(englishFast) ? englishFast : "large-v3-turbo"
+    }
+    function pick(mode, role) { return (choice[mode] && choice[mode][role]) || defaultOf(mode, role) }
+    function _split(key) { const i = key.indexOf("."); return [key.substring(0, i), key.substring(i + 1)] }
+    function value(key) { const k = _split(key); return pick(k[0], k[1]) }
+    function overridden(key) { const k = _split(key); return !!(choice[k[0]] && choice[k[0]][k[1]]) && value(key) !== defaultOf(k[0], k[1]) }
+    function unset(key) { const k = _split(key); applyRole(k[0], k[1], "") }
     readonly property bool changed: keys.some(k => overridden(k))
-    function resetAll() { for (const k of keys) unset(k); notice = "" }
+    function resetAll() { choice = ({}); notice = ""; saver.restart() }
     // set() is the store call: it refuses what roleProblem() refuses (the section shows the reason in `notice`)
-    function set(key, name) { return setRole(key, name) === "" }
+    function set(key, name) { const k = _split(key); return setRole(k[0], k[1], name) === "" }
+    // the pill's mode ("en", "cs", "cs-en", "de", "auto", ...) -> the key above
+    function modeKeyOf(pillMode) { return pillMode === "en" ? "en" : /-en$|^translate/.test(pillMode) ? "translate" : "cs" }
 
     // ---- catalog + install state (the helper's `list`) ----
-    property var models: []                    // [{name,label,file,size,vramGb,translate,czech,recommended,note,installed,damaged,diskBytes,partialBytes}]
+    property var models: []                    // [{name,label,file,size,vramGb,translate,english,local,czech,recommended,note,installed,damaged,diskBytes,partialBytes}]
     property string modelsDir: ""
     property bool loaded: false
     property string listError: ""
@@ -63,41 +79,55 @@ Singleton {
     readonly property bool noneInstalled: loaded && !anyInstalled
     function pathOf(name) { return modelsDir !== "" && model(name) ? modelsDir + "/" + model(name).file : "" }
 
-    // what the pill shows instead of recording: "" = both jobs have an installed model
-    function problemOf(role) {
-        const name = value(role)
+    // what the pill shows instead of recording in a mode: "" = both jobs have an installed model that fits
+    function problemOf(mode, role) {
+        const name = pick(mode, role)
         if (!loaded) return ""
         if (noneInstalled) return missingMessage
-        if (!model(name)) return "Unknown speech model " + name
-        if (!isInstalled(name)) return labelOf(name) + " is not installed, pick or download one in settings"
-        return ""
+        const m = model(name)
+        if (!m) return "Unknown speech model " + name
+        if (!m.installed) return m.label + " is not installed, pick or add one in settings"
+        return fitProblem(mode, role, m)
     }
-    readonly property string statusMessage: problemOf("live") || problemOf("final")
+    function statusFor(mode) { return problemOf(mode, "live") || problemOf(mode, "final") }
 
     // ---- role changes ----
     property string notice: ""                 // the reason the last role change was refused (cleared by the next good one / a timer)
     Timer { id: noticeTimer; interval: 8000; onTriggered: sm.notice = "" }
-    // "" = fine, else why `name` cannot do `role`
-    function roleProblem(role, name) {
-        const m = model(name)
-        if (!m) return "Unknown model"
-        if (role === "final" && !m.translate)
-            return m.label + " cannot translate, and the final pass also translates. Pick Large v3 or its q5_0 version."
-        if (!m.installed) return m.label + " is not installed yet. Download it first."
+    // "" = fine, else why model `m` cannot do `role` in `mode` (installed or not): English-only models serve English
+    // only; the full pass of translate mode translates
+    function fitProblem(mode, role, m) {
+        if (m.english && mode !== "en") return m.label + " is English only."
+        if (mode === "translate" && role === "final" && !m.translate)
+            return m.label + " cannot translate, and the full pass translates. Pick Large v3 or its q5_0 version."
         return ""
     }
-    function setRole(role, name) {
-        if (keys.indexOf(role) < 0) return "Unknown role"
-        const p = roleProblem(role, name)
+    // "" = fine, else why `name` cannot do `role` in `mode`
+    function roleProblem(mode, role, name) {
+        const m = model(name)
+        if (!m) return "Unknown model"
+        const fit = fitProblem(mode, role, m)
+        if (fit !== "") return fit
+        if (!m.installed) return m.local ? m.label + " is not installed. Copy your file to " + (pathOf(name) || m.file) + "."
+                                         : m.label + " is not installed yet. Download it first."
+        return ""
+    }
+    function setRole(mode, role, name) {
+        if (!modes.some(x => x.key === mode) || roles.indexOf(role) < 0) return "Unknown role"
+        const p = roleProblem(mode, role, name)
         notice = p
         if (p !== "") { noticeTimer.restart(); return p }
         noticeTimer.stop()
-        applyRole(role, name)
+        applyRole(mode, role, name)
         return ""
     }
-    function applyRole(role, name) {
-        if (role === "live") live = name
-        else final_ = name
+    // name "" = back to the default
+    function applyRole(mode, role, name) {
+        const c = Object.assign({}, choice)
+        const e = Object.assign({}, c[mode] || {})
+        if (name === "") delete e[role]; else e[role] = name
+        if (Object.keys(e).length === 0) delete c[mode]; else c[mode] = e
+        choice = c
         saver.restart()
     }
 
@@ -207,9 +237,17 @@ Singleton {
     function parse(text) {
         let o = null
         try { o = JSON.parse(text) } catch (e) {}
-        const ok = k => o !== null && typeof o === "object" && typeof o[k] === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(o[k])
-        live = ok("live") ? o.live : defaults.live
-        final_ = ok("final") ? o.final : defaults.final
+        const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v)
+        const ok = (src, k) => isObj(src) && typeof src[k] === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(src[k])
+        const c = {}
+        for (const m of modes) {
+            for (const r of roles) {
+                // the mode's own entry, else a version 1 file's top level (applies to every mode)
+                const src = ok(o && o[m.key], r) ? o[m.key] : ok(o, r) ? o : null
+                if (src) { c[m.key] = c[m.key] || {}; c[m.key][r] = src[r] }
+            }
+        }
+        choice = c
     }
     Timer {
         id: saver
@@ -220,7 +258,7 @@ Singleton {
         }
     }
     // mkdir runs detached: give it a moment before the write
-    Timer { id: writer; interval: 150; onTriggered: fileView.setText(JSON.stringify({ version: 1, live: sm.live, final: sm.final_ }) + "\n") }
+    Timer { id: writer; interval: 150; onTriggered: fileView.setText(JSON.stringify(Object.assign({ version: 2 }, sm.choice)) + "\n") }
 
     Component.onCompleted: { fileView.text(); refresh() }
     FileView {
@@ -236,11 +274,11 @@ Singleton {
 
     IpcHandler {
         target: "sttmodels"
-        function get(): string { return JSON.stringify({ live: sm.live, final: sm.final_, installed: sm.models.filter(m => m.installed).map(m => m.name), status: sm.statusMessage, downloading: sm.downloading, phase: sm.phase, progress: sm.progress }) }
+        function get(): string { return JSON.stringify({ choice: Object.fromEntries(sm.modes.map(m => [m.key, { live: sm.pick(m.key, "live"), final: sm.pick(m.key, "final") }])), installed: sm.models.filter(m => m.installed).map(m => m.name), status: Object.fromEntries(sm.modes.map(m => [m.key, sm.statusFor(m.key)])), downloading: sm.downloading, phase: sm.phase, progress: sm.progress }) }
         function list(): string { return JSON.stringify(sm.models) }
         function download(name: string): string { return sm.download(name) ? "ok" : "busy or unknown" }
         function cancel(): string { sm.cancel(); return "ok" }
         function remove(name: string): string { sm.remove(name); return "ok" }
-        function role(role: string, name: string): string { return sm.setRole(role, name) || "ok" }
+        function role(mode: string, role: string, name: string): string { return sm.setRole(mode, role, name) || "ok" }
     }
 }

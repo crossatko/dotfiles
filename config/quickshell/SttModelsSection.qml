@@ -2,10 +2,11 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 
-// The speech model part of a Settings page (dictation): which model does the live passes and which one the final pass
-// and translation (shown first), then every catalog model (SttModelRow) with its size, VRAM, translation and Czech
-// marks, Download / Cancel / Resume / Delete, and the Live / Final buttons that assign the roles. A role a model cannot
-// take is refused with the reason in red (the final pass translates: a model that cannot translate is refused). With no
+// The speech model part of a Settings page (dictation): per language mode (English, Czech, Czech to English) the Fast
+// (live) and the Full (final) model (SttModeGroup, shown first), then every catalog model (SttModelRow) with its size,
+// VRAM, translation and Czech marks, Download / Cancel / Resume / Delete (a local model is added by hand: the row says
+// where to copy it). A model that cannot serve a mode is not offered there (English-only ones serve English only; the
+// full pass of translation needs a model that can translate); a refused change shows its reason in red. With no
 // model installed it says to download one; nothing downloads by itself. After the roles: how long the models stay loaded
 // (IdleUnloadRow over DictationPrefs, as the Diacritics page's Model section). All state is SttModels (roles in its prefs
 // file, `changed` / `resetAll()` for the page's PageReset) and DictationPrefs (the idle time). Drop it into a page: `SttModelsSection { titleWidth: ... }`.
@@ -33,13 +34,12 @@ ColumnLayout {
         hint: SttModels.missingMessage
     }
 
-    SttRoleRow {
-        title: "Live passes"; titleWidth: sec.titleWidth; role: "live"
-        info: "Typing as you speak. Any model; a faster one keeps up better."
-    }
-    SttRoleRow {
-        title: "Final pass"; titleWidth: sec.titleWidth; role: "final"
-        info: "The corrected text after you release the key, and Czech to English translation. Only models that can translate."
+    Repeater {
+        model: SttModels.modes
+        SttModeGroup {
+            required property var modelData
+            mode: modelData.key; title: modelData.label; info: modelData.info ?? ""; titleWidth: sec.titleWidth
+        }
     }
     IdleUnloadRow { id: idle; objectName: "dict-idle"; titleWidth: sec.titleWidth; store: DictationPrefs; use: "dictation" }
     Label {

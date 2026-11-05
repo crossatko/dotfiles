@@ -29,12 +29,20 @@ service core; the shell drives it: the three push-to-talk keys (Settings > Voice
    `WHISPER_PREFIX=<src> WHISPER_BUILD=<src>/build config/dictation/worker/build.sh` for a source build. Output:
    `${XDG_DATA_HOME:-~/.local/share}/dictation/bin/dictation-whisper` (rpath to the whisper libraries).
 3. Models in `${XDG_DATA_HOME:-~/.local/share}/dictation/models/ggml-<name>.bin` (Settings > Voice downloads them),
-   never in the repo. Which ones: `serve --live/--final`, else the shell's choice in
-   `${XDG_STATE_HOME:-~/.local/state}/quickshell/stt-models.json` (`{"live": NAME, "final": NAME}`, written by
-   Settings > Voice; `DICTATION_MODELS_FILE` overrides), else `large-v3-turbo` (live) / `large-v3` (final and
-   translation). A missing key or malformed name is that role's default, exactly as the settings page reads it. The
-   file is re-read at every `begin`: a changed choice reloads the models first (about a second), and a chosen model
+   never in the repo. A fast ("live") and a full ("final") model are chosen per mode: `en` (English), `cs` (Czech and
+   every other language, and auto) and `translate` (speak Czech, type English). Which ones: `serve --live/--final` (every
+   mode), else the shell's choice in `${XDG_STATE_HOME:-~/.local/state}/quickshell/stt-models.json`
+   (`{"version":2,"en":{"live":NAME,"final":NAME},"cs":{...},"translate":{...}}`, written by Settings > Voice;
+   `DICTATION_MODELS_FILE` overrides; an older `{"live","final"}` file applies to every mode), else the defaults: fast
+   `futo-small-en` for English when its file is installed (otherwise `large-v3-turbo`), `large-v3-turbo` for the rest;
+   full `large-v3` everywhere. A missing mode, key or malformed name is that role's default, exactly as the settings page
+   reads it. The file is re-read at every `begin`; the worker keeps one fast and one full model loaded, and the models
+   reload (about a second) only when the pair for the session's mode differs from the loaded one. A chosen model
    that is not installed is an error with code `no-model` naming the file; another model is never used instead.
+   `futo-small-en` is a local, English-only model (a Whisper small.en fine-tune, Q8_0, about 264 MB, about twice as fast
+   as Large v3 Turbo): it has no download, copy your own file to `ggml-futo-small-en.bin` in the models folder. It cannot
+   serve `cs` or `translate` (a `no-model` error naming the reason), nor can a model that cannot translate be the full
+   model of `translate` (`large-v3-turbo`, `futo-small-en`).
 4. Links: `./install.sh --only links` (idempotent) links `bin/dictation` to `~/.local/bin/dictation` and
    `config/systemd/user/dictation.service` to `~/.config/systemd/user/`. Nothing enables the unit (no `[Install]`): the
    shell starts it on the first key press (`systemctl --user start dictation.service`), by then Hyprland has imported
@@ -43,9 +51,11 @@ service core; the shell drives it: the three push-to-talk keys (Settings > Voice
    `WAYLAND_DISPLAY` is missing. Logs: `journalctl --user -u dictation`.
 5. Voice preferences, written by Settings > Voice to `${XDG_STATE_HOME:-~/.local/state}/quickshell/dictation-prefs.json`
    (`DICTATION_PREFS_FILE` overrides), re-read at every `begin`: `{"version":1,"mic":"","gpu":true,"idle_timeout_s":600,
-   "prompt_hints":false,"gpu_device":0}` (plus `pause_silence_s` and `trailing_space`, no UI: see Behaviour; the `pill_*` position keys, and the old `pill_bottom`, are the shell's). `mic` = PipeWire source name (`pactl list short sources`; "" = system default; a name that
+   "prompt_hints":false,"gpu_device":0}` (plus `pause_silence_s`, `trailing_space` and `release_tail_s`, no UI: see Behaviour; the `pill_*` position keys, and the old `pill_bottom`, are the shell's). `mic` = PipeWire source name (`pactl list short sources`; "" = system default; a name that
    is not listed is a `mic` error), `gpu` false = the worker runs on the CPU only (`--no-gpu`; slow, an explicit
-   choice), `idle_timeout_s` = unload after that long without a session (0 or negative = never; 0 < x <= 1 = right after each session, Settings "Immediately" writes 1, `prefs.unload_due`). A missing or
+   choice), `release_tail_s` = seconds the mic keeps recording after the key is released, so the last word is not cut off
+   (default 0.5, clamped to 0..2, 0 = stop at once; the final pass starts after it, and the idle unload, "Immediately"
+   included, only runs between sessions, never during the final pass), `idle_timeout_s` = unload after that long without a session (0 or negative = never; 0 < x <= 1 = right after each session, Settings "Immediately" writes 1, `prefs.unload_due`). A missing or
    malformed file or key means the default; a changed `gpu` or `gpu_device` reloads the models at the next `begin`.
    `gpu_device` = which GPU the worker uses: the index printed by `dictation-whisper --list-devices` (one JSON line per
    GPU: `index`, `name`, `type` discrete|integrated, `free_mb`, `total_mb`; Settings > Voice reads it), default 0, passed
@@ -72,7 +82,7 @@ event. Commands are plain words or JSON:
 
 ```
 begin cs | begin en | begin translate      {"cmd": "begin", "mode": "cs"}
-end                                        key released: final pass, flush, mic closed
+end                                        key released: mic records on for `release_tail_s` (0.5 s), final pass, flush, mic closed
 cancel                                     drop the session, type nothing more
 status                                     reply to this client only
 ```
