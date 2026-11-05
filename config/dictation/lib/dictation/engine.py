@@ -73,8 +73,10 @@ class Injector(Protocol):
 LIVE, FINAL = "live", "final"
 
 # Preview defaults (README, Behaviour; see Config).
-MIN_PASS_AUDIO = 1.5
-PASS_EVERY = 0.5
+MIN_PASS_AUDIO = 1.0
+PASS_EVERY = 0.3
+WHISPER_WINDOW = 30  # seconds per whisper decoding window (counted from the start of the audio it gets)
+TAIL_RUN = 3  # frames in a row above tail_rms that count as a soft ending (a lone noise peak does not move the end)
 TRAILING_SPACE = True
 QUIET_ROOM_DB = 12.0  # a noise floor this far under the speech gate: every frame at the gate counts as speech
 
@@ -90,7 +92,15 @@ class Config:
     strip_single_word_punct: bool = True  # a lone word loses its trailing . , ; : … (? and ! stay)
     level_frame: int = 512  # samples per published level (32 ms)
     speech_rms: float = 0.005  # a window with no frame this loud is silence and is never recognised
-    silence_pad: float = 0.5  # seconds of silence kept around speech when trimming it
+    silence_pad: float = 0.5  # seconds of silence kept before the first speech
+    # The final pass hears everything from the speech start to the end of the session (a soft ending below the
+    # speech gate is never cut off); only a very long silent hold is cut: final_tail seconds after the last frame
+    # above tail_rms (half the speech gate; evidence for where the audio ends, never for "is there speech").
+    final_tail: float = 3.0
+    final_hard_cap: float = 8.0  # the final audio never runs further than this past the last frame at the speech gate
+    tail_rms: float = 0.0025
+    close_after: float = 0.5  # silence after which a preview pass that has not heard the speech end runs at once
+    heard_pad: float = 0.3  # a pass whose audio reaches this far past the last loud frame heard the speech end
     # Evidence of speech, counted in voiced frames (at the speech gate and above the noise floor): less than min_voiced seconds and the session had no speech (breath, a key click, room noise): no pass,
     # no final pass, nothing typed. With less than junk_voiced seconds the stock phrases whisper invents on noise
     # (hallucinations.json) are dropped as well; a clearly spoken "Thank you." has more.
@@ -199,6 +209,8 @@ class _Session:
         self.voiced_frames = 0  # frames that counted as speech (see Config.min_voiced)
         self.floors: list = []  # the noise floor (dB, None before the first) after each level frame, for _has_voice
         self.recount = (0, 0)  # (frames, voiced) of the last look back with the later floor (see _has_voice)
+        self.heard_end = 0  # samples the last pass that really ran recognised
+        self.closed_for: int | None = None  # last loud frame the closing pass already ran for
         self.window_start = 0  # in samples
         self.last_pass_end = None  # samples recognised by the previous live pass
         self.typed = ""  # everything typed this session (once, on release)
@@ -304,20 +316,24 @@ class Dictation:
             total = len(s.pcm) // _BPS
         if s.first_loud is None or not self._has_voice(s, cfg.min_voiced):
             return False
-        if total - s.first_loud * frame < cfg.min_pass_audio * SAMPLE_RATE:
+        if not self._closing_due(s, total) and total - s.first_loud * frame < cfg.min_pass_audio * SAMPLE_RATE:
             return False
         previous = s.last_pass_end
-        if previous is not None and total - previous < cfg.pass_every * SAMPLE_RATE:
+        closing = self._closing_due(s, total)
+        if not closing and previous is not None and total - previous < cfg.pass_every * SAMPLE_RATE:
             return False
         if previous is None:
             # the first pass: the window starts shortly before the speech (leading silence invites hallucinations)
             s.window_start = max(s.window_start, self._speech_start(s))
         s.last_pass_end = total
+        if closing:
+            s.closed_for = self._last_loud(s, cfg.speech_rms)
         # nothing new was said (a pause with the key held): the same audio would only invite hallucinations
-        start = s.window_start if previous is None else -(-previous // frame) * frame
+        start = s.window_start if previous is None or closing else -(-previous // frame) * frame
         if not self._has_speech(s, start, total):
             return False
-        end = self._speech_end(s, total)
+        end = total  # a pass hears everything up to now: a soft word is never cut off
+        s.heard_end = end
         with self._lock:
             audio = bytes(s.pcm[s.window_start * _BPS : end * _BPS])
         slot = FINAL if s.mode.translate else LIVE
@@ -355,7 +371,8 @@ class Dictation:
                 # nothing was said (silence, breath, a key click): no final pass, nothing typed, a normal final event
                 self.emit({"event": "final", "text": s.typed, "ms": 0})
                 return s.typed
-            start, end = self._speech_start(s), self._speech_end(s, total)
+            start = self._speech_start(s)
+            end = self._final_end(s, start, total)
             with self._lock:
                 audio = bytes(s.pcm[start * _BPS : end * _BPS])
             result = self._transcribe(s, audio, FINAL)
@@ -438,11 +455,42 @@ class Dictation:
         s.recount = (n, count)
         return count
 
-    def _speech_end(self, s: _Session, total: int) -> int:
-        """Sample after the last loud frame plus a short pad: trailing silence is where whisper hallucinates."""
-        frame, pad = self.config.level_frame, int(self.config.silence_pad * SAMPLE_RATE)
-        last = next((i for i in range(len(s.levels) - 1, -1, -1) if s.levels[i] >= self.config.speech_rms), None)
-        return total if last is None else min(total, (last + 1) * frame + pad)
+    def _final_end(self, s: _Session, start: int, total: int) -> int:
+        """Where the final audio ends. What the old gate-based rule sent (the last frame at the speech gate plus
+        silence_pad) is the base. A soft ending under the gate extends it (to final_tail past the last soft frame, at
+        most final_hard_cap past the last gated frame: a steady fan above tail_rms must not keep it alive), but only
+        while the whole audio stays within one 30 s whisper window. Past that, whisper's last window holds the
+        end of the speech plus the extra tail, and it invents text there ("Thank you.", a repeated sentence): measured
+        on sessions of 30-60 s, so there the base is sent, as before."""
+        cfg, frame = self.config, self.config.level_frame
+        gated = self._last_loud(s, cfg.speech_rms)
+        base = total if gated is None else min(total, (gated + 1) * frame + int(cfg.silence_pad * SAMPLE_RATE))
+        soft = self._last_loud(s, cfg.tail_rms, TAIL_RUN)
+        end = total if soft is None else min(total, (soft + 1) * frame + int(cfg.final_tail * SAMPLE_RATE))
+        if gated is not None:
+            end = min(end, (gated + 1) * frame + int(cfg.final_hard_cap * SAMPLE_RATE))
+        end = max(end, base)
+        return end if end - start <= WHISPER_WINDOW * SAMPLE_RATE else base
+
+    def _last_loud(self, s: _Session, gate: float, run: int = 1) -> int | None:
+        """Index of the last level frame at or above `gate` (rms) that ends a run of `run` such frames, or None."""
+        count = 0
+        for i in range(len(s.levels) - 1, -1, -1):
+            count = count + 1 if s.levels[i] >= gate else 0
+            if count >= run:
+                return i + run - 1
+        return None
+
+    def _closing_due(self, s: _Session, total: int) -> bool:
+        """The speech stopped (`close_after` of quiet after the last frame at the speech gate) and no pass has heard
+        its end yet: run one now instead of at the next scheduled time (there is none in a pause), so the preview
+        shows the last words before the release."""
+        cfg = self.config
+        last = self._last_loud(s, cfg.speech_rms)
+        if last is None or s.heard_end == 0 or s.closed_for == last:
+            return False
+        end = (last + 1) * cfg.level_frame
+        return s.heard_end < end + cfg.heard_pad * SAMPLE_RATE and total - end >= cfg.close_after * SAMPLE_RATE
 
     def _speech_start(self, s: _Session) -> int:
         frame, pad = self.config.level_frame, int(self.config.silence_pad * SAMPLE_RATE)

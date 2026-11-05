@@ -150,13 +150,15 @@ Shell: `dictation begin cs`, `dictation end`, `dictation listen`.
 
 - Language is pinned per session by the mode (no auto-detect). `translate` = Czech speech, English text.
 - Type on release, the only mode: while the key is held nothing is typed and nothing is ever backspaced. The fast
-  (live) model runs a preview pass every 0.5 s of new audio (`PASS_EVERY`) once 1.5 s of speech are recorded
+  (live) model runs a preview pass every 0.3 s of new audio (`PASS_EVERY`) once 1.0 s of speech are recorded
   (`MIN_PASS_AUDIO`, counted from the first frame at the speech gate, not from the key press), over a window of at
   most 15 s that starts 0.5 s before the speech and slides at segment boundaries (never after the window's last
   segment, whose end time whisper stretches over speech it has not transcribed yet, and never inside a segment); the
   words before the window stay in the preview. Its running text goes out as `preview {text}` events, for the pill
-  only; the fast model may revise it at every pass. Trailing silence is trimmed to 0.5 s before every pass, and a
-  pause with the key held runs no passes. The tunables are `Config` / the constants at the top of `engine.py`.
+  only; the fast model may revise it at every pass. A pass hears everything up to now (a soft word below the
+  speech gate is never cut off). A pause with the key held runs no passes, except one closing pass when 0.5 s after
+  the last loud frame no pass has heard the end of the speech yet (so the preview shows the last words before the
+  release). The tunables are `Config` / the constants at the top of `engine.py`.
 - Release (after the release tail, see `release_tail_s`): the full (final) model (beam 5) recognises the WHOLE session,
   the cleanup (fillers, replacements, junk filter, fragment style) runs over its text, and that text is typed once
   with one trailing space. A wrong word of the fast model never reaches the field. A session without speech types
@@ -185,7 +187,10 @@ Shell: `dictation begin cs`, `dictation end`, `dictation listen`.
   past 13 a capital or accented letter was dropped (14 = BackSpace), letters became Ctrl chords (29) and F-key or
   keypad codes typed escape sequences.
 - Silence (no 32 ms frame above RMS 0.005 in the window) is never sent to the recognizer (whisper hallucinates on
-  silence). Nor is a session without clear speech: fewer than `min_voiced` (0.25 s) of voiced frames (at the speech
+  silence). The final pass hears the audio from 0.5 s before the first loud frame to the end of the session,
+  including the release tail and any soft ending under the gate; only a silent hold longer than `final_tail` (3 s)
+  after the last frame above `tail_rms` (0.0025, half the gate; three frames in a row) is cut,, the audio never runs more than `final_hard_cap` (8 s) past the last frame at the gate, and the extension applies only while the final audio stays within 30 s (one whisper window; longer sessions send what the gate-based rule sent, the speech end plus 0.5 s) (a steady fan or hum above `tail_rms` would otherwise keep a soft ending alive, and whisper invents text on holds of ~25 s and more). A phrase that stays under the gate from start
+  to end is not speech and types nothing. Nor is a session without clear speech: fewer than `min_voiced` (0.25 s) of voiced frames (at the speech
   gate and 8 dB above the noise floor, the lowest one at or after the frame, so a word from the key press on is
   judged by the room noise after it: breath, a key click or tap, room noise) runs no live and no final pass, types
   nothing (no trailing space either) and ends with a normal `final` event with empty text. Whisper returns junk on such

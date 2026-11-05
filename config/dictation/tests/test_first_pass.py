@@ -19,7 +19,7 @@ def play(d, seconds, value, step=0.1):
 class FirstPass(unittest.TestCase):
     def test_the_first_pass_counts_from_the_speech_and_skips_the_leading_silence(self):
         r = Scripted(["Hello there"])
-        d = Dictation(r, Recorder(), config=Config(trailing_space=False))
+        d = Dictation(r, Recorder(), config=Config(trailing_space=False, min_pass_audio=1.5))
         d.begin("en")
         play(d, 1.0, BED)
         play(d, 1.4, VOICE)

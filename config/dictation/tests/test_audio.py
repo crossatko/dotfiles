@@ -48,6 +48,25 @@ class Recorder(unittest.TestCase):
             self.assertIn("exit code 3", rec.failed or "")
             rec.stop()
 
+    def test_a_feed_failure_is_reported_at_once(self):
+        def boom(b):
+            raise ValueError("bad feed")
+
+        rec = PwRecord(boom, cmd=["sh", "-c", "exec sleep 30"])
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = os.path.join(tmp, "rec")
+            with open(fake, "w") as f:
+                f.write("#!/bin/bash\nprintf 'abcd'\nexec sleep 30\n")
+            os.chmod(fake, stat.S_IRWXU)
+            rec = PwRecord(boom, cmd=[fake])
+            rec.start()
+            for _ in range(100):
+                if rec.failed:
+                    break
+                time.sleep(0.02)
+            self.assertIn("bad feed", rec.failed or "")
+            rec.stop()
+
     def test_stop_is_not_a_failure_and_a_missing_recorder_is_a_mic_error(self):
         rec = PwRecord(lambda b: None, cmd=["sh", "-c", "exec sleep 30"])  # the appended "-" becomes $0
         rec.start()

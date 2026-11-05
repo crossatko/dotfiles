@@ -65,9 +65,9 @@ class TypeOnRelease(unittest.TestCase):
 
     def test_no_pass_before_min_pass_audio_of_speech(self):
         r = Scripted(["garbage"], final="Ahoj.")
-        d, rec, _ = make(r)
+        d, rec, _ = make(r, config=Config(trailing_space=False, min_pass_audio=1.5))
         d.begin("cs")
-        d.feed(tone(Config().min_pass_audio - 0.1))
+        d.feed(tone(1.4))
         d.step()
         self.assertEqual(r.calls, [])
         d.end()
@@ -248,7 +248,7 @@ class Silence(unittest.TestCase):
 
 
 class TrailingSilence(unittest.TestCase):
-    def test_a_pause_is_not_recognised_again_and_silence_is_trimmed(self):
+    def test_a_pause_runs_only_one_closing_pass_and_the_final_pass_hears_the_whole_session(self):
         r = Scripted(["Hello there", "Hello there friend"], final="Hello there friend.")
         d, rec, _ = make(r)
         d.begin("en")
@@ -256,9 +256,18 @@ class TrailingSilence(unittest.TestCase):
         for _ in range(4):  # two seconds of pause with the key held
             d.feed(silence(0.5))
             d.step()
-        self.assertEqual(len(r.calls), 2)
+        self.assertEqual(len(r.calls), 3, "two scheduled passes and one closing pass; none in the rest of the pause")
         d.end()
-        self.assertLess(r.calls[-1][3], 3.5 + 0.5 + 0.04, "the final pass gets the speech plus a short pad only")
+        self.assertAlmostEqual(r.calls[-1][3], 5.5, delta=0.04, msg="the final pass hears the whole session")
+
+    def test_a_very_long_silent_hold_is_cut_from_the_final_pass(self):
+        r = Scripted(["Hello there"], final="Hello there.")
+        d, rec, _ = make(r)
+        d.begin("en")
+        speak(d, 2)
+        d.feed(silence(20.0))
+        d.end()
+        self.assertAlmostEqual(r.calls[-1][3], 3.5 + Config().final_tail, delta=0.1)
 
 
 class Lifecycle(unittest.TestCase):

@@ -83,7 +83,12 @@ class PwRecord:
             if not chunk:
                 break
             self._last = self._clock()
-            self.on_pcm(chunk)
+            try:
+                self.on_pcm(chunk)
+            except Exception as exc:  # a feed failure must not silently end the reader: report it at once
+                if self._proc is proc:
+                    self._failed = f"microphone audio could not be processed: {exc}"
+                return
         if self._proc is proc:  # not stop(): the recorder ended by itself
             self._failed = f"microphone capture stopped (pw-record exit code {proc.wait()})"
 
