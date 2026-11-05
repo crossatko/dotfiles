@@ -2,7 +2,7 @@
 
     {"version": 1, "mic": "", "gpu": true, "idle_timeout_s": 600, "prompt_hints": false, "pause_silence_s": 1.0,
      "trailing_space": true, "gpu_device": 0, "pill_edge": "bar", "lowercase_fragments": true,
-     "strip_single_word_punct": true}
+     "strip_single_word_punct": true, "release_tail_s": 0.5}
 
 mic          PipeWire source name to record from, "" = the system default source
 gpu          false = the whisper worker runs on the CPU only (slow); true = GPU or an error, never a silent fallback
@@ -22,6 +22,9 @@ lowercase_fragments  false = a single word or short fragment keeps Whisper's cap
              default true; no UI
 strip_single_word_punct  false = a lone word keeps Whisper's trailing . , ; : … ("Yes." instead of "yes"); "?" and
              "!" always stay; default true; no UI
+release_tail_s  seconds the microphone keeps recording after the key is released, before the final pass runs, so the last
+             word is not cut off (it often ends after the key comes up); 0 = stop at once; default RELEASE_TAIL (0.5);
+             clamped to 0..2; no UI
 
 A missing file, unreadable JSON or a value of the wrong type leaves that key at its default; nothing here raises.
 """
@@ -34,6 +37,8 @@ from dataclasses import dataclass
 
 # idle_timeout_s at or below this (and above 0) = unload as soon as a session is over (see idle_timeout_s above)
 UNLOAD_AT_ONCE = 1.0
+# seconds of audio recorded after the key release (release_tail_s above)
+RELEASE_TAIL = 0.5
 
 
 def unload_due(idle_timeout_s: float, idle_for: float) -> bool:
@@ -54,6 +59,7 @@ class Prefs:
     gpu_device: int = 0
     lowercase_fragments: bool = True
     strip_single_word_punct: bool = True
+    release_tail_s: float = RELEASE_TAIL
 
 
 def prefs_file() -> str:
@@ -94,8 +100,12 @@ def load(path: str | None = None) -> Prefs:
     device = min(1000, max(0, device))  # negative = the first GPU
     lower = saved.get("lowercase_fragments", d.lowercase_fragments)
     strip = saved.get("strip_single_word_punct", d.strip_single_word_punct)
+    tail = saved.get("release_tail_s", d.release_tail_s)
+    if isinstance(tail, bool) or not isinstance(tail, (int, float)) or tail != tail:
+        tail = d.release_tail_s
+    tail = min(2.0, max(0.0, float(tail)))
     return Prefs(mic.strip(), gpu if isinstance(gpu, bool) else d.gpu, float(idle),
                  hints if isinstance(hints, bool) else d.prompt_hints, pause,
                  space if isinstance(space, bool) else d.trailing_space, device,
                  lower if isinstance(lower, bool) else d.lowercase_fragments,
-                 strip if isinstance(strip, bool) else d.strip_single_word_punct)
+                 strip if isinstance(strip, bool) else d.strip_single_word_punct, tail)

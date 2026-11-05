@@ -6,7 +6,8 @@ line. Commands are either JSON ({"cmd": "begin", "mode": "cs"}) or plain words (
     begin <code>|translate:<code>|translate|auto|translate:auto [<codes>]
                              start a session (opens the mic); ignored while one is running. auto detects the
                              language once and pins it, among <codes> (comma separated; JSON "languages": [..]) when given
-    end                      key released: final pass, flush the rest, close the mic
+    end                      key released: the mic records on for prefs.release_tail_s (0.5 s), then the final pass,
+                             flush the rest, close the mic
     cancel                   drop the session without typing anything more
     status                   reply (to this client only) with a status event
 
@@ -143,6 +144,8 @@ class Service:
         self._owner = None  # the client whose begin started the session; its disconnect cancels it
         self._restarted = False  # the worker was restarted once during this session
         self._idle_timeout = 0.0
+        self._tail_s = 0.0  # prefs.release_tail_s of the last read; no prefs source = no tail
+        self._ending = None  # monotonic time the release tail ends (the key is up, the mic still records), or None
         self._last_activity = 0.0
         self._prefs_read = 0.0
         self._started = 0.0
@@ -194,6 +197,7 @@ class Service:
             prefs = None
         self._prefs_read = self._clock()
         self._idle_timeout = float(prefs.idle_timeout_s) if prefs else 0.0
+        self._tail_s = float(getattr(prefs, "release_tail_s", 0.0)) if prefs else 0.0
         return prefs
 
     def _close_recognizer(self) -> None:
@@ -207,6 +211,7 @@ class Service:
     def _unload(self) -> None:
         """Stop the worker: its memory (RAM and GPU) goes back to the system. The next begin loads again."""
         self._close_recognizer()
+        self._ending = None
         self.engine, self._loaded_key = None, None
         self._error = self._code = None
         self._set_state("idle")
@@ -261,6 +266,9 @@ class Service:
 
     def _tick(self) -> None:
         engine = self.engine
+        if self._ending is not None and time.monotonic() >= self._ending:
+            self._end_session(engine)
+            return
         if engine and engine.active and self._state == "listening":
             if time.monotonic() - self._started > self.max_session:
                 self._handle({"cmd": "end"})
@@ -291,6 +299,9 @@ class Service:
             self._reply(cmd, {"event": "error", "message": f"unknown mode {mode!r}", "code": "mode"})
             return
         engine = self.engine
+        if self._ending is not None:  # pressed again within the release tail: the old session ends first
+            self._end_session(engine)
+            engine = self.engine
         if engine is not None and engine.active:  # the running session is not disturbed
             self._reply(cmd, self.status())
             return
@@ -352,24 +363,44 @@ class Service:
         elif name == "_disconnect":  # a client went away: its session must not keep typing
             if cmd.get("_client") is not None and cmd["_client"] is self._owner:
                 self._handle({"cmd": "cancel"})
-        elif name in ("end", "cancel"):
-            owner = self._owner
+        elif name == "end":
+            if self._ending is not None:
+                return  # the tail is already running
+            if self._tail_s > 0 and engine is not None and engine.active and self._capture is not None \
+                    and self._state == "listening":
+                # the key is up but the last word often is not: keep recording for the tail, then run the final pass
+                # (the controller loop ends it from _tick; cancel, disconnect and a new begin settle it earlier)
+                self._ending = time.monotonic() + self._tail_s
+                self._state = "finishing"
+                self.emit({"event": "state", "state": "finishing"})
+                return
+            self._end_session(engine)
+        elif name == "cancel":
+            self._ending = None
             self._stop_capture()
-            if engine is None or not engine.active:
-                return
-            self._last_activity = self._clock()
-            if name == "cancel":
+            if engine is not None and engine.active:
+                self._last_activity = self._clock()
                 engine.cancel()
-                return
-            self._state = "finishing"
-            self.emit({"event": "state", "state": "finishing"})
-            self._owner = owner  # its disconnect still abandons the final pass (and a retry of it)
-            try:
-                self._finish(engine)
-            finally:
-                self._owner = None
         elif name != "status":
             self._reply(cmd, {"event": "error", "message": f"unknown command {name!r}", "code": "command"})
+
+    def _end_session(self, engine) -> None:
+        """Stop the mic (everything recorded so far, the release tail included, reaches the engine first), then run the
+        final pass and type its result. The idle unload cannot fire meanwhile: this runs on the controller thread, which
+        checks the idle timer only between commands, and the engine stays active until the final pass has finished."""
+        self._ending = None
+        owner = self._owner
+        self._stop_capture()
+        if engine is None or not engine.active:
+            return
+        self._last_activity = self._clock()
+        self._state = "finishing"
+        self.emit({"event": "state", "state": "finishing"})
+        self._owner = owner  # its disconnect still abandons the final pass (and a retry of it)
+        try:
+            self._finish(engine)
+        finally:
+            self._owner = None
 
     def _finish(self, engine: Dictation) -> None:
         """The final pass. A recognizer failure keeps the session (audio and typed text) and retries once with a fresh
