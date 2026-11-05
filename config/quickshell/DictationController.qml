@@ -47,6 +47,7 @@ Scope {
         pill.captionText = ""
         pill.level = 0
         pill.mode = m.pill
+        pill.modelMode = SttModels.modeKeyOf(m.service)
         pill.state = "listening"
         if (pill.state === "error") return    // no usable speech model: the pill said so (SttModels), nothing to record
         session = true

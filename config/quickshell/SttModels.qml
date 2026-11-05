@@ -26,7 +26,7 @@ import Quickshell.Io
 // overridden / keys / changed / resetAll).
 //
 // For the pill: `noneInstalled`, `missingMessage` ("Download a speech model in settings"), `statusFor(modeKey)` (what to
-// show instead of recording, "" = ready), `modeKeyOf(pillMode)`, `pathOf(name)`. Call `refresh()` once when you need
+// show instead of recording, "" = ready), `modeKeyOf(serviceMode)`, `pathOf(name)`. Call `refresh()` once when you need
 // fresh install state (the section does when it opens); `loaded` is false until the first answer.
 //   qs ipc call sttmodels get | list | download <name> | cancel | remove <name> | role <en|cs|translate> <live|final> <name>
 Singleton {
@@ -53,7 +53,8 @@ Singleton {
     property var choice: ({})                     // explicit choices only: { en: { live: NAME, final: NAME }, ... }
     function defaultOf(mode, role) {
         if (role === "final") return "large-v3"
-        return mode === "en" && isInstalled(englishFast) ? englishFast : "large-v3-turbo"
+        const f = model(englishFast)       // as the service: the file exists (the service has no catalog to check its size)
+        return mode === "en" && f !== null && f.diskBytes > 0 ? englishFast : "large-v3-turbo"
     }
     function pick(mode, role) { return (choice[mode] && choice[mode][role]) || defaultOf(mode, role) }
     function _split(key) { const i = key.indexOf("."); return [key.substring(0, i), key.substring(i + 1)] }
@@ -64,8 +65,8 @@ Singleton {
     function resetAll() { choice = ({}); notice = ""; saver.restart() }
     // set() is the store call: it refuses what roleProblem() refuses (the section shows the reason in `notice`)
     function set(key, name) { const k = _split(key); return setRole(k[0], k[1], name) === "" }
-    // the pill's mode ("en", "cs", "cs-en", "de", "auto", ...) -> the key above
-    function modeKeyOf(pillMode) { return pillMode === "en" ? "en" : /-en$|^translate/.test(pillMode) ? "translate" : "cs" }
+    // the service mode ("en", "cs", "auto", "translate:cs", ...) -> the key above (as whisper.model_mode)
+    function modeKeyOf(serviceMode) { return serviceMode === "en" ? "en" : /^translate/.test(serviceMode) ? "translate" : "cs" }
 
     // ---- catalog + install state (the helper's `list`) ----
     property var models: []                    // [{name,label,file,size,vramGb,translate,english,local,czech,recommended,note,installed,damaged,diskBytes,partialBytes}]

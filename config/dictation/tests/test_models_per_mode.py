@@ -1,6 +1,10 @@
 """The model choice per mode (en, cs, translate): the file formats, the refusals, and reloads only when the pair changes."""
+import argparse
+import importlib.machinery
+import importlib.util
 import json
 import os
+import stat
 import tempfile
 import unittest
 
@@ -9,6 +13,17 @@ from helpers import Scripted
 from dictation import whisper
 from test_lifecycle import Base
 from test_service import Client
+
+BIN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "dictation")
+
+
+def load_cli():
+    loader = importlib.machinery.SourceFileLoader("dictation_cli", BIN)
+    spec = importlib.util.spec_from_loader("dictation_cli", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
 
 TURBO, FULL, FUTO = "large-v3-turbo", "large-v3", "futo-small-en"
 
@@ -134,6 +149,91 @@ class Reloads(Base):
     def test_one_pair_for_every_mode_never_reloads(self):
         same = {m: ("turbo", "full") for m in whisper.MODES}
         self.assertEqual(self.run_modes("en", "cs", "translate", pairs=same), ["en"])
+
+
+class RealKey(Base):
+    """bin/dictation's own key function and recognizer factory, the real Service, chosen_models and model_paths: a pair
+    that is loaded for one mode must never be reused for a mode it cannot serve."""
+
+    ENV = ("DICTATION_MODEL_DIR", "DICTATION_MODELS_FILE", "DICTATION_PREFS_FILE", "DICTATION_WORKER")
+
+    def setUp(self):
+        self.saved = {k: os.environ.get(k) for k in self.ENV}
+        self.work = tempfile.TemporaryDirectory()
+        self.models = os.path.join(self.work.name, "models")
+        os.makedirs(self.models)
+        for n in (TURBO, FULL, FUTO):
+            open(os.path.join(self.models, f"ggml-{n}.bin"), "w").close()
+        worker = os.path.join(self.work.name, "worker")
+        with open(worker, "w") as fh:
+            fh.write("#!/bin/bash\necho '{\"ready\":true}'\nexec cat >/dev/null\n")
+        os.chmod(worker, stat.S_IRWXU)
+        self.models_file = os.path.join(self.work.name, "stt-models.json")
+        os.environ.update(DICTATION_MODEL_DIR=self.models, DICTATION_MODELS_FILE=self.models_file,
+                          DICTATION_PREFS_FILE=os.path.join(self.work.name, "prefs.json"), DICTATION_WORKER=worker)
+        self.cli = load_cli()
+
+    def tearDown(self):
+        super().tearDown()
+        for k, v in self.saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+        self.work.cleanup()
+
+    def begins(self, args, *modes):
+        """For each mode: the first state-or-error event after `begin`."""
+        self.start(lambda mode: self.cli.recognizer(args, mode), models_key=lambda mode: self.cli.models_key(args, mode))
+        self.svc.per_mode = True
+        c = Client(self.path)
+        c.until(lambda e: e.get("event") == "status" and e["state"] == "idle")
+        out = []
+        for mode in modes:
+            c.send(f"begin {mode}")
+            ev = c.until(lambda e: (e.get("event") == "state" and e["state"] == "listening") or e.get("event") == "error")[-1]
+            out.append(ev)
+            if ev.get("event") != "error":
+                c.send("cancel")
+                c.until(lambda e: e.get("event") == "state" and e["state"] == "idle")
+        c.close()
+        return out
+
+    def args(self, **kw):
+        return argparse.Namespace(**dict(dict(live=None, final=None, no_gpu=True, final_beam=5, verbose=False), **kw))
+
+    def test_an_english_only_pair_is_refused_for_cs_and_translate_after_en_loaded_it(self):
+        for modes, why in ((("en", "cs"), "English only"), (("en", "translate"), "English only")):
+            with self.subTest(modes=modes):
+                ev = self.begins(self.args(live=FUTO), *modes)
+                self.assertEqual(ev[0].get("event"), "state")
+                self.assertEqual((ev[1].get("event"), ev[1].get("code")), ("error", "no-model"))
+                self.assertIn(why, ev[1]["message"])
+                self.tearDown_service()
+
+    def test_the_same_from_a_version_1_file(self):
+        with open(self.models_file, "w") as fh:
+            json.dump({"version": 1, "live": FUTO, "final": FULL}, fh)
+        ev = self.begins(self.args(), "en", "cs")
+        self.assertEqual(ev[0].get("event"), "state")
+        self.assertEqual((ev[1].get("event"), ev[1].get("code")), ("error", "no-model"))
+
+    def test_a_full_model_that_cannot_translate_is_refused_for_translate_after_en_loaded_it(self):
+        ev = self.begins(self.args(final=TURBO), "en", "translate")
+        self.assertEqual(ev[0].get("event"), "state")
+        self.assertEqual((ev[1].get("event"), ev[1].get("code")), ("error", "no-model"))
+        self.assertIn("cannot translate", ev[1]["message"])
+
+    def test_a_good_pair_still_loads_once_for_every_mode(self):
+        made = []
+        real = self.cli.recognizer
+        self.cli.recognizer = lambda a, m: made.append(m) or real(a, m)
+        ev = self.begins(self.args(live=TURBO), "en", "cs", "translate")
+        self.assertEqual([e.get("event") for e in ev], ["state"] * 3)
+        self.assertEqual(made, ["en"])
+
+    def tearDown_service(self):
+        self.svc.shutdown()
+        self.thread.join(10)
 
 
 if __name__ == "__main__":

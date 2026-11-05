@@ -149,6 +149,7 @@ class Service:
         self._restarted = False  # the worker was restarted once during this session
         self._idle_timeout = 0.0
         self._tail_s = 0.0  # prefs.release_tail_s of the last read; no prefs source = no tail
+        self._next_session = False  # a begin is finishing the previous session: an end now belongs to the new one
         self._ending = None  # monotonic time the release tail ends (the key is up, the mic still records), or None
         self._last_activity = 0.0
         self._prefs_read = 0.0
@@ -307,7 +308,11 @@ class Service:
             return
         engine = self.engine
         if self._ending is not None:  # pressed again within the release tail: the old session ends first
-            self._end_session(engine)
+            self._next_session = True
+            try:
+                self._end_session(engine)
+            finally:
+                self._next_session = False
             engine = self.engine
         if engine is not None and engine.active:  # the running session is not disturbed
             self._reply(cmd, self.status())
@@ -480,7 +485,8 @@ class Service:
                     if name == "cancel" or (name == "_disconnect" and cmd.get("_client") is not None
                                             and cmd["_client"] is self._owner):
                         return self._abandon(worker), None
-                    if name != "end":  # a repeated end is moot; anything else waits its turn
+                    if name != "end" or self._next_session:  # a repeated end is moot, but the end of the session a
+                        # begin is about to start is not; anything else waits its turn
                         deferred.append(cmd)
                 if deadline is not None and worker.is_alive() and self._clock_mono() > deadline:
                     with self._retry_lock:

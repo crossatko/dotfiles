@@ -74,6 +74,19 @@ class ReleaseTail(Base):
         c.send("cancel")
         c.close()
 
+    def test_the_end_of_a_session_begun_during_the_old_final_pass_is_not_dropped(self):
+        rec = Slow(delay=0.6)
+        self.start(lambda: rec, prefs_fn=lambda: prefs.Prefs(idle_timeout_s=0, release_tail_s=1.0))
+        c = Client(self.path)
+        c.send("begin en")
+        c.until(lambda e: e.get("event") == "edit")
+        c.send("end")  # the tail starts
+        c.send("begin en")  # settles the old session: its final pass runs for 0.6 s
+        c.send("end")  # arrives during that pass but belongs to the new session
+        c.until(lambda e: e.get("event") == "final")
+        c.until(lambda e: e.get("event") == "final")  # the second session ended too (it did not wait for the 300 s cap)
+        c.close()
+
     def test_without_prefs_there_is_no_tail(self):
         rec = Slow(delay=0)
         self.start(lambda: rec)

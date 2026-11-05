@@ -224,6 +224,23 @@ class Download(Base):
         self.assertEqual((rc, ev[-1]["code"]), (1, "catalog"))
         self.assertEqual(Handler.seen, [])
 
+    def test_a_local_model_has_no_download_and_no_verify(self):
+        m = {"name": "mine", "file": "ggml-mine.bin", "local": True, "english": True, "size": 5, "translate": False}
+        self.write_cat({"models": [m]})
+        rc, ev, _ = self.run_cli("download", "mine")
+        self.assertEqual((rc, ev[-1]["event"], ev[-1]["code"]), (1, "error", "local"))
+        self.assertEqual(Handler.seen, [])
+        self.assertFalse(os.path.exists(os.path.join(self.dir, "ggml-mine.bin.part")))
+        os.makedirs(self.dir, exist_ok=True)
+        with open(os.path.join(self.dir, "ggml-mine.bin"), "wb") as fh:
+            fh.write(b"12345")
+        rc, ev, _ = self.run_cli("download", "mine")  # installed or not, there is nothing to download
+        self.assertEqual((rc, ev[-1]["code"]), (1, "local"))
+        rc, ev, _ = self.run_cli("verify", "mine")
+        self.assertEqual((rc, ev[-1]["code"]), (1, "local"))
+        rc, ev, out = self.run_cli("list")
+        self.assertTrue(json.loads(out)["models"][0]["installed"])  # the right size = installed, no checksum needed
+
     def test_cancel_by_pid_keeps_part_then_resume(self):
         Handler.slow = True
         p = subprocess.Popen([sys.executable, "-I", BIN, "download", "fake"], env=self.env, stdout=subprocess.PIPE, text=True)

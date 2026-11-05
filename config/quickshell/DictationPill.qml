@@ -21,7 +21,7 @@ import Quickshell.Wayland
 //   captionText  the text so far (the end is shown)
 //   errorText / errorCode  the error detail (and an optional short code): recorded in DictationStatus when the state
 //                becomes "error" (set them before the state; a new text while in "error" is a new error). Any other
-//                shown state while SttModels.statusFor(the mode) is set (no usable model) becomes that error, code "no-model".
+//                shown state while SttModels.statusFor(modelMode) is set (no usable model) becomes that error, code "no-model".
 //   mirrored     bottom edge only (default on): caption ABOVE the swoosh, so the swoosh stays beside the edge and never
 //                moves when the caption opens; false = the top layout growing upwards (override for tests)
 // Test hook (manual): qs ipc call dictation-pill start cs | hide | state <s> | mode <m> | level <0-100> | levels <csv> |
@@ -33,6 +33,7 @@ PanelWindow {
 
     property string state: "hidden"
     property string mode: "cs"
+    property string modelMode: "cs"           // which model pair the service uses for this session: "en" | "cs" | "translate" (SttModels.modeKeyOf(service mode)); not the shown mode, which auto-detection changes
     property real level: 0
     property var levels: []
     property string captionText: ""
@@ -54,9 +55,9 @@ PanelWindow {
         const sameShowing = engaged
         if (!engaged) { screen = place.pick(); engaged = true }
         // no usable speech model: an error instead of recording (the reason, e.g. SttModels.missingMessage, goes to DictationStatus)
-        if (state !== "error" && SttModels.statusFor(SttModels.modeKeyOf(pill.mode)) !== "") {
+        if (state !== "error" && SttModels.statusFor(pill.modelMode) !== "") {
             if (sameShowing && look === "error" && errorCode === "no-model") { keepRecord = true; state = "error"; keepRecord = false; return }   // shown this time already
-            errorCode = "no-model"; errorText = SttModels.statusFor(SttModels.modeKeyOf(pill.mode)); state = "error"; return
+            errorCode = "no-model"; errorText = SttModels.statusFor(pill.modelMode); state = "error"; return
         }
         look = state
         shownCaption = captionText

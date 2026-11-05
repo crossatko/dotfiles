@@ -50,6 +50,18 @@ def chosen(args, mode):
     return whisper.chosen_models(mode=whisper.model_mode(mode), live=args.live, final=args.final)
 
 
+def models_key(args, mode):
+    """Which models a begin in `mode` wants; the service reloads when it differs from the loaded one. The pair is
+    checked at EVERY begin (installed, and able to do the mode): a refusal is a key of its own, so a pair that is
+    loaded for one mode can never be reused for a mode it cannot serve; the reload then reports the refusal (no-model)."""
+    names = chosen(args, mode)
+    try:
+        whisper.model_paths(names, mode=whisper.model_mode(mode))
+    except whisper.ModelMissing as exc:
+        return ("refused", str(exc))
+    return (tuple(sorted(names.items())), use_gpu(args), gpu_device())
+
+
 def use_gpu(args):
     """--no-gpu, or the shell's choice (Settings > Voice: prefs gpu=false); read at every begin."""
     return not args.no_gpu and prefs.load().gpu
@@ -117,7 +129,7 @@ def cmd_serve(args):
 
     svc = Service(args.socket, lambda mode: recognizer(args, mode), DryRun() if args.dry_run else WtypeInjector(),
                   hyprland_focus, capture, cleanup=Cleanup(), config=Config(max_window=args.max_window),
-                  models_key=lambda mode: (tuple(sorted(chosen(args, mode).items())), use_gpu(args), gpu_device()),
+                  models_key=lambda mode: models_key(args, mode),
                   prefs=prefs.load, per_mode=True)
     asyncio.run(svc.serve())
 
