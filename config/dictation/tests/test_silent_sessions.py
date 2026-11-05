@@ -221,7 +221,7 @@ class ShortRealSpeechStillTyped(unittest.TestCase):
             d, rec, events = run(r, mix(overlay(word, white(0.4, room)), white(0.4, room, 4)), "cs")
             self.assertEqual(rec.screen(), "ano ", room)
 
-    def test_a_longer_session_types_live_and_final_as_before(self):
+    def test_a_longer_session_types_the_final_text(self):
         r = Scripted(["a b c", "a b c d"], final="a b c d.")
         d, rec, events = run(r, mix(white(0.5, 0.0005), speech(4.0, 0.05), white(0.5, 0.0005)), "en")
         self.assertEqual(rec.screen(), "a b c d. ")
@@ -243,10 +243,10 @@ class FinalTextWithoutLetters(unittest.TestCase):
         d, rec, events = run(r, mix(white(0.5, 0.0005), speech(1.0, 0.05), white(0.5, 0.0005)), "en")
         self.assertEqual(rec.screen(), "42 ")  # a lone word loses its period
 
-    def test_a_punctuation_only_final_keeps_what_the_live_passes_typed(self):
+    def test_a_punctuation_only_final_types_nothing_whatever_the_preview_said(self):
         r = Scripted(["a b c", "a b c d"], final=".")
         d, rec, events = run(r, mix(white(0.5, 0.0005), speech(4.0, 0.05), white(0.5, 0.0005)), "en")
-        self.assertEqual(rec.screen(), "a b c ", "typed words stay; the final pass adds nothing")
+        self.assertEqual(rec.screen(), "")
 
 
 class HallucinationList(unittest.TestCase):

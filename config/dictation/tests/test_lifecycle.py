@@ -66,7 +66,7 @@ class Base(unittest.TestCase):
 
     def dictate(self, c, mode="en"):
         c.send(f"begin {mode}")
-        c.until(lambda e: e.get("event") == "edit")
+        c.until(lambda e: e.get("event") == "preview")
         c.send("end")
         c.until(lambda e: e.get("event") == "final")
         c.until(lambda e: e.get("event") == "state" and e["state"] == "idle")
@@ -252,7 +252,7 @@ class Failures(Base):
         self.start(lambda: good(), capture=Dies)
         c = Client(self.path)
         c.send("begin en")
-        c.until(lambda e: e.get("event") == "edit")
+        c.until(lambda e: e.get("event") == "preview")
         caps[0].failed = "microphone capture stopped (pw-record exit code 1)"
         err = c.until(lambda e: e.get("event") == "error")[-1]
         self.assertEqual(err["code"], "mic")
@@ -265,7 +265,7 @@ class Failures(Base):
 
     def dictate_again(self, c):
         c.send("begin en")
-        c.until(lambda e: e.get("event") == "edit")
+        c.until(lambda e: e.get("event") == "preview")
         c.send("end")
         c.until(lambda e: e.get("event") == "final")
 
@@ -336,7 +336,7 @@ class Failures(Base):
         c, other = Client(self.path), Client(self.path)
         other.until(lambda e: e.get("event") == "status")  # the greeting
         c.send("begin en")
-        c.until(lambda e: e.get("event") == "edit")
+        c.until(lambda e: e.get("event") == "preview")
         other.send("begin cs")
         st = other.until(lambda e: e.get("event") == "status" and e["state"] == "listening")[-1]
         self.assertEqual(st["mode"], "en")
@@ -358,7 +358,7 @@ class Failures(Base):
         self.start(lambda: good(), capture=Cap)
         shell, spy = Client(self.path), Client(self.path)
         shell.send("begin en")
-        shell.until(lambda e: e.get("event") == "edit")
+        shell.until(lambda e: e.get("event") == "preview")
         shell.close()
         spy.until(lambda e: e.get("event") == "state" and e["state"] == "idle")
         self.assertEqual(stopped, [1])
@@ -371,7 +371,7 @@ class Failures(Base):
         self.start(lambda: good())
         sender, spy = Client(self.path), Client(self.path)
         sender.send(json.dumps({"cmd": "begin", "mode": "en", "detached": True}))
-        sender.until(lambda e: e.get("event") == "edit")
+        sender.until(lambda e: e.get("event") == "preview")
         sender.close()
         time.sleep(0.3)
         spy.send("end")
@@ -389,7 +389,7 @@ class Failures(Base):
         self.start(lambda: recs.append(good()) or recs[-1], capture=Cap)
         c = Client(self.path)
         c.send("begin en")
-        c.until(lambda e: e.get("event") == "edit")
+        c.until(lambda e: e.get("event") == "preview")
         self.svc.shutdown()  # what the SIGTERM handler does
         self.thread.join(5)
         self.assertFalse(self.thread.is_alive())
@@ -417,18 +417,7 @@ class Failures(Base):
         c.close()
 
 
-class PauseFromPrefs(Base):
-    def test_begin_applies_the_prefs_pause_silence_and_the_default_without_it(self):
-        made, pause = [], [1.5]
-        self.start(lambda: made.append(good()) or made[-1], prefs_fn=lambda: prefs.Prefs(pause_silence_s=pause[0]))
-        c = Client(self.path)
-        self.dictate(c)
-        self.assertEqual(self.svc.engine.config.pause_silence, 1.5)
-        pause[0] = None
-        self.dictate(c)
-        self.assertEqual(self.svc.engine.config.pause_silence, Config().pause_silence)
-        c.close()
-
+class TrailingSpacePref(Base):
     def test_the_prefs_switch_turns_the_trailing_space_off(self):
         space = [False]
         self.start(lambda: good(), prefs_fn=lambda: prefs.Prefs(trailing_space=space[0]))
@@ -490,15 +479,6 @@ class Prefs(unittest.TestCase):
         for bad in ('"1"', "true", "null", "1.5", "[1]", "NaN", "Infinity"):
             self.assertEqual(self.write('{"gpu_device": %s}' % bad).gpu_device, 0, bad)
         self.assertEqual(self.write('{"gpu_device": 1, "mic": "m"}').mic, "m")
-
-    def test_pause_silence_without_ui(self):
-        self.assertIsNone(self.write('{"version": 1}').pause_silence_s, "missing: the engine default")
-        self.assertEqual(self.write('{"pause_silence_s": 1.5}').pause_silence_s, 1.5)
-        self.assertEqual(self.write('{"pause_silence_s": 0}').pause_silence_s, 0.0, "0 = only on release")
-        self.assertEqual(self.write('{"pause_silence_s": 0.05}').pause_silence_s, 0.3, "clamped")
-        self.assertEqual(self.write('{"pause_silence_s": 99}').pause_silence_s, 10.0)
-        for bad in ('"1"', "true", "null", "[1]"):
-            self.assertIsNone(self.write('{"pause_silence_s": %s}' % bad).pause_silence_s, bad)
 
     def test_trailing_space_without_ui(self):
         self.assertTrue(self.write('{"version": 1}').trailing_space)

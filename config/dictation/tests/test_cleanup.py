@@ -244,7 +244,7 @@ class Engine(Words):
         r = Scripted(["Um, so I", "Um, so I think", "Um, so I think, uh, we", "Um, so I think, uh, we should go"],
                      final="Um, so I think, uh, we should go.")
         rec, live, _ = session(r, Cleanup(self.path), "en", 4)
-        self.assertEqual(live, [(0, "So I"), (0, " think,"), (0, " we")])
+        self.assertEqual(live, [], "nothing is typed before the release")
         self.assertEqual(rec.screen(), "So I think, we should go.")
         self.assertNeverErased(rec)
 
@@ -261,7 +261,7 @@ class Engine(Words):
                       "Please enable two factor authentication now please"],
                      final="Please enable two factor authentication now please.")
         rec, live, _ = session(r, c, "en", 4)
-        self.assertEqual(live, [(0, "Please enable"), (0, " 2FA now")])
+        self.assertEqual(live, [])
         self.assertNeverErased(rec)
         self.assertEqual(rec.screen(), "Please enable 2FA now please.")
 
@@ -269,15 +269,15 @@ class Engine(Words):
         c = self.cleanup([("two factor authentication", "2FA", "any")])
         r = Scripted(["it has two", "it has two factor", "it has two factor issues", "it has two factor issues now"],
                      final="It has two factor issues now.")
-        _, live, _ = session(r, c, "en", 4)
-        self.assertEqual("".join(t for _, t in live), "it has two factor issues")
+        rec, live, _ = session(r, c, "en", 4)
+        self.assertEqual((live, rec.screen()), ([], "It has two factor issues now."))
 
     def test_held_words_are_flushed_at_the_end(self):
         c = self.cleanup([("two factor authentication", "2FA", "any")])
         r = Scripted(["enable the two", "enable the two factor", "enable the two factor"],
                      final="Enable the two factor")
         rec, live, events = session(r, c, "en", 3)
-        self.assertEqual("".join(t for _, t in live), "enable the")
+        self.assertEqual(live, [])
         self.assertEqual(rec.screen().casefold(), "enable the two factor")
         self.assertEqual(events[-2]["event"], "final")
 

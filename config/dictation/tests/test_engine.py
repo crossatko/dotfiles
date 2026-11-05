@@ -28,35 +28,40 @@ def speak(d, passes, chunk=tone):
         d.step()
 
 
-class Stability(unittest.TestCase):
-    def test_types_only_words_two_passes_agree_on_and_never_the_last_word(self):
-        r = Scripted(["Udělal jsem", "Udělal jsem commit", "Udělal jsem commit a pak"],
-                     final="Udělal jsem commit a pak otevřel pull request.")
-        d, rec, _ = make(r)
+class TypeOnRelease(unittest.TestCase):
+    """The only mode: the fast model feeds the preview while the key is held, the full model's text is typed once."""
+
+    def test_nothing_is_typed_while_the_key_is_held_but_the_preview_flows(self):
+        r = Scripted(["Udělal jsem", "Udělal jsem commit", "Udělal jsem commit a pak"], final="x")
+        d, rec, events = make(r)
         d.begin("cs")
         speak(d, 3)
-        self.assertEqual(rec.ops, [(0, "Udělal jsem"), (0, " commit")])
-        d.end()
-        self.assertEqual(rec.ops[-1], (0, " a pak otevřel pull request."))
-        self.assertEqual(rec.screen(), "Udělal jsem commit a pak otevřel pull request.")
-
-    def test_the_last_word_waits_even_when_two_passes_agree_on_it(self):
-        d, rec, _ = make(Scripted(["Hello there", "Hello there"]))
-        d.begin("en")
-        speak(d, 2)
-        self.assertEqual(rec.ops, [(0, "Hello")])
-
-    def test_a_single_pass_types_nothing(self):
-        d, rec, _ = make(Scripted(["Hello there friend"]))
-        d.begin("en")
-        speak(d, 1)
         self.assertEqual(rec.ops, [])
+        self.assertEqual([e["text"] for e in events if e["event"] == "preview"],
+                         ["Udělal jsem", "Udělal jsem commit", "Udělal jsem commit a pak"])
+        self.assertFalse([e for e in events if e["event"] == "edit"])
 
-    def test_case_and_diacritics_are_ignored_when_comparing_but_the_newest_spelling_is_typed(self):
-        d, rec, _ = make(Scripted(["spust docker", "Spusť Docker compose"]))
+    def test_the_full_models_text_is_typed_once_on_release(self):
+        r = Scripted(["Udělal jsem", "Udělal jsem commit"], final="Udělal jsem commit a pak otevřel pull request.")
+        d, rec, events = make(r)
         d.begin("cs")
         speak(d, 2)
-        self.assertEqual(rec.ops, [(0, "Spusť Docker")])
+        d.end()
+        self.assertEqual(rec.ops, [(0, "Udělal jsem commit a pak otevřel pull request.")])
+        self.assertEqual([e for e in events if e["event"] == "edit"],
+                         [{"event": "edit", "backspace": 0, "text": "Udělal jsem commit a pak otevřel pull request."}])
+        self.assertEqual([e["text"] for e in events if e["event"] == "final"], ["Udělal jsem commit a pak otevřel pull request."])
+
+    def test_a_wrong_fast_model_does_not_matter_the_full_text_is_typed_in_full(self):
+        # the failure that ended live typing: "Gidribis" was typed long before the final pass read "git rebase"
+        r = Scripted(["Run Gidribis on", "Run Gidribis on Origin Main, then"],
+                     final="Run git rebase on origin main, then force push the branch with lease.")
+        d, rec, _ = make(r)
+        d.begin("en")
+        speak(d, 2)
+        self.assertEqual(rec.ops, [])
+        d.end()
+        self.assertEqual(rec.ops, [(0, "Run git rebase on origin main, then force push the branch with lease.")])
 
     def test_no_pass_before_min_pass_audio_of_speech(self):
         r = Scripted(["garbage"], final="Ahoj.")
@@ -77,83 +82,33 @@ class Stability(unittest.TestCase):
         d.end()
         self.assertEqual([c[:3] for c in r.calls], [("live", "en", False), ("live", "en", False), ("final", "en", False)])
 
-
-class TailCorrections(unittest.TestCase):
-    def test_a_correction_backspaces_only_the_tail(self):
-        r = Scripted(["one two three four", "one two three four five",
-                      "one two tree for five six", "one two tree for five six seven"])
-        d, rec, _ = make(r)
+    def test_the_final_pass_gets_the_whole_session(self):
+        r = Scripted(["a b"], final="a b c.")
+        d, _, _ = make(r)
         d.begin("en")
-        speak(d, 4)
-        self.assertEqual(rec.ops, [(0, "one two three four"), (9, "ree for five six")])
-        self.assertEqual(rec.screen(), "one two tree for five six")
-
-    def test_a_disagreement_deeper_than_the_tail_is_left_alone_and_typing_goes_on(self):
-        r = Scripted(["a b c d e f g h", "a b c d e f g h i",
-                      "x b c d e f g h i j", "x b c d e f g h i j k"])
-        d, rec, _ = make(r)
-        d.begin("en")
-        speak(d, 4)
-        self.assertEqual(rec.ops, [(0, "a b c d e f g h"), (0, " i"), (0, " j")])
-
-    def test_a_reworded_window_start_does_not_stall_typing(self):
-        # the first words of the window come out differently in every pass from some point on
-        r = Scripted(["one two three four five", "one two three four five six",
-                      "won two three four five six seven", "un two three four five six seven eight",
-                      "uno two three four five six seven eight nine"])
-        d, rec, _ = make(r)
-        d.begin("en")
-        speak(d, 5)
-        self.assertEqual(rec.screen(), "one two three four five six seven eight")
-
-    def test_a_correction_needs_both_passes_to_agree_on_it(self):
-        r = Scripted(["one two three four", "one two three four five",
-                      "one two tree for five six", "one two three four five six seven",
-                      "one two three four five six seven eight"])
-        d, rec, _ = make(r)
-        d.begin("en")
-        speak(d, 4)
-        self.assertEqual(rec.screen(), "one two three four")
-        speak(d, 1)
-        self.assertTrue(all(bs == 0 for bs, _ in rec.ops))
-        self.assertEqual(rec.screen(), "one two three four five six seven")
-
-    def test_the_final_pass_fixes_only_the_tail_and_flushes_the_rest(self):
-        r = Scripted(["a b c d e f g", "a b c d e f g h"], final="A x c d e f g h i.")
-        d, rec, _ = make(r)
-        d.begin("en")
-        speak(d, 2)
-        self.assertEqual(rec.screen(), "a b c d e f g")
+        speak(d, 3)
         d.end()
-        self.assertEqual(rec.ops[-1], (0, " h i."))
-        self.assertEqual(rec.screen(), "a b c d e f g h i.")
+        self.assertGreater(r.calls[-1][3], 3.5)
 
-    def test_the_final_pass_fixes_diacritics_and_punctuation_in_the_tail(self):
-        r = Scripted(["Spust docker compose", "Spust docker compose up"], final="Spusť docker compose up.")
-        d, rec, _ = make(r)
+    def test_the_cleanup_runs_over_the_preview_and_the_final_text(self):
+        seen = []
+
+        class DropEhm:
+            def begin(self, language, translate):
+                return ""
+
+            def apply(self, segments, language):
+                seen.append(language)
+                return [[w for w in ws if w.strip(",.").lower() != "ehm"] for ws in segments], 0
+
+        r = Scripted(["Můžeš ehm mi", "Můžeš ehm mi poslat"], final="Můžeš mi, ehm, poslat soubor?")
+        d, rec, events = make(r, cleanup=DropEhm())
         d.begin("cs")
         speak(d, 2)
+        self.assertEqual([e["text"] for e in events if e["event"] == "preview"], ["Můžeš mi", "Můžeš mi poslat"])
         d.end()
-        self.assertEqual(rec.ops, [(0, "Spust docker compose"), (16, "ť docker compose up.")])
-
-    def test_a_truncated_final_pass_never_erases_typed_words(self):
-        r = Scripted(["Můžeš mi poslat ten soubor než", "Můžeš mi poslat ten soubor než odejdeš"],
-                     final="Můžeš mi poslat")
-        d, rec, _ = make(r)
-        d.begin("cs")
-        speak(d, 2)
-        d.end()
-        self.assertTrue(all(bs == 0 for bs, _ in rec.ops))
-        self.assertEqual(rec.screen(), "Můžeš mi poslat ten soubor než")
-
-    def test_words_the_final_pass_drops_from_the_tail_are_erased(self):
-        r = Scripted(["Ahoj tak jak se", "Ahoj tak jak se máš"], final="Ahoj, jak se máš?")
-        d, rec, _ = make(r)
-        d.begin("cs")
-        speak(d, 2)
-        d.end()
-        self.assertEqual(rec.screen(), "Ahoj, jak se máš?")
-        self.assertTrue(all(bs <= len("Ahoj tak jak se") for bs, _ in rec.ops))
+        self.assertEqual(rec.ops, [(0, "Můžeš mi, poslat soubor?")])
+        self.assertEqual(set(seen), {"cs"})
 
 
 class TrailingSpace(unittest.TestCase):
@@ -175,11 +130,11 @@ class TrailingSpace(unittest.TestCase):
             d.end()
         self.assertEqual(rec.screen(), "First sentence here. Second one too. ")
 
-    def test_the_space_goes_with_the_tail_correction_in_one_edit(self):
+    def test_the_space_is_in_the_one_edit_and_the_final_event(self):
         d, rec, events = self.session(Scripted(["Spust docker compose", "Spust docker compose up"],
                                                final="Spusť docker compose up."), mode="cs")
         d.end()
-        self.assertEqual(rec.ops, [(0, "Spust docker compose"), (16, "ť docker compose up. ")])
+        self.assertEqual(rec.ops, [(0, "Spusť docker compose up. ")])
         self.assertEqual([e["text"] for e in events if e["event"] == "final"], ["Spusť docker compose up. "])
 
     def test_translate_gets_the_space_after_the_english_text(self):
@@ -200,11 +155,11 @@ class TrailingSpace(unittest.TestCase):
         self.assertEqual(rec.ops, [])
         d, rec, _ = self.session(Scripted(["a b c", "a b c d"], final="a b c d."))
         d.cancel()
-        self.assertEqual(rec.screen(), "a b c")
-        windows = iter(["0xa", "0xa", "0xb"])
+        self.assertEqual(rec.ops, [])
+        windows = iter(["0xa", "0xb"])
         d, rec, _ = self.session(Scripted(["a b c", "a b c d"], final="a b c d."), focus=lambda: next(windows, "0xb"))
         d.end()
-        self.assertEqual(rec.screen(), "a b c", "focus changed before the final edit: no text, no space")
+        self.assertEqual(rec.ops, [], "focus changed: no text, no space")
 
     def test_the_switch_turns_it_off(self):
         d, rec, _ = make(Scripted(["a b c", "a b c d"], final="a b c d."), config=Config(trailing_space=False))
@@ -231,19 +186,23 @@ class Translate(unittest.TestCase):
 
 
 class Focus(unittest.TestCase):
-    def test_typing_stops_when_the_focused_window_changes(self):
-        windows = iter(["0xa", "0xa", "0xb", "0xa", "0xa", "0xa"])
-        r = Scripted(["one two three", "one two three four", "one two three four five six"],
-                     final="one two three four five six seven.")
-        d, rec, events = make(r, focus=lambda: next(windows, "0xa"))
+    def test_nothing_is_typed_when_the_focused_window_changed_during_the_session(self):
+        windows = iter(["0xa", "0xb"])  # at begin, at release
+        r = Scripted(["one two three", "one two three four"], final="one two three four five.")
+        d, rec, events = make(r, focus=lambda: next(windows, "0xb"))
         d.begin("en")
         speak(d, 2)
-        self.assertEqual(rec.ops, [(0, "one two three")])
-        speak(d, 2)
         d.end()
-        self.assertEqual(rec.ops, [(0, "one two three")])
-        self.assertIn({"event": "aborted", "reason": "focus"}, events)
-        self.assertEqual(sum(1 for e in events if e["event"] == "aborted"), 1)
+        self.assertEqual(rec.ops, [])
+        self.assertEqual([e for e in events if e["event"] == "aborted"], [{"event": "aborted", "reason": "focus"}])
+        self.assertFalse(d.active)
+
+    def test_the_same_window_at_release_types(self):
+        d, rec, _ = make(Scripted(["one two"], final="one two."), focus=lambda: "0xa")
+        d.begin("en")
+        speak(d, 1)
+        d.end()
+        self.assertEqual(rec.screen(), "one two.")
 
     def test_translate_is_not_typed_into_a_different_window(self):
         windows = iter(["0xa", "0xb"])
@@ -258,15 +217,13 @@ class Focus(unittest.TestCase):
 
 class NeverSends(unittest.TestCase):
     def test_no_enter_no_tab_and_one_trailing_space_at_most(self):
-        r = Scripted([" hello\nworld \r\n", "hello\nworld\tagain  \n", "hello world again and \n"],
-                     final=" hello world\nagain and more.\n ")
+        r = Scripted([" hello\nworld \r\n", "hello\nworld\tagain  \n"], final=" hello world\nagain and more.\n ")
         d, rec, _ = make(r, config=Config())
         d.begin("en")
-        speak(d, 3)
+        speak(d, 2)
         d.end()
-        self.assertTrue(rec.ops)
-        for _, text in rec.ops:
-            self.assertNotRegex(text, r"[\n\r\t]")
+        self.assertEqual(len(rec.ops), 1)
+        self.assertNotRegex(rec.ops[0][1], r"[\n\r\t]")
         self.assertEqual(rec.screen(), "hello world again and more. ", "whitespace from whisper never doubles the space")
 
     def test_whole_segment_annotations_are_not_typed(self):
@@ -292,7 +249,7 @@ class Silence(unittest.TestCase):
 class TrailingSilence(unittest.TestCase):
     def test_a_pause_is_not_recognised_again_and_silence_is_trimmed(self):
         r = Scripted(["Hello there", "Hello there friend"], final="Hello there friend.")
-        d, rec, _ = make(r, config=Config(trailing_space=False, pause_silence=0))  # no closing pass: only the pad is tested
+        d, rec, _ = make(r)
         d.begin("en")
         speak(d, 2)
         for _ in range(4):  # two seconds of pause with the key held
@@ -303,39 +260,18 @@ class TrailingSilence(unittest.TestCase):
         self.assertLess(r.calls[-1][3], 3.5 + 0.5 + 0.04, "the final pass gets the speech plus a short pad only")
 
 
-class Cleanup(unittest.TestCase):
-    def test_the_cleanup_hook_runs_before_the_stability_check(self):
-        seen = []
-
-        class DropEhm:
-            def begin(self, language, translate):
-                return ""
-
-            def apply(self, segments, language):
-                seen.append(language)
-                return [[w for w in ws if w.strip(",.").lower() != "ehm"] for ws in segments], 0
-
-        drop_ehm = DropEhm()
-        r = Scripted(["Můžeš ehm mi", "Můžeš ehm mi poslat"], final="Můžeš mi, ehm, poslat soubor?")
-        d, rec, _ = make(r, cleanup=drop_ehm)
-        d.begin("cs")
-        speak(d, 2)
-        self.assertEqual(rec.ops, [(0, "Můžeš mi")])
-        d.end()
-        self.assertEqual(rec.screen(), "Můžeš mi, poslat soubor?")
-        self.assertEqual(set(seen), {"cs"})
-
-
 class Lifecycle(unittest.TestCase):
-    def test_cancel_types_nothing_more(self):
+    def test_cancel_types_nothing(self):
         r = Scripted(["a b c", "a b c d"], final="a b c d e.")
         d, rec, events = make(r)
         d.begin("en")
         speak(d, 2)
         d.cancel()
-        self.assertEqual(rec.ops, [(0, "a b c")])
+        self.assertEqual(rec.ops, [])
         self.assertFalse(d.active)
         self.assertEqual(events[-1], {"event": "state", "state": "idle"})
+        d.end()  # nothing running: no final pass, nothing typed
+        self.assertEqual((rec.ops, [c[0] for c in r.calls]), ([], ["live", "live"]))
 
     def test_levels_are_published_between_zero_and_one(self):
         d, _, events = make(Scripted([""]))
@@ -364,7 +300,7 @@ class Lifecycle(unittest.TestCase):
 
 
 class LongSessions(unittest.TestCase):
-    def test_the_window_slides_at_sentence_ends_without_losing_or_repeating_words(self):
+    def test_the_preview_window_slides_and_the_final_pass_reads_everything(self):
         # 20 sentences of 5 words, one word every 0.4 s: 40 s of speech, longer than one whisper window.
         words, t = [], 0.0
         for s in range(20):
@@ -372,7 +308,7 @@ class LongSessions(unittest.TestCase):
                 t += 0.4
                 words.append((round(t, 2), f"w{s}x{w}" + ("." if w == 4 else "")))
         tl = Timeline(words)
-        d, rec, _ = make(tl, config=Config(max_window=10.0, pause_silence=0, trailing_space=False))  # position-coded audio, not speech
+        d, rec, events = make(tl, config=Config(max_window=10.0, trailing_space=False))  # position-coded audio, not speech
         d.begin("en")
         d.feed(counting(0, 3.0))
         d.step()
@@ -381,13 +317,14 @@ class LongSessions(unittest.TestCase):
             d.feed(counting(pos, 0.5))
             pos += 0.5
             d.step()
-        typed_while_speaking = rec.screen()
+        self.assertEqual(rec.ops, [])
+        expected = [w for _, w in words]
+        last = [e["text"] for e in events if e["event"] == "preview"][-1].split()
+        self.assertEqual(last[:-1], expected[: len(last) - 1], "the preview is the whole running text, nothing lost or repeated")
+        self.assertGreater(len(last), len(expected) - 8)
         d.end()
-        expected = " ".join(w for _, w in words)
-        self.assertEqual(rec.screen(), expected)
-        self.assertGreater(len(typed_while_speaking), len(expected) // 2)
+        self.assertEqual(rec.ops, [(0, " ".join(expected))])
         self.assertTrue(all(end - start <= 10.0 + 0.5 + 1e-6 for start, end in tl.windows[:-1]))
-        self.assertTrue(all(bs == 0 for bs, _ in rec.ops))
 
 
 class ModeRace(unittest.TestCase):

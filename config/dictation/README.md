@@ -1,6 +1,6 @@
 # dictation: local push-to-talk dictation service
 
-Hold a key, speak, release: the text is typed into the focused field or terminal. Czech and English, plus Czech
+Hold a key, speak, release: the text is typed into the focused field or terminal, once, on release. Czech and English, plus Czech
 spoken and typed as English. Everything runs locally on whisper.cpp (Vulkan backend). This directory is the
 service core; the shell drives it: the three push-to-talk keys (Settings > Voice) and the pill are in
 `config/quickshell` (`DictationController.qml` wires keys -> `DictationClient.qml` (this socket) -> `DictationPill.qml`).
@@ -51,7 +51,7 @@ service core; the shell drives it: the three push-to-talk keys (Settings > Voice
    `WAYLAND_DISPLAY` is missing. Logs: `journalctl --user -u dictation`.
 5. Voice preferences, written by Settings > Voice to `${XDG_STATE_HOME:-~/.local/state}/quickshell/dictation-prefs.json`
    (`DICTATION_PREFS_FILE` overrides), re-read at every `begin`: `{"version":1,"mic":"","gpu":true,"idle_timeout_s":600,
-   "prompt_hints":false,"gpu_device":0}` (plus `pause_silence_s`, `trailing_space` and `release_tail_s`, no UI: see Behaviour; the `pill_*` position keys, and the old `pill_bottom`, are the shell's). `mic` = PipeWire source name (`pactl list short sources`; "" = system default; a name that
+   "prompt_hints":false,"gpu_device":0}` (plus `trailing_space` and `release_tail_s`, no UI: see Behaviour; the `pill_*` position keys, and the old `pill_bottom`, are the shell's). `mic` = PipeWire source name (`pactl list short sources`; "" = system default; a name that
    is not listed is a `mic` error), `gpu` false = the worker runs on the CPU only (`--no-gpu`; slow, an explicit
    choice), `release_tail_s` = seconds the mic keeps recording after the key is released, so the last word is not cut off
    (default 0.5, clamped to 0..2, 0 = stop at once; the final pass starts after it, and the idle unload, "Immediately"
@@ -140,61 +140,38 @@ Shell: `dictation begin cs`, `dictation end`, `dictation listen`.
 
 - Final-pass retry: when the final pass fails (worker crash, hang killed by the recognizer's timeout, GPU error) the
   session is kept (audio buffer, typed text), a `retry` event is broadcast, a fresh worker is loaded and the final pass
-  runs once more over the whole audio in the same mode. Success: the normal final edit (tail fix, or the full English
-  text in translate mode) and `final` with `retried: true`. Failure (or no worker could be started: `worker`,
-  `gpu-failed`, `no-model`): an `error` event, nothing more is typed (transcribe modes keep what the live passes
-  typed, no backspaces; translate mode typed nothing), then `idle`, and the next `begin` loads a fresh worker. The
+  runs once more over the whole audio in the same mode. Success: the normal final edit and `final` with
+  `retried: true`. Failure (or no worker could be started: `worker`, `gpu-failed`, `no-model`): an `error` event,
+  nothing is typed, then `idle`, and the next `begin` loads a fresh worker. The
   retry (reload plus pass) is abandoned after `retry_timeout` (default 30 s, the worker is killed); the first attempt
   has the recognizer's own timeout (20 s on the GPU, 90 s on the CPU, plus the audio length), so a session's final
   pass can take at most about that plus 30 s extra. `cancel`, the owner's disconnect and SIGTERM abandon the final pass or its retry at once (worker
   killed, nothing typed). Focus change still suppresses typing.
 
 - Language is pinned per session by the mode (no auto-detect). `translate` = Czech speech, English text.
-- Live passes (turbo, greedy) every 0.5 s of new audio (`PASS_EVERY`) once 1.5 s of speech are recorded
+- Type on release, the only mode: while the key is held nothing is typed and nothing is ever backspaced. The fast
+  (live) model runs a preview pass every 0.5 s of new audio (`PASS_EVERY`) once 1.5 s of speech are recorded
   (`MIN_PASS_AUDIO`, counted from the first frame at the speech gate, not from the key press), over a window of at
-  most 15 s that starts 0.5 s before the speech and slides at segment boundaries behind the typed text (never after
-  the window's last segment, whose end time whisper stretches over speech it has not transcribed yet, and never
-  inside a segment). Trailing silence is trimmed to 0.5 s before every pass, and a pause with the key held runs no
-  passes (where the room noise stays under the speech gate; above it passes go on, over the same trimmed audio). The tunables are `Config` / the constants at the top of `engine.py`, chosen on replays of recorded speech
-  (first text ~2.1 s after the speech starts instead of ~3.0 s; shorter first windows or 0.3 s passes typed more
-  words that were erased again).
-- A word is typed when two consecutive passes agree on it (compared without case, diacritics and edge punctuation)
-  and it is not the newest pass's last word. A correction replaces at most the last 4 typed words, and only when two
-  passes agree on it.
-- End of speech (`PAUSE_SILENCE`, 1.0 s; `pause_silence_s` in `dictation-prefs.json` overrides it, 0 = off, no UI):
-  after that much silence the words still waiting are typed without another pass or the release: the newest pass's
-  last word, and a phrase start the cleanup held back (the phrase cannot grow in a pause; if the speech goes on and
-  completes the phrase, the usual two-pass tail correction replaces it). Conditions: a pass heard the end of the
-  speech (its audio reaches 0.3 s past the last voiced frame; when none did, a closing pass runs 0.5 s into the
-  silence, not at the next scheduled time), the pass before it agrees on every new word but the last, it lines up
-  with the typed text, no edit happened since, and no voiced frame since. Silence is relative: a frame is voiced at
-  the speech gate and 8 dB above the session's tracked noise floor (in a quiet room, floor 12 dB or more under the
-  gate, every frame at the gate), so hiss, hum or a noisy room still count as a pause, while breathing loud enough to
-  be voiced only delays it; the audio after the speech must also stay under the gate or within 3 dB of the floor
-  measured during the speech (soft speech going on in a noisy room never arms it). The last word goes without its punctuation
-  (`.,!?;:…`): when the speech goes on, the edit that types the next words adds the punctuation both passes agree on
-  (never a backspace; a period typed in a thinking pause would otherwise stay mid-sentence), and on release the final
-  pass adds it. One flush per pause; passes in a pause hear the speech plus 0.5 s only, also where the room noise is
-  above the absolute gate (no words invented in the noise). Never in translate mode; one short utterance heard by a
-  single pass waits for the release; the final pass fixes the tail on release as before. Measured on recorded speech
-  with inserted thinking pauses: the word before a pause appears ~1.0 s after it starts instead of with the next
-  words (~2 s) or on release; 1.5 s (`pause_silence_s`) gave the same text and corrections, only later.
-- Release: the final model (large-v3, beam 5) recognises the whole session; it may fix the last 4 words exactly
-  (diacritics, punctuation), then types the rest. It never only erases (a truncated decode keeps the typed text).
-- Translate: nothing is typed while speaking; the preview streams from the final model; the English text is typed
-  once on release.
-- Typing stops for the rest of the session when the focused Hyprland window changes. Text goes to `wtype` on stdin;
+  most 15 s that starts 0.5 s before the speech and slides at segment boundaries (never after the window's last
+  segment, whose end time whisper stretches over speech it has not transcribed yet, and never inside a segment); the
+  words before the window stay in the preview. Its running text goes out as `preview {text}` events, for the pill
+  only; the fast model may revise it at every pass. Trailing silence is trimmed to 0.5 s before every pass, and a
+  pause with the key held runs no passes. The tunables are `Config` / the constants at the top of `engine.py`.
+- Release (after the release tail, see `release_tail_s`): the full (final) model (beam 5) recognises the WHOLE session,
+  the cleanup (fillers, replacements, junk filter, fragment style) runs over its text, and that text is typed once
+  with one trailing space. A wrong word of the fast model never reaches the field. A session without speech types
+  nothing.
+- Translate works the same way; its preview streams from the full model (the only one that translates).
+- Nothing is typed when the focused Hyprland window changed since the key was pressed (`aborted`, reason `focus`). Text goes to `wtype` on stdin;
   newlines, tabs, control characters and trailing whitespace other than one space are refused, so Enter is never
   sent.
-- Trailing space: a session that typed something ends with one space after its final text (in the final edit,
-  after the tail fix; translate: after the English text), so the next dictation starts a new word. Never after an
+- Trailing space: a session that typed something ends with one space after its final text (in the one edit), so the next dictation starts a new word. Never after an
   empty session, a cancel, a focus abort or a failed final pass (only after a successful retry).
   `trailing_space` false in `dictation-prefs.json` turns it off (no UI).
 - Fragments: a dictation of one word, or of at most 4 words with no sentence end (`. ? ! …`), is typed without
   whisper's capital ("docker compose up", "yes"); sentences are untouched. A lone word also loses a trailing
   `. , ; : …` ("Yes." -> "yes"; `?` and `!` stay, and so does an abbreviation's: "U.S.", "e.g."). Decided on the final
-  text: the live passes type the capitalised words, the final edit corrects them (the tail fix reaches 4 words; when
-  the live passes typed more words than the final text has, the first one may be out of reach and keeps its capital).
+  text.
   Only plain title-case first words change (not `I`, `I'm`, `API`, `GitHub`, words with digits). A replacement keeps
   the user's spelling: a capital of its own ("Praha", so a replacement `praha` -> `Praha` restores a name) and its own
   punctuation (`etc.`) stay; a capital it only took over from whisper's word (`docker` typed for "Docker") goes.
@@ -235,8 +212,7 @@ Shell: `dictation begin cs`, `dictation end`, `dictation listen`.
   defaults.
 - Replacements: heard words or phrases -> typed, whole words, case-insensitive, never across punctuation, longest
   phrase first, replaced text never re-matched; the typed form takes the original's ALL CAPS or capital first letter,
-  else stays as entered. A live pass holds back trailing words that may still start a longer phrase until the next
-  word decides; the final pass flushes everything.
+  else stays as entered. The preview and the final text both go through it.
 - Vocabulary hints (switch `prompt_hints` in `dictation-prefs.json` next to the word file, `DICTATION_PREFS_FILE`;
   the word file's `hints` counts only when the prefs have none; default off): the replacement targets (at most 12,
   160 characters) as whisper's initial prompt, live and final passes, never in translate mode. Off by default: on the
@@ -260,8 +236,6 @@ name, an absolute socket path only that socket (a nested compositor's socket is 
 
 ## Caveats
 
-- Speech the live passes keep disagreeing on can be skipped while later speech is agreed and typed; the final pass
-  cannot insert in the middle (corrections are tail-only). Seen only with English sentences inside a Czech session.
 - The final pass time grows with the session (about 0.3 s for 3 s of speech, 1.1-1.3 s for 14-20 s, 1.7 s for 45 s
   on a recent discrete AMD GPU); `--final-beam 0` is faster but truncated a 20 s decode once.
 - Both models together take about 5.3 GB VRAM and 130 MB RSS (measured); they load on the first `begin` and unload

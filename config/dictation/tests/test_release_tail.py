@@ -52,7 +52,7 @@ class ReleaseTail(Base):
         self.start(lambda: rec, prefs_fn=lambda: prefs.Prefs(idle_timeout_s=0, release_tail_s=1.5))
         c = Client(self.path)
         c.send("begin en")
-        c.until(lambda e: e.get("event") == "edit")
+        c.until(lambda e: e.get("event") == "preview")
         c.send("end")
         c.until(lambda e: e.get("event") == "state" and e["state"] == "finishing")
         c.send("cancel")
@@ -65,7 +65,7 @@ class ReleaseTail(Base):
         self.start(lambda: rec, prefs_fn=lambda: prefs.Prefs(idle_timeout_s=0, release_tail_s=2))
         c = Client(self.path)
         c.send("begin en")
-        c.until(lambda e: e.get("event") == "edit")
+        c.until(lambda e: e.get("event") == "preview")
         c.send("end")
         c.send("begin en")
         c.until(lambda e: e.get("event") == "final")
@@ -79,7 +79,7 @@ class ReleaseTail(Base):
         self.start(lambda: rec, prefs_fn=lambda: prefs.Prefs(idle_timeout_s=0, release_tail_s=1.0))
         c = Client(self.path)
         c.send("begin en")
-        c.until(lambda e: e.get("event") == "edit")
+        c.until(lambda e: e.get("event") == "preview")
         c.send("end")  # the tail starts
         c.send("begin en")  # settles the old session: its final pass runs for 0.6 s
         c.send("end")  # arrives during that pass but belongs to the new session
@@ -102,7 +102,7 @@ class UnloadVersusFinalPass(Base):
         self.start(lambda: rec, prefs_fn=lambda: prefs.Prefs(idle_timeout_s=1, release_tail_s=0.2))
         c = Client(self.path)
         c.send("begin en")
-        c.until(lambda e: e.get("event") == "edit")
+        c.until(lambda e: e.get("event") == "preview")
         c.send("end")
         c.until(lambda e: e.get("event") == "final")
         self.assertIs(rec.closed_during_final, False)  # still resident while the full model ran
@@ -115,7 +115,7 @@ class UnloadVersusFinalPass(Base):
         self.start(lambda: rec, prefs_fn=lambda: prefs.Prefs(idle_timeout_s=1, release_tail_s=0))
         c = Client(self.path)
         c.send("begin en")
-        c.until(lambda e: e.get("event") == "edit")
+        c.until(lambda e: e.get("event") == "preview")
         c.send("end")
         c.send("status")
         c.until(lambda e: e.get("event") == "final")

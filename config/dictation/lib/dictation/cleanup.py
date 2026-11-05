@@ -98,8 +98,7 @@ def _capitalize(word: str) -> str:
     return lead + core[0].upper() + core[1:] + trail
 
 
-MAX_FRAGMENT_WORDS = 4  # a dictation of at most this many words without a sentence end is a fragment; the engine's
-                        # tail fix reaches back exactly this far (Config.tail_words), so the first word stays editable
+MAX_FRAGMENT_WORDS = 4  # a dictation of at most this many words without a sentence end is a fragment
 _CLOSERS = ")]}\"'”’“‘»"
 
 

@@ -89,10 +89,7 @@ class Base(unittest.TestCase):
 
     def speak(self, mode):
         self.c.send(f"begin {mode}")
-        if mode != "translate":
-            self.c.until(lambda e: e.get("event") == "edit" and "zeta" in "".join(o[1] for o in self.rec.ops))
-        else:
-            self.c.until(lambda e: e.get("event") == "preview" and "zeta" in e["text"])
+        self.c.until(lambda e: e.get("event") == "preview" and "zeta" in e["text"])
 
     def finish(self):
         self.c.send("end")

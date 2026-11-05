@@ -1,5 +1,5 @@
 """A fragment (one word, or up to four without a sentence end) is typed without the capital whisper puts on it; a
-sentence is untouched. The live passes type the capitalised words, the final edit fixes the first one."""
+sentence is untouched. The full model's text is typed once, so the fragment is lower-cased there."""
 import json
 import os
 import tempfile
@@ -10,7 +10,6 @@ from helpers import Recorder, Scripted, TranslateScripted, tone
 from dictation.cleanup import Cleanup, is_fragment, lowercase_fragment
 from dictation.engine import Config, Dictation
 from dictation.prefs import load
-from test_pause import talk, pause, CFG
 
 
 def session(recognizer, mode="en", live_passes=3, config=None, cleanup=None):
@@ -84,62 +83,23 @@ class Rule(unittest.TestCase):
             self.assertEqual(rec.screen(), expected)
 
 
-class LiveThenFixed(unittest.TestCase):
-    def test_the_typed_capital_is_fixed_by_the_final_edit(self):
+class FinalText(unittest.TestCase):
+    def test_a_fragment_is_typed_lower_case(self):
         r = Scripted(["Docker compose up now", "Docker compose up now", "Docker compose up now"], final="Docker compose up")
         rec, live, events = session(r)
-        self.assertEqual(rec.screen(), "docker compose up")
-        self.assertTrue(live and live[0][1].startswith("Docker"), live)
-        self.assertEqual(rec.ops[len(live):], [(len("Docker compose up"), "docker compose up")])
+        self.assertEqual(live, [], "nothing is typed while the key is held")
+        self.assertEqual(rec.ops, [(0, "docker compose up")])
         self.assertEqual([e["text"] for e in events if e["event"] == "final"], ["docker compose up"])
 
-    def test_the_trailing_space_follows_the_fixed_text(self):
+    def test_the_trailing_space_follows_the_text(self):
         r = Scripted(["Docker compose up now"], final="Docker compose up")
         rec, _, _ = session(r, config=Config())
         self.assertEqual(rec.screen(), "docker compose up ")
 
-    def test_a_sentence_typed_live_is_not_touched(self):
+    def test_a_sentence_is_not_touched(self):
         r = Scripted(["Run the tests now please"] * 3, final="Run the tests now please.")
         rec, live, _ = session(r)
         self.assertEqual(rec.screen(), "Run the tests now please.")
-
-    def test_more_words_typed_than_the_final_has_stay_consistent(self):
-        # five words went out live, the final pass hears four: the first word is out of the tail's reach, so it keeps
-        # its capital (never garbled text)
-        r = Scripted(["Run the tests now please later"] * 3, final="Run the tests now")
-        rec, live, _ = session(r)
-        self.assertTrue(rec.screen().startswith("Run the tests now"), rec.screen())  # nothing reachable to fix: the typed capital stays
-
-    def test_every_fragment_first_word_is_in_reach(self):
-        # fragment <= tail_words words: a live pass cannot have typed more than the final has, unless it heard more
-        self.assertLessEqual(__import__("dictation.cleanup", fromlist=["x"]).MAX_FRAGMENT_WORDS, Config().tail_words)
-
-
-class Pauses(unittest.TestCase):
-    def test_pause_flush_then_release(self):
-        r = Scripted(["Docker compose up"] * 20, final="Docker compose up")
-        rec, events = Recorder(), []
-        d = Dictation(r, rec, emit=events.append, config=CFG)
-        d.begin("en")
-        pause(d, 0.5)
-        talk(d, 2.0)
-        pause(d, 1.5)
-        self.assertEqual(rec.screen(), "Docker compose up")  # live: capitalised, all words flushed at the pause
-        d.end()
-        self.assertEqual(rec.screen(), "docker compose up")
-
-    def test_pause_then_the_speech_goes_on_into_a_sentence(self):
-        r = Scripted(["Docker compose up"] * 4 + ["Docker compose up and then run the tests"] * 20,
-                     final="Docker compose up and then run the tests.")
-        rec, _ = Recorder(), []
-        d = Dictation(r, rec, config=CFG)
-        d.begin("en")
-        pause(d, 0.5)
-        talk(d, 2.0)
-        pause(d, 1.5)
-        talk(d, 3.0)
-        d.end()
-        self.assertEqual(rec.screen(), "Docker compose up and then run the tests.")
 
     def test_a_silent_session_types_nothing(self):
         r = Scripted(["Yes"], final="Yes")
@@ -248,31 +208,16 @@ class Unit(unittest.TestCase):
 
 
 class LonePunctuation(unittest.TestCase):
-    def test_the_typed_period_and_the_trailing_space(self):
-        # the pause flush types the lone word without its period (live: "Yes"); the final edit lower-cases it, keeps no period and adds exactly one space
+    def test_a_lone_word_loses_its_period_and_gets_one_space(self):
         r = Scripted(["Yes."] * 20, final="Yes.")
         rec, events = Recorder(), []
-        d = Dictation(r, rec, emit=events.append, config=Config(pause_silence=1.0, min_pass_audio=1.5, pass_every=0.5))
-        d.begin("en")
-        pause(d, 0.5)
-        talk(d, 2.0)
-        pause(d, 1.5)
-        self.assertEqual(rec.screen(), "Yes")
-        d.end()
-        self.assertEqual(rec.screen(), "yes ")
-        self.assertEqual([e["text"] for e in events if e["event"] == "final"], ["yes "])
-
-    def test_a_period_typed_live_is_backspaced(self):
-        # a custom recognizer view: the lone word typed with its period (as the pause flush of an earlier build did)
-        rec = Recorder()
-        d = Dictation(Scripted(["Yes."], final="Yes."), rec, config=Config())
+        d = Dictation(r, rec, emit=events.append, config=Config())
         d.begin("en")
         d.feed(tone(3.0))
         d.step()
-        d._s.typed = "Yes."
-        rec.ops.append((0, "Yes."))
         d.end()
-        self.assertEqual(rec.screen(), "yes ")
+        self.assertEqual(rec.ops, [(0, "yes ")])
+        self.assertEqual([e["text"] for e in events if e["event"] == "final"], ["yes "])
 
     def test_translate_mode(self):
         r = TranslateScripted(["Yes."], final="Yes.")

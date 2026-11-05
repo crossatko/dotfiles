@@ -6,8 +6,8 @@ line. Commands are either JSON ({"cmd": "begin", "mode": "cs"}) or plain words (
     begin <code>|translate:<code>|translate|auto|translate:auto [<codes>]
                              start a session (opens the mic); ignored while one is running. auto detects the
                              language once and pins it, among <codes> (comma separated; JSON "languages": [..]) when given
-    end                      key released: the mic records on for prefs.release_tail_s (0.5 s), then the final pass,
-                             flush the rest, close the mic
+    end                      key released: the mic records on for prefs.release_tail_s (0.5 s), then the full model reads the whole
+                             session and its text is typed once, the mic closes
     cancel                   drop the session without typing anything more
     status                   reply (to this client only) with a status event
 
@@ -343,12 +343,9 @@ class Service:
         intake.attach(engine.feed)
 
     def _session_config(self, prefs) -> Config:
-        """The engine's tunables for one session: the service's config, with the prefs' pause_silence_s,
+        """The engine's tunables for one session: the service's config, with the prefs'
         trailing_space, lowercase_fragments and strip_single_word_punct (no UI)."""
         config = self._config or Config()
-        pause = getattr(prefs, "pause_silence_s", None)
-        if pause is not None:
-            config = dataclasses.replace(config, pause_silence=pause)
         space = getattr(prefs, "trailing_space", None)
         if isinstance(space, bool):
             config = dataclasses.replace(config, trailing_space=space)
