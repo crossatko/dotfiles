@@ -187,7 +187,7 @@ PanelWindow {
     readonly property var layout: BarWidgets.layoutFor(BarWidgets.keyOf(bar.screen))
     readonly property var widgetComps: ({
         workspaces: wsComp, recording: recComp, vm: vmComp, media: mediaComp, caffeine: caffeineComp, cpu: cpuComp, memory: memComp,
-        homeassistant: haComp, ai: aiComp, btc: btcComp, weather: weatherComp, volume: volumeComp, network: netComp, bluetooth: btComp,
+        homeassistant: haComp, ai: aiComp, btc: btcComp, weather: weatherComp, reminder: reminderComp, volume: volumeComp, network: netComp, bluetooth: btComp,
         tray: trayComp, dnd: dndComp, calendar: calComp, clock: clockComp, controlcenter: bellComp
     })
 
@@ -317,6 +317,16 @@ PanelWindow {
             Component.onCompleted: bar.reg("vm", vmChip)
             active: bar.isOpen("vm")
             onClicked: bar.pop("vm", vmChip)
+        }
+    }
+    // reminder (ReminderService.qml): hourglass; running = hourglass in a draining ring + time left; ended = red ring + 0:00; click = the reminder popup
+    Component {
+        id: reminderComp
+        ReminderChip {
+            id: reminderChip
+            Component.onCompleted: bar.reg("reminder", reminderChip)
+            active: bar.isOpen("reminder")
+            onClicked: bar.pop("reminder", reminderChip)
         }
     }
     Component {

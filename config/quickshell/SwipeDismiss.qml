@@ -35,6 +35,7 @@ Item {
     readonly property bool busy: dh.active || back.running || out.running || gone
     property bool gone: false               // flown off (stays true: the owner removes the card)
     signal swiped()
+    signal leaving()                        // the fly-off has started (`swiped` follows when it is over)
 
     // --- pure logic (unit-tested) ---
     // raw horizontal pointer movement -> offset: 1:1 to the right, rubber band to the left
@@ -94,6 +95,7 @@ Item {
     // animate to the decided end; also the test hook for the nested visual check (settle(true / false, vx))
     function settle(dismiss, v) {
         if (dismiss) {
+            leaving()
             out.duration = flyMs(offset, v, w)
             out.to = w
             out.start()

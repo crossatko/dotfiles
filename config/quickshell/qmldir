@@ -122,6 +122,16 @@ NotifStack 1.0 NotifStack.qml
 NotifSlot 1.0 NotifSlot.qml
 singleton VmService 1.0 VmService.qml
 VmChip 1.0 VmChip.qml
+singleton ReminderService 1.0 ReminderService.qml
+ReminderChip 1.0 ReminderChip.qml
+MinutesStepper 1.0 MinutesStepper.qml
+RingArc 1.0 RingArc.qml
+BigDigits 1.0 BigDigits.qml
+ProgressHairline 1.0 ProgressHairline.qml
+CaptionRow 1.0 CaptionRow.qml
+NotifTrail 1.0 NotifTrail.qml
+SnoozeRow 1.0 SnoozeRow.qml
+ReminderCardBody 1.0 ReminderCardBody.qml
 Lock 1.0 Lock.qml
 LockView 1.0 LockView.qml
 GlassText 1.0 GlassText.qml

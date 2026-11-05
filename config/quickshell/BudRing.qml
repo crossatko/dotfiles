@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Shapes
 
 // One battery readout of the AirPods section: a ring meter around the part's icon (PodIcon), the percentage (bolt
 // while charging) and the name below. `level` < 0 = not heard from (case closed / bud out of range): empty grey
@@ -29,17 +28,13 @@ ColumnLayout {
         implicitWidth: br.ring
         implicitHeight: br.ring
         opacity: br.known ? 1 : Theme.dimOpacity
-        Shape {
+        RingArc {
             anchors.fill: parent
-            preferredRendererType: Shape.CurveRenderer     // analytic anti-aliasing: crisp at fractional scales
-            ShapePath {
-                strokeColor: Theme.itemActive; strokeWidth: br.stroke; fillColor: Theme.alpha(Theme.bg, 0)
-                PathAngleArc { centerX: br.ring / 2; centerY: br.ring / 2; radiusX: br.ring / 2 - br.arcInset; radiusY: br.ring / 2 - br.arcInset; startAngle: 0; sweepAngle: 360 }
-            }
-            ShapePath {
-                strokeColor: br.tone; strokeWidth: br.stroke; fillColor: Theme.alpha(Theme.bg, 0); capStyle: ShapePath.RoundCap
-                PathAngleArc { centerX: br.ring / 2; centerY: br.ring / 2; radiusX: br.ring / 2 - br.arcInset; radiusY: br.ring / 2 - br.arcInset; startAngle: -90; sweepAngle: br.known ? 3.6 * br.level : 0 }
-            }
+            size: br.ring
+            stroke: br.stroke
+            inset: br.arcInset
+            value: br.known ? br.level / 100 : 0
+            color: br.tone
         }
         PodIcon {
             anchors.centerIn: parent

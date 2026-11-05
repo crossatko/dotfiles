@@ -34,6 +34,7 @@ Singleton {
         ha:     { source: "HaPanel.qml",     width: 400 },               // entity cards with controls
         ai:     { source: "AiPanel.qml",     width: 400 },               // profile cards
         weather: { source: "WeatherPanel.qml", width: Theme.popupW },   // current conditions, hours, days
+        reminder: { source: "ReminderPanel.qml", width: Theme.popupW },   // minutes picker / countdown
         vm:     { source: "VmPanel.qml",     width: 440 }                // VM cards with meters
     })
 

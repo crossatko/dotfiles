@@ -20,6 +20,8 @@ Rectangle {
     readonly property real glassScale: Theme.glassScaleAt(fade * swipeFade)
     readonly property bool hovered: hover.hovered
     readonly property bool critical: n.urgency === NotificationUrgency.Critical
+    // the reminder's own card (ReminderService's private hint): drawn by ReminderCardBody, its buttons act on the reminder
+    readonly property bool reminder: { try { return ReminderService.owns(n) } catch (e) { return false } }
     // The server hands themed icon *names* over as "image://icon/<name>" in n.image (and leaves
     // appIcon empty); unwrap that so NotifIcon can look for a symbolic variant. Anything else in
     // n.image is genuine image data (avatar, cover art) and is shown as is.
@@ -57,7 +59,7 @@ Rectangle {
     readonly property int iconBox: 40           // app icon / image box (a square the glyph or picture is centred in)
     readonly property int stripeW: 3            // the critical card's red mark
 
-    implicitHeight: content.implicitHeight + 2 * Theme.pad
+    implicitHeight: (reminder ? reminderBody.implicitHeight : content.implicitHeight) + 2 * Theme.pad
     radius: Theme.radius
     color: Theme.alpha(Theme.bg, Theme.cardFill)
     border.width: 1
@@ -67,14 +69,18 @@ Rectangle {
     // the one dismiss path (close button, right click, swipe, click): the owner animates the card out and then closes
     // the notification
     signal dismissRequested()
-    function dismiss() { dismissRequested() }
+    function dismiss() { reminderGone(); dismissRequested() }
+    // a reminder card tells ReminderService the moment it is dismissed (its sound stops now, not after the exit animation)
+    function reminderGone() {
+        if (reminder) { try { ReminderService.cardDismissed(n) } catch (e) { console.warn("NotifCard: reminder dismiss failed:", e) } }
+    }
     // dismiss with the swipe's fly-out to the right (Clear sweeps the cards one by one); `dismissRequested` follows
     // when it has flown off
     function flyOut() { if (!swipe.busy) swipe.settle(true, 0) }
 
     // Swipe to the right with the mouse to dismiss (SwipeDismiss). Translate, not x: NotifSlot drives x (slide-in /
     // slide-out).
-    SwipeDismiss { id: swipe; onSwiped: card.dismiss() }
+    SwipeDismiss { id: swipe; onSwiped: card.dismiss(); onLeaving: card.reminderGone() }
     transform: Translate { x: swipe.offset }
     readonly property real swipeFade: swipe.fade
     readonly property bool swiping: swipe.busy       // dragging / springing back / flying off: toasts pause their timeout
@@ -87,6 +93,7 @@ Rectangle {
     // notification's desktop entry / app name and focuses it, which also switches Hyprland group tabs
     // and workspaces/monitors. The notification is dismissed once acted on.
     function activate() {
+        if (reminder) return            // the reminder card has its own buttons; a stray click must not cancel it
         if (defaultAction) defaultAction.invoke()
         const de = n.desktopEntry ? DesktopEntries.byId(n.desktopEntry) : null
         // Chromium/Brave: every site and web app sends desktop-entry "brave-browser"; the only per-site identity
@@ -116,8 +123,21 @@ Rectangle {
         color: card.critical ? Theme.red : card.low ? Theme.muted : Theme.accent
     }
 
+    Loader {
+        id: reminderBody
+        active: card.reminder
+        anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.pad; leftMargin: Theme.pad + Theme.gapTight }
+        sourceComponent: ReminderCardBody {
+            n: card.n
+            showTime: card.showTime
+            outerRadius: card.radius
+            onDismissRequested: card.dismiss()
+        }
+    }
+
     RowLayout {
         id: content
+        visible: !card.reminder
         anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.pad; leftMargin: Theme.pad + Theme.gapTight }
         spacing: Theme.pad
 
@@ -151,19 +171,7 @@ Rectangle {
                     color: Theme.accent
                     font.pixelSize: Theme.fontCaption
                 }
-                Label {
-                    visible: card.showTime
-                    text: Notifs.ago(card.n.id)
-                    color: Theme.muted
-                    font.pixelSize: Theme.fontCaption
-                }
-                Icon {
-                    text: Icons.xmark
-                    color: closeArea.containsMouse ? Theme.accent : Theme.muted
-                    font.pixelSize: Theme.iconSm
-                    Behavior on color { ColorAnimation { duration: Motion.hoverMs; easing.type: Motion.easeHover } }
-                    MouseArea { id: closeArea; anchors.fill: parent; anchors.margins: -Theme.controlGap; hoverEnabled: true; onClicked: card.dismiss() }
-                }
+                NotifTrail { nid: card.n.id; showTime: card.showTime; onCloseClicked: card.dismiss() }
             }
             Label {
                 Layout.fillWidth: true

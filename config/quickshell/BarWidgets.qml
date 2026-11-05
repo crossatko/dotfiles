@@ -37,6 +37,7 @@ Singleton {
         { id: "dnd",        title: "Do not disturb", icon: Icons.bellOff, section: "right", before: "clock" },   // visible only while do-not-disturb is on
         { id: "calendar",   title: "Calendar",     icon: Icons.calendar, section: "right", before: "clock" },   // icon-only chip; a layout file without it gets it right before the clock
         { id: "weather",    title: "Weather",      icon: Icons.weatherPartlyDay, section: "right", before: "calendar" },   // icon + temperature; polls Open-Meteo only while shown
+        { id: "reminder",   title: "Reminder",     icon: Icons.hourglass, section: "right", before: "weather" },   // icon-only at rest, the time left while a reminder runs; a layout file without it gets it right before the weather chip
         { id: "btc",        title: "Bitcoin price", icon: Icons.bitcoin, section: "right", hiddenByDefault: true },   // off by default (enable in Settings > Bar); price + 24 h trend; polls CoinGecko only while shown
         { id: "clock",      title: "Clock",        icon: Icons.clock, section: "right" },   // opens the notification center
         { id: "controlcenter", title: "Control center", icon: Icons.menu, section: "right" }   // last = rightmost by default; never hideable

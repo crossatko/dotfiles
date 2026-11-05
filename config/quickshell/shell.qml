@@ -12,6 +12,7 @@ ShellRoot {
     readonly property var weatherBlur: WeatherBlur   // Weather blur (Settings > Weather): writes the state the compositor reads
     readonly property var diacriticsPrefs: DiacriticsPrefs   // the diacritics key (Settings > Diacritics): written to Hyprland from the start
     readonly property var pttShortcuts: PttShortcuts   // push-to-talk global shortcuts (Settings > Voice): registered from the start
+    readonly property var reminder: ReminderService   // the reminder countdown (bar chip): ticks and notifies from the start, shown or not
     readonly property var tvCast: TvCast     // Send to TV: its `tvcast` IPC target exists from the start (idle until used)
 
     // the desktop wallpaper (theme.py wallpaper_backend "quickshell"; Wallpaper.qml): background layer, first so it maps early

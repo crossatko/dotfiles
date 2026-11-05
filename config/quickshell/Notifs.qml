@@ -36,18 +36,33 @@ Singleton {
             // looked up by the notification stack the moment it is tracked, so set before
             byId[n.id] = n
             times[n.id] = Date.now()        // a replacement (same id) counts as new
+            // the reminder's own cards (private hint, ReminderService): it decides; quiet = no toast and no history entry.
+            // A failure there must never lose a notification: it is then shown as a plain one.
+            let reminder = false, quiet = false
+            try {
+                reminder = ReminderService.owns(n)
+                if (reminder) quiet = ReminderService.adopt(n)
+            } catch (e) {
+                console.warn("Notifs: reminder adopt failed:", e)
+                quiet = false
+            }
             // an identical one (same app, summary and body) replaces the older card and counts up instead of stacking
+            // (never a reminder card, either way: each of its cards is its own)
             const key = root.keyOf(n)
             let reps = 1
-            for (const o of root.all.values.slice()) {
+            for (const o of (reminder ? [] : root.all.values.slice())) {
                 if (o.id === n.id || root.keyOf(o) !== key) continue
+                let own = false
+                try { own = ReminderService.owns(o) } catch (e) {}
+                if (own) continue
                 reps += root.repeats[o.id] ?? 1
                 root.closeNow(o)
             }
             root.repeats[n.id] = reps
-            root.record(n, key)
+            if (!quiet) root.record(n, key)
             root.now = Date.now()
             n.tracked = true
+            if (quiet) return
             // do-not-disturb silences toasts but still files them away; critical always shows. With the notification
             // center open the new one goes straight into its list (no toast of its own)
             // A transient one (hint `transient`) is never kept: it is closed once its toast is over (NotifSlot), or at
@@ -126,6 +141,18 @@ Singleton {
         }
         root.now = Date.now()
         popups = shown
+    }
+
+    // a tracked notification is news again after an in-place replacement (the reminder's end card; a replacement makes no
+    // toast, age or history entry by itself): a fresh age, a history entry, and a toast (out and back in, so its timer
+    // starts over) by the same rules as a new one (center open = none, DND = critical only)
+    function repop(n) {
+        times[n.id] = Date.now()
+        root.now = Date.now()
+        root.record(n, root.keyOf(n))
+        if (Popups.name === "notif" || (root.dnd && n.urgency !== NotificationUrgency.Critical)) return
+        root.popups = root.popups.filter(p => p.id !== n.id)
+        Qt.callLater(() => { root.popups = [n].concat(root.popups.filter(p => p.id !== n.id)).slice(0, 5) })
     }
 
     function dismissPopup(n) { popups = popups.filter(p => p !== n) }
