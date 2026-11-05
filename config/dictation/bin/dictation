@@ -197,7 +197,7 @@ def cmd_replay(args):
         def emit(ev):
             if ev["event"] == "pass":
                 (final_passes if released_flag.is_set() else passes).append(ev)
-            elif ev["event"] == "preview":
+            elif ev["event"] == "preview" and not released_flag.is_set():  # the fast model's previews; the release one is the final text
                 previews.append(ev["text"])
             elif ev["event"] == "aborted":
                 print(json.dumps(ev), file=sys.stderr)

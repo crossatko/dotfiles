@@ -14,7 +14,7 @@ line. Commands are either JSON ({"cmd": "begin", "mode": "cs"}) or plain words (
 Final-pass retry: when the final pass fails (worker crash, hang, GPU error) the session is kept (audio, typed text), an
 informational `retry {what: "final", message, code}` event is broadcast, a fresh worker is loaded and the final pass
 runs again over the whole audio, once. On success the `final` event carries `retried: true`. If the retry fails too (or
-exceeds `retry_timeout`, 30 s by default) an error event follows and nothing more is typed. Cancel, owner disconnect
+exceeds its limit: `retry_timeout`, 30 s by default, plus 0.5 s per second of audio, at most 300 s) an error event follows and nothing more is typed. Cancel, owner disconnect
 and SIGTERM abandon the final pass or its retry at once.
 
 Events: status {state: loading|idle|listening|finishing|error, mode, error, code}, state, level {value 0..1},
@@ -110,6 +110,10 @@ class _Intake:
         return len(self._buf)
 
 
+RETRY_PER_AUDIO_S = 0.5  # retry limit: extra seconds per second of recorded audio (the whole session is read again)
+RETRY_MAX_S = 300.0  # ... and never longer than this
+
+
 class Service:
     def __init__(self, socket_path, make_recognizer, injector, focus, make_capture, *,
                  cleanup=identity_cleanup, config: Config | None = None, max_session: float = 300.0,
@@ -131,6 +135,7 @@ class Service:
         self._prefs_source = prefs
         self._clock = clock
         self.retry_timeout = retry_timeout
+        self._retry_limit_s = retry_timeout
         self._retry_lock = threading.Lock()
         self._abandoned = threading.Event()
         self._loaded_key = None
@@ -425,13 +430,20 @@ class Service:
             return
         # the session is intact: reload the worker and run the final pass again (at most once)
         self.emit({"event": "retry", "what": "final", "message": str(exc), "code": error_code(exc)})
-        deadline = self._clock_mono() + self.retry_timeout
+        limit = self.retry_limit(engine.audio_seconds)
+        deadline = self._clock_mono() + limit
+        self._retry_limit_s = limit
         outcome, exc = self._supervise(lambda abandoned: self._retry_final(engine, abandoned), deadline)
         if outcome == "cancelled":
             return
         if exc is not None:
             self._fail(exc)
             self._unload()  # the recognizer is gone or untrusted: the next begin starts a fresh worker
+
+    def retry_limit(self, audio_s: float) -> float:
+        """Seconds the retry of a failed final pass may take: `retry_timeout` for the worker reload plus RETRY_PER_AUDIO_S
+        per second of audio (the pass reads the whole session: nothing was typed before it), at most RETRY_MAX_S."""
+        return min(RETRY_MAX_S, self.retry_timeout + RETRY_PER_AUDIO_S * audio_s)
 
     @staticmethod
     def _clock_mono() -> float:
@@ -490,7 +502,7 @@ class Service:
                         abandoned.set()
                         self._abort_recognizer()
                     worker.join(5)
-                    return "done", WorkerFailed(f"final pass retry did not finish within {self.retry_timeout:.0f} s")
+                    return "done", WorkerFailed(f"the final pass retry did not finish within {self._retry_limit_s:.0f} s: nothing was typed")
         finally:
             for cmd in deferred:
                 self._commands.put(cmd)

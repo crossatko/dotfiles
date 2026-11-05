@@ -186,12 +186,13 @@ class Translate(unittest.TestCase):
 
 
 class Focus(unittest.TestCase):
-    def test_nothing_is_typed_when_the_focused_window_changed_during_the_session(self):
-        windows = iter(["0xa", "0xb"])  # at begin, at release
+    def test_nothing_is_typed_when_the_focus_at_release_differs_from_the_focus_at_the_key_press(self):
+        window = ["0xa"]
         r = Scripted(["one two three", "one two three four"], final="one two three four five.")
-        d, rec, events = make(r, focus=lambda: next(windows, "0xb"))
+        d, rec, events = make(r, focus=lambda: window[0])
         d.begin("en")
         speak(d, 2)
+        window[0] = "0xb"  # the user switched windows while holding the key
         d.end()
         self.assertEqual(rec.ops, [])
         self.assertEqual([e for e in events if e["event"] == "aborted"], [{"event": "aborted", "reason": "focus"}])

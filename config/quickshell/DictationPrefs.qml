@@ -22,7 +22,7 @@ import "launcher/js/PillPos.js" as P
 //                   THE source of truth for hints: DictationWords mirrors it into dictation-words.json ("hints").
 //   pill_edge / pill_gap / pill_x / pill_screen  where the pill sits (launcher/js/PillPos.js, PillPlacement); the service ignores them
 //   pill_preview_lines  how many lines of the running text the pill shows: 0 = it grows while you talk (up to the screen), N =
-//                   at most N lines (1..12), the oldest scroll out; this pill only (the diacritics pill has no text)
+//                   at most N lines (1..4), the oldest scroll out; this pill only (the diacritics pill has no text)
 //   pill_bottom     legacy: read only while pill_edge is missing (true = "bottom"); written as pill_edge === "bottom" for older shells
 // The object is a PrefSwitch / PrefSlider / PageReset store (value / set / unset / overridden / defaults / spec / changed /
 // resetAll); the mic, the timeout and the pill keys are set through the same set().
@@ -70,7 +70,7 @@ Singleton {
         else if (P.KEYS.indexOf(key) >= 0) { const n = P.withKey(pill, key, v); if (!n) return false; pill = n }
         else if (key === "idle_timeout_s") idleTimeoutS = Math.min(604800, Math.max(0, Math.round(Number(v)) || 0))
         else if (key === "prompt_hints") promptHints = !!v
-        else if (key === "pill_preview_lines") pillPreviewLines = Math.min(12, Math.max(0, Math.round(Number(v)) || 0))
+        else if (key === "pill_preview_lines") pillPreviewLines = Math.min(4, Math.max(0, Math.round(Number(v)) || 0))
         else return false
         saver.restart()
         return true
@@ -121,7 +121,7 @@ Singleton {
         extra = rest
         idleTimeoutS = Number.isInteger(d.idle_timeout_s) && d.idle_timeout_s >= 0 && d.idle_timeout_s <= 604800 ? d.idle_timeout_s : defaults.idle_timeout_s
         promptHints = typeof d.prompt_hints === "boolean" ? d.prompt_hints : defaults.prompt_hints
-        pillPreviewLines = Number.isInteger(d.pill_preview_lines) ? Math.min(12, Math.max(0, d.pill_preview_lines)) : defaults.pill_preview_lines
+        pillPreviewLines = Number.isInteger(d.pill_preview_lines) ? Math.min(4, Math.max(0, d.pill_preview_lines)) : defaults.pill_preview_lines
     }
     function serialize() {
         return JSON.stringify(Object.assign({}, extra, { version: 1, mic: mic, gpu: gpu, gpu_device: gpuDevice, idle_timeout_s: idleTimeoutS,

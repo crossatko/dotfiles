@@ -10,7 +10,7 @@ service core; the shell drives it: the three push-to-talk keys (Settings > Voice
 | Path | What |
 |---|---|
 | `bin/dictation` | CLI: `serve`, `begin MODE`, `end`, `cancel`, `status`, `listen`, `replay FILE.wav --mode MODE` |
-| `lib/dictation/engine.py` | the deep module: one session from audio frames to edit operations (stability, tail corrections, final pass, translate, focus abort); cleanup seam `NoCleanup` |
+| `lib/dictation/engine.py` | the deep module: one session from audio frames to edit operations (preview passes, final pass, translate, focus abort); cleanup seam `NoCleanup` |
 | `lib/dictation/cleanup.py`, `lib/dictation/default-words.json` | cleanup stage: filler filter, replacement list, vocabulary hints; the built-in filler lists |
 | `lib/dictation/service.py` | unix socket control interface, controller thread |
 | `lib/dictation/whisper.py` | recognizer client for the worker; model and worker paths |
@@ -143,7 +143,7 @@ Shell: `dictation begin cs`, `dictation end`, `dictation listen`.
   runs once more over the whole audio in the same mode. Success: the normal final edit and `final` with
   `retried: true`. Failure (or no worker could be started: `worker`, `gpu-failed`, `no-model`): an `error` event,
   nothing is typed, then `idle`, and the next `begin` loads a fresh worker. The
-  retry (reload plus pass) is abandoned after `retry_timeout` (default 30 s, the worker is killed); the first attempt
+  retry (reload plus pass) is abandoned after its limit (`retry_timeout`, default 30 s, plus 0.5 s per second of recorded audio, at most 300 s: the pass reads the whole session; the worker is killed) with a `worker` error saying nothing was typed; the first attempt
   has the recognizer's own timeout (20 s on the GPU, 90 s on the CPU, plus the audio length), so a session's final
   pass can take at most about that plus 30 s extra. `cancel`, the owner's disconnect and SIGTERM abandon the final pass or its retry at once (worker
   killed, nothing typed). Focus change still suppresses typing.
@@ -162,7 +162,7 @@ Shell: `dictation begin cs`, `dictation end`, `dictation listen`.
   with one trailing space. A wrong word of the fast model never reaches the field. A session without speech types
   nothing.
 - Translate works the same way; its preview streams from the full model (the only one that translates).
-- Nothing is typed when the focused Hyprland window changed since the key was pressed (`aborted`, reason `focus`). Text goes to `wtype` on stdin;
+- The focus is checked once, at release: if the focused Hyprland window then differs from the one at the key press, nothing is typed (`aborted`, reason `focus`). Text goes to `wtype` on stdin;
   newlines, tabs, control characters and trailing whitespace other than one space are refused, so Enter is never
   sent.
 - Trailing space: a session that typed something ends with one space after its final text (in the one edit), so the next dictation starts a new word. Never after an

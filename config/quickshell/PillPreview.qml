@@ -83,7 +83,7 @@ Item {
             // the slot = the room the real window has (the card grows away from its edge inside it); its top-left on the screen
             readonly property real slotY: pv.atTop ? pv.dist : pv.sh - pv.dist - slot.height
             // the part of the screen shown: centred on the slot, kept inside the screen
-            readonly property real viewX: Math.max(0, Math.min(pv.sw - width, place.left + pv.cardW / 2 - width / 2))
+            readonly property real viewX: Math.max(0, Math.min(pv.sw - width, place.left + (pv.cardItem ? pv.cardItem.x + pv.cardItem.width / 2 : pv.cardW / 2) - width / 2))
             readonly property real viewY: Math.max(0, Math.min(pv.sh - height, slotY + slot.height / 2 - height / 2))
             Item {
                 x: -Math.round(strip.viewX)

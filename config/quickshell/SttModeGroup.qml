@@ -20,7 +20,7 @@ ColumnLayout {
     }
     SttRoleRow {
         title: "Fast (live)"; titleWidth: grp.titleWidth; mode: grp.mode; role: "live"
-        info: "Typing as you speak. A faster model keeps up better."
+        info: "Feeds the pill preview while you hold the key (nothing is typed yet). A faster model keeps up better."
     }
     SttRoleRow {
         title: "Full (final)"; titleWidth: grp.titleWidth; mode: grp.mode; role: "final"

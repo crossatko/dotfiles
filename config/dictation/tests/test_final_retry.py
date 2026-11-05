@@ -10,7 +10,7 @@ from helpers import Recorder, Scripted
 
 from dictation import whisper
 from dictation.engine import Dictation, RecognizerError
-from dictation.service import Service
+from dictation.service import RETRY_MAX_S, RETRY_PER_AUDIO_S, Service
 from test_lifecycle import wait_for
 from test_service import Client, FakeCapture
 
@@ -192,6 +192,24 @@ class Retry(Base):
         self.assertTrue(self.made[1].aborted.is_set(), "the stuck worker was killed")
         self.assertEqual(self.events(seen, "final"), [])
 
+    def test_a_slow_reload_within_the_audio_scaled_limit_still_types_the_text(self):
+        def factory(n):
+            if n == 1:
+                time.sleep(1.0)  # longer than retry_timeout alone, well inside the scaled limit of a few seconds of audio
+            return Flaky(self.stopped, "die" if n == 0 else "ok")
+        self.start([], retry_timeout=0.3, factory=factory)
+        self.speak("en")
+        seen = self.finish()
+        self.assertEqual([e.get("retried") for e in self.events(seen, "final")], [True])
+        self.assertEqual(self.events(seen, "error"), [])
+
+    def test_a_retry_that_runs_out_of_time_reports_a_clear_worker_error(self):
+        self.start(["die", "hang"], retry_timeout=0.5)
+        self.speak("en")
+        err = self.events(self.finish(), "error")[0]
+        self.assertEqual(err["code"], "worker")
+        self.assertIn("nothing was typed", err["message"])
+
     def test_a_hung_first_attempt_that_the_recognizer_kills_is_retried(self):
         class Hangs(Flaky):
             def transcribe(s, audio, **k):
@@ -346,6 +364,14 @@ class EngineSeam(unittest.TestCase):
         gate.set()
         t.join(5)
         self.assertEqual(rec.ops, [])
+
+
+class RetryLimit(unittest.TestCase):
+    def test_the_retry_limit_grows_with_the_audio_and_has_a_cap(self):
+        svc = Service("x", None, None, None, None, retry_timeout=30.0)
+        self.assertEqual(svc.retry_limit(0), 30.0)
+        self.assertEqual(svc.retry_limit(100), 30.0 + 100 * RETRY_PER_AUDIO_S)
+        self.assertEqual(svc.retry_limit(100000), RETRY_MAX_S)
 
 
 if __name__ == "__main__":

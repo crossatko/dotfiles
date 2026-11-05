@@ -41,7 +41,7 @@ SettingRow {
         Layout.alignment: Qt.AlignTop
         visible: row.slow
         icon: Icons.warning; color: Theme.yellow
-        text: "For testing: much slower, live typing will lag."
+        text: "For testing: much slower, the pill preview will lag."
     }
     InfoTip {
         objectName: "info-gpu-device"

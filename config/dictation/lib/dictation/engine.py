@@ -15,8 +15,8 @@ Type on release: while the key is held the fast (live) model re-recognises a sli
 publishes its running text as `preview` events (for the pill); nothing is typed and nothing is ever backspaced. On
 release the full (final) model recognises the whole session, the cleanup (fillers, replacements) and the junk filter
 run over its text, and that text is typed ONCE (`edit`, backspace 0), followed by one space (`Config.trailing_space`) so
-the next dictation starts a new word. A session without speech types nothing. If the focused window changed since the
-key was pressed, nothing is typed (`aborted`, reason focus). Translate mode works the same way: its previews come from
+the next dictation starts a new word. A session without speech types nothing. The focus is checked once, at release:
+if the focused window then differs from the one at the key press, nothing is typed (`aborted`, reason focus). Translate mode works the same way: its previews come from
 the full model (the only one that translates).
 """
 from __future__ import annotations
@@ -234,6 +234,12 @@ class Dictation:
     @property
     def active(self) -> bool:
         return self._s is not None
+
+    @property
+    def audio_seconds(self) -> float:
+        """Seconds of audio recorded so far in the running session (0 without one)."""
+        s = self._s
+        return len(s.pcm) / _BPS / SAMPLE_RATE if s else 0.0
 
     @property
     def mode(self) -> str | None:
