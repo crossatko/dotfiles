@@ -55,9 +55,9 @@ class Files(unittest.TestCase):
             self.assertEqual(whisper.model_mode(mode), key, mode)
 
     def test_defaults_english_fast_is_futo_only_when_installed(self):
-        self.assertEqual(self.chosen("en"), {"live": TURBO, "final": FULL})
+        self.assertEqual(self.chosen("en"), {"live": TURBO, "final": TURBO})
         self.install(FUTO)
-        self.assertEqual(self.chosen("en"), {"live": FUTO, "final": FULL})
+        self.assertEqual(self.chosen("en"), {"live": FUTO, "final": TURBO})
         self.assertEqual(self.chosen("cs"), {"live": TURBO, "final": FULL})
         self.assertEqual(self.chosen("translate"), {"live": TURBO, "final": FULL})
 
@@ -76,7 +76,7 @@ class Files(unittest.TestCase):
 
     def test_bad_entries_leave_the_default(self):
         self.write({"version": 2, "en": {"live": "../x", "final": 7}, "cs": "oops", "translate": None})
-        self.assertEqual(self.chosen("en"), {"live": TURBO, "final": FULL})
+        self.assertEqual(self.chosen("en"), {"live": TURBO, "final": TURBO})
         self.assertEqual(self.chosen("cs"), {"live": TURBO, "final": FULL})
         self.write("not json")
         self.assertEqual(self.chosen("translate"), {"live": TURBO, "final": FULL})
@@ -227,7 +227,7 @@ class RealKey(Base):
         made = []
         real = self.cli.recognizer
         self.cli.recognizer = lambda a, m: made.append(m) or real(a, m)
-        ev = self.begins(self.args(live=TURBO), "en", "cs", "translate")
+        ev = self.begins(self.args(live=TURBO, final=FULL), "en", "cs", "translate")
         self.assertEqual([e.get("event") for e in ev], ["state"] * 3)
         self.assertEqual(made, ["en"])
 

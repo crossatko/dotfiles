@@ -16,10 +16,10 @@ import Quickshell.Io
 // of the session's mode differs from the loaded one: a chosen model that is not installed is its `no-model` error,
 // never another model. The choice is per mode (en = English, cs = Czech and every other language, translate = speak
 // Czech, type English); only explicit choices are saved, so a default can follow what is installed:
-//   { "version": 2, "en": { "live": "futo-small-en", "final": "large-v3" }, "cs": { ... }, "translate": { ... } }
+//   { "version": 2, "en": { "live": "futo-small-en", "final": "large-v3-turbo" }, "cs": { ... }, "translate": { ... } }
 //   live   the fast model: the live (streaming) passes while a key is held
 //   final  the full model: the pass after release (and translation: only a model that can translate)
-// Defaults: en live = futo-small-en when installed, else large-v3-turbo; everything else large-v3-turbo / large-v3.
+// Defaults: en live = futo-small-en when installed, else large-v3-turbo, full large-v3-turbo; cs and translate: large-v3-turbo / large-v3.
 // An English-only model (catalog "english") is refused for cs and translate. A version 1 file ({live, final}) is read
 // for every mode and rewritten as version 2 at the next change.
 // The object doubles as the prefs store of the Settings controls: keys are "<mode>.<role>" (value / set / unset /
@@ -52,7 +52,7 @@ Singleton {
     readonly property var keys: modes.flatMap(m => roles.map(r => m.key + "." + r))
     property var choice: ({})                     // explicit choices only: { en: { live: NAME, final: NAME }, ... }
     function defaultOf(mode, role) {
-        if (role === "final") return "large-v3"
+        if (role === "final") return mode === "en" ? "large-v3-turbo" : "large-v3"
         const f = model(englishFast)       // as the service: the file exists (the service has no catalog to check its size)
         return mode === "en" && f !== null && f.diskBytes > 0 ? englishFast : "large-v3-turbo"
     }

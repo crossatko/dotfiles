@@ -34,8 +34,8 @@ service core; the shell drives it: the three push-to-talk keys (Settings > Voice
    mode), else the shell's choice in `${XDG_STATE_HOME:-~/.local/state}/quickshell/stt-models.json`
    (`{"version":2,"en":{"live":NAME,"final":NAME},"cs":{...},"translate":{...}}`, written by Settings > Voice;
    `DICTATION_MODELS_FILE` overrides; an older `{"live","final"}` file applies to every mode), else the defaults: fast
-   `futo-small-en` for English when its file is installed (otherwise `large-v3-turbo`), `large-v3-turbo` for the rest;
-   full `large-v3` everywhere. A missing mode, key or malformed name is that role's default, exactly as the settings page
+   `futo-small-en` for English when its file is installed (otherwise `large-v3-turbo`) and full `large-v3-turbo`; `cs` and `translate`: fast `large-v3-turbo`, full `large-v3`.
+   Every pair can be changed freely in Settings (within what each model can do). A missing mode, key or malformed name is that role's default, exactly as the settings page
    reads it. The file is re-read at every `begin`; the worker keeps one fast and one full model loaded, and the models
    reload (about a second) only when the pair for the session's mode differs from the loaded one. A chosen model
    that is not installed is an error with code `no-model` naming the file; another model is never used instead.

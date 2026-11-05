@@ -85,10 +85,13 @@ _NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")  # fullmatch: as SttModels.qml (no t
 
 def default_models(mode: str, directory: str | None = None) -> dict:
     """The default pair of a mode ("en", "cs" or "translate"). English fast = the FUTO English model when its file is
-    installed, else the multilingual turbo (so a machine without the local file keeps working)."""
+    installed, else the multilingual turbo (so a machine without the local file keeps working); English full = turbo
+    too (the user can pick large-v3 in Settings). cs and translate: turbo fast, large-v3 full."""
     names = {"live": DEFAULT_LIVE, "final": DEFAULT_FINAL}
-    if mode == "en" and os.path.isfile(model_path(ENGLISH_LIVE, directory)):
-        names["live"] = ENGLISH_LIVE
+    if mode == "en":
+        names["final"] = DEFAULT_LIVE
+        if os.path.isfile(model_path(ENGLISH_LIVE, directory)):
+            names["live"] = ENGLISH_LIVE
     return names
 
 
