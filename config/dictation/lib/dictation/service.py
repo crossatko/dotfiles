@@ -113,15 +113,19 @@ class _Intake:
 class Service:
     def __init__(self, socket_path, make_recognizer, injector, focus, make_capture, *,
                  cleanup=identity_cleanup, config: Config | None = None, max_session: float = 300.0,
-                 models_key=None, prefs=None, clock=time.monotonic, retry_timeout: float = 30.0):
+                 models_key=None, prefs=None, clock=time.monotonic, retry_timeout: float = 30.0, per_mode: bool = False):
         # make_capture(on_pcm, mode) -> object with start(), stop() and optionally `failed` (a message once the
         # capture died on its own, e.g. the mic went away). The capture starts before the models are loaded.
         # prefs() -> prefs.Prefs, read at every begin (and now and then while idle, for the idle timeout); None = defaults.
         # The models load on the first begin and unload after prefs.idle_timeout_s without a session; `clock` is the
         # idle timer's time source (monotonic seconds). retry_timeout: seconds the retry of a failed final pass (worker
         # reload + the pass) may take before it is abandoned with a worker error.
+        # per_mode: the models depend on the session's mode: models_key(mode) and make_recognizer(mode) get the mode
+        # of the session (begin's argument); a begin whose key differs from the loaded one reloads, the same key never.
         self.socket_path = socket_path
         self.make_recognizer = make_recognizer
+        self.per_mode = per_mode
+        self._mode = None  # the mode of the last begin: the models are loaded for it
         self.make_capture = make_capture
         self.models_key = models_key
         self._prefs_source = prefs
@@ -182,11 +186,14 @@ class Service:
 
     # --- controller thread: owns the engine, the recognizer and the capture ---
 
+    def _make(self):
+        return self.make_recognizer(self._mode) if self.per_mode else self.make_recognizer()
+
     def _wanted(self):
         if self.models_key is None:
             return None
         try:
-            return self.models_key()
+            return self.models_key(self._mode) if self.per_mode else self.models_key()
         except Exception as exc:  # an unreadable choice is the loader's error to report
             return ("unreadable", str(exc))
 
@@ -222,7 +229,7 @@ class Service:
         self.engine = None
         self._set_state("loading")
         try:
-            self._recognizer = self.make_recognizer()
+            self._recognizer = self._make()
             self.engine = Dictation(self._recognizer, self._injector, focus=self._focus, emit=self.emit,
                                     cleanup=self._cleanup, config=self._config)
             self._error = self._code = None
@@ -239,7 +246,7 @@ class Service:
         self._close_recognizer()
         self._set_state("loading")
         try:
-            self._recognizer = self.make_recognizer()
+            self._recognizer = self._make()
         except Exception as exc:
             self._fail(exc)
             if self.engine is not None:  # still bound to the closed recognizer: the next begin must load a fresh one
@@ -316,6 +323,7 @@ class Service:
             self.emit({"event": "error", "message": str(exc), "code": error_code(exc)})
             return
         self._capture, self._intake = capture, intake
+        self._mode = mode
         self._owner = None if cmd.get("detached") else cmd.get("_client")
         if engine is None or self._wanted() != self._loaded_key:  # nothing loaded yet, or another model chosen
             self._load()
@@ -429,7 +437,7 @@ class Service:
 
     def _retry_final(self, engine: Dictation, abandoned: threading.Event) -> None:
         self._close_recognizer()
-        recognizer = self.make_recognizer()
+        recognizer = self._make()
         with self._retry_lock:
             gone = abandoned.is_set()
             if not gone:

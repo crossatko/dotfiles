@@ -19,7 +19,9 @@ Download events (stdout, one JSON object per line, flushed):
   {"event":"retry","name","attempt","message"}                 a network error, resuming after a short pause
   {"event":"verifying","name","pct"}
   {"event":"done","name","path"}                               exit 0
-  {"event":"error","name","code","message","resumable"}        exit 1; code = network|http|space|checksum|size|busy|catalog|io
+  {"event":"error","name","code","message","resumable"}        exit 1; code = network|http|space|checksum|size|busy|catalog|io|local
+A catalog entry with "local": true (no url, no sha256) is imported by hand: `download` refuses it (code local), `list` shows it
+installed when the file has the catalog size. "english": true marks an English-only model (not for other languages or translation).
   {"event":"cancelled","name","bytes"}                         SIGTERM / SIGINT: the .part stays (resume), exit 130
 A checksum or size mismatch deletes the .part (resumable false): the bytes are bad, a retry starts over.
 
@@ -196,6 +198,8 @@ def download(cat, name):
     m = find(cat, name)
     if m is None:
         return emit(event="error", name=name, code="catalog", message="unknown model", resumable=False) or 1
+    if m.get("local"):
+        return emit(event="error", name=name, code="local", message="this model has no download: copy your file to %s" % path_of(m), resumable=False) or 1
     sha = (m.get("sha256") or "").lower()
     url = m.get("url") or ""
     if len(sha) != 64 or not m.get("size"):
@@ -286,6 +290,9 @@ def cmd_verify(cat, name):
     m = find(cat, name)
     if m is None or not state_of(m)["installed"]:
         emit(event="error", name=name, code="catalog", message="not installed", resumable=False)
+        return 1
+    if m.get("local"):
+        emit(event="error", name=name, code="local", message="no checksum for a hand-imported model", resumable=False)
         return 1
     ok = sha256_file(path_of(m)) == m["sha256"].lower()
     emit(event="verify", name=name, ok=ok)

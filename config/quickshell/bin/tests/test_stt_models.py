@@ -307,9 +307,15 @@ class Catalog(unittest.TestCase):
         self.assertEqual(len(names), len(set(names)))
         for m in cat["models"]:
             self.assertEqual(m["file"], "ggml-%s.bin" % m["name"])
-            self.assertTrue(m["url"].startswith("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"))
-            self.assertTrue(m["url"].endswith(m["file"]))
-            self.assertRegex(m["sha256"], r"^[0-9a-f]{64}$")
+            self.assertIsInstance(m["english"], bool)
+            if m["local"]:                       # imported by hand: no URL, no checksum, never downloaded
+                self.assertNotIn("url", m)
+                self.assertNotIn("sha256", m)
+                self.assertTrue(m["english"] and not m["translate"])
+            else:
+                self.assertTrue(m["url"].startswith("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"))
+                self.assertTrue(m["url"].endswith(m["file"]))
+                self.assertRegex(m["sha256"], r"^[0-9a-f]{64}$")
             self.assertGreater(m["size"], 10_000_000)
             self.assertIsInstance(m["translate"], bool)
             self.assertIn(m["czech"], ("good", "fair", "poor"))

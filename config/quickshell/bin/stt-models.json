@@ -17,7 +17,9 @@
       "translate": false,
       "czech": "fair",
       "recommended": "live",
-      "note": "Fast. Czech errors about 10-14 %, English 3-8 %."
+      "note": "Fast. Czech errors about 10-14 %, English 3-8 %.",
+      "english": false,
+      "local": false
     },
     {
       "name": "large-v3",
@@ -30,7 +32,9 @@
       "translate": true,
       "czech": "good",
       "recommended": "final",
-      "note": "Most accurate. Czech errors about 5-8 %, translates Czech to English."
+      "note": "Most accurate. Czech errors about 5-8 %, translates Czech to English.",
+      "english": false,
+      "local": false
     },
     {
       "name": "large-v3-q5_0",
@@ -43,7 +47,9 @@
       "translate": true,
       "czech": "good",
       "recommended": "",
-      "note": "Lighter large v3. Czech errors about 7-8 %, translates; a little below the full model."
+      "note": "Lighter large v3. Czech errors about 7-8 %, translates; a little below the full model.",
+      "english": false,
+      "local": false
     },
     {
       "name": "small",
@@ -56,7 +62,22 @@
       "translate": true,
       "czech": "poor",
       "recommended": "",
-      "note": "Low-VRAM fallback only. Czech not usable (the larger medium already fails), translation unreliable."
+      "note": "Low-VRAM fallback only. Czech not usable (the larger medium already fails), translation unreliable.",
+      "english": false,
+      "local": false
+    },
+    {
+      "name": "futo-small-en",
+      "label": "FUTO Small English",
+      "file": "ggml-futo-small-en.bin",
+      "local": true,
+      "size": 264477561,
+      "vramGb": 0.45,
+      "translate": false,
+      "english": true,
+      "czech": "poor",
+      "recommended": "live-en",
+      "note": "English only. A fine-tuned Whisper small.en (Q8_0), about 2x faster than Large v3 Turbo and nearly as accurate on English. Not downloadable: copy your own file to ggml-futo-small-en.bin in the models folder."
     }
   ]
 }

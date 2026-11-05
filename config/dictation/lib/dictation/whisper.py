@@ -12,13 +12,33 @@ import weakref
 
 from .engine import FINAL, LIVE, Recognition, RecognizerError, Segment
 
-MODEL_NAMES = ("large-v3-turbo", "large-v3", "large-v3-q5_0", "medium", "small")
+MODEL_NAMES = ("large-v3-turbo", "large-v3", "large-v3-q5_0", "medium", "small", "futo-small-en")
 DEFAULT_LIVE = "large-v3-turbo"
 DEFAULT_FINAL = "large-v3"
+ENGLISH_LIVE = "futo-small-en"  # the English "fast" model when it is installed (a local, English-only file)
+ENGLISH_ONLY = frozenset({"futo-small-en"})  # cannot transcribe another language, nor translate
+NO_TRANSLATE = frozenset({"large-v3-turbo", "futo-small-en"})  # cannot translate
+MODES = ("en", "cs", "translate")  # the model choice is per mode: English, every other language (and auto), translation
+ROLES = ("live", "final")
+
+
+def model_mode(mode: str) -> str:
+    """The models.json key for a session mode: "en", "translate" (translate, translate:<code>) or "cs" (any other
+    language, and auto: the multilingual pair)."""
+    if mode == "en":
+        return "en"
+    if isinstance(mode, str) and mode.startswith("translate"):
+        return "translate"
+    return "cs"
 
 
 class ModelMissing(RuntimeError):
     code = "no-model"
+
+
+class ModelUnsuitable(ModelMissing):
+    """A chosen model that is installed but cannot do the job of this mode (an English-only model for Czech, a model
+    that cannot translate for translation); reported like a missing one (no-model), never swapped for another."""
 
 
 class WorkerFailed(RecognizerError):
@@ -53,7 +73,9 @@ def model_path(name: str, directory: str | None = None) -> str:
 
 
 def models_file() -> str:
-    """The shell's model choice (Settings > Voice, SttModels.qml writes it): {"live": NAME, "final": NAME}."""
+    """The shell's model choice (Settings > Voice, SttModels.qml writes it), per mode:
+    {"version": 2, "en": {"live": NAME, "final": NAME}, "cs": {...}, "translate": {...}}.
+    A missing mode or role = its default. The older {"live": NAME, "final": NAME} (version 1) applies to every mode."""
     return os.environ.get("DICTATION_MODELS_FILE") or os.path.join(
         os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "quickshell", "stt-models.json")
 
@@ -61,30 +83,45 @@ def models_file() -> str:
 _NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")  # fullmatch: as SttModels.qml (no trailing newline accepted)
 
 
-def chosen_models(path: str | None = None, *, live: str | None = None, final: str | None = None) -> dict:
-    """{"live": name, "final": name}: explicit arguments first, then the shell's choice, then the defaults.
+def default_models(mode: str, directory: str | None = None) -> dict:
+    """The default pair of a mode ("en", "cs" or "translate"). English fast = the FUTO English model when its file is
+    installed, else the multilingual turbo (so a machine without the local file keeps working)."""
+    names = {"live": DEFAULT_LIVE, "final": DEFAULT_FINAL}
+    if mode == "en" and os.path.isfile(model_path(ENGLISH_LIVE, directory)):
+        names["live"] = ENGLISH_LIVE
+    return names
+
+
+def chosen_models(path: str | None = None, *, mode: str = "cs", live: str | None = None, final: str | None = None,
+                  directory: str | None = None) -> dict:
+    """{"live": name, "final": name} for a models.json key `mode` (see model_mode): explicit arguments first, then the
+    shell's choice for that mode, then the top-level live/final of a version 1 file, then the defaults.
 
     Reads the file exactly as SttModels.qml does (a missing file, unreadable JSON, a missing key or a malformed name
     leave that role at its default), so the service and the settings page always agree on which model is meant.
     The file is never written here, and a chosen model that is not installed is never swapped for another one."""
-    names = {"live": DEFAULT_LIVE, "final": DEFAULT_FINAL}
+    names = default_models(mode, directory)
     try:
         with open(path or models_file(), encoding="utf-8") as f:
             saved = json.load(f)
     except (OSError, ValueError):
         saved = None
     if isinstance(saved, dict):
+        section = saved.get(mode)
         for role in names:
-            if isinstance(saved.get(role), str) and _NAME.fullmatch(saved[role]):
-                names[role] = saved[role]
+            for source in (section, saved):  # the mode's own entry first, then a version 1 file's top level
+                if isinstance(source, dict) and isinstance(source.get(role), str) and _NAME.fullmatch(source[role]):
+                    names[role] = source[role]
+                    break
     for role, name in (("live", live), ("final", final)):
         if name:
             names[role] = name
     return names
 
 
-def model_paths(names: dict, directory: str | None = None) -> dict:
-    """{"live": path, "final": path}; ModelMissing (code no-model) names the first chosen model that is not there."""
+def model_paths(names: dict, directory: str | None = None, mode: str | None = None) -> dict:
+    """{"live": path, "final": path}; ModelMissing (code no-model) names the first chosen model that is not there.
+    With `mode` (a models.json key) a model that cannot do that mode's job is refused too (ModelUnsuitable, no-model)."""
     paths = {}
     for role, name in names.items():
         if not _NAME.fullmatch(name):
@@ -92,6 +129,11 @@ def model_paths(names: dict, directory: str | None = None) -> dict:
         paths[role] = model_path(name, directory)
         if not os.path.isfile(paths[role]):
             raise ModelMissing(f"speech model {name} ({role}) is not installed: expected {paths[role]}")
+        if mode in ("cs", "translate") and name in ENGLISH_ONLY:
+            raise ModelUnsuitable(f"speech model {name} ({role}) is English only and cannot serve the {mode} mode: "
+                                  "choose another in Settings > Voice")
+        if mode == "translate" and role == "final" and name in NO_TRANSLATE:
+            raise ModelUnsuitable(f"speech model {name} ({role}) cannot translate: choose another in Settings > Voice")
     return paths
 
 

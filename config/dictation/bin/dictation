@@ -10,9 +10,11 @@
     dictation replay FILE.wav --mode cs [--realtime]          offline: run a recording through the real models,
                                                               print the edit operations instead of typing them
 
-Models: --live / --final, else the shell's choice in DICTATION_MODELS_FILE (default
-${XDG_STATE_HOME:-~/.local/state}/quickshell/stt-models.json, written by Settings > Voice), else large-v3-turbo /
-large-v3. A chosen model that is not installed is an error (code no-model), never replaced by another one.
+Models: --live / --final (every mode), else the shell's choice per mode (English, other languages, translation) in
+DICTATION_MODELS_FILE (default ${XDG_STATE_HOME:-~/.local/state}/quickshell/stt-models.json, written by Settings >
+Voice), else futo-small-en (English only, when installed) or large-v3-turbo as the fast model and large-v3 as the full
+one. A chosen model that is not installed, or cannot do the mode (an English-only one for Czech or translation), is an
+error (code no-model), never replaced by another one. The models reload at a begin only when the pair changes.
 Voice preferences (mic, gpu, gpu_device, idle_timeout_s) come from DICTATION_PREFS_FILE (default
 ${XDG_STATE_HOME:-~/.local/state}/quickshell/dictation-prefs.json, written by Settings > Voice), read at every begin.
 The models load on the first begin and are unloaded after idle_timeout_s without a session.
@@ -43,8 +45,9 @@ from dictation.languages import parse_mode  # noqa: E402
 from dictation.service import default_socket  # noqa: E402
 
 
-def chosen(args):
-    return whisper.chosen_models(live=args.live, final=args.final)
+def chosen(args, mode):
+    """The {"live", "final"} model names for a session mode (--live / --final win for every mode)."""
+    return whisper.chosen_models(mode=whisper.model_mode(mode), live=args.live, final=args.final)
 
 
 def use_gpu(args):
@@ -57,8 +60,9 @@ def gpu_device():
     return prefs.load().gpu_device
 
 
-def recognizer(args):
-    models = whisper.model_paths(chosen(args))
+def recognizer(args, mode):
+    key = whisper.model_mode(mode)
+    models = whisper.model_paths(chosen(args, mode), mode=key)
     gpu = use_gpu(args)
     device = gpu_device()
     # a live pass that takes 20 s on the GPU is a hung worker; on the CPU passes are much slower, and so are the
@@ -111,9 +115,10 @@ def cmd_serve(args):
         print("dictation: WAYLAND_DISPLAY is not set, typing will fail (the user manager needs the session environment: "
               "systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE)", file=sys.stderr, flush=True)
 
-    svc = Service(args.socket, lambda: recognizer(args), DryRun() if args.dry_run else WtypeInjector(),
+    svc = Service(args.socket, lambda mode: recognizer(args, mode), DryRun() if args.dry_run else WtypeInjector(),
                   hyprland_focus, capture, cleanup=Cleanup(), config=Config(max_window=args.max_window),
-                  models_key=lambda: (tuple(sorted(chosen(args).items())), use_gpu(args), gpu_device()), prefs=prefs.load)
+                  models_key=lambda mode: (tuple(sorted(chosen(args, mode).items())), use_gpu(args), gpu_device()),
+                  prefs=prefs.load, per_mode=True)
     asyncio.run(svc.serve())
 
 
@@ -169,7 +174,7 @@ class PrintRecorder:
 def cmd_replay(args):
     audio = read_wav(args.file)
     t_load = time.monotonic()
-    rec_engine = recognizer(args)
+    rec_engine = recognizer(args, args.mode)
     load = time.monotonic() - t_load
     try:
         passes, previews, final_passes = [], [], []
@@ -234,8 +239,8 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
     for name in ("serve", "replay"):
         sp = sub.add_parser(name)
-        sp.add_argument("--live", help="model for live passes (ggml-<name>.bin; default: the shell's choice)")
-        sp.add_argument("--final", help="model for the final pass and translation (default: the shell's choice)")
+        sp.add_argument("--live", help="model for live passes in every mode (ggml-<name>.bin; default: the shell's choice per mode)")
+        sp.add_argument("--final", help="model for the final pass and translation in every mode (default: the shell's choice per mode)")
         sp.add_argument("--no-gpu", action="store_true")
         sp.add_argument("--verbose", action="store_true", help="show whisper.cpp's own log")
         sp.add_argument("--final-beam", type=int, default=5, help="beam size of the final pass (0 = greedy)")
