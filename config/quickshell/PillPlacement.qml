@@ -17,6 +17,8 @@ import "launcher/js/PillPos.js" as P
 //              least): edgeInset + zoneShift = the distance from the physical screen edge (the preview draws it there)
 //   reserved   Monitors.reservedOf(screen)
 //   gapUnit    the px one step of pillGap is on this edge (the Settings gap slider shows px)
+//   maxH       the tallest a card may get here (a growing caption): from its edge to the far edge of the usable screen, less the
+//              bar if that sits on the far edge, and one edge gap
 //   refresh()  asks Hyprland for a new monitor report (the reserved area)
 //   pick()     refresh() and the screen a pill opening now goes to: pillScreen when connected (Monitors.byKey), else the focused monitor
 QtObject {
@@ -57,6 +59,10 @@ QtObject {
     readonly property int margin: geo.margin
     readonly property int cardW: geo.cardW
     readonly property real zoneShift: inUsable ? Math.max(atTop ? reserved.top : reserved.bottom, onBar ? BarConfig.zoneOf(screen) : 0) : 0
+    readonly property real barInset: Popups.cardInsetOf(screen) - BarConfig.popupGapOf(screen)       // screen edge -> the bar's far edge
+    readonly property real farClear: (barEdge !== "" && barEdge !== (atTop ? "top" : "bottom") ? barInset : 0)
+        + (inUsable ? (atTop ? reserved.bottom : reserved.top) : 0) + gapEdge
+    readonly property real maxH: Math.max(0, screenH - edgeInset - zoneShift - farClear)
     // qmllint enable missing-property
 
     function refresh() { Hyprland.refreshMonitors() }      // a fresh reserved area (the pinned-video strip comes and goes)

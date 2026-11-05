@@ -10,7 +10,7 @@ import Quickshell.Wayland
 // Look = DictationPillCard (the swoosh with the mode letters, one caption line that grows the card away from its edge; on the
 // bottom edge the caption sits above the swoosh). Error: a flat red dotted line and ONE generic line ("An error occurred"), no
 // mode; the detail goes to DictationStatus (the persisted last-error record the Voice settings page shows), never onto the
-// pill. Fixed width (pillW): text never changes it.
+// pill. The caption grows the card (see DictationPillCard, pill_preview_lines).
 //
 // API (set by DictationController; nothing here talks to the service):
 //   state        "hidden" | "listening" | "speaking" | "translating" | "error"   (hidden = fade out; shown = fade in on the
@@ -68,8 +68,8 @@ PanelWindow {
     onErrorTextChanged: if (state === "error" && errorText !== "") DictationStatus.record(errorText, errorCode)
 
     // ---- geometry (Theme tokens; the width is this card's own content cap) ----
-    readonly property int pillW: card.pillW   // fixed card width, shrinks only on a narrow screen
-    PillPlacement { id: place; screen: pill.screen; prefs: DictationPrefs; pillW: pill.pillW }   // where the card sits (shared with DiacPill)
+    readonly property int pillW: card.placeW  // the window's width: the card's, plus the room to widen while the text grows
+    PillPlacement { id: place; screen: pill.screen; prefs: DictationPrefs; pillW: card.placeW }   // where the card sits (shared with DiacPill)
     readonly property string screenName: place.screenName
     readonly property bool atTop: place.atTop
     readonly property real edgeInset: place.edgeInset
@@ -106,7 +106,10 @@ PanelWindow {
         id: card
         openMotion: motion
         fromTop: pill.atTop
-        width: parent.width
+        slotW: parent.width
+        slotAlign: DictationPrefs.pillX
+        previewLines: DictationPrefs.pillPreviewLines
+        maxH: place.maxH
         y: pill.atTop ? 0 : parent.height - height     // hangs off its edge, grows away from it
         look: pill.look
         mode: pill.mode
@@ -142,7 +145,7 @@ PanelWindow {
             return "state=" + pill.state + " look=" + pill.look + " mode=" + pill.mode + " screen=" + pill.screenName
                 + " edge=" + (pill.atTop ? "top" : "bottom") + " inset=" + pill.edgeInset + " window=" + pill.width + "x" + pill.height
                 + " left=" + place.left + " margin=" + place.margin + " reserved=" + JSON.stringify(place.reserved) + " card=" + card.width + "x" + Math.round(card.height) + " swoosh=" + card.swoosh.width + "x" + card.swoosh.height
-                + " caption=" + card.tail.width + " overflow=" + card.tail.overflows + " glass=" + Theme.glass
+                + " caption=" + card.tail.width + "x" + card.tail.height + " lines=" + card.tail.lineCount + "/" + card.maxLines + " overflow=" + card.tail.overflows + " glass=" + Theme.glass
         }
     }
 }

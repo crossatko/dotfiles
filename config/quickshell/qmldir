@@ -217,7 +217,7 @@ MediaActions 1.0 MediaActions.qml
 VDivider 1.0 VDivider.qml
 BarZone 1.0 BarZone.qml
 DotSwoosh 1.0 DotSwoosh.qml
-TailLine 1.0 TailLine.qml
+TailText 1.0 TailText.qml
 DictationPill 1.0 DictationPill.qml
 DictationController 1.0 DictationController.qml
 singleton DictationClient 1.0 DictationClient.qml
@@ -270,5 +270,6 @@ PillBarSketch 1.0 PillBarSketch.qml
 ScreenBackdrop 1.0 ScreenBackdrop.qml
 WallpaperCut 1.0 WallpaperCut.qml
 PillPositionRows 1.0 PillPositionRows.qml
+PillLinesRow 1.0 PillLinesRow.qml
 PillSection 1.0 PillSection.qml
 DictationPillSection 1.0 DictationPillSection.qml

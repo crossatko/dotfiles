@@ -37,7 +37,7 @@ Item {
 
     implicitHeight: mock.implicitHeight + Theme.gapRow + strip.height
 
-    PillPlacement { id: place; screen: pv.screen; prefs: pv.store; pillW: pv.card ? pv.card.pillW : 0 }   // qmllint disable missing-property
+    PillPlacement { id: place; screen: pv.screen; prefs: pv.store; pillW: pv.card ? pv.card.placeW : 0 }   // qmllint disable missing-property
     Component.onCompleted: place.refresh()
     OpenMotion { id: om; open: true; t: 1 }      // always fully open: the card's own idle look
 
@@ -57,13 +57,13 @@ Item {
                 screen: pv.screen
                 decodeWidth: Math.round(mock.width * pv.mockDecode)
                 reserved: place.reserved
-                frost: pv.cardItem ? Qt.rect(place.left, pv.cardY, pv.cardW, pv.cardH) : Qt.rect(0, 0, 0, 0)
+                frost: pv.cardItem ? Qt.rect(place.left + pv.cardItem.x, pv.cardY, pv.cardItem.width, pv.cardH) : Qt.rect(0, 0, 0, 0)
             }
             ShaderEffectSource {
                 objectName: "pill-preview-mini"
                 visible: pv.cardItem !== null
                 sourceItem: pv.cardItem
-                x: place.left
+                x: place.left + (pv.cardItem ? pv.cardItem.x : 0)
                 y: pv.cardY
                 width: pv.cardItem ? pv.cardItem.width : 0
                 height: pv.cardH
@@ -99,7 +99,7 @@ Item {
                     view: Qt.rect(x, y, width, height)
                     screen: pv.screen
                     reserved: place.reserved
-                    frost: pv.cardItem ? Qt.rect(slot.x, slot.y + pv.cardItem.y, pv.cardW, pv.cardH) : Qt.rect(0, 0, 0, 0)
+                    frost: pv.cardItem ? Qt.rect(slot.x + pv.cardItem.x, slot.y + pv.cardItem.y, pv.cardItem.width, pv.cardH) : Qt.rect(0, 0, 0, 0)
                 }
                 Item {
                     id: slot

@@ -15,7 +15,7 @@ import Quickshell.Io
 //   state     the service's: "" (not connected) | loading | idle | listening | finishing | error
 //   mode      a language code | translate[:<code>|auto] | auto while a session runs
 //   level     the last mic level 0..1 (levelEvent(v) fires for every one, also a repeated value)
-//   preview   the session's text so far (translate: the English preview); cleared when a session starts
+//   preview   the fast model's running text of the session (translate: the English preview); cleared when a session starts
 //   serviceError / serviceCode   why the service is not ready (state error: a missing model, a broken worker)
 // Signals: failed(message, code) (an `error` event, a start that failed), lost() (the connection dropped), finished(text)
 // (`final`), aborted(reason, message) (typing stopped: focus moved / injection failed).

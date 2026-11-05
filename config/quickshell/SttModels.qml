@@ -49,7 +49,7 @@ Singleton {
         { key: "translate", label: "Czech to English", info: "Speak Czech, type English (translate)." }
     ]
     readonly property var roles: ["live", "final"]
-    readonly property var keys: modes.flatMap(m => roles.map(r => m.key + "." + r))
+    readonly property var keys: modes.reduce((a, m) => a.concat(roles.map(r => m.key + "." + r)), [])
     property var choice: ({})                     // explicit choices only: { en: { live: NAME, final: NAME }, ... }
     function defaultOf(mode, role) {
         if (role === "final") return mode === "en" ? "large-v3-turbo" : "large-v3"

@@ -12,6 +12,7 @@ ColumnLayout {
     property real titleWidth: 120
     property alias card: preview.card
     property alias fullH: preview.fullH
+    readonly property real maxH: preview.placement.maxH       // the tallest a card may get on the drawn monitor
     readonly property OpenMotion motion: preview.motion
     readonly property bool atTop: preview.atTop
     readonly property int cardW: preview.cardW

@@ -11,8 +11,8 @@ idle_timeout_s  seconds without a session before both models are unloaded; 0 or 
 gpu_device   which GPU the worker uses when gpu is true: the index of `dictation-whisper --list-devices` (0 = the first,
              the default; a negative number is 0, anything that is not a whole number is 0); an index that does not
              exist is a `gpu-failed` error
-pill_edge, pill_gap, pill_x, pill_screen  where the pill sits: read by the shell only, ignored here (pill_bottom = their
-             legacy form, also the shell's)
+pill_edge, pill_gap, pill_x, pill_screen, pill_preview_lines  where the pill sits and how many lines it shows: read by the
+             shell only, ignored here (pill_bottom = their legacy form, also the shell's)
 prompt_hints read by the cleanup module, not here
 trailing_space  false = no space after a session's final text (default true: the next dictation starts a new word);
              no UI

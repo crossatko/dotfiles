@@ -16,6 +16,7 @@ MotionCard {
 
     // ---- geometry (Theme tokens; the sizes are this card's own) ----
     readonly property int pillW: 336          // the card's width (the window's; shrinks only on a narrow screen)
+    readonly property int placeW: pillW       // the width a window / preview slot reserves
     readonly property int dotsW: 300          // 78 dots
     readonly property int dotsH: 50           // 13 rows; the 7-row base band is rows 3..9, on the card's centre line
     readonly property int rowH: 40            // the dictation pill's swoosh row: the dots are centred on it

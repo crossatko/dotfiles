@@ -11,8 +11,8 @@ import "launcher/js/PillPos.js" as P
 // service (config/dictation) reads the same file at every key press and applies it to the next dictation; a missing or
 // malformed file / field = that field's default.
 //   { "version": 1, "mic": "", "gpu": true, "gpu_device": 0, "idle_timeout_s": 600, "prompt_hints": false,
-//     "pill_edge": "bar", "pill_gap": 2, "pill_x": 0.5, "pill_screen": "", "pill_bottom": false }
-// Keys this file does not know (the service's pause_silence_s / trailing_space, hand-written) are kept when it saves.
+//     "pill_edge": "bar", "pill_gap": 2, "pill_x": 0.5, "pill_screen": "", "pill_bottom": false, "pill_preview_lines": 0 }
+// Keys this file does not know (the service's trailing_space / release_tail_s, hand-written) are kept when it saves.
 //   mic             PipeWire / PulseAudio source name (node.name); "" = follow the system default source
 //   gpu             use the GPU (Vulkan); false = CPU
 //   gpu_device      which GPU (index of `dictation-whisper --list-devices`, GpuDevices.qml); 0 = the first. Only used with gpu
@@ -21,10 +21,12 @@ import "launcher/js/PillPos.js" as P
 //   prompt_hints    use the replacement words as recognition hints (transcribe only, never when translating).
 //                   THE source of truth for hints: DictationWords mirrors it into dictation-words.json ("hints").
 //   pill_edge / pill_gap / pill_x / pill_screen  where the pill sits (launcher/js/PillPos.js, PillPlacement); the service ignores them
+//   pill_preview_lines  how many lines of the running text the pill shows: 0 = it grows while you talk (up to the screen), N =
+//                   at most N lines (1..12), the oldest scroll out; this pill only (the diacritics pill has no text)
 //   pill_bottom     legacy: read only while pill_edge is missing (true = "bottom"); written as pill_edge === "bottom" for older shells
 // The object is a PrefSwitch / PrefSlider / PageReset store (value / set / unset / overridden / defaults / spec / changed /
 // resetAll); the mic, the timeout and the pill keys are set through the same set().
-//   qs ipc call dictationprefs get | set <mic|gpu|device|idle|hints|pill|edge|gap|x|screen> <value> | reset | sources
+//   qs ipc call dictationprefs get | set <mic|gpu|device|idle|hints|pill|edge|gap|x|screen|lines> <value> | reset | sources
 Singleton {
     id: dp
 
@@ -36,8 +38,8 @@ Singleton {
     // test hook: a program printing `pactl --format=json list sources`
     readonly property string pactl: Quickshell.env("QS_DICTATION_PACTL") || "pactl"
 
-    readonly property var defaults: Object.assign({ mic: "", gpu: true, gpu_device: 0, idle_timeout_s: 600, prompt_hints: false }, P.DEFAULTS)
-    readonly property var keys: ["mic", "gpu", "gpu_device", "idle_timeout_s", "prompt_hints"].concat(P.KEYS)
+    readonly property var defaults: Object.assign({ mic: "", gpu: true, gpu_device: 0, idle_timeout_s: 600, prompt_hints: false, pill_preview_lines: 0 }, P.DEFAULTS)
+    readonly property var keys: ["mic", "gpu", "gpu_device", "idle_timeout_s", "prompt_hints", "pill_preview_lines"].concat(P.KEYS)
     readonly property var spec: P.SPEC
     readonly property var pillKeys: P.KEYS
 
@@ -52,11 +54,12 @@ Singleton {
     readonly property bool pillBottom: pillEdge === "bottom"
     property var extra: ({})          // unknown keys of the file, written back unchanged
     property int idleTimeoutS: defaults.idle_timeout_s
+    property int pillPreviewLines: defaults.pill_preview_lines
     property bool promptHints: defaults.prompt_hints
 
     function value(key) {
         return key === "mic" ? mic : key === "gpu" ? gpu : key === "gpu_device" ? gpuDevice : key === "idle_timeout_s" ? idleTimeoutS
-            : key === "prompt_hints" ? promptHints : P.KEYS.indexOf(key) >= 0 ? pill[key] : undefined
+            : key === "prompt_hints" ? promptHints : key === "pill_preview_lines" ? pillPreviewLines : P.KEYS.indexOf(key) >= 0 ? pill[key] : undefined
     }
     function overridden(key) { return value(key) !== defaults[key] }
     function set(key, v) {
@@ -67,6 +70,7 @@ Singleton {
         else if (P.KEYS.indexOf(key) >= 0) { const n = P.withKey(pill, key, v); if (!n) return false; pill = n }
         else if (key === "idle_timeout_s") idleTimeoutS = Math.min(604800, Math.max(0, Math.round(Number(v)) || 0))
         else if (key === "prompt_hints") promptHints = !!v
+        else if (key === "pill_preview_lines") pillPreviewLines = Math.min(12, Math.max(0, Math.round(Number(v)) || 0))
         else return false
         saver.restart()
         return true
@@ -117,10 +121,11 @@ Singleton {
         extra = rest
         idleTimeoutS = Number.isInteger(d.idle_timeout_s) && d.idle_timeout_s >= 0 && d.idle_timeout_s <= 604800 ? d.idle_timeout_s : defaults.idle_timeout_s
         promptHints = typeof d.prompt_hints === "boolean" ? d.prompt_hints : defaults.prompt_hints
+        pillPreviewLines = Number.isInteger(d.pill_preview_lines) ? Math.min(12, Math.max(0, d.pill_preview_lines)) : defaults.pill_preview_lines
     }
     function serialize() {
         return JSON.stringify(Object.assign({}, extra, { version: 1, mic: mic, gpu: gpu, gpu_device: gpuDevice, idle_timeout_s: idleTimeoutS,
-                                                         prompt_hints: promptHints }, pill, { pill_bottom: pillBottom })) + "\n"
+                                                         prompt_hints: promptHints, pill_preview_lines: pillPreviewLines }, pill, { pill_bottom: pillBottom })) + "\n"
     }
     property string lastText: ""
     Timer {
@@ -157,10 +162,10 @@ Singleton {
         function set(key: string, v: string): string {
             if (key === "pill") return dp.set("pill_edge", v === "true" ? "bottom" : "bar") ? "ok" : "bad"   // the old switch
             const map = { mic: "mic", gpu: "gpu", device: "gpu_device", idle: "idle_timeout_s", hints: "prompt_hints",
-                          edge: "pill_edge", gap: "pill_gap", x: "pill_x", screen: "pill_screen" }
+                          edge: "pill_edge", gap: "pill_gap", x: "pill_x", screen: "pill_screen", lines: "pill_preview_lines" }
             const k = map[key]
             if (!k) return "unknown key"
-            const val = k === "gpu" || k === "prompt_hints" ? v === "true" : k === "idle_timeout_s" || k === "gpu_device" || k === "pill_gap" || k === "pill_x" ? Number(v) : v
+            const val = k === "gpu" || k === "prompt_hints" ? v === "true" : k === "idle_timeout_s" || k === "gpu_device" || k === "pill_gap" || k === "pill_x" || k === "pill_preview_lines" ? Number(v) : v
             return dp.set(k, val) ? "ok" : "bad"
         }
         function reset(): string { dp.resetAll(); return "ok" }

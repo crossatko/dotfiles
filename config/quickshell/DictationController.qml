@@ -8,8 +8,8 @@ import Quickshell.Io
 // <code>, <code>-en, auto or auto-en, listening; Auto shows the language the service detected once it has); release: `end`, the pill stays until the final text is typed (or nothing was said, or
 // typing stopped) and then fades. One session at a time: another key pressed meanwhile is ignored.
 // Pill state: listening while quiet, speaking (translate: translating) while the mic level is above `loud` (held
-// `quietMs` after the last loud frame); the caption is the service's preview (transcribe: the text being typed, the
-// pill shows its end; translate: the English preview, nothing is typed until release). Errors (service `error`
+// `quietMs` after the last loud frame); the caption is the service's preview (the fast model's running text, the
+// pill shows its end; nothing is typed until release). Errors (service `error`
 // events, a service that cannot be started, no speech model) turn the pill into its generic error line; the detail goes
 // to DictationStatus through the pill (errorText / errorCode).
 //   qs ipc call dictation press <code>|<code>-en|auto|auto-en | release | cancel | status   (the keys' code path, for tests)

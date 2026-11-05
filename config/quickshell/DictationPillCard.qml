@@ -2,14 +2,19 @@ import QtQuick
 
 // The dictation pill's card (DictationPill, and the Settings > Voice preview through PillSection): the glass card (MotionCard),
 // a full-width dithered swoosh driven by the mic level (DotSwoosh) with the mode as dot letters in the swoosh's own grid ("CS" /
-// "EN" left; translating: "CS" left, "EN" right, colour accent -> accent2) and ONE caption line with the tail of the text
-// (TailLine) that opens when there is text: the card grows away from its anchor edge (`flip` = the caption ABOVE the swoosh, so
-// the swoosh stays beside a bottom bar). Error: a flat red dotted line and `errorLine`, no mode.
-// Pure view: the window (or preview) sets the state; nothing here talks to the service. Width from the user; height =
-// baseH + the caption's share (animated while `openMotion.shown`); `fullH` = the grown height (the window's room).
+// "EN" left; translating: "CS" left, "EN" right, colour accent -> accent2) and the caption: the running text (TailText, its
+// end always in view) that opens when there is text: the card grows away from its anchor edge (`flip` = the caption ABOVE the
+// swoosh, so the swoosh stays beside a bottom bar). Error: a flat red dotted line and `errorLine`, no mode.
+// Pure view: the window (or preview) sets the state; nothing here talks to the service. Height = baseH + the caption's share
+// (animated while `openMotion.shown`); `fullH` = the tallest height (the window's room).
 //   look     listening | speaking | translating | error        mode    a language code, "auto" or "src-dst" (see DictationPill)
 //   caption  the text so far (the end is shown)                level / levels  the mic level (DotSwoosh)
 //   running  the swoosh's clock runs
+//   previewLines  0 = the caption grows line by line while you talk (and the card gets `growW` wider once the text is longer
+//            than one line), N = at most N lines; either way the oldest lines scroll out. `maxH` = the tallest the card may
+//            get (the placement's room: PillPlacement.maxH); 0 = no limit known (one line).
+// Width: `slotW` > 0 = the card sizes itself inside a window / slot that wide (pillW, wider while it grows, never beyond the slot;
+// `placeW` = the width the slot must reserve) and sits in it by `slotAlign` (the pill_x pref); 0 = set from outside.
 MotionCard {
     id: card
     property string look: "listening"
@@ -19,6 +24,10 @@ MotionCard {
     property var levels: []
     property bool running: true
     property bool flip: false
+    property int previewLines: 0
+    property real maxH: 0
+    property real slotW: 0
+    property real slotAlign: 0.5
     property string errorLine: "An error occurred"
     readonly property alias swoosh: swooshItem
     readonly property alias tail: tailItem
@@ -47,11 +56,17 @@ MotionCard {
 
     // ---- geometry (Theme tokens; the swoosh row is this card's own content cap) ----
     readonly property int pillW: 336          // the card's width (the window's; shrinks only on a narrow screen)
+    readonly property int growW: 96           // the most it widens while the text grows (not much: the pill stays a pill)
+    readonly property int placeW: pillW + growW
+    readonly property real wantW: pillW + (previewLines === 0 && tailItem.naturalW > pillW - 2 * sidePad ? growW : 0)
     readonly property int waveH: 40           // the swoosh row
     readonly property int sidePad: Theme.pad + Theme.controlGap   // 18, as the OSD pill
     readonly property real baseH: 2 * Theme.pad + waveH
-    readonly property real capH: tailItem.implicitHeight        // one line, caption or error
-    readonly property real fullH: baseH + Theme.gapRow + capH
+    readonly property real lineH: tailItem.lineH
+    // the most lines the caption shows: the setting, or (grow) what fits under maxH
+    readonly property int maxLines: previewLines > 0 ? previewLines : Math.max(1, Math.floor((maxH - baseH - Theme.gapRow) / lineH))
+    readonly property real capH: isError ? lineH : tailItem.implicitHeight        // the caption's lines, or one error line
+    readonly property real fullH: baseH + Theme.gapRow + maxLines * lineH
 
     // caption row share of the card height: opens / closes with the text (move tokens), instant while hidden
     property real capShare: hasText ? Theme.gapRow + capH : 0
@@ -59,6 +74,9 @@ MotionCard {
 
     height: baseH + capShare
     clip: true
+    Binding { target: card; property: "width"; value: Math.min(card.slotW, card.wantW); when: card.slotW > 0 }
+    x: slotW > 0 ? (slotW - width) * slotAlign : 0
+    Behavior on width { enabled: card.openMotion.shown && card.slotW > 0; NumberAnimation { duration: Motion.moveMs; easing.type: Motion.easeMove } }
 
     DotSwoosh {
         id: swooshItem
@@ -83,11 +101,12 @@ MotionCard {
         height: card.capH
         y: card.flip ? Theme.pad : Theme.pad + card.waveH + Theme.gapRow
         opacity: card.hasText ? Math.max(0, Math.min(1, (card.capShare - Theme.gapRow) / Math.max(1, card.capH))) : 0
-        TailLine {
+        TailText {
             id: tailItem
             anchors.left: parent.left
             anchors.right: parent.right
             visible: !card.isError
+            maxLines: card.maxLines
             text: card.caption
             label.font.pixelSize: Theme.fontLead
             label.font.weight: Font.Medium

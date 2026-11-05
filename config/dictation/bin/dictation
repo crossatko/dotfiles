@@ -239,7 +239,8 @@ def cmd_replay(args):
             "final_ms": final[0] if final else None,
             "release_to_done_ms": round((time.monotonic() - released) * 1000),
             "text": text, "ops": ops.ops,
-            "previews": previews[-3:] if args.mode.startswith("translate") else None,
+            "preview_events": len(previews), "last_preview": previews[-1] if previews else None,
+            "typed_before_release": sum(1 for o in ops.ops if o["at"] < released - t0),
         }, ensure_ascii=False, indent=None if args.compact else 1))
     finally:
         rec_engine.close()
