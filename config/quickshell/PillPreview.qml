@@ -3,12 +3,10 @@ import QtQuick
 
 // Settings > Voice / Diacritics > Pill: the live preview of a pill (PillSection). The real pill card goes in as `card`
 // (DictationPillCard / DiacPillCard with demo state, re-parented here; bind `openMotion: <preview>.motion`, `fromTop: <preview>.atTop`,
-// `width: <preview>.cardW`). Two views of the same monitor (`screen`; ScreenBackdrop: its wallpaper still and a sketch of its bar):
-//   the mock    the whole screen scaled down (ScreenFrame at the monitor's own size), the card (a live ShaderEffectSource of it)
-//               where PillPlacement puts the real pill; Hyprland's reserved side strips (pinned video) veiled
-//   the crop    a 1:1 window onto the screen around the card (clamped to the screen), the card itself at actual size
-// Under the card in both: ScreenBackdrop's `frost`, a sketch of the compositor's glass (the Settings window cannot show it there).
-// Both read the real geometry (PillPlacement over the same prefs), so the preview cannot drift from the real pill.
+// `width: <preview>.cardW`). A 1:1 window onto the monitor (`screen`; ScreenBackdrop: its wallpaper still and a sketch of its bar)
+// around the card (clamped to the screen), the card itself at actual size; Hyprland's reserved side strips (pinned video) veiled.
+// Under the card: ScreenBackdrop's `frost`, a sketch of the compositor's glass (the Settings window cannot show it there).
+// It reads the real geometry (PillPlacement over the same prefs), so the preview cannot drift from the real pill.
 //   store   DictationPrefs or DiacriticsPrefs (the pill_* keys)        screen  the monitor drawn (PillSection: the saved one, else
 //   fullH   the card's tallest height (the crop's room; default its height)    the one picked in Settings)
 Item {
@@ -28,14 +26,12 @@ Item {
     readonly property real sw: screen && screen.width > 0 ? screen.width : 1920
     readonly property real sh: screen && screen.height > 0 ? screen.height : 1080
     // qmllint enable missing-property
-    // the card's top on the screen (physical px): its anchored edge plus what the bar's exclusive zone adds
+    // the card's distance from its screen edge (physical px): its anchored edge plus what the bar's exclusive zone adds
     readonly property real cardH: cardItem ? cardItem.height : 0
     readonly property real dist: place.edgeInset + place.zoneShift
-    readonly property real cardY: atTop ? dist : sh - dist - cardH
-    readonly property real mockDecode: 2       // the mock's still decodes at 2x its drawn width (sharp on HiDPI)
     readonly property real stripPad: Theme.pad + Theme.gapRow     // at least this much screen around the actual-size card
 
-    implicitHeight: mock.implicitHeight + Theme.gapRow + strip.height
+    implicitHeight: strip.height
 
     PillPlacement { id: place; screen: pv.screen; prefs: pv.store; pillW: pv.card ? pv.card.placeW : 0 }   // qmllint disable missing-property
     Component.onCompleted: place.refresh()
@@ -43,36 +39,8 @@ Item {
 
     Column {
         width: parent.width
-        spacing: Theme.gapRow
 
-        // the monitor, scaled: wallpaper, bar sketch, the pill at its place
-        ScreenFrame {
-            id: mock
-            objectName: "pill-preview-mock"
-            width: parent.width
-            virtualW: pv.sw
-            virtualH: pv.sh
-            ScreenBackdrop {
-                anchors.fill: parent
-                screen: pv.screen
-                decodeWidth: Math.round(mock.width * pv.mockDecode)
-                reserved: place.reserved
-                frost: pv.cardItem ? Qt.rect(place.left + pv.cardItem.x, pv.cardY, pv.cardItem.width, pv.cardH) : Qt.rect(0, 0, 0, 0)
-            }
-            ShaderEffectSource {
-                objectName: "pill-preview-mini"
-                visible: pv.cardItem !== null
-                sourceItem: pv.cardItem
-                x: place.left + (pv.cardItem ? pv.cardItem.x : 0)
-                y: pv.cardY
-                width: pv.cardItem ? pv.cardItem.width : 0
-                height: pv.cardH
-                live: true
-                smooth: true
-            }
-        }
-
-        // actual size: a window onto the screen around the card
+        // a window onto the screen around the card
         ScreenFrame {
             id: strip
             objectName: "pill-preview-actual"

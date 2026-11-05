@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 
-// What a monitor shows under a pill (PillPreview: the screen mock and the actual-size crop): a fill, its wallpaper still (cover
+// What a monitor shows under a pill (PillPreview): a fill, its wallpaper still (cover
 // crop, LockWallpapers.stillFor), a sketch of its bar (PillBarSketch) and its reserved left / right strips (`reserved`, e.g. the
 // pinned-video strip: a dim veil). It draws the part `view` of the screen (screen px; default the whole screen) into its own
 // size and decodes only that part of the still (WallpaperCut), at `decodeWidth` px across (default its width).

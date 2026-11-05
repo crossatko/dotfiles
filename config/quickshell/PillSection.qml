@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 
 // Settings > Voice / Diacritics > Pill: one section on both pages. Head, the live preview (PillPreview: the real card at actual
-// size and in a mock of the monitor where the pill sits), the feature's own rows (children, e.g. Diacritics "Text"), then
+// size on a crop of the monitor where the pill sits), the feature's own rows (children, e.g. Diacritics "Text"), then
 // where it sits (PillPositionRows). `card` = the feature's real pill card with demo state (bind `openMotion: <section>.motion`,
 // `fromTop: <section>.atTop`, `width: <section>.cardW`); `fullH` = its tallest height. The preview draws the saved monitor
 // (pill_screen) when it is connected, else the one picked in Settings (Monitors.selected).
@@ -27,7 +27,7 @@ ColumnLayout {
     SectionHead {
         title: "Pill"
         detail: sec.store && sec.store.pillKeys.some(k => sec.store.overridden(k)) ? "moved" : ""
-        InfoTip { text: "The preview shows the real pill with sample content: at actual size, and on the monitor where it opens." }
+        InfoTip { text: "The preview shows the real pill with sample content at actual size, on the monitor where it opens." }
     }
     PillPreview {
         id: preview
