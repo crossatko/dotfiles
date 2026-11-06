@@ -956,7 +956,7 @@ stage_links() {
   local odir="$HOME/.local/share/fonts/obel-mono" over=1.002 otmp
   local osum=462b58d6d95e8541e01e45a9848c59f4fb24718c2d19706ad1476d2b617a5dd1
   local ourl="https://typographic.systems/download/ObelMono-$over-ttf.zip"
-  if [ -f "$odir/ObelMono-Regular.ttf" ] && [ -f "$odir/OFL.txt" ]; then
+  if [ -f "$odir/ObelMono-Regular.ttf" ] && [ -f "$odir/OFL.txt" ] && [ "$(cat "$odir/.version" 2>/dev/null)" = "$over" ]; then
     echo "    ok      $odir ($over)"
   elif [ "$DRY" = 1 ]; then
     changed
@@ -970,7 +970,9 @@ stage_links() {
       && [ "$(sha256sum "$otmp/obel.zip" | cut -d' ' -f1)" = "$osum" ] \
       && unzip -q -j "$otmp/obel.zip" "ObelMono-$over-ttf/static/*.ttf" "ObelMono-$over-ttf/OFL.txt" -d "$otmp/out"; then
       mkdir -p "$odir"
+      rm -f "$odir"/*.ttf
       cp "$otmp"/out/* "$odir/"
+      echo "$over" > "$odir/.version"
       FONTS_DIRTY=1
     else
       warn "could not fetch Obel Mono $over (download or checksum failed); skipped"

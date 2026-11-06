@@ -5531,7 +5531,7 @@ def font_prefs():
         d = json.loads(FONTS_FILE.read_text())
     except (OSError, ValueError):
         return {}
-    ok = lambda v: isinstance(v, str) and 0 < len(v) <= 100 and not re.search(r'[\x00-\x1f"\'\\\\{}$`;]', v)
+    ok = lambda v: isinstance(v, str) and 0 < len(v) <= 100 and not re.search(r'[\x00-\x1f"\'\\\\{}$`;#,]', v)
     return {k: d[k] for k in ("ui", "mono") if isinstance(d, dict) and ok(d.get(k)) and font_installed(d[k])}
 
 
@@ -6246,6 +6246,7 @@ def analyze_library():
 
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else "apply"
+    fonts_only = False
     args = list(argv[2:])
     if cmd == "video":
         return video_command(args)
@@ -6288,6 +6289,7 @@ def main(argv):
             print(json.dumps({**{"ui": load_cfg()["vars"]["font"], "mono": load_cfg()["vars"]["mono_font"]}}))
             return
         apply_lock()
+        fonts_only = True   # reload only the apps whose font files really changed (not the colour-switch reloads)
         cmd, args = "mode-apply", []
         argv = argv[:2]
     if cmd == "migrate-local":
@@ -6343,13 +6345,14 @@ def main(argv):
         return
     PAL[0] = pal
     drop_marker()
+    CHANGED.clear()
     render_all(pal, cfg, mode, dark)
     if os.environ.get("THEME_OUT_DIR"):   # a redirected out/ is a test render: never repoint the live ~/.config links or apps at it
         return
     deploy(cfg, pal, mode)
     apply_brave(cfg, pal, mode)
     if cmd == "mode-apply":
-        reload_apps(cfg, mode_only=True)
+        reload_apps(cfg, mode_only=True, changed=set(CHANGED) if fonts_only else None)
     print(f"theme: {wp.name} ({mode})  bg {pal['bg']}  fg {pal['fg']}  accent {pal['accent']}")
 
 

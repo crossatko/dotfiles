@@ -47,8 +47,11 @@ def parse(text):
     return out
 
 
+BAD = re.compile(r'[\x00-\x1f"\'\\{}$`;#,]')   # what Fonts.qml / theme.py refuse in a family name
+
+
 def usable(fam):
-    return not SKIP.search(fam) and (fam in NOTO_KEEP or not NOTO_SCRIPT.match(fam))
+    return len(fam) <= 100 and not BAD.search(fam) and not SKIP.search(fam) and (fam in NOTO_KEEP or not NOTO_SCRIPT.match(fam))
 
 
 def families(ui_text, mono_text):

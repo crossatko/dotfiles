@@ -162,7 +162,7 @@ ModalMenu {
             if (i >= 0) { lc.sel = i; if (i < lc.first) lc.first = i; else if (i >= lc.first + lc.numResults) lc.first = i - lc.numResults + 1 }
         }
     }
-    SectionsSource { id: secSrc; binds: Binds; jf: jfSrc; vpn: vpnSrc; net: netSrc; web: waSrc; vm: vmSrc; onUpdated: lc.refreshKeep() }
+    SectionsSource { id: secSrc; font: Theme.font; binds: Binds; jf: jfSrc; vpn: vpnSrc; net: netSrc; web: waSrc; vm: vmSrc; onUpdated: lc.refreshKeep() }
     readonly property var sourceList: [appsSrc, winSrc, cmdSrc, secSrc, jfSrc, netSrc, vpnSrc, vmSrc, waSrc, scriptSrc, calcSrc, emojiSrc, pathSrc, findSrc, clipSrc, projSrc, webSrc]
 
     readonly property var allItems: {

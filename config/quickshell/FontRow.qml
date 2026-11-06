@@ -20,6 +20,7 @@ SettingRow {
         options: row.families.map(f => ({ label: f, family: f }))
         currentIndex: row.families.indexOf(row.chosen)
         headText: row.families.length === 0 ? row.chosen : ""
+        onToggled: open => { if (open) Fonts.refreshList() }
         onPicked: i => Fonts.set(row.kind, row.families[i])
     }
     InfoTip { Layout.alignment: Qt.AlignTop; Layout.topMargin: Math.round((Theme.controlH - 16) / 2); text: row.info }

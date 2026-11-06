@@ -520,7 +520,15 @@ exit 0
             raise SystemExit(f"theme.py fonts failed: {r.stderr[-600:]}")
         rd = lambda n: (out / n).read_text()
         return rd("ghostty-font"), rd("kitty-font.conf"), rd("alacritty-font.toml"), rd("hyprlock.conf"), rd("hyprtoolkit.conf"), qt6.read_text()
+    n0 = len(log.read_text().splitlines())
     g, k, al, hl, ht, q = render_fonts('{"ui": "Obel Mono", "mono": "Obel Mono"}')
+    fl = log.read_text().splitlines()[n0:]
+    c_check("fonts: terminals are reloaded", "pkill -USR1 -x kitty" in fl and "pkill -USR2 -x ghostty" in fl, str(fl))
+    c_check("fonts: no colour-switch reloads (hyprland, GTK blip, KDE scheme, herdr, nautilus)",
+            not any(l.startswith(("hyprctl reload", "plasma-apply-colorscheme", "herdr", "nautilus")) or "color-scheme default" in l for l in fl), str(fl))
+    render_fonts('{"ui": "Obel Mono", "mono": "Obel Mono"}')
+    fl2 = log.read_text().splitlines()[n0 + len(fl):]
+    c_check("fonts: an unchanged pick reloads no terminal", not any(l.startswith("pkill") for l in fl2), str(fl2))
     c_check("fonts: terminals carry the chosen family", 'font-family = "Obel Mono"' in g and 'family="Obel Mono"' in k and 'family = "Obel Mono"' in al, g + k + al)
     c_check("fonts: ghostty list is reset first", g.index('font-family = ""') < g.index('font-family = "Obel Mono"'))
     c_check("fonts: hyprlock / hyprtoolkit variables", "$ui_font = Obel Mono" in hl and "$mono_font = Obel Mono" in ht)
@@ -529,6 +537,8 @@ exit 0
     c_check("fonts: a missing family falls back to Paper Mono", 'family="Paper Mono"' in k and "$ui_font = Obel Mono" in hl)
     g, k, al, hl, ht, q = render_fonts('{"ui": "Evil\\"; rm", "mono": "Obel\\nMono"}')
     c_check("fonts: an unsafe family falls back to Paper Mono", 'family="Paper Mono"' in k and "$ui_font = Paper Mono" in hl)
+    g, k, al, hl, ht, q = render_fonts('{"ui": "Obel#Mono", "mono": "Obel,Mono"}')
+    c_check("fonts: # and , are refused", 'family="Paper Mono"' in k and "$ui_font = Paper Mono" in hl)
     g, k, al, hl, ht, q = render_fonts("not json")
     c_check("fonts: a malformed file falls back to Paper Mono", 'font-family = "Paper Mono"' in g and "$mono_font = Paper Mono" in ht)
     # engine backend: a video is a player RECORD (theme-video/<conn>.json "engine": true + engine/players.json), never an

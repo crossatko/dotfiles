@@ -39,16 +39,20 @@ Singleton {
     readonly property string mono: !listed || monoList.indexOf(monoChoice) >= 0 ? monoChoice : defaultFamily
     readonly property bool changed: uiChoice !== defaultFamily || monoChoice !== defaultFamily
 
-    function valid(v) { return typeof v === "string" && v.length > 0 && v.length <= 100 && !/[\x00-\x1f"'\\{}$`;]/.test(v) }
+    function valid(v) { return typeof v === "string" && v.length > 0 && v.length <= 100 && !/[\x00-\x1f"'\\{}$`;#,]/.test(v) }
     function set(key, v) {
-        if (!valid(v)) return false
+        if (!valid(v) || (key !== "ui" && key !== "mono")) return false
+        if ((key === "ui" ? uiChoice : monoChoice) === v) return true
         if (key === "ui") uiChoice = v
-        else if (key === "mono") monoChoice = v
-        else return false
+        else monoChoice = v
         saver.restart()
         return true
     }
-    function reset() { uiChoice = defaultFamily; monoChoice = defaultFamily; saver.restart() }
+    function reset() {
+        if (!changed) return
+        uiChoice = defaultFamily; monoChoice = defaultFamily
+        saver.restart()
+    }
 
     function parse(text) {
         let o = null
@@ -67,7 +71,10 @@ Singleton {
             onStreamFinished: {
                 try {
                     const o = JSON.parse(text)
-                    if (Array.isArray(o.ui) && Array.isArray(o.mono)) { fonts.uiList = o.ui; fonts.monoList = o.mono }
+                    if (!Array.isArray(o.ui) || !Array.isArray(o.mono)) return
+                    // only a real change replaces the lists (an open dropdown keeps its scroll position)
+                    if (JSON.stringify(o.ui) !== JSON.stringify(fonts.uiList)) fonts.uiList = o.ui
+                    if (JSON.stringify(o.mono) !== JSON.stringify(fonts.monoList)) fonts.monoList = o.mono
                 } catch (e) {}
             }
         }
@@ -105,7 +112,7 @@ Singleton {
         atomicWrites: true
         onFileChanged: reload()
         onLoaded: if (!saver.running && !writer.running && text() !== fonts.lastText) { fonts.lastText = text(); fonts.parse(text()) }
-        onLoadFailed: if (!saver.running && !writer.running) fonts.parse("")
+        onLoadFailed: if (!saver.running && !writer.running) { fonts.lastText = ""; fonts.parse("") }
     }
 
     IpcHandler {

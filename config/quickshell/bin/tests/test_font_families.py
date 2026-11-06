@@ -13,7 +13,7 @@ UI = "\n".join([
     "Paper Mono,Paper Mono Light\t", "Paper Mono\t", "Obel Mono,Obel Mono Thin\t100", "Obel Mono\t100",
     "Noto Sans\t0", "Noto Sans Mono\t100", "Noto Sans Adlam\t0", "Noto Sans CJK JP\t0", "Noto Serif Display\t0",
     "Font Awesome 7 Free\t0", "Material Icons\t0", "Noto Color Emoji\t0", "DejaVu Math TeX Gyre\t0",
-    "TX\\-02\t100", "Fira Sans,Fira Sans Light\t0", ".hidden\t0", "",
+    "TX\\-02\t100", "Bad#Name\t0", "Quote\"d\t0", "Dollar$Font\t0", "Fira Sans,Fira Sans Light\t0", ".hidden\t0", "",
 ])
 MONO = "\n".join(["Obel Mono\t100", "Hack\t100", "Paper Mono,Paper Mono Bold\t", "DejaVu Sans\t0", "Some Mono\t0", "Noto Sans Mono CJK JP\t100"])
 
@@ -36,7 +36,7 @@ class FontFamilies(unittest.TestCase):
         for name in ("Paper Mono", "Obel Mono", "Noto Sans", "Noto Sans Mono", "Noto Serif Display", "TX-02", "Fira Sans"):
             self.assertIn(name, ui)
         for name in ("Paper Mono Light", "Noto Sans Adlam", "Noto Sans CJK JP", "Font Awesome 7 Free", "Material Icons",
-                     "Noto Color Emoji", "DejaVu Math TeX Gyre", ".hidden", "Obel Mono Thin"):
+                     "Noto Color Emoji", "DejaVu Math TeX Gyre", ".hidden", "Obel Mono Thin", "Bad#Name", 'Quote"d', "Dollar$Font"):
             self.assertNotIn(name, ui)
 
     def test_mono_by_spacing_or_name(self):

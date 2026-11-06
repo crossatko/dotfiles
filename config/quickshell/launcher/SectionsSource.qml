@@ -90,6 +90,7 @@ QtObject {
     property bool twitchLoading: false
     property string twitchError: ""
     property string twAppPath: ""                   // twitch-qs-mpv (empty = not installed)
+    property string font: "Paper Mono"             // the UI font handed to the Twitch app (Launcher.qml binds Theme.font)
     property string twFollowsPath: ""               // twitch-qs-follows (empty = not installed)
     property bool twMpv: false                      // mpv on PATH
     property bool twProbed: false
@@ -549,7 +550,7 @@ QtObject {
     function watchTwitch(login) {
         if (!/^[A-Za-z0-9_]{1,25}$/.test(login)) return
         const url = "https://www.twitch.tv/" + login.toLowerCase()
-        if (twAppPath !== "") Quickshell.execDetached(["env", "TWITCH_QS_FONT=" + Theme.font, twAppPath, "watch", login])
+        if (twAppPath !== "") Quickshell.execDetached(["env", "TWITCH_QS_FONT=" + src.font, twAppPath, "watch", login])
         else if (twMpv) mpvToast(url)
         else Quickshell.execDetached(["xdg-open", url])
     }
@@ -565,7 +566,7 @@ QtObject {
     function playVod(id) {
         if (!/^[0-9]{1,15}$/.test(id)) return
         const url = "https://www.twitch.tv/videos/" + id
-        if (twAppPath !== "") Quickshell.execDetached(["env", "TWITCH_QS_FONT=" + Theme.font, twAppPath, "vod", id])
+        if (twAppPath !== "") Quickshell.execDetached(["env", "TWITCH_QS_FONT=" + src.font, twAppPath, "vod", id])
         else if (twMpv) mpvToast(url)
         else Quickshell.execDetached(["xdg-open", url])
     }
@@ -603,7 +604,7 @@ QtObject {
         if (item.kind === "twitch-vod") { playVod(item.vodId); return true }
         if (item.kind === "twitch-web") { Quickshell.execDetached(["xdg-open", item.url]); return true }
         if (item.kind === "twitch-login" && twAppPath !== "") {
-            Quickshell.execDetached(["env", "TWITCH_QS_FONT=" + Theme.font, src.twAppPath, "login"])
+            Quickshell.execDetached(["env", "TWITCH_QS_FONT=" + src.font, src.twAppPath, "login"])
             return true
         }
         return false
