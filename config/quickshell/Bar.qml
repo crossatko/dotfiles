@@ -549,9 +549,11 @@ PanelWindow {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                         onClicked: mouse => {
-                            if (mouse.button === Qt.LeftButton) trayItem.modelData.activate()
-                            else if (mouse.button === Qt.MiddleButton) trayItem.modelData.secondaryActivate()
-                            else if (trayItem.modelData.hasMenu) { menu.anchorX = trayItem.mapToItem(null, 0, 0).x; menu.show() }
+                            const item = trayItem.modelData
+                            if (mouse.button === Qt.MiddleButton) item.secondaryActivate()
+                            else if (!item.hasMenu) bar.run([Quickshell.shellDir + "/bin/tray-click", item.id, mouse.button === Qt.LeftButton ? "Activate" : "ContextMenu"])
+                            else if (mouse.button === Qt.LeftButton) item.activate()
+                            else { menu.anchorX = trayItem.mapToItem(null, 0, 0).x; menu.show() }
                         }
                     }
                     TrayMenu {

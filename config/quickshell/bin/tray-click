@@ -1,0 +1,90 @@
+#!/bin/bash
+# Click on a tray item that has no D-Bus menu, at the mouse pointer: tray-click <item id> <Activate|ContextMenu>.
+# Legacy XEmbed icons (Wine apps through xembedsniproxy) are this kind: their own menu opens only from a click
+# forwarded to the X window. Quickshell cannot call ContextMenu and its activate() sends 0,0, so the bar uses this.
+# Wine does not ask the compositor to raise the app either, so the raise happens here too.
+set -u
+id=$1 method=$2
+watcher=org.kde.StatusNotifierWatcher
+item_iface=org.kde.StatusNotifierItem
+
+clients() { hyprctl clients -j; }
+
+# The app's main window: the biggest titled window of the class, once it exists (a window closed to the tray comes back).
+focus_app() {
+    local class=$1 address _
+    for _ in {1..20}; do
+        address=$(clients | jq -r --arg c "$class" \
+            '[.[] | select(.class == $c and .title != "")] | max_by(.size[0] * .size[1]) | .address // empty')
+        if [[ -n "$address" ]]; then
+            hyprctl dispatch "hl.dsp.focus({window=\"address:$address\"})" >/dev/null
+            return
+        fi
+        sleep 0.1
+    done
+}
+
+# Follows the app's menu until it closes. True when the pointer was in it at the end: an item was picked, not dismissed
+# (a guess from the pointer: Esc over the menu counts as picked, Enter away from it does not).
+# Height > 24 leaves out Wine's one-line tooltip. `known` = addresses of the class before the click. The first new window
+# is the menu and decides the end, so a dialog that a picked item opens does not keep this waiting; later ones (submenus)
+# still count for the pointer.
+menu_item_picked() {
+    local class=$1 known=$2 menus='[]' inside=false cx cy first=""
+    SECONDS=0
+    while ((SECONDS < 300)); do
+        menus=$(clients | jq -c --arg c "$class" --argjson known "$known" \
+            '[.[] | select(.class == $c and .size[1] > 24 and (.address | IN($known[]) | not))]')
+        if [[ -z "$first" ]]; then
+            first=$(jq -r '.[0].address // empty' <<< "$menus")
+            if [[ -z "$first" ]] && ((SECONDS > 2)); then break; fi
+        elif [[ $(jq --arg a "$first" 'any(.[]; .address == $a)' <<< "$menus") == false ]]; then
+            break
+        fi
+        if [[ $menus != '[]' ]]; then
+            IFS=", " read -r cx cy < <(hyprctl cursorpos)
+            inside=$(jq -r --argjson x "$cx" --argjson y "$cy" \
+                'any(.[]; $x >= .at[0] and $x < .at[0] + .size[0] and $y >= .at[1] and $y < .at[1] + .size[1])' <<< "$menus")
+        fi
+        sleep 0.1
+    done
+    [[ $inside == true ]]
+}
+
+# ContextMenu wants X coordinates, and the X root does not match the Hyprland layout (monitors side by side there).
+# 0,0 when that fails (no xrandr, say): only a menu placement needs them, and a click must not get lost.
+x=0 y=0
+IFS=", " read -r cx cy < <(hyprctl cursorpos)
+read -r name mx my < <(hyprctl monitors -j | jq -r --argjson x "$cx" --argjson y "$cy" \
+    '.[] | select($x >= .x and $x < .x + .width and $y >= .y and $y < .y + .height) | "\(.name) \(.x) \(.y)"')
+if [[ -n "${name:-}" && $(xrandr 2>/dev/null | grep "^$name connected") =~ \+([0-9]+)\+([0-9]+) ]]; then
+    x=$((BASH_REMATCH[1] + cx - mx)) y=$((BASH_REMATCH[2] + cy - my))
+fi
+
+# An XEmbed item's id is its X window, whose class is the app's. Empty for any other item: nothing to raise then.
+class=""
+if [[ $id =~ ^[0-9]+$ ]]; then
+    class=$(xprop -id "$id" WM_CLASS 2>/dev/null | sed -n 's/.*"\(.*\)"$/\1/p')
+fi
+known=$(clients | jq -c --arg c "$class" '[.[] | select(.class == $c) | .address]')
+known=${known:-[]}
+
+items=$(busctl --user --json=short get-property "$watcher" /StatusNotifierWatcher "$watcher" RegisteredStatusNotifierItems | jq -r ".data[]")
+while read -r item; do
+    service=${item%%/*} path=/${item#*/}
+    if [[ $(busctl --user --json=short get-property "$service" "$path" "$item_iface" Id 2>/dev/null | jq -r .data) == "$id" ]]; then
+        busctl --user call "$service" "$path" "$item_iface" "$method" ii "$x" "$y"
+        break
+    fi
+done <<< "$items"
+
+# The forwarded click drags the invisible container to the pointer; send it back off-screen (hypr rules.lua).
+clients | jq -r '.[] | select(.class == "xembedsniproxy") | .address' |
+    while read -r address; do
+        hyprctl dispatch "hl.dsp.window.move({window=\"address:$address\", x=-500, y=-500})" >/dev/null
+    done
+
+[[ -n "$class" ]] || exit 0
+if [[ $method == Activate ]] || menu_item_picked "$class" "$known"; then
+    focus_app "$class"
+fi

@@ -1,4 +1,4 @@
-# Optional bundle: gaming (Steam, gamescope, gamemode, MangoHud).
+# Optional bundle: gaming (Steam, gamescope, gamemode, MangoHud, Wine tray icons).
 # Not installed by default; install with `./install.sh --with gaming`. Quickshell shows an install hint
 # (`yay -S --needed <names below>`) when this feature is missing. One name per line (repo or AUR), `#` starts a comment.
 
@@ -7,3 +7,6 @@ steam
 gamescope
 gamemode
 mangohud
+# xembedsniproxy: Wine tray icons in the bar; xrandr: bin/tray-click.
+plasma-workspace
+xorg-xrandr

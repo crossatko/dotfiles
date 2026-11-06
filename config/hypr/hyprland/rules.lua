@@ -257,6 +257,28 @@ hl.window_rule({
 	match = { class = "^steam_app_\\d+$" },
 })
 
+-- xembedsniproxy (autostart.lua) must keep its icon container mapped, and hides it with an X11 opacity hint that
+-- Hyprland ignores: a black box over the desktop. Not on a special workspace: a forwarded click focuses it, which opens
+-- that workspace. Opacity 0 hides it, and off-screen it cannot catch clicks: moved there here (a `move` rule does not reach
+-- it, it is override-redirect) and again by quickshell bin/tray-click, since every forwarded click drags it to the pointer.
+hl.window_rule({
+	name = "xembedsniproxy-container",
+	no_focus = true,
+	no_initial_focus = true,
+	no_anim = true,
+	no_blur = true,
+	no_shadow = true,
+	border_size = 0,
+	opacity = "0 override 0 override",
+	match = { class = "^xembedsniproxy$" },
+})
+
+hl.on("window.open", function(win)
+	if win.class == "xembedsniproxy" then
+		hl.dispatch(hl.dsp.window.move({ window = "address:" .. win.address, x = -500, y = -500 }))
+	end
+end)
+
 hl.window_rule({
 	name = "hyprland-share-picker",
 	float = true,

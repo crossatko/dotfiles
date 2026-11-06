@@ -57,6 +57,9 @@ hl.on("hyprland.start", function()
 	hl.exec_cmd("blueman-applet &")
 
 	if host.is_battlestation then
+		-- Owns the X11 tray so Wine / Proton apps show their icon in the bar (as SNI) instead of a small tray window of
+		-- their own. Must be up before those apps start. Hidden container: rules.lua; clicks: quickshell bin/tray-click.
+		hl.exec_cmd("env QT_QPA_PLATFORM=xcb xembedsniproxy")
 		hl.exec_cmd("steam -silent")
 		hl.exec_cmd("bash ~/.config/hypr/scripts/tv-input-poll.sh &")
 	end

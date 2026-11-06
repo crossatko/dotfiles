@@ -614,6 +614,12 @@ config/aerospace karabiner swiftbar  macOS only
 - `vm-ctl`: quickemu exits 0 on errors (the script greps output); never put the vdagent port in a conf's `extra_args`. `code-open` relies on zellij's `<session>
   | <pane>` title format, and passes the tab cwd in a `--layout-string` (a resurrected session's new_tab_template cwd beats `new-tab --cwd`).
 
+## Wine tray icons (battlestation)
+
+- `xembedsniproxy` (`config/hypr/hyprland/autostart.lua`) owns the X11 tray, so Wine / Proton apps show in the bar as SNI items. Caveat: it must be up before the app starts. A proxy restart under a running app brings back Wine's small tray window until the app restarts.
+- Its container window is invisible and off-screen (`config/hypr/hyprland/rules.lua`). Never park it on a special workspace: a forwarded click focuses it, which opens that workspace.
+- These items have no D-Bus menu. The bar sends their clicks through `config/quickshell/bin/tray-click`, which maps the pointer to X coordinates (the X root does not match the Hyprland layout) and raises the app, since Wine does not ask for it.
+
 ## systemd / gamescope TV session
 
 `config/systemd/README.md` is authoritative (WAYLAND_DISPLAY must be UNSET in the rootful gamescope session; wake-source and delay-inhibitor notes). TV scripts:
