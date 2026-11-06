@@ -8,7 +8,7 @@ import Quickshell
 // almost no words: colour mode (theme.py mode: dark / light from the same wallpaper) and accent source (theme.py accent:
 // a standout detail or the dominant colour), glass style (GlassTuneCtl /
 // glass.json: the Settings window itself shows the result), motion (Motion / animations.json: popup replay), shape
-// (Appearance / appearance.json: a scaled desktop). Each section's Customise… fold holds the detailed controls that
+// (Appearance / appearance.json: a scaled desktop), type (Fonts / fonts.json: the UI and the terminal font). Each section's Customise… fold holds the detailed controls that
 // were the old Glass / Animations / Appearance pages (GlassAdvanced, MotionAdvanced, ShapeAdvanced); a tweak there
 // turns the choice into Custom (the saved values stay), a preset click puts a named set back. Old page ids
 // appearance / animations / glass open this page (Settings.qml).
@@ -90,6 +90,21 @@ Item {
             onPicked: v => pg.setAccentPick(v)
         }
 
+        // ---------------------------------------------------------------- type
+        SectionHead { title: "Type"; Layout.topMargin: 6 }
+        FontRow {
+            title: "UI font"
+            titleWidth: pg.titleW
+            kind: "ui"
+            info: "The shell, GTK / Qt apps, the lock screen, Discord. Applies at once in the shell; other apps pick it up when they restart. A proportional font can misalign the numbers the layouts expect to line up."
+        }
+        FontRow {
+            title: "Terminal font"
+            titleWidth: pg.titleW
+            kind: "mono"
+            info: "Ghostty, kitty and alacritty (monospaced fonts only). Running windows follow when the terminal reloads its config; a new window always does."
+        }
+
         // ---------------------------------------------------------------- glass
         SectionHead {
             title: "Glass"
@@ -164,9 +179,9 @@ Item {
         }
 
         PageReset {
-            dirty: pg.glassDirty || pg.motionDirty || pg.shapeDirty
-            info: "Back to the built-in glass, the default motion and the theme's shape (glass.json, animations.json, appearance.json)."
-            onReset: { GlassTuneCtl.reset("all"); if (GlassSurfaces.available) GlassSurfaces.reset("all"); Motion.reset(""); Appearance.reset() }
+            dirty: pg.glassDirty || pg.motionDirty || pg.shapeDirty || Fonts.changed
+            info: "Back to the built-in glass, the default motion, the theme's shape and Paper Mono (glass.json, animations.json, appearance.json, fonts.json)."
+            onReset: { Fonts.reset(); GlassTuneCtl.reset("all"); if (GlassSurfaces.available) GlassSurfaces.reset("all"); Motion.reset(""); Appearance.reset() }
         }
     }
 }

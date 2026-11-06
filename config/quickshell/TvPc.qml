@@ -25,7 +25,7 @@ Singleton {
     readonly property int lookupMs: 15000
 
     property bool twitchApp: false                // twitch-qs-mpv is installed (probed once)
-    readonly property var env: ({ twitchApp: twitchApp ? twitchPath : "", jellyfin: jellyfin })
+    readonly property var env: ({ twitchApp: twitchApp ? twitchPath : "", font: Theme.font, jellyfin: jellyfin })
 
     // the TV card's facts as TvPc.js reads them
     function factsOf(c) {

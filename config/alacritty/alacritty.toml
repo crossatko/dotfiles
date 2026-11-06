@@ -1,6 +1,6 @@
 [general]
 # Colors are generated: edit ~/.config/theme/theme.toml
-import = ["~/.config/theme/out/alacritty.toml"]
+import = ["~/.config/theme/out/alacritty.toml", "~/.config/theme/out/alacritty-font.toml"]  # colors, then the font family (Settings > Look > Type)
 
 # Alacritty Configuration
 
@@ -21,14 +21,4 @@ size = 18.0
 x = 0
 y = -2  # Increase this for more space between lines, decrease for less
 
-[font.normal]
-family = "Paper Mono"
-style = "Regular"
-
-[font.bold]
-family = "Paper Mono"
-style = "Bold"
-
-[font.italic]
-family = "Paper Mono"
-style = "Italic"
+# font family: generated (out/alacritty-font.toml); bold / italic follow it

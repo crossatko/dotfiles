@@ -951,6 +951,33 @@ stage_links() {
     rm -rf "$vtmp"
   fi
 
+  # Obel Mono (OFL, optional pick in Settings > Look > Type): pinned release, checked against its sha256, static TTFs only.
+  log "Obel Mono font"
+  local odir="$HOME/.local/share/fonts/obel-mono" over=1.002 otmp
+  local osum=462b58d6d95e8541e01e45a9848c59f4fb24718c2d19706ad1476d2b617a5dd1
+  local ourl="https://typographic.systems/download/ObelMono-$over-ttf.zip"
+  if [ -f "$odir/ObelMono-Regular.ttf" ] && [ -f "$odir/OFL.txt" ]; then
+    echo "    ok      $odir ($over)"
+  elif [ "$DRY" = 1 ]; then
+    changed
+    echo "    [dry-run] fetch $ourl -> $odir"
+  elif ! command -v unzip >/dev/null 2>&1; then
+    warn "unzip not found: install it, then re-run --only links (Obel Mono is a font choice in Settings)"
+  else
+    changed
+    otmp="$(mktemp -d)"
+    if curl -fsSL --proto '=https' --max-time 120 -o "$otmp/obel.zip" "$ourl" \
+      && [ "$(sha256sum "$otmp/obel.zip" | cut -d' ' -f1)" = "$osum" ] \
+      && unzip -q -j "$otmp/obel.zip" "ObelMono-$over-ttf/static/*.ttf" "ObelMono-$over-ttf/OFL.txt" -d "$otmp/out"; then
+      mkdir -p "$odir"
+      cp "$otmp"/out/* "$odir/"
+      FONTS_DIRTY=1
+    else
+      warn "could not fetch Obel Mono $over (download or checksum failed); skipped"
+    fi
+    rm -rf "$otmp"
+  fi
+
   log "Scripts, launcher, portals, units"
   local s
   for s in "$CONFIG_DIR"/nautilus/scripts/*; do
@@ -1262,7 +1289,7 @@ if stage_on links || stage_on packages || stage_on repos; then
 
 Manual steps (not automated):
   - Hyprland fork (glass compositing; battlestation only): build/install from the fork repo. Stock `hyprland` works elsewhere.
-  - The Paper Mono font into ~/.local/share/fonts/ (the Vadivam icon font is fetched from npm by the links stage; needs nodejs).
+  - The Paper Mono font into ~/.local/share/fonts/ (the Vadivam icon font is fetched from npm and Obel Mono from its site by the links stage).
   - omacal is built by the packages stage from the author's pinned PKGBUILD (skip: INSTALL_SKIP=omacal). It stores its Google sign-in in the Secret
     Service: gnome-keyring is installed, but a keyring must be unlocked/created in your session (Seahorse or first sign-in prompt).
   - Sign in: 1Password, Mullvad, `sudo tailscale up`, `jellyfin-qs login`, Brave/Firefox profiles.

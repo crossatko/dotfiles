@@ -39,6 +39,7 @@ test("sent Twitch: live joins live; a past broadcast at the TV's position (else 
     const live = P.resolve(sent({ kind: "twitch", ref: "streamer", origin: "twitch-app", position: 50, positionAt: NOW }), NOW);
     eq([live.state, live.start, live.how], ["ready", -1, "live"]);
     eq(P.command(live, env).argv, ["env", "TWITCH_QS_FONT=Paper Mono", "/opt/twitch-qs-mpv", "watch", "streamer"]);
+    eq(P.command(live, Object.assign({}, env, { font: "Obel Mono" })).argv, ["env", "TWITCH_QS_FONT=Obel Mono", "/opt/twitch-qs-mpv", "watch", "streamer"]);
     eq(P.command(Object.assign({}, live, { origin: "browser" }), env).argv, ["xdg-open", "https://www.twitch.tv/streamer"]);
     eq(P.command(live, { twitchApp: "" }).argv, ["xdg-open", "https://www.twitch.tv/streamer"]);
     const vod = P.resolve(sent({ kind: "twitch-vod", ref: "1234567890", origin: "browser", position: 21400, positionAt: NOW }), NOW);

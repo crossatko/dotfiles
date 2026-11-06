@@ -45,6 +45,8 @@ set (dark or light variant of every state colour).
 
 ### Type (Paper Mono; digits line up by themselves)
 
+Paper Mono is the default; Settings > Look > Type can swap it (`Theme.font`). A proportional face can misalign number columns: layouts stay as they are.
+
 `fontTitle` 17 popup / modal / Settings title · `fontLead` 15 the one prominent line of a card (media title, a big value) ·
 `fontSize` 13 body · `fontSmall` 12 buttons, secondary lines, values next to sliders · `fontCaption` 11 sub lines, captions,
 section heads · `fontTiny` 10 badges. Bold only for titles and a primary button.

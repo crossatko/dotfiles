@@ -166,7 +166,7 @@ Singleton {
     readonly property int barBorder: p.bar_border
 
     // layout/typography knobs shared by everything in the shell
-    readonly property string font: "Paper Mono"
+    readonly property string font: Fonts.ui
     readonly property int fontSize: 13      // body text (Label default)
     readonly property int fontTitle: 17     // popup / modal / Settings sidebar title
     readonly property int fontSmall: 12     // buttons, secondary lines, values next to sliders

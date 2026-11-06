@@ -4954,19 +4954,20 @@ def apply_fonts(cfg):
     if not fam:
         return
     size = int(s.get("ui_font_size", 11))
-    spec = lambda sz: f"{fam},{sz},-1,5,400,0,0,0,0,0,0,0,0,0,0,1"
+    mono = cfg.get("vars", {}).get("mono_font") or fam
+    spec = lambda sz, f=fam: f"{f},{sz},-1,5,400,0,0,0,0,0,0,0,0,0,0,1"
     for q in ("qt5ct/qt5ct.conf", "qt6ct/qt6ct.conf"):
         _sub_file(f"~/.config/{q}", r"^general=.*$", f'general="{spec(size)}"')
-        _sub_file(f"~/.config/{q}", r"^fixed=.*$", f'fixed="{spec(size)}"')
+        _sub_file(f"~/.config/{q}", r"^fixed=.*$", f'fixed="{spec(size, mono)}"')
     for key, sz in (("font", size), ("fixed", size), ("menuFont", size), ("toolBarFont", size), ("smallestReadableFont", size - 2)):
-        sh(f"kwriteconfig6 --file kdeglobals --group General --key {key} '{spec(sz)}'")
+        sh(f"kwriteconfig6 --file kdeglobals --group General --key {key} '{spec(sz, mono if key == 'fixed' else fam)}'")
     gtk = f"{fam} {size}"
     for f in ("gtk-3.0", "gtk-4.0"):
         _sub_file(f"~/.config/{f}/settings.ini", r"^gtk-font-name=.*$", f"gtk-font-name={gtk}", append=f"gtk-font-name={gtk}")
     _sub_file("~/.gtkrc-2.0", r"^gtk-font-name=.*$", f'gtk-font-name="{gtk}"', append=f'gtk-font-name="{gtk}"')
     _sub_file("~/.config/xsettingsd/xsettingsd.conf", r"^Gtk/FontName .*$", f'Gtk/FontName "{fam},  {size}"')
     sh(f"gsettings set org.gnome.desktop.interface font-name '{gtk}'")
-    sh(f"gsettings set org.gnome.desktop.interface monospace-font-name '{gtk}'")
+    sh(f"gsettings set org.gnome.desktop.interface monospace-font-name '{mono} {size}'")
 
 
 HERDR_BASE = ROOT.parent / "herdr" / "config.toml"   # tracked, carries the default [theme] block
@@ -5490,8 +5491,8 @@ def reload_apps(cfg, mode_only=False, changed=None):
 
     pal_ch = ch(OUT / "palette.lua")
     jobs = [(quit_apps, changed is None or bool(changed)), (refresh_nautilus, pal_ch), (hypr, pal_ch or not mode_only),
-            (lambda: sh("pkill -USR1 -x kitty"), ch(OUT / "kitty.conf")),   # kitty: reload config (re-reads the included colors)
-            (lambda: sh("pkill -USR2 -x ghostty"), ch(OUT / "ghostty")),    # ghostty: reload config (alacritty watches its imports)
+            (lambda: sh("pkill -USR1 -x kitty"), ch(OUT / "kitty.conf", OUT / "kitty-font.conf")),   # kitty: reload config (re-reads the included colors)
+            (lambda: sh("pkill -USR2 -x ghostty"), ch(OUT / "ghostty", OUT / "ghostty-font")),    # ghostty: reload config (alacritty watches its imports)
             (reload_nvim, pal_ch), (reload_zellij, ch(OUT / "zellij.kdl")),
             (reload_gtk, ch(OUT / "gtk.css", HOST_OUT / "gtk3.css", HOST_OUT / "gtk4.css")), (reload_kde, ch(OUT / "kde.colors")),
             (lambda: reload_icons(cfg), pal_ch), (lambda: sh("herdr server reload-config"), ch(OUT / "herdr.toml"))]
@@ -5513,8 +5514,29 @@ def deep_merge(base, over):
     return out
 
 
+# Settings > Look > Type (the shell is the only writer): {"ui": family, "mono": family} for the UI font and the terminal font.
+# A missing, malformed, unsafe or no longer installed family = the theme.toml one ([vars] font / mono_font).
+FONTS_FILE = Path(os.environ.get("QS_FONTS_FILE") or Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "quickshell" / "fonts.json")
+
+
+def font_installed(fam):
+    if not shutil.which("fc-list"):
+        return True
+    r = subprocess.run(["fc-list", ":family=" + fam.replace("\\", "\\\\").replace(",", "\\,"), "family"], capture_output=True, text=True)
+    return r.returncode != 0 or bool(r.stdout.strip())
+
+
+def font_prefs():
+    try:
+        d = json.loads(FONTS_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+    ok = lambda v: isinstance(v, str) and 0 < len(v) <= 100 and not re.search(r'[\x00-\x1f"\'\\\\{}$`;]', v)
+    return {k: d[k] for k in ("ui", "mono") if isinstance(d, dict) and ok(d.get(k)) and font_installed(d[k])}
+
+
 def load_cfg():
-    """theme.toml (tracked) with theme.local.toml (git-ignored, per machine) merged over it."""
+    """theme.toml (tracked) with theme.local.toml (git-ignored, per machine) merged over it and the chosen fonts on top."""
     with open(ROOT / "theme.toml", "rb") as f:
         cfg = tomllib.load(f)
     if not DEFAULT_MODE and LOCAL_TOML.exists():
@@ -5523,6 +5545,13 @@ def load_cfg():
                 cfg = deep_merge(cfg, tomllib.load(f))
         except (tomllib.TOMLDecodeError, OSError) as e:
             print(f"theme: ignoring unreadable {LOCAL_TOML.name}: {e}", file=sys.stderr)
+    fp = font_prefs() if not DEFAULT_MODE else {}
+    if "ui" in fp:
+        cfg.setdefault("vars", {})["font"] = fp["ui"]
+        if cfg.get("settings", {}).get("ui_font", "x"):
+            cfg.setdefault("settings", {})["ui_font"] = fp["ui"]
+    if "mono" in fp:
+        cfg.setdefault("vars", {})["mono_font"] = fp["mono"]
     return cfg
 
 
@@ -6252,6 +6281,13 @@ def main(argv):
         apply_lock()
         PICK_FILE.parent.mkdir(parents=True, exist_ok=True)
         write_atomic(PICK_FILE, want + "\n")
+        cmd, args = "mode-apply", []
+        argv = argv[:2]
+    if cmd == "fonts":   # theme.py fonts [get]: re-render + reload after Settings > Look > Type saved a font (fonts.json)
+        if args[:1] == ["get"]:
+            print(json.dumps({**{"ui": load_cfg()["vars"]["font"], "mono": load_cfg()["vars"]["mono_font"]}}))
+            return
+        apply_lock()
         cmd, args = "mode-apply", []
         argv = argv[:2]
     if cmd == "migrate-local":

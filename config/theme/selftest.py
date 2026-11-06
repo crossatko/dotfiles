@@ -499,6 +499,38 @@ exit 0
     c_check("unreadable image: failed, palette kept", st.get("state") == "failed" and pal2 == pal, st.get("stage", "")[:60])
     c_check("nothing live touched", all(l.split()[0] in ("hyprctl", "pkill", "gsettings", "kwriteconfig6", "plasma-apply-colorscheme", "herdr",
                                                           "nautilus", "nvim", "mpvpaper", "hyprpaper") for l in log.read_text().splitlines()))
+    # fonts (Settings > Look > Type: quickshell/fonts.json): the UI font reaches Qt / GTK / hyprlock, the terminal font the three
+    # terminal includes; an unsafe or not installed family falls back to Paper Mono (fc-list shim: only "Obel Mono" is installed)
+    fshims = d / "fshims"
+    fshims.mkdir()
+    (fshims / "fc-list").write_text('#!/bin/sh\ncase "$*" in *"Obel Mono"*) echo "Obel Mono";; esac\nexit 0\n')
+    (fshims / "fc-list").chmod(0o755)
+    fonts_json = d / "fonts.json"
+    fenv = dict(env, PATH=f"{fshims}:{env['PATH']}", QS_FONTS_FILE=str(fonts_json))
+    subprocess.run(py + [str(b)], env=fenv, check=True)   # (the last pick above was the unreadable image)
+    settle()
+    qt6 = home / ".config" / "qt6ct" / "qt6ct.conf"
+    qt6.parent.mkdir(parents=True, exist_ok=True)
+    qt6.write_text('[Fonts]\ngeneral="x"\nfixed="x"\n')
+
+    def render_fonts(content):
+        fonts_json.write_text(content)
+        r = subprocess.run([sys.executable, "-I", str(root / "theme.py"), "fonts"], env=fenv, capture_output=True, text=True)
+        if r.returncode:
+            raise SystemExit(f"theme.py fonts failed: {r.stderr[-600:]}")
+        rd = lambda n: (out / n).read_text()
+        return rd("ghostty-font"), rd("kitty-font.conf"), rd("alacritty-font.toml"), rd("hyprlock.conf"), rd("hyprtoolkit.conf"), qt6.read_text()
+    g, k, al, hl, ht, q = render_fonts('{"ui": "Obel Mono", "mono": "Obel Mono"}')
+    c_check("fonts: terminals carry the chosen family", 'font-family = "Obel Mono"' in g and 'family="Obel Mono"' in k and 'family = "Obel Mono"' in al, g + k + al)
+    c_check("fonts: ghostty list is reset first", g.index('font-family = ""') < g.index('font-family = "Obel Mono"'))
+    c_check("fonts: hyprlock / hyprtoolkit variables", "$ui_font = Obel Mono" in hl and "$mono_font = Obel Mono" in ht)
+    c_check("fonts: Qt gets the UI font", 'general="Obel Mono,11' in q and 'fixed="Obel Mono,11' in q, q)
+    g, k, al, hl, ht, q = render_fonts('{"ui": "Obel Mono", "mono": "Not Installed"}')
+    c_check("fonts: a missing family falls back to Paper Mono", 'family="Paper Mono"' in k and "$ui_font = Obel Mono" in hl)
+    g, k, al, hl, ht, q = render_fonts('{"ui": "Evil\\"; rm", "mono": "Obel\\nMono"}')
+    c_check("fonts: an unsafe family falls back to Paper Mono", 'family="Paper Mono"' in k and "$ui_font = Paper Mono" in hl)
+    g, k, al, hl, ht, q = render_fonts("not json")
+    c_check("fonts: a malformed file falls back to Paper Mono", 'font-family = "Paper Mono"' in g and "$mono_font = Paper Mono" in ht)
     # engine backend: a video is a player RECORD (theme-video/<conn>.json "engine": true + engine/players.json), never an
     # mpvpaper; an image afterwards empties the players file
     (root / "theme.local.toml").write_text(local + '\n[settings]\nwallpaper_backend = "engine"\n')

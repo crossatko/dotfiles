@@ -1,5 +1,6 @@
 singleton Theme 1.0 Theme.qml
 singleton Appearance 1.0 Appearance.qml
+singleton Fonts 1.0 Fonts.qml
 singleton Motion 1.0 Motion.qml
 singleton Binds 1.0 Binds.qml
 Chip 1.0 Chip.qml
@@ -66,6 +67,7 @@ SettingsBar 1.0 SettingsBar.qml
 SettingsLook 1.0 SettingsLook.qml
 singleton Presets 1.0 Presets.qml
 ChoiceRow 1.0 ChoiceRow.qml
+FontRow 1.0 FontRow.qml
 CustomTag 1.0 CustomTag.qml
 PresetCards 1.0 PresetCards.qml
 AdvancedFold 1.0 AdvancedFold.qml

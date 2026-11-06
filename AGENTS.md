@@ -55,7 +55,7 @@ AeroSpace fork, librepods) live in their own repos, only the wiring is here.
   is stock-compatible and needs no fork.
 - Hyprland Lua: `hyprctl dispatch "hl.dsp.focus({workspace=N})"`; `hyprctl keyword` is refused; Lua objects are userdata (nil-check, never `type(x)=="table"`);
   `hl.dsp.window.pin` TOGGLES.
-- Fonts: Paper Mono (UI), Vadivam + Font Awesome Brands (icons). A new machine needs `inode/directory` -> Nautilus in untracked `~/.config/mimeapps.list`.
+- Fonts: Paper Mono (default UI + terminal), Obel Mono (optional, fetched by install.sh); Vadivam + Font Awesome Brands (icons). Settings > Look > Type picks the UI and terminal font per machine (`Fonts.qml`, `quickshell/fonts.json`, `QS_FONTS_FILE`; `theme.py fonts` re-renders). A new machine needs `inode/directory` -> Nautilus in untracked `~/.config/mimeapps.list`.
 
 ## Repository map
 

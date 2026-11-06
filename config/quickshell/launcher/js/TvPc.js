@@ -130,7 +130,7 @@ function urlOf(t) {
     if (t.kind === "twitch-clip") return "https://clips.twitch.tv/" + t.ref
     return ""
 }
-// a ready target -> { argv, player } | null. env = { twitchApp (twitch-qs-mpv path, "" = none), jellyfin (argv prefix that
+// a ready target -> { argv, player } | null. env = { twitchApp (twitch-qs-mpv path, "" = none), font (UI font family), jellyfin (argv prefix that
 // runs jellyfin-qs) }. Players follow the repo's own: YouTube back to where it came from (mpv, else the default browser);
 // Twitch live = twitch-qs-mpv watch (as the launcher), the browser when it came from one; a past broadcast / clip = the
 // browser (twitch-qs-mpv takes no start position; Twitch's site resumes from the account); Jellyfin = jellyfin-qs play.
@@ -143,7 +143,7 @@ function command(t, env) {
         return { argv: ["xdg-open", url], player: "browser" }
     }
     if (t.kind === "twitch") {
-        if (t.origin !== "browser" && env.twitchApp) return { argv: ["env", "TWITCH_QS_FONT=Paper Mono", env.twitchApp, "watch", t.ref], player: "Twitch app" }
+        if (t.origin !== "browser" && env.twitchApp) return { argv: ["env", "TWITCH_QS_FONT=" + (env.font || "Paper Mono"), env.twitchApp, "watch", t.ref], player: "Twitch app" }
         return { argv: ["xdg-open", url], player: "browser" }
     }
     if (t.kind === "twitch-vod" || t.kind === "twitch-clip") return { argv: ["xdg-open", url], player: "browser" }

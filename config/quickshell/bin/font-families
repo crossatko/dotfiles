@@ -1,0 +1,68 @@
+#!/usr/bin/env -S python3 -I
+"""Installed font families for Settings > Look > Type, as JSON on stdout: {"ui": [...], "mono": [...]} (sorted, base family
+names only). Read from fontconfig (`fc-list`); QS_FC_LIST_UI / QS_FC_LIST_MONO name files with canned `fc-list --format
+'%{family}\\t%{spacing}\\n'` output (tests).
+
+ui    Latin + Czech coverage (a font without the accents would break the UI), minus icon, symbol, emoji, math and script-
+      specific families (Noto Sans <script>, CJK).
+mono  Latin coverage and monospaced: fontconfig spacing 90 / 100, or a name with "mono" (some fonts, Paper Mono among
+      them, report no spacing).
+"Paper Mono" is always in both lists (the default).
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+
+DEFAULT = "Paper Mono"
+UI_CHARSET = ":charset=30 41 61 10d 11b 159 17e"   # 0 A a c-caron e-caron r-caron z-caron
+MONO_CHARSET = ":charset=41 61"
+SKIP = re.compile(r"awesome|icons?\b|symbol|emoji|dingbat|math|music|cjk|material|vadivam|brands|dseg|tkinter|signwriting|"
+                  r"z003|\bui$", re.I)
+NOTO_SCRIPT = re.compile(r"^Noto (Sans|Serif|Naskh|Kufi|Nastaliq|Rashi|Fangsong|Looped)\b.+")
+NOTO_KEEP = {"Noto Sans Mono", "Noto Serif Display"}
+
+
+def rows(charset, env):
+    path = os.environ.get(env)
+    if path:
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    cmd = ["fc-list", charset, "--format", "%{family}\t%{spacing}\n"]
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def parse(text):
+    """[(base family, spacing)]: the first name of a "Paper Mono,Paper Mono Light" entry, \\-escapes removed."""
+    out = []
+    for line in text.splitlines():
+        fam, _, sp = line.partition("\t")
+        fam = re.sub(r"\\(.)", r"\1", re.split(r"(?<!\\),", fam)[0]).strip()
+        if fam and not fam.startswith("."):
+            out.append((fam, sp.strip()))
+    return out
+
+
+def usable(fam):
+    return not SKIP.search(fam) and (fam in NOTO_KEEP or not NOTO_SCRIPT.match(fam))
+
+
+def families(ui_text, mono_text):
+    ui = {f for f, _ in parse(ui_text) if usable(f)}
+    mono = {f for f, sp in parse(mono_text) if usable(f) and (sp in ("90", "100") or re.search(r"mono", f, re.I))}
+    ui.add(DEFAULT)
+    mono.add(DEFAULT)
+    return {"ui": sorted(ui, key=str.lower), "mono": sorted(mono, key=str.lower)}
+
+
+def main():
+    json.dump(families(rows(UI_CHARSET, "QS_FC_LIST_UI"), rows(MONO_CHARSET, "QS_FC_LIST_MONO")), sys.stdout)
+    sys.stdout.write("\n")
+
+
+if __name__ == "__main__":
+    main()

@@ -359,6 +359,11 @@ snapshot, `vp_start` / `vp_ipc` / `vp_stop` and the mpv options in theme.py.
   scheme, so `theme.py` removes them. KDE's own accent (`AccentColor`, `accentColorFromWallpaper`) is also
   overridden, otherwise selection/focus colors stay an old wallpaper's.
 * One UI font for Qt, KDE and GTK: `ui_font` / `ui_font_size` in `theme.toml` (`ui_font = ""` leaves fonts alone).
+* Fonts: `[vars] font` (UI) and `mono_font` (terminals) are the defaults; Settings > Look > Type saves a per-machine choice in
+  `quickshell/fonts.json` (state dir, `QS_FONTS_FILE`), which `load_cfg` puts over them (an unsafe or no longer installed family is
+  ignored), then `theme.py fonts` re-renders. UI font: `{{font}}` (vesktop, hyprlock / hyprtoolkit `$ui_font`), Qt / KDE / GTK via
+  `apply_fonts`. Terminal font: `{{mono_font}}` in `ghostty-font`, `kitty-font.conf`, `alacritty-font.toml` (included by the
+  terminals' own configs after their font lines), hyprtoolkit `$mono_font`, the Qt / GTK monospace entries.
 
 ## GTK / Brave dialogs / Oxygen cleanup
 * Chromium's Open/Save dialogs ignore `gtk-3.0/settings.ini` and user CSS, but obey `GTK_THEME`. GTK's compiled

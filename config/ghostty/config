@@ -1,4 +1,5 @@
 # --- Font ---
+# fallback; the generated out/ghostty-font (Settings > Look > Type) replaces it, loaded after this file
 font-family = "Paper Mono"
 font-size = 18
 # Linux: kitty's modify_font cell_height 110%; macos.conf overrides it
@@ -7,6 +8,7 @@ adjust-cell-width = 0
 
 # --- Colors: generated, edit ~/.config/theme/theme.toml ---
 config-file = ?~/.config/theme/out/ghostty
+config-file = ?~/.config/theme/out/ghostty-font
 
 # --- Window ---
 background-opacity = 0.8
