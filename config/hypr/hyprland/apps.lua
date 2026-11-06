@@ -1,7 +1,7 @@
 return {
 	menu = "qs ipc call launcher toggle", -- quickshell launcher (config/quickshell/Launcher.qml)
 	terminal = "ghostty", -- kitty stays installed as a fallback
-	herdr = "ghostty --class=com.herdr.terminal -e $HOME/.local/bin/herdr", -- terminal running herdr (workspace 4)
+	herdr = "$HOME/.local/bin/herdr-app", -- Herdr desktop app (workspace 4)
 	browser = "brave",
 	whatsapp = "brave --app='https://web.whatsapp.com'",
 	messages = "brave --app='https://messages.google.com'",

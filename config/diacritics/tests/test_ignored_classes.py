@@ -30,7 +30,7 @@ class IgnoredClasses(unittest.TestCase):
         self.assertEqual(list(prefs.DEFAULT_IGNORED_CLASSES), qml_default_classes())
 
     def test_repo_terminals_ignored(self):
-        for c in ("com.mitchellh.ghostty", "com.herdr.terminal", "dotfiles.scratchpad"):
+        for c in ("com.mitchellh.ghostty", "com.herdr.terminal", "herdr-app", "dotfiles.scratchpad"):
             self.assertIn(c, prefs.DEFAULT_IGNORED_CLASSES)
 
     def load(self, content):

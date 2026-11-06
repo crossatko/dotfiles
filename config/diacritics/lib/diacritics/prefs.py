@@ -35,7 +35,7 @@ DEFAULT_IGNORED_CLASSES = (
     "kitty", "foot", "footclient", "alacritty", "ghostty", "com.mitchellh.ghostty", "org.wezfurlong.wezterm",
     "wezterm", "konsole", "org.kde.konsole", "xterm", "uxterm", "urxvt", "st", "terminator",
     "gnome-terminal-server", "org.gnome.ptyxis", "com.gexperts.tilix", "tilix",
-    "com.herdr.terminal", "dotfiles.scratchpad",
+    "com.herdr.terminal", "herdr-app", "dotfiles.scratchpad",
 )
 
 

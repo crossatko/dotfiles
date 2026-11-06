@@ -343,6 +343,22 @@ hl.window_rule({ name = "whatsapp", workspace = "7", match = { class = "^(brave-
 hl.window_rule({ name = "messages", workspace = "7", match = { class = "^(brave-messages\\.google\\.com__-Default)$" } })
 hl.window_rule({ name = "signal", workspace = "7", match = { class = "^(org\\.signal\\.Signal)$" } })
 
+-- Herdr desktop app on workspace 4: the whole monitor, square, with the bar drawn over it. Floating, because a tiled window
+-- stops at the bar's reserved strip and a fullscreen one covers the bar. The app asks for fullscreen when it restored that
+-- state, so the request is suppressed (this list replaces the global "maximize" one); SUPER+F still works. A herdr-app
+-- elsewhere (a second instance, a test) stays an ordinary window.
+hl.window_rule({
+	name = "herdr-app",
+	float = true,
+	move = "0 0",
+	size = "monitor_w monitor_h",
+	rounding = 0,
+	border_size = 0,
+	no_shadow = true,
+	suppress_event = "fullscreen maximize",
+	match = { class = "^(herdr-app)$", workspace = "4" },
+})
+
 hl.window_rule({
 	name = "tuifin-mpv",
 	workspace = "11",
