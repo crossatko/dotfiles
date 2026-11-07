@@ -35,8 +35,19 @@ alias down="make down"
 alias killdocker='docker kill $(docker ps -q)'
 alias kd='docker kill $(docker ps -q)'
 alias cd="z"
-alias claudep='CLAUDE_CONFIG_DIR=~/.claude-personal claude --dangerously-skip-permissions'
-alias claudew='CLAUDE_CONFIG_DIR=~/.claude claude --dangerously-skip-permissions'
+# Link every skill in ~/.agents/skills into a Claude config and drop broken links.
+# Real entries (the per-account synced/, .trash/) are never touched.
+_claude_link_skills() {
+  local dir="$1/skills" skill link
+  mkdir -p "$dir"
+  for skill in ~/.agents/skills/*(-/N); do
+    link="$dir/${skill:t}"
+    [[ -e $link && ! -L $link ]] || ln -sfn "../../.agents/skills/${skill:t}" "$link"
+  done
+  for link in "$dir"/*(-@N); do rm -f "$link"; done
+}
+alias claudep='_claude_link_skills ~/.claude-personal; CLAUDE_CONFIG_DIR=~/.claude-personal claude --dangerously-skip-permissions'
+alias claudew='_claude_link_skills ~/.claude; CLAUDE_CONFIG_DIR=~/.claude claude --dangerously-skip-permissions'
 
 # Zellij
 # Auto-rename tab to current directory name

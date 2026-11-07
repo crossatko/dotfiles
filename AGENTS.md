@@ -629,6 +629,7 @@ wallpaper to hyprpaper on TV resyncs.
 ## Shell, url-router
 
 - `config/shell/zshrc`: `eval "$(zoxide init zsh)"` stays the LAST line. zsh is the login shell (`install.sh --chsh` sets it); `~/.zprofile` (unmanaged) starts the TTY1 session supervisor. No bashrc is kept; agents still run bash.
+- Claude skills: `~/.agents/skills` is the shared source. The `claudep` and `claudew` aliases link each skill into their config dir before launch and drop broken links (`_claude_link_skills` in zshrc); starting `claude` any other way skips this. `skills/synced` is per account and is never linked.
 - `config/url-router/bin/url-router` is the default http(s) handler (docs in its header, template `config.example`); Brave's "make default" resets the handler.
   Links sent to the fallback browser focus its plain window (class `Brave-browser`, never `--app` windows; waits up to 10 s for a cold start) via `hl.dsp.focus`; `focus_browser = no` opts out, Hyprland only (elsewhere it execs the browser as before). Web app links are not focused. Real focus is only unit-tested (fake hyprctl), not tried live.
 
