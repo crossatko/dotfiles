@@ -290,6 +290,7 @@ snapshot, `vp_start` / `vp_ipc` / `vp_stop` and the mpv options in theme.py.
 | nvim | catppuccin fed from `out/palette.lua` | yes, every running instance (RPC `ThemeReload()`) |
 | zellij | theme file `themes/wall.kdl` | yes (rewrite of config.kdl triggers its watcher) |
 | herdr | `~/.config/herdr/config.toml` is generated (tracked `config/herdr/config.toml` + this machine's `[theme]` block; herdr has no include) | `herdr server reload-config` |
+| herdr desktop app (`herdr-app`) | `templates/herdr-app-theme.json` + `herdr-app-layout.json` are written to `~/.config/herdr-app/themes/wall.json` and `layouts/shell.json`, plus patched copies `mods/shell-<name>/` of the shipped mods the layout shows (square corners, flat tabs: `herdr_app_patch`, rewritten at each render so app updates flow in). Only when that dir exists; settings.json is never touched; the layout `shell` shows theme `wall` and carries its own `colors` block so a static `colors` in settings.json cannot freeze them | yes, the app watches the theme file |
 | hyprland, hyprlock, hyprtoolkit, hyprpaper | `dofile` / `source` / symlink | yes (`hyprctl reload`, hyprpaper restart with that backend); hyprlock reads its wallpaper path on each lock |
 | desktop wallpaper (quickshell backend) | `out/wallpaper.json` (Wallpaper.qml) | instant, cross-fade |
 | Omarchy apps (omacal, omamail, ...) | `out/omarchy/` is a complete Omarchy theme, linked as `~/.local/state/omarchy/current/theme` (+ `current/theme.name`); see below | their own file watch |

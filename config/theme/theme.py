@@ -4500,6 +4500,11 @@ def render_all(pal, cfg, mode=None, dark=None):
     bs = cfg.get("settings", {})
     extra["brave_active"] = mix(pal["bg"], pal["accent"], float(bs.get("brave_active_tint", 0.2)))
     extra["brave_dim"] = mix(pal["bg"], pal["fg"], float(bs.get("brave_inactive_ink", 0.55)))
+    # herdr-app (templates/herdr-app-*.json): opaque flattenings of the shell's alpha tokens (Theme.edge / itemHover / accentFill /
+    # itemFill over bg_alt, the sidebar fill)
+    extra.update(herdr_edge=mix(pal["bg"], pal["overlay"], 0.5), herdr_hover=mix(pal["bg_alt"], pal["fg"], 0.10),
+                 herdr_selected=mix(pal["bg_alt"], pal["accent"], 0.18), herdr_input=mix(pal["bg"], pal["fg"], 0.06),
+                 herdr_selection=mix(pal["bg"], pal["accent"], 0.32))
     # a host without the TV wallpaper (it is not in the repo) falls back to the main one instead of a black output
     tv = os.path.expanduser(extra.get("tv_wallpaper", ""))
     if not tv or not os.path.exists(tv):
@@ -5002,6 +5007,63 @@ def deploy_herdr():
     write_atomic(dest, new)
 
 
+HERDR_APP_DIR = Path.home() / ".config/herdr-app"
+# The shipped mods the `shell` layout shows, derived at deploy into mods/shell-<name>/ (the shipped ones are read-only, replaced on
+# every app start, and Herdr's code does not belong in this repo): square corners everywhere, flat tabs. A pattern that no longer
+# matches after an app update is a silent no-op (the mod then just keeps that bit of the shipped look).
+HERDR_APP_MODS = ("tabs", "spaces", "agents", "workspace-chrome", "workspace-status", "pane", "files", "changes")
+HERDR_APP_PATCHES = {   # mod -> [(regex, replacement)] applied to main.js after the generic square-corner pass
+    "tabs": [
+        (r"\.h\(29\)\.px\(10\)\.gap\(7\)", ".h_full().px(10).gap(7)"),                                  # a tab fills the bar, no pill
+        (r"\.border\(1\)\.border_color\(c\.active \? t\.border : t\.chrome\)", ".border_r(1).border_color(t.border)"),
+        (r"\.px\(10\)\.pl\(lightsPadding\)\.gap\(3\)", ".px(0).pl(lightsPadding).gap(0)"),            # no bar padding / gap
+        (r"(\?\? 0\)\)\s*: )10;", r"\g<1>0;"),                                                          # (macOS traffic-light padding stays)
+        (r"\.gap\(3\)\.overflow_x_scrollbar\(\)", ".gap(0).overflow_x_scrollbar()"),
+        (r"\.bg\(t\.chrome\)\.border_b\(1\)", ".bg(t.chrome).border_t(1)"),                           # the bar sits below the panes
+    ],
+}
+_ROUND = re.compile(r"((?:\.size\([1-8]\)(?:\.\w+\([^()]*\))*?)?)\.rounded(_(?:t|b|l|r|tl|tr|bl|br))?\(([^()]*)\)")
+
+
+def herdr_app_patch(name, text):
+    """main.js of a shipped mod -> the square-cornered copy named shell-<name>. Corners become 0 except status dots (a `.size(1..8)`
+    element: `.size(6).rounded(3)`, `.rounded_full()` is not matched at all); a mod that opens itself by name opens its copy."""
+    text = _ROUND.sub(lambda m: m.group(0) if m.group(1) else f".rounded{m.group(2) or ''}(0)", text)
+    for pat, rep in HERDR_APP_PATCHES.get(name, []):
+        try:
+            text = re.sub(pat, rep, text)
+        except re.error:
+            pass
+    return re.sub(r'(\bmod"?:\s*)"%s"' % re.escape(name), r'\g<1>"shell-%s"' % name, text)
+
+
+def deploy_herdr_app():
+    """Herdr desktop app (only when ~/.config/herdr-app exists): themes/wall.json, layouts/shell.json and the patched copies
+    mods/shell-<name>/ of the shipped mods (herdr_app_patch), each written only when changed, so an app update flows in at the
+    next render. Hot-reloaded by the app. Nothing else there is touched (settings.json never). A failure never breaks apply."""
+    if not HERDR_APP_DIR.is_dir():
+        return
+    for name in HERDR_APP_MODS:   # before the layout, which names them
+        shipped = HERDR_APP_DIR / "mods" / name
+        try:
+            if (shipped / "main.js").exists():
+                dest = HERDR_APP_DIR / "mods" / f"shell-{name}"
+                dest.mkdir(parents=True, exist_ok=True)
+                write_atomic(dest / "main.js", herdr_app_patch(name, (shipped / "main.js").read_text()))
+                if (shipped / "mod.json").exists():
+                    write_atomic(dest / "mod.json", (shipped / "mod.json").read_text())
+        except (OSError, ValueError) as e:
+            print(f"theme: herdr-app: {name}: {e}")
+    try:
+        for src, sub in (("herdr-app-theme.json", "themes/wall.json"), ("herdr-app-layout.json", "layouts/shell.json")):
+            f = OUT / src
+            if f.exists():
+                (HERDR_APP_DIR / sub).parent.mkdir(exist_ok=True)
+                write_atomic(HERDR_APP_DIR / sub, f.read_text())
+    except (OSError, ValueError) as e:
+        print(f"theme: herdr-app: {e}")
+
+
 VESKTOP_DIR = Path.home() / ".config/vesktop"
 VESKTOP_THEME = "wall.theme.css"
 
@@ -5097,6 +5159,7 @@ def deploy(cfg, pal, mode=None):
     purge_oxygen(mode)
 
     deploy_herdr()
+    deploy_herdr_app()
 
 
 # ---------------------------------------------------------------------- brave

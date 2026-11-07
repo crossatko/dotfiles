@@ -1,0 +1,36 @@
+{
+  "background": "{{bg}}",
+  "foreground": "{{fg}}",
+  "selection": "{{herdr_selection}}",
+  "cursor": "{{accent}}",
+  "ansi": [
+    "{{black}}", "{{red}}", "{{green}}", "{{yellow}}", "{{blue}}", "{{magenta}}", "{{cyan}}", "{{white}}",
+    "{{bright_black}}", "{{bright_red}}", "{{bright_green}}", "{{bright_yellow}}", "{{bright_blue}}", "{{bright_magenta}}", "{{bright_cyan}}", "{{bright_white}}"
+  ],
+  "colors": {
+    "background": "{{bg}}",
+    "canvas": "{{bg}}",
+    "chrome": "{{bg_alt}}",
+    "surface": "{{surface}}",
+    "popover": "{{surface}}",
+    "raised": "{{surface2}}",
+    "hover": "{{herdr_hover}}",
+    "selected": "{{herdr_selected}}",
+    "border": "{{herdr_edge}}",
+    "input": "{{herdr_input}}",
+    "foreground": "{{fg}}",
+    "muted": "{{fg_dim}}",
+    "dim": "{{muted}}",
+    "accent": "{{accent}}",
+    "accent_foreground": "{{bg}}",
+    "solid": "{{fg}}",
+    "solid_foreground": "{{bg}}",
+    "selection": "{{herdr_selection}}",
+    "ring": "{{accent}}",
+    "working": "{{accent}}",
+    "blocked": "{{yellow}}",
+    "done": "{{green}}",
+    "idle": "{{muted}}",
+    "unknown": "{{muted}}"
+  }
+}

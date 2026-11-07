@@ -136,6 +136,7 @@ config/aerospace karabiner swiftbar  macOS only
   wallpaper switch changes no tracked file).
 - `bin/theme-seed` fills a missing `out/` only on machines without `theme.local.toml` (fresh clone, Mac); elsewhere the hooks run `theme.py render`
   (`THEME_RENDER_SKIP=1` skips). herdr has no include: edits to its settings need `theme.py render`.
+- Herdr desktop app: `deploy_herdr_app()` writes `~/.config/herdr-app/themes/wall.json`, `layouts/shell.json` and `mods/shell-<name>/` (patched copies of the shipped mods: square corners, flat tabs; popups stay round) if that dir exists, never settings.json. The app hot-reloads them; the copies follow an app update only at the next render. Its window is always opaque: no per-pixel transparency.
 - Layout defaults in `theme.toml [settings]` drive Quickshell only; Hyprland's own values are hand-written in `hypr/hyprland/theme.lua`/`settings.lua`: keep in
   sync.
 - Hyprland group bar (`group.groupbar` in `settings.lua`, values in `theme.lua` `M.groupbar` / `groupbar_colors` /

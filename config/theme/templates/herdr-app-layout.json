@@ -1,0 +1,199 @@
+{
+  "id": "root",
+  "type": "row",
+  "children": [
+    {
+      "id": "sidebar",
+      "type": "column",
+      "children": [
+        {
+          "id": "brand",
+          "type": "block",
+          "content": {
+            "mod": "shell-workspace-chrome"
+          },
+          "size": {
+            "px": 46
+          },
+          "window_drag": true
+        },
+        {
+          "id": "sidebar-lists",
+          "type": "column",
+          "children": [
+            {
+              "id": "spaces",
+              "type": "block",
+              "content": {
+                "mod": "shell-spaces"
+              },
+              "size": {
+                "weight": 1
+              },
+              "min": 90
+            },
+            {
+              "id": "agents",
+              "type": "block",
+              "content": {
+                "mod": "shell-agents"
+              },
+              "size": {
+                "weight": 1
+              },
+              "min": 90
+            }
+          ]
+        },
+        {
+          "id": "sidebar-footer",
+          "type": "block",
+          "content": {
+            "mod": "shell-workspace-chrome",
+            "props": {
+              "footer": true
+            }
+          },
+          "size": {
+            "px": 69
+          }
+        }
+      ],
+      "size": {
+        "px": 268
+      },
+      "min": 44,
+      "max": 480,
+      "background": "chrome",
+      "resizable": false
+    },
+    {
+      "id": "work",
+      "type": "column",
+      "children": [
+        {
+          "id": "work-body",
+          "type": "row",
+          "children": [
+            {
+              "id": "main",
+              "type": "block",
+              "content": {
+                "tab": "active",
+                "pane": {
+                  "header": {
+                    "content": {
+                      "mod": "shell-pane"
+                    },
+                    "reveal": "always",
+                    "height": 26,
+                    "position": "top"
+                  },
+                  "background": "background",
+                  "border": {
+                    "width": 0,
+                    "color": "border"
+                  },
+                  "focus": {
+                    "width": 1,
+                    "color": "accent"
+                  },
+                  "radius": 0,
+                  "gap": 1,
+                  "lone": false
+                }
+              }
+            },
+            {
+              "id": "panel",
+              "type": "column",
+              "children": [
+                {
+                  "id": "panel-body",
+                  "type": "stack",
+                  "children": [
+                    {
+                      "id": "files",
+                      "type": "block",
+                      "content": {
+                        "mod": "shell-files"
+                      }
+                    },
+                    {
+                      "id": "changes",
+                      "type": "block",
+                      "content": {
+                        "mod": "shell-changes"
+                      }
+                    }
+                  ],
+                  "active": "files"
+                }
+              ],
+              "size": {
+                "px": 368
+              },
+              "min": 280,
+              "max": 900,
+              "hidden": true
+            }
+          ],
+          "padding": 0,
+          "gap": 0,
+          "background": "border"
+        },
+        {
+          "id": "tabs",
+          "type": "block",
+          "content": {
+            "mod": "shell-tabs"
+          },
+          "size": {
+            "px": 30
+          },
+          "window_drag": true
+        },
+        {
+          "id": "status",
+          "type": "block",
+          "content": {
+            "mod": "shell-workspace-status"
+          },
+          "size": {
+            "px": 28
+          }
+        }
+      ],
+      "resizable": false
+    }
+  ],
+  "background": "canvas",
+  "terminal_padding": [
+    0,
+    0
+  ],
+  "divider": {
+    "width": 1,
+    "color": "border"
+  },
+  "titlebar": "none",
+  "theme": "wall",
+  "font": "Paper Mono",
+  "font_size": 16.7,
+  "ui_font": "Paper Mono",
+  "terminal_opacity": 1,
+  "colors": {
+    "accent": "{{accent}}",
+    "border": "{{herdr_edge}}",
+    "canvas": "{{bg}}",
+    "chrome": "{{bg_alt}}",
+    "dim": "{{muted}}",
+    "foreground": "{{fg}}",
+    "hover": "{{herdr_hover}}",
+    "input": "{{herdr_input}}",
+    "muted": "{{fg_dim}}",
+    "selected": "{{herdr_selected}}",
+    "selection": "{{herdr_selection}}",
+    "surface": "{{surface}}"
+  }
+}

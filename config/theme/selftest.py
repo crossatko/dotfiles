@@ -568,4 +568,60 @@ exit 0
     # (a worker that is still running when the temp dir goes: wait for it)
     settle()
 
+# ---- herdr-app templates: valid JSON, only #rrggbb colours, 16 ansi entries, no placeholder left (dark and light palette)
+def herdr_app_problems(pal, mode):
+    import json
+    extra = {"herdr_edge": theme.mix(pal["bg"], pal["overlay"], 0.5), "herdr_hover": theme.mix(pal["bg_alt"], pal["fg"], 0.10),
+             "herdr_selected": theme.mix(pal["bg_alt"], pal["accent"], 0.18), "herdr_input": theme.mix(pal["bg"], pal["fg"], 0.06),
+             "herdr_selection": theme.mix(pal["bg"], pal["accent"], 0.32), **theme.mode_extras(pal, mode)}
+    bad = []
+    for name in ("herdr-app-theme.json", "herdr-app-layout.json"):
+        text = theme.render((theme.ROOT / "templates" / name).read_text(), pal, extra)
+        if "{{" in text:
+            bad.append(f"{name}: placeholder left")
+        try:
+            d = json.loads(text)
+        except ValueError as e:
+            bad.append(f"{name}: {e}")
+            continue
+        if name.endswith("theme.json"):
+            cols = [d["background"], d["foreground"], d["selection"], d["cursor"], *d["ansi"], *d["colors"].values()]
+            bad += [f"{c!r} not #rrggbb" for c in cols if not re.fullmatch(r"#[0-9a-f]{6}", c)]
+            if len(d["ansi"]) != 16:
+                bad.append("ansi != 16")
+            if theme.contrast(d["foreground"], d["selection"]) < 4.5:
+                bad.append("selection unreadable")
+        elif d.get("theme") != "wall" or d.get("titlebar") != "none":
+            bad.append("layout: theme/titlebar")
+        else:
+            mods = set(re.findall(r'"mod": "([^"]+)"', text))
+            if mods != {f"shell-{m}" for m in theme.HERDR_APP_MODS}:
+                bad.append(f"layout mods {sorted(mods)} != HERDR_APP_MODS")
+    return bad
+
+
+with tempfile.TemporaryDirectory() as d:
+    d = Path(d)
+    subprocess.run(["magick", "-size", "800x600", "gradient:#301030-#f0a040", str(d / "w.png")], check=True)
+    base = theme.extract(d / "w.png")
+    for mode in ("dark", "light"):
+        bad = herdr_app_problems(theme.build_palette(base, {}, None if mode == "dark" else "light"), mode)
+        fails += bool(bad)
+        print(f"{'ok  ' if not bad else 'FAIL'} herdr-app templates {mode} {bad or ''}")
+
+
+# ---- herdr-app mod patch (theme.herdr_app_patch): corners zeroed, status dots kept, self-opening by name follows the copy,
+# a pattern that is gone is a no-op
+_src = ('div().size(6).rounded(3).bg(t.dim) div().size(7).mx(3).flex_none().rounded(4) div().rounded_full() '
+        'h_flex().h(28).rounded(8) div().rounded_bl(6) div().size(18).flex_none().rounded(5) div().size(26).rounded(6) '
+        'openOverlay({ mod: "agents", kind: "popup" }) openOverlay({ mod: "menu" })')
+_out = theme.herdr_app_patch("agents", _src)
+_want = ('div().size(6).rounded(3).bg(t.dim) div().size(7).mx(3).flex_none().rounded(4) div().rounded_full() '
+         'h_flex().h(28).rounded(0) div().rounded_bl(0) div().size(18).flex_none().rounded(0) div().size(26).rounded(0) '
+         'openOverlay({ mod: "shell-agents", kind: "popup" }) openOverlay({ mod: "menu" })')
+_tabs = theme.herdr_app_patch("tabs", "h_flex().h(29).px(10).gap(7).rounded(7)")
+_ok = _out == _want and _tabs == "h_flex().h_full().px(10).gap(7).rounded(0)" and theme.herdr_app_patch("tabs", "nothing here") == "nothing here"
+fails += not _ok
+print(f"{'ok  ' if _ok else 'FAIL'} herdr-app mod patch {'' if _ok else (_out, _tabs)}")
+
 sys.exit(1 if fails else 0)
