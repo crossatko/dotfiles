@@ -4,7 +4,8 @@ onboarding = false
 prefix = ["f4", "f3", "ctrl+b"]
 previous_tab = "alt+h"
 focus_pane_left = ["prefix+h", "ctrl+alt+h"]
-focus_pane_right = ["prefix+l", "ctrl+alt+l"]
+# prefix+l opens lazygit (see keys.command below)
+focus_pane_right = "ctrl+alt+l"
 next_tab = "alt+l"
 new_tab = "prefix+t"
 new_workspace = "prefix+n"
@@ -31,6 +32,12 @@ key = "prefix+p"
 type = "shell"
 command = "$HOME/dotfiles/config/herdr/auto-split.sh"
 description = "split along the longer side"
+
+[[keys.command]]
+key = "prefix+l"
+type = "shell"
+command = "$HOME/dotfiles/config/herdr/auto-split.sh lazygit"
+description = "lazygit in a new split"
 
 # herdr-nvim (plugin chmarax.herdr-nvim); its keys took over herdr's defaults for scrollback edit and notification target
 [[keys.command]]
