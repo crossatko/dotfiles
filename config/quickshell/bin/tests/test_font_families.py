@@ -5,6 +5,9 @@ python3 -I -m unittest discover -s config/quickshell/bin/tests
 import importlib.machinery
 import importlib.util
 import os
+import subprocess
+import sys
+import tempfile
 import unittest
 
 BIN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "font-families")
@@ -45,6 +48,12 @@ class FontFamilies(unittest.TestCase):
     def test_default_always_listed(self):
         got = load().families("", "")
         self.assertEqual((got["ui"], got["mono"]), (["Paper Mono"], ["Paper Mono"]))
+
+    def test_no_rows_fails_without_output(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".txt") as f:
+            env = dict(os.environ, QS_FC_LIST_UI=f.name, QS_FC_LIST_MONO=f.name)
+            r = subprocess.run([sys.executable, "-I", BIN], env=env, capture_output=True, text=True)
+        self.assertEqual((r.returncode, r.stdout), (1, ""))
 
 
 if __name__ == "__main__":

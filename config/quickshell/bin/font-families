@@ -63,7 +63,10 @@ def families(ui_text, mono_text):
 
 
 def main():
-    json.dump(families(rows(UI_CHARSET, "QS_FC_LIST_UI"), rows(MONO_CHARSET, "QS_FC_LIST_MONO")), sys.stdout)
+    ui, mono = rows(UI_CHARSET, "QS_FC_LIST_UI"), rows(MONO_CHARSET, "QS_FC_LIST_MONO")
+    if not ui.strip() or not mono.strip():
+        sys.exit(1)     # fc-list failed: no output, the shell keeps the lists it has
+    json.dump(families(ui, mono), sys.stdout)
     sys.stdout.write("\n")
 
 

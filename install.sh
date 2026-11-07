@@ -970,8 +970,9 @@ stage_links() {
       && [ "$(sha256sum "$otmp/obel.zip" | cut -d' ' -f1)" = "$osum" ] \
       && unzip -q -j "$otmp/obel.zip" "ObelMono-$over-ttf/static/*.ttf" "ObelMono-$over-ttf/OFL.txt" -d "$otmp/out"; then
       mkdir -p "$odir"
-      rm -f "$odir"/*.ttf
       cp "$otmp"/out/* "$odir/"
+      local of
+      for of in "$odir"/*.ttf; do [ -e "$otmp/out/${of##*/}" ] || rm -f "$of"; done
       echo "$over" > "$odir/.version"
       FONTS_DIRTY=1
     else
