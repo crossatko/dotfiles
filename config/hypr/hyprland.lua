@@ -10,6 +10,7 @@ require("hyprland.workspaces")
 require("hyprland.rules")
 require("hyprland.permissions")
 pcall(require, "hyprland.managed") -- Settings > Appearance / Glass overrides (managed files): keep it after the modules above
+pcall(require, "hyprland.herdr-fill") -- workspace 4: a lone Herdr window fills the monitor under the bar
 
 -- Scripts
 require("scripts.pip-fix")
