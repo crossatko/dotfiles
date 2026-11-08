@@ -644,6 +644,8 @@ Linked only by `./install-mac.sh` (symlinks, `--dry-run`, backups `*.bak.<timest
   Magic Mouse 2-finger workspace swipe (`magic-mouse-swipe` in `[gestures]`) needs the fork build and macOS Mouse > "Swipe between full-screen apps" off.
 - `config/karabiner/karabiner.json` is GENERATED: edit the table in `generate.py`, run `python3 -I config/karabiner/generate.py` (`--aerospace` prints the
   matching bindings).
+- SwiftBar plugin `config/swiftbar/colima.10s.py` controls Colima (profile `default`): state from `colima list --json`, containers via `docker ps` on the colima
+  socket; start/stop/restart run detached with a marker in `~/Library/Caches` for the transitional state. Needs `brew install colima docker` (no Mac package list).
 - SwiftBar plugin `config/swiftbar/ai-usage.10m.py` reads the Claude token from the Keychain. Set `user.name`/`user.email` on the Mac (else the hostname lands
   in commits).
 - `wl-copy` for zellij is a host-local symlink to `pbcopy` (not in the repo).
