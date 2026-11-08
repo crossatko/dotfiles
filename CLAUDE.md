@@ -52,3 +52,7 @@
 - The user's login shell is zsh, but all agents must use bash for every command they run (Bash tool, scripts, subagents). Write scripts with a `#!/bin/bash` shebang and bash syntax, never zsh-only syntax.
 - The Bash tool's shell is zsh, which does not word-split unquoted variables (`for t in "1 a"; do set -- $t`): wrap multi-statement shell with loops or splitting in `bash -c '...'`.
 - Quote heredoc delimiters (`<<'EOF'`) whenever the text contains backticks or `$`, e.g. issue bodies and comments; an unquoted one executes them and silently drops code spans from published text.
+- Avoid commands that stop for a permission prompt even in bypass mode; the user is often away:
+  - Never use `rm` in Bash. To get rid of files, move them into a fresh temp folder: `mv <files> "$(mktemp -d)"/`. Deleting a git worktree or branch with `git worktree remove` / `git branch -d` is fine.
+  - Create and change files with the Write and Edit tools, not with heredocs, `python - <<EOF` or `sed -i` scripts that rewrite source files.
+  - Tell subagents the same rules in their brief.
