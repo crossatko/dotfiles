@@ -12,8 +12,8 @@
 Runs the shared helper (../quickshell/bin/ai-usage, JSON on stdout) and renders it. The dropdown follows
 AiPanel.qml / AiLimit.qml (sections, wording); the meter bars are
 as Menlo text. Colours: config/theme/out/palette.json (the file the Quickshell Theme reads), as
-light,dark pairs. Chip value = the 5h window of
-the most recently used account whose values are fresh (else the most recent one, dimmed); at 100 % the reset
+light,dark pairs. Chip value = the shortest window (5h session, else the
+fullest weekly) of the most recently used account whose values are fresh (else the most recent one, dimmed); at 100 % the reset
 countdown instead. SwiftBar's PATH is minimal, so interpreters are given by absolute path.
 """
 import json
@@ -142,7 +142,9 @@ def main():
     cand.sort(key=lambda p: -(p.get("lastUsed") or 0))
     cur = next((p for p in cand if not p.get("stale")), cand[0] if cand else None)
     if cur:
-        ws = sorted((w for w in cur["windows"] if pct(w)), key=lambda w: (minutes(w) or 1e9, w.get("resetsAt") or 1e12))
+        # shortest window (the 5h session where the plan has one); among equally long ones the fullest, so a
+        # plan without a session window shows the all-models weekly, not an empty model-scoped one
+        ws = sorted((w for w in cur["windows"] if pct(w)), key=lambda w: (minutes(w) or 1e9, -w["percent"]))
         blocked = max([w["resetsAt"] for w in cur["windows"] if pct(w) and w["percent"] >= 100 and (w.get("resetsAt") or 0) > NOW] or [0])
         text = until(blocked) if blocked else "%d%%" % round(ws[0]["percent"])
         if cur.get("stale") is True:

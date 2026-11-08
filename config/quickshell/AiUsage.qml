@@ -56,14 +56,13 @@ Singleton {
             : title === "monthly" ? 43200 : 0
     }
     // the chip's window: the account's short limit (Claude: the 5-hour session; others: the shortest window, e.g.
-    // a daily one). Shortest known length first, unknown lengths after the known ones, ties by the earlier reset.
-    // An account with only weekly windows shows its weekly one.
+    // a daily one). Shortest known length first, unknown lengths after the known ones, ties by the fuller one.
+    // A plan without a session window shows its all-models weekly, not an empty model-scoped weekly.
     readonly property var currentWindow: {
         if (!current) return null
         const ws = current.windows.filter(w => typeof w.percent === "number")
         const len = w => windowMinutes(w) || 1e9
-        const rst = w => w.resetsAt || 1e12
-        ws.sort((a, b) => len(a) - len(b) || rst(a) - rst(b))
+        ws.sort((a, b) => len(a) - len(b) || b.percent - a.percent)
         return ws[0] || null
     }
     readonly property real currentPercent: currentWindow ? currentWindow.percent : -1
