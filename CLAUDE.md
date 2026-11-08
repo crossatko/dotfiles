@@ -8,6 +8,7 @@
 - Put questions last. List them one per line, each on its own row. Never hide a question inside a long sentence.
 
 ## Delegate to subagents
+- Exception, orchestrated workers: if an orchestrator started you as the worker for one ticket (your prompt says so), you are already the delegate. Do the work yourself in your own session and run checks in the foreground. Use subagents only for the code review and for clearly separate parallel work. The rules below apply to normal sessions.
 - Delegate by default for real work; the main thread plans, delegates, verifies and reports. Investigation, multi-step edits, debugging, live-state probing, hypothesis loops, and anything spanning several files go to an agent.
 - Handle small, fast tasks inline when that costs fewer tokens than writing a brief and reading a report back: a known-file read, a grep, a one-line or few-line edit, a single quick command, a short check. Rule of thumb: if the brief would be longer than the work, do it inline. Never inline long-running or multi-step work, even if it looks like "just a quick look".
 - Models, start low:
