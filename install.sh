@@ -993,6 +993,8 @@ stage_links() {
   link "$CONFIG_DIR/xdg-desktop-portal/portals.conf" "$HOME/.config/xdg-desktop-portal/portals.conf"
   link "$CONFIG_DIR/systemd/user/xdg-desktop-portal-gnome.service" "$HOME/.config/systemd/user/xdg-desktop-portal-gnome.service"
   link "$CONFIG_DIR/systemd/user/librepods.service" "$HOME/.config/systemd/user/librepods.service"
+  # Clears the Herdr voice away flag (config/hypr/hypridle.conf) whenever hypridle starts or stops
+  link "$CONFIG_DIR/systemd/user/hypridle.service.d/herdr-voice-away.conf" "$HOME/.config/systemd/user/hypridle.service.d/herdr-voice-away.conf"
   # Dictation (config/dictation): the CLI/service launcher and its user unit, started by the shell on the first push-to-talk
   # press (systemctl --user start dictation.service). The whisper.cpp worker and the models are per machine (README).
   link "$CONFIG_DIR/dictation/bin/dictation" "$HOME/.local/bin/dictation"
