@@ -148,7 +148,19 @@ QtObject {
     }
 
     // rows that stay above the ranked list while filtering (typed channel when there is no follows list)
+    // A VOD id or https://www.twitch.tv/videos/<id> URL: the listed row when the open list has it, else a row that plays it.
+    // Unlisted bare numbers need 8+ digits, so a number from a title or a year is still an ordinary search.
+    function vodRefRows(q) {
+        const m = /^(?:(?:https?:\/\/)?(?:www\.|m\.)?twitch\.tv\/videos\/)?([0-9]{1,15})(?:[/?#].*)?$/i.exec(q.trim())
+        if (!m) return []
+        const id = m[1], listed = vodActive ? vodRows.find(r => r.vodId === id) : undefined
+        if (listed) return [listed]
+        if (!/\/videos\//i.test(q) && id.length < 8) return []
+        return [{ id: "sec:twitch:vod-ref:" + id, name: "Play video " + id, subtitle: "https://www.twitch.tv/videos/" + id, kind: "twitch-vod", source: "",
+                  glyph: "", transient: true, private: true, vodId: id }]   // circle-play
+    }
     function extra(name, q) {
+        if (name === "twitch") { const vod = vodRefRows(q); if (vod.length > 0) return vod }
         if (name !== "twitch" || vodActive || twitchLoading || twFollowsPath !== "" || !/^[A-Za-z0-9_]{1,25}$/.test(q)) return []
         const login = q.toLowerCase()
         return [{ id: "sec:twitch:typed", name: "Watch " + login, subtitle: "Open the channel with " + twitchPlayerLabel(), kind: "twitch", source: "",
