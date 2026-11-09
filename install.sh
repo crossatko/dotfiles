@@ -909,7 +909,6 @@ stage_links() {
   link "$CONFIG_DIR/pi/models.json" "$HOME/.pi/agent/models.json"
   link "$CONFIG_DIR/pi/extensions/herdr-ctx.ts" "$HOME/.pi/agent/extensions/herdr-ctx.ts"
   link "$CONFIG_DIR/brave-flags.conf" "$HOME/.config/brave-flags.conf"
-  link "$CONFIG_DIR/vesktop-flags.conf" "$HOME/.config/vesktop-flags.conf"
 
   log "Shell dotfiles"
   link "$CONFIG_DIR/shell/zshrc" "$HOME/.zshrc"
@@ -1039,7 +1038,7 @@ stage_links() {
   # Default handlers for the apps this setup uses (only when the app is installed; writes ~/.config/mimeapps.list)
   default_handler org.gnome.Geary.desktop x-scheme-handler/mailto
   default_handler omacal.desktop text/calendar
-  default_handler vesktop.desktop x-scheme-handler/discord
+  default_handler discord.desktop x-scheme-handler/discord
 
   log "Firefox translucent header"
   local ffdir="$HOME/.config/mozilla/firefox" ffp

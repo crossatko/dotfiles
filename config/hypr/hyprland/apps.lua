@@ -5,7 +5,7 @@ return {
 	browser = "brave",
 	whatsapp = "brave --app='https://web.whatsapp.com'",
 	messages = "brave --app='https://messages.google.com'",
-	discord = "vesktop", -- Vesktop (the official discord package stays installed; class `vesktop`)
+	discord = "discord",
 	signal = "flatpak run org.signal.Signal",
 	mail = "geary",
 	filemanager = "nautilus --new-window",

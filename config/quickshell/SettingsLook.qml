@@ -96,7 +96,7 @@ Item {
             title: "UI font"
             titleWidth: pg.titleW
             kind: "ui"
-            info: "The shell, GTK / Qt apps, the lock screen, Discord. Applies at once in the shell; other apps pick it up when they restart. A proportional font can misalign the numbers the layouts expect to line up."
+            info: "The shell, GTK / Qt apps, the lock screen. Applies at once in the shell; other apps pick it up when they restart. A proportional font can misalign the numbers the layouts expect to line up."
         }
         FontRow {
             title: "Terminal font"

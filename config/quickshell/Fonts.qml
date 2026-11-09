@@ -3,7 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// The two chosen fonts (Settings > Look > Type): `ui` for the shell, GTK / Qt / KDE, hyprlock, Vesktop and the Twitch app,
+// The two chosen fonts (Settings > Look > Type): `ui` for the shell, GTK / Qt / KDE, hyprlock and the Twitch app,
 // `mono` for the terminals (ghostty, kitty, alacritty) and hyprtoolkit's monospace. Saved in
 // ${XDG_STATE_HOME:-~/.local/state}/quickshell/fonts.json (QS_FONTS_FILE overrides), this singleton is the only writer
 // (atomic); the file is watched, so a hand edit shows here too.

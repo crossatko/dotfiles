@@ -48,7 +48,7 @@ overrides ──┘                      │   (out/ is git-ignored; default/ is
   `theme.local.toml` (this machine's `wallpaper`, written by `apply` / the picker; optional local `[settings]`,
   `[overrides]`, `[vars]` `tv_wallpaper` and `static_blocks` = this machine's hyprpaper per-monitor blocks, merged over
   `theme.toml`) and `out/` (what every app reads, incl. `out/host/`: `gtk3.css`, `gtk4.css`, `kvantum.kvconfig`,
-  `brave-glass.css`, `vesktop-theme.css`, which depend on the running compositor; only `theme.py` links them).
+  `brave-glass.css`, which depend on the running compositor; only `theme.py` links them).
 * **Seeding:** `bin/theme-seed` (POSIX sh) copies `default/` into a missing `out/` (leading `~/` becomes `$HOME/`) and writes
   `out/.default`. install.sh, `theme.py` and the git hooks (`post-merge`, `post-rewrite`, `post-checkout` -> `theme-render`) call it, so a
   fresh clone and the Mac (the engine never runs there) have working files; while the marker exists `out/` follows changes
@@ -301,7 +301,6 @@ snapshot, `vp_start` / `vp_ipc` / `vp_stop` and the mpv options in theme.py.
 | GTK 3 apps, Brave dialogs | named theme `Wall` (`~/.local/share/themes/Wall`): GTK's stylesheet (dark or light, by mode) re-colored by `recolor_gtk_css`; Brave gets `GTK_THEME=Wall:dark` (`Wall` in light mode) from its shim | GTK 3 apps reload on theme change; Brave on restart |
 | GTK 4 / libadwaita apps, nautilus | `~/.config/gtk-4.0/gtk.css` -> `out/host/gtk4.css` (= `out/gtk.css` + translucent backgrounds and a compositor blur request, `gtk_glass*` in theme.toml); `gtk-3.0` -> `out/host/gtk3.css` (= `out/gtk.css` + the same glass for client-side-decorated GTK3 windows only; Firefox and SSD windows stay opaque) | **after the app restarts** (see below) |
 | Adwaita icons | generated hue-rotated copy `Wall-Adwaita` (see below) | new windows / apps that reload icons |
-| Vesktop (Vencord) | `templates/vesktop-theme.css` -> `out/host/vesktop-theme.css` (Discord CSS variables remapped, glass via the `gtk_eff_*` alphas) -> copied atomically to `~/.config/vesktop/themes/wall.theme.css` when vesktop is installed (`vesktop = false` in `[settings]` skips) | Vencord watches `themes/` and re-applies live; first enabling: see Vesktop below |
 | Brave | seed-color theme written into its Preferences by the `~/.local/bin/brave` launcher shim | at next start (Brave rewrites Preferences on exit, so it can't be edited while running) |
 | Geary 46 (GTK3 + libhandy) | window chrome: Geary block in `templates/gtk3.css` (scoped to `window.geary-main-window`: accent-tint selection, unread = accent edge + accent sender, read dimmed, starred yellow, thread badges, in-app toast `box.app-notification` restyled like a Quickshell notification card); plain-text bodies: `out/geary-user-style.css` linked as `~/.config/geary/user-style.css` (`deploy()`, only when Geary is installed) | at next start |
 
@@ -325,7 +324,6 @@ snapshot, `vp_start` / `vp_ipc` / `vp_stop` and the mpv options in theme.py.
 * **Blur**: the quickshell bar opts in to Hyprland's own blur via the `qs-bar` layer rule in
   `hypr/hyprland/rules.lua`; tune with `bar_opacity`.
 * Not themed: web page contents.
-* **Vesktop**: the file is a real copy (a symlink target change would not fire Vencord's folder watch). `theme.py` writes `enabledThemes` + `transparent` in `~/.config/vesktop/settings/settings.json` (read-modify-write, other keys kept) ONLY while Vesktop is closed, else it prints the manual step (Settings > Vencord > Themes > Wall; Vencord settings > transparent window; restart). The transparent window needs no flag; Hyprland's default blur already covers it (no window rule). Radius is a fixed 6 px. Verified in a nested Hyprland with the real logged-in profile (checkerboard backdrop): glass with blur behind, accent selection/unread/focus, engine mono font, status colours, server/DM/friends panes, channel view, context menu, settings modal. The current-name variables (`--background-base-*`, `--background-surface-*`, `--bg-base-*`, `--chat-background-default`, `--app-frame-*`, `--input-background*`, `--background-mod-*`, `--interactive-*`, `--text-*`, `--control-primary-*`, `--brand-*`) drive nearly everything; Discord's hashed class names (`menu_xxxxxx`) change, so rules use `[role=...]` / `[class*="name_"]`. Menus, listboxes and dialogs sit over live page content, so they get a near-opaque fill plus `backdrop-filter` (the glass alpha of the panes is unreadable there). A blanket `[class*="unreadMentionsIndicator"]` background paints solid accent blocks on the server rail: keep accent rules on the badge only. Still Discord-coloured: user avatars/media, the fullscreen User Settings view (dialog fill, dark and flat), login art, status-dot/brand icons, and the "Add Friend" tab clips its text with the wider mono font (fixed width, not fixed). Discord can rename variables: recheck after big UI changes (inspect with `--remote-debugging-port` on a nested instance, never on live).
 * **Geary limits** (46): HTML mails keep their own white page (only `div.plaintext` bodies are recoloured; forcing a
   dark page breaks mails that set dark text). The folder tree is a GtkTreeView: no per-folder colours or hover, and
   its unread badges are cairo-drawn `#888` (`CountBadge`), not CSS. Selectors come from Geary 46.0's UI files and
@@ -362,7 +360,7 @@ snapshot, `vp_start` / `vp_ipc` / `vp_stop` and the mpv options in theme.py.
 * One UI font for Qt, KDE and GTK: `ui_font` / `ui_font_size` in `theme.toml` (`ui_font = ""` leaves fonts alone).
 * Fonts: `[vars] font` (UI) and `mono_font` (terminals) are the defaults; Settings > Look > Type saves a per-machine choice in
   `quickshell/fonts.json` (state dir, `QS_FONTS_FILE`), which `load_cfg` puts over them (an unsafe or no longer installed family is
-  ignored), then `theme.py fonts` re-renders and reloads only the apps whose font files changed (terminals). UI font: `{{font}}` (vesktop, hyprlock / hyprtoolkit `$ui_font`), Qt / KDE / GTK via
+  ignored), then `theme.py fonts` re-renders and reloads only the apps whose font files changed (terminals). UI font: `{{font}}` (hyprlock / hyprtoolkit `$ui_font`), Qt / KDE / GTK via
   `apply_fonts`. Terminal font: `{{mono_font}}` in `ghostty-font`, `kitty-font.conf`, `alacritty-font.toml` (included by the
   terminals' own configs after their font lines), hyprtoolkit `$mono_font`, the Qt / GTK monospace entries.
 
