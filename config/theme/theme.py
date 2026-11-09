@@ -4521,6 +4521,8 @@ def render_all(pal, cfg, mode=None, dark=None):
         extra["monitor_blocks"] = ""
     extra.update(wallpaper_t=tilde(wp), tv_wallpaper_t=tilde(extra["tv_wallpaper"]))   # hyprpaper expands ~
     extra["static_blocks"] = static_blocks(cfg, extra)
+    # out/omarchy/shell.toml [font] base-size (px, Flea): the GTK / Qt UI font size is in pt (ui_font_size), 1 pt = 4/3 px
+    extra["flea_base_size"] = max(1, round(float(cfg.get("settings", {}).get("ui_font_size", 11)) * 96 / 72))
     rendered = {}
     for tpl in sorted((ROOT / "templates").iterdir()):
         if tpl.is_dir() or (DEFAULT_MODE and tpl.name in HOST_TEMPLATES):
@@ -4588,7 +4590,7 @@ def yaru_icons(accent):
 
 def render_omarchy(pal, mode, extra, rendered, wp):
     """out/omarchy/: colors.toml + alacritty.toml kitty.conf ghostty.conf (our own outputs, same formats) and, on a host
-    render only, backgrounds/ (the wallpaper), preview.png and icons.theme. Skipped (formats Omarchy renders itself
+    render only, shell.toml (Flea: font base-size, glass alpha), backgrounds/ (the wallpaper), preview.png and icons.theme. Skipped (formats Omarchy renders itself
     from its own templates): btop, neovim, helix, vscode, foot, obsidian, ... See README."""
     om = OUT / "omarchy"
     om.mkdir(exist_ok=True)
@@ -4598,6 +4600,9 @@ def render_omarchy(pal, mode, extra, rendered, wp):
         write_atomic(om / name, rendered[src])
     if DEFAULT_MODE:   # the committed default stays tiny: no image copy (default/wallpaper.jpg is generated)
         return
+    # shell.toml (Flea, a file manager that reads it without Omarchy): text size and glass alpha follow the GTK windows.
+    # The alpha depends on the running compositor (gtk_a_window), so it is host-only like icons.theme; out/omarchy is git-ignored.
+    write_atomic(om / "shell.toml", render((ROOT / "templates/omarchy/shell.toml").read_text(), pal, x))
     icons = yaru_icons(pal["accent"])
     if icons:
         write_atomic(om / "icons.theme", icons + "\n")
