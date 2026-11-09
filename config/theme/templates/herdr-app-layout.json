@@ -74,6 +74,9 @@
         {
           "id": "work-body",
           "type": "row",
+          "floating": [
+            { "id": "zmodes", "content": { "mod": "zellij-modes" }, "edge": "bottom", "align": "end" }
+          ],
           "children": [
             {
               "id": "main",
