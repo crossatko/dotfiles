@@ -796,7 +796,15 @@ ModalMenu {
                             visible: false
                         }
                     }
-                    RowText { title: row.modelData.name; sub: row.modelData.subtitle || "" }
+                    RowText { title: row.modelData.name; sub: row.modelData.subtitle || ""; titleColor: row.modelData.watched ? Theme.fgDim : Theme.fg }
+                    Meter {                                  // a started broadcast (item.vodProgress 0..1): thin accent bar along the row's bottom edge
+                        parent: row
+                        visible: (row.modelData.vodProgress ?? 0) > 0
+                        implicitHeight: 3
+                        x: Theme.pad; y: row.height - height - 3
+                        width: row.width - 2 * Theme.pad
+                        value: row.modelData.vodProgress ?? 0
+                    }
                     Meter {                                  // progress rows (VM downloads): item.progress 0..1
                         visible: row.modelData.progress !== undefined
                         Layout.preferredWidth: lc.progressW; Layout.alignment: Qt.AlignVCenter
@@ -821,10 +829,16 @@ ModalMenu {
                         font.pixelSize: Theme.fontCaption
                         color: Theme.yellow
                     }
+                    Icon {                                   // a watched broadcast (item.watched): check mark before the source label
+                        visible: !!row.modelData.watched
+                        text: "\ue0ab"                       // check
+                        font.pixelSize: Theme.fontCaption
+                        color: Theme.green
+                    }
                     Label {
                         visible: !row.modelData.keys
                         text: (lc.usage[row.modelData.id] && lc.usage[row.modelData.id].pinned ? "• " : "") + row.modelData.source
-                        color: Theme.muted
+                        color: row.modelData.recording ? Theme.red : Theme.muted   // the broadcast that is live now
                         font.pixelSize: Theme.fontCaption
                     }
                     KeyBadge { visible: row.index < 9 && !row.modelData.keys; text: String(row.index + 1); sel: row.sel }

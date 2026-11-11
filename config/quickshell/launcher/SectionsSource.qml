@@ -16,6 +16,8 @@ import Quickshell.Io
 //     (vodLogin != ""; Launcher.back() leaves it): `twitch-qs-mpv vods <login> --json` -> VOD rows, Enter plays with
 //     `twitch-qs-mpv vod <id>`, else mpv / xdg-open on https://www.twitch.tv/videos/<id>. Without the app the action opens
 //     https://www.twitch.tv/<login>/videos in the browser.
+//     Watch state (fields of the vods JSON, absent in an older app = plain rows; loaded with the level, never polled): started = thin accent
+//     progress bar + "<m:ss> left" in the sub line, watched = check mark + dimmed row (still plays), recording = red "Recording" label.
 //     With an app that has `fav` (probe: `twitch-qs-mpv fav list` exits 0 = twFav; its output = the favourites when twitch-qs-follows has no `favorite` field) channel rows get a second action, "Add to favourites" /
 //     "Remove from favourites" (`twitch-qs-mpv fav toggle <login>` prints on|off; the row is updated in place, no reload, launcher stays open;
 //     a failure leaves the row as is and shows a notification; a successful toggle is remembered in favPending until the section opens
@@ -404,7 +406,8 @@ QtObject {
     }
 
     // ---- twitch: past broadcasts (twitch-qs-mpv vods <login> --json) ---------------------------------------------
-    // [{id, title, game, duration, duration_s, created_at, views, url}], newest first
+    // [{id, title, game, duration, duration_s, created_at, views, url, state: new|started|watched, position_s, progress 0..1, watched_at,
+    //   recording}], newest first (the watch-state fields are absent in an older twitch-qs-mpv: such rows look as plain rows)
     readonly property var monthNames: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     function countText(n) {
         return n >= 1000000 ? (Math.floor(n / 100000) / 10) + "M" : n >= 10000 ? Math.floor(n / 1000) + "k" : n >= 1000 ? (Math.floor(n / 100) / 10) + "k" : String(n)
@@ -426,6 +429,11 @@ QtObject {
         if (diff > 1 && diff < 7) return diff + " days ago"
         return d.getDate() + " " + monthNames[d.getMonth()] + (d.getFullYear() !== n.getFullYear() ? " " + d.getFullYear() : "")
     }
+    function clockText(s) {                         // 3723 -> "1:02:03", 125 -> "2:05"
+        s = Math.max(0, Math.floor(s))
+        const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60
+        return (h > 0 ? h + ":" + (m < 10 ? "0" : "") : "") + m + ":" + (x < 10 ? "0" : "") + x
+    }
     // returns the rows, or null when the text is not a JSON array
     function parseVods(text) {
         let arr
@@ -440,10 +448,16 @@ QtObject {
             const parts = []
             if (game) parts.push(game)
             const dur = durationText(e); if (dur) parts.push(dur)
+            const state = e.state === "watched" || e.state === "started" ? e.state : "new"
+            const prog = typeof e.progress === "number" && e.progress > 0 && e.progress < 1 ? e.progress : 0
+            const total = Number(e.duration_s), pos = Number(e.position_s)
+            if (state === "started" && total > 0 && pos >= 0 && pos < total) parts.push(clockText(total - pos) + " left")
             const date = e.created_at ? dateText(String(e.created_at)) : ""; if (date) parts.push(date)
             if (typeof e.views === "number") parts.push(countText(e.views) + (e.views === 1 ? " view" : " views"))
-            out.push({ id: "sec:twitch:vod:" + id, name: String(e.title || "Untitled broadcast"), subtitle: parts.join("  \u00b7  "), kind: "twitch-vod", source: "",
-                       glyph: "\ue22f", keywords: game ? [game] : [], transient: true, private: true, vodId: id })   // circle-play
+            out.push({ id: "sec:twitch:vod:" + id, name: String(e.title || "Untitled broadcast"), subtitle: parts.join("  \u00b7  "), kind: "twitch-vod", source: e.recording === true ? "Recording" : "",
+                       glyph: "\ue22f", keywords: game ? [game] : [], transient: true, private: true, vodId: id,
+                       watched: state === "watched", vodProgress: state === "started" ? prog : 0, recording: e.recording === true,
+                       iconColor: state === "watched" ? "muted" : "" })   // circle-play
         }
         return out
     }
