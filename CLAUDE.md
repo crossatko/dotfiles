@@ -42,8 +42,8 @@
 - Kill crashed game or app processes proactively. They hold the wine prefix and block the next test.
 
 ## Notes
-- Notes describe the **current state** plus **short caveats**, not a history. No dated change logs; histories belong in commit messages. Keep them short, update in place, remove stale entries.
-- Each piece of software documents itself in its own repo. The dotfiles only record config state; see the dotfiles `AGENTS.md` for its notes policy.
+- Code repos keep no notes file (no `NOTES.md` or similar). Git history is the source of truth: describe changes in commit messages, put a non-obvious reason in a short code comment next to the code, and track open follow-ups as issues. `AGENTS.md` holds only short rules and setup commands an agent cannot find in the code.
+- The dotfiles are the exception: they record config state in notes; see the dotfiles `AGENTS.md` for its notes policy. Those notes describe the **current state** plus **short caveats**, not a history. Keep them short, update in place, remove stale entries.
 
 ## No attribution
 - Never attribute Claude or AI in commit messages, PR descriptions, or code. That means no `Co-Authored-By: Claude` trailers, no "Generated with Claude Code" lines, and no code comments or headers mentioning Claude or AI authorship.
