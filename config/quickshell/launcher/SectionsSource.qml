@@ -16,6 +16,10 @@ import Quickshell.Io
 //     (vodLogin != ""; Launcher.back() leaves it): `twitch-qs-mpv vods <login> --json` -> VOD rows, Enter plays with
 //     `twitch-qs-mpv vod <id>`, else mpv / xdg-open on https://www.twitch.tv/videos/<id>. Without the app the action opens
 //     https://www.twitch.tv/<login>/videos in the browser.
+//     With an app that has `fav` (probe: `twitch-qs-mpv fav list` exits 0 = twFav; its output = the favourites when twitch-qs-follows has no `favorite` field) channel rows get a second action, "Add to favourites" /
+//     "Remove from favourites" (`twitch-qs-mpv fav toggle <login>` prints on|off; the row is updated in place, no reload, launcher stays open;
+//     a failure leaves the row as is and shows a notification; a successful toggle is remembered in favPending until the section opens
+//     again, so a slower follows run cannot show the old state). Favourite rows (`favorite: true` in the --json row) show a star in Launcher.qml.
 //   screenshot / record: the former standalone menus. Rows start hypr/scripts/screenshot.sh <mode> /
 //     screenrec.sh <mode> --fps N --format F --audio-source off|desktop|mic|both. The launcher closes first (Launcher.runItem sets
 //     shown=false before run()), and the script starts after a short sleep so the layer is unmapped before slurp /
@@ -94,6 +98,9 @@ QtObject {
     property string twFollowsPath: ""               // twitch-qs-follows (empty = not installed)
     property bool twMpv: false                      // mpv on PATH
     property bool twProbed: false
+    property var twFavList: []                      // lowercase logins from `fav list` (probe)
+    property var favPending: ({})                   // login -> bool, set by a successful toggle, cleared when the section opens
+    property bool twFav: false                      // the installed app has the `fav` command
     property bool twVods: false                     // the installed app has the `vods` command (bin/twitch-qs-vods next to twitch-qs-mpv)
     property string vodLogin: ""                    // non-empty = the nested "Past broadcasts" level of the twitch section is open
     property string vodName: ""
@@ -117,7 +124,7 @@ QtObject {
         else if (name === "sound-input") { inRows = []; inError = ""; inLoading = true; inProc.running = false; inProc.running = true }
         else if (name === "twitch") {
             leaveVods()
-            twitchRows = []; twitchError = ""; twitchLoading = true; twProbed = false; twVods = false
+            twitchRows = []; twitchError = ""; twitchLoading = true; twProbed = false; twVods = false; twFav = false; twFavList = []; favPending = ({})
             twitchProc.running = false; twitchTextProc.running = false; twitchProbe.running = false; twitchProbe.running = true
         }
     }
@@ -292,11 +299,23 @@ QtObject {
         return { id: "sec:twitch:login", name: "Log in to Twitch", subtitle: label, kind: "twitch-login", source: "",
                  glyph: "", transient: true, private: true }
     }
-    function twitchRow(login, name, sub, live, avatar) {
+    function twitchActions(fav) {
+        const a = [{ id: "twitch-vods", label: twAppPath !== "" ? "Past broadcasts" : "Past broadcasts (browser)", glyph: "\ue22f" }]   // circle-play
+        if (twFav && twAppPath !== "") a.push(fav ? { id: "twitch-fav", label: "Remove from favourites", glyph: "\ue6a6" }   // star-minus
+                                                  : { id: "twitch-fav", label: "Add to favourites", glyph: "\ue6a7" })      // star-plus
+        return a
+    }
+    // favourite state of a login: a toggle made in this session wins, else the follows field, else the app's `fav list`
+    function favOf(login, field) {
+        const k = login.toLowerCase()
+        if (favPending[k] !== undefined) return favPending[k]
+        return typeof field === "boolean" ? field : twFavList.indexOf(k) >= 0
+    }
+    function twitchRow(login, name, sub, live, avatar, fav) {
         return { id: "sec:twitch:" + login, name: name, subtitle: sub, kind: "twitch", source: live ? "Live" : "",
                  avatar: avatar || "", avatarLive: live,    // local profile picture path ("" = generic glyph); full colour only while live
                  glyph: "", iconColor: live ? "red" : "muted", transient: true, private: true, login: login,
-                 actions: [{ id: "twitch-vods", label: twAppPath !== "" ? "Past broadcasts" : "Past broadcasts (browser)", glyph: "\ue22f" }] }   // circle-play
+                 favorite: fav === true, actions: twitchActions(fav === true) }
     }
     // returns the rows, or null when the text is not a JSON array (an older twitch-qs-follows)
     function parseTwitchJson(text) {
@@ -304,6 +323,7 @@ QtObject {
         try { arr = JSON.parse(text) } catch (e) { return null }
         if (!Array.isArray(arr)) return null
         const out = []
+        const hasField = arr.some(e => e && typeof e.favorite === "boolean")   // an older twitch-qs-follows has none
         for (const e of arr) {
             if (!e || typeof e !== "object") continue
             const kind = e.kind, name = String(e.name || e.login || "")
@@ -317,7 +337,7 @@ QtObject {
                 if (typeof e.viewers === "number") parts.push(viewersText(e.viewers))
             } else parts.push(kind === "favorite" ? "favorite" : "offline")
             if (stale) parts.push(stale)
-            out.push(twitchRow(login, name || login, parts.join("  \u00b7  "), kind === "live", typeof e.avatar === "string" && e.avatar.startsWith("/") ? e.avatar : ""))
+            out.push(twitchRow(login, name || login, parts.join("  \u00b7  "), kind === "live", typeof e.avatar === "string" && e.avatar.startsWith("/") ? e.avatar : "", favOf(login, hasField ? e.favorite === true : undefined)))
         }
         return out
     }
@@ -331,7 +351,7 @@ QtObject {
             if (login === "__none__" || login === "__login__") { out.push(twitchSpecial(login === "__none__" ? "none" : "login", label)); continue }
             if (!/^[A-Za-z0-9_]{2,25}$/.test(login)) continue
             const c = label.indexOf(": ")
-            out.push(twitchRow(login, c > 0 ? label.slice(0, c) : label, c > 0 ? label.slice(c + 2) : "", !/\[(offline|favorite)\]/.test(label)))
+            out.push(twitchRow(login, c > 0 ? label.slice(0, c) : label, c > 0 ? label.slice(c + 2) : "", !/\[(offline|favorite)\]/.test(label), "", favOf(login, undefined)))
         }
         return out
     }
@@ -340,18 +360,18 @@ QtObject {
     property var twitchProbe: Process {
         command: ["sh", "-c",
             "for t in twitch-qs-mpv twitch-qs-follows; do p=; if [ -x \"$1/$t\" ]; then p=\"$1/$t\"; else p=$(command -v \"$t\"); fi; printf '%s=%s\\n' \"$t\" \"$p\"; " +
-            "if [ \"$t\" = twitch-qs-mpv ] && [ -n \"$p\" ]; then d=$(dirname \"$(readlink -f \"$p\")\"); [ -x \"$d/twitch-qs-vods\" ] && echo vods=1; fi; done; " +
+            "if [ \"$t\" = twitch-qs-mpv ] && [ -n \"$p\" ]; then d=$(dirname \"$(readlink -f \"$p\")\"); [ -x \"$d/twitch-qs-vods\" ] && echo vods=1; l=$(timeout 5 \"$p\" fav list 2>/dev/null) && { echo fav=1; printf 'favlist=%s\\n' \"$(printf '%s' \"$l\" | tr '\\n' ',')\"; }; fi; done; " +
             "printf 'mpv=%s\\n' \"$(command -v mpv)\"", "sh", src.twitchDir]
         stdout: StdioCollector { id: tpOut }
         onExited: code => {
-            let app = "", fol = "", mpv = "", vods = false
+            let app = "", fol = "", mpv = "", vods = false, fav = false, favs = []
             for (const l of tpOut.text.split("\n")) {
                 const i = l.indexOf("=")
                 if (i < 0) continue
                 const k = l.slice(0, i), v = l.slice(i + 1).trim()
-                if (k === "twitch-qs-mpv") app = v; else if (k === "twitch-qs-follows") fol = v; else if (k === "mpv") mpv = v; else if (k === "vods") vods = v === "1"
+                if (k === "twitch-qs-mpv") app = v; else if (k === "twitch-qs-follows") fol = v; else if (k === "mpv") mpv = v; else if (k === "vods") vods = v === "1"; else if (k === "fav") fav = v === "1"; else if (k === "favlist") favs = v.split(",").filter(x => x !== "")
             }
-            src.twAppPath = app; src.twFollowsPath = fol; src.twMpv = mpv !== ""; src.twVods = vods; src.twProbed = true
+            src.twAppPath = app; src.twFollowsPath = fol; src.twMpv = mpv !== ""; src.twVods = vods; src.twFav = fav; src.twFavList = favs; src.twProbed = true
             if (fol !== "") twitchProc.running = true
             else { src.twitchLoading = false; src.updated() }
         }
@@ -584,7 +604,30 @@ QtObject {
     }
 
     // item actions (Launcher.doAction): returns true = done and close, "enter" = a nested level was pushed, false = not ours
+    // ---- twitch: favourites (twitch-qs-mpv fav toggle <login>, prints on|off) ----------------------------------------
+    property string favLogin: ""                    // the login being toggled ("" = idle; a second toggle meanwhile is ignored)
+    function setFavorite(login, on) {
+        const k = login.toLowerCase()
+        favPending[k] = on
+        twitchRows = twitchRows.map(r => r.kind === "twitch" && String(r.login).toLowerCase() === k ? Object.assign({}, r, { favorite: on, actions: twitchActions(on) }) : r)
+        updated()
+    }
+    property var favProc: Process {
+        command: ["sh", "-c", "timeout 10 \"$1\" fav toggle \"$2\"", "sh", src.twAppPath, src.favLogin]
+        stdout: StdioCollector { id: favOut }
+        onExited: code => {
+            const login = src.favLogin, v = favOut.text.trim()
+            src.favLogin = ""
+            if (code === 0 && (v === "on" || v === "off")) src.setFavorite(login, v === "on")
+            else Quickshell.execDetached(["notify-send", "-a", "Launcher", "Twitch", "Could not change favourites for " + login])
+        }
+    }
     function action(id, item) {
+        if (id === "twitch-fav") {
+            if (!twFav || twAppPath === "" || favLogin !== "" || item.kind !== "twitch" || !/^[a-z0-9_]{2,25}$/.test(String(item.login || "").toLowerCase())) return false
+            favLogin = String(item.login).toLowerCase(); favProc.running = true
+            return "keep"
+        }
         if (id !== "twitch-vods" || item.kind !== "twitch" || !/^[A-Za-z0-9_]{1,25}$/.test(item.login || "")) return false
         if (twAppPath === "") { Quickshell.execDetached(["xdg-open", videosUrl(item.login)]); return true }
         enterVods(item.login, item.name)

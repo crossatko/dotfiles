@@ -815,6 +815,12 @@ ModalMenu {
                         Layout.rightMargin: Theme.controlGap
                         Repeater { model: parent.hint; KeyBadge { required property string modelData; text: modelData; outlined: true; sel: row.sel } }
                     }
+                    Icon {                                   // favourite Twitch channel (item.favorite): a small star before the source label
+                        visible: !!row.modelData.favorite
+                        text: ""                       // star
+                        font.pixelSize: Theme.fontCaption
+                        color: Theme.yellow
+                    }
                     Label {
                         visible: !row.modelData.keys
                         text: (lc.usage[row.modelData.id] && lc.usage[row.modelData.id].pinned ? "• " : "") + row.modelData.source
