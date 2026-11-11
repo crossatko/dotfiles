@@ -17,7 +17,7 @@ import Quickshell.Io
 //     `twitch-qs-mpv vod <id>`, else mpv / xdg-open on https://www.twitch.tv/videos/<id>. Without the app the action opens
 //     https://www.twitch.tv/<login>/videos in the browser.
 //     Watch state (fields of the vods JSON, absent in an older app = plain rows; loaded with the level, never polled): started = thin accent
-//     progress bar + "<m:ss> left" in the sub line, watched = check mark + dimmed row (still plays), recording = red "Recording" label.
+//     progress bar + "<[h:]mm:ss> left" in the sub line, watched = check mark + dimmed row (still plays), recording = red "Recording" label.
 //     With an app that has `fav` (probe: `twitch-qs-mpv fav list` exits 0 = twFav; its output = the favourites when twitch-qs-follows has no `favorite` field) channel rows get a second action, "Add to favourites" /
 //     "Remove from favourites" (`twitch-qs-mpv fav toggle <login>` prints on|off; the row is updated in place, no reload, launcher stays open;
 //     a failure leaves the row as is and shows a notification; a successful toggle is remembered in favPending until the section opens
